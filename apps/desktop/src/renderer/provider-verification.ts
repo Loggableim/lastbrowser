@@ -15,6 +15,12 @@ export type ProviderRuntimeEvidence = {
   modelId?: string;
 };
 
+/** Product release policy; this is independent of personal connection evidence. */
+export function isStableProvider(providerId: string): boolean {
+  return ['openai-codex', 'opencode-go']
+    .includes(providerId.trim().toLowerCase());
+}
+
 const BETA_UNTESTED: ProviderVerification = {
   statusKey: 'settings.panels.providers.betaUntested',
   verified: false,
@@ -34,6 +40,10 @@ export function providerVerification(
       verified: true,
       modelId: evidence.modelId.trim(),
     };
+  }
+
+  if (isStableProvider(providerId)) {
+    return { statusKey: 'settings.panels.providers.stableRelease', verified: false };
   }
 
   switch (providerId.trim().toLowerCase()) {

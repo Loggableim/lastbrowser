@@ -1,0 +1,38 @@
+LASTBROWSER — PRESSE-FAKTENBLATT
+Stand: 13. Oktober 2026
+Website: https://lastbrowser.com/
+Pressekontakt: Rainer Dominik, rainer@dominik.in
+
+IN EINEM SATZ
+LastBrowser ist ein Chromium-basierter Desktop-Browser für Windows, der Webseiten, getrennte Arbeitsbereiche und einen KI-Assistenten in einer Oberfläche verbindet.
+
+KURZBESCHREIBUNG
+LastBrowser verbindet klassisches Browsen mit KI-Unterstützung direkt im Arbeitskontext. Getrennte Spaces organisieren Projekte und Anmeldungen, während der Sidekick beim Lesen, Zusammenfassen und Bearbeiten von Inhalten unterstützt. Zusätzliche Werkzeuge und Anbindungen erweitern den Arbeitsbereich. KI-Funktionen hängen vom gewählten Anbieter, dessen Zugang und dem jeweiligen Build ab. Die Entwicklung folgt einem Local-First-Ansatz: Lokale Speicherung und bewusst eingerichtete Cloud-Funktionen werden klar unterschieden.
+
+FAKTEN
+- Desktop-Browser mit integriertem KI-Assistenten.
+- Technische Basis: Chromium, Electron und integrierte Sidekick-Engine.
+- Windows 10 und Windows 11, x64.
+- Vertikale Tabs und getrennte Spaces für Projekte und Anmeldungen.
+- Modelle, Werkzeuge und Zugangsarten hängen von Anbieter und Build ab.
+- Externe KI-Dienste können separate Zugangsdaten, Abonnements oder Gebühren erfordern.
+- Quellcode und Lizenz: https://github.com/Loggableim/lastbrowser
+- Aktuelle Pakete und Prüfsummen: https://lastbrowser.com/download/
+- Technische Änderungen: https://lastbrowser.com/changelog/
+- Entwicklungsziele und öffentliche Abstimmung: https://lastbrowser.com/roadmap/
+- Datenschutz: https://lastbrowser.com/privacy/
+
+BILDMATERIAL
+Das Paket enthält vorhandene Markenassets und eine UI-Aufnahme.
+Die UI-Aufnahme stammt aus dem Medienbestand und enthält ältere Beschriftungen.
+Sie ist kein Nachweis für den Funktionsumfang eines bestimmten Releases.
+Keine künstlich erzeugten neuen Screenshots oder Kundenreferenzen.
+Bildnachweis: LastBrowser.
+Für aktuelle releasebezogene Aufnahmen und Nutzungsfragen bitte Pressekontakt nutzen.
+
+REDAKTIONELLE HINWEISE
+Produktname: LastBrowser.
+Local-First bedeutet keine pauschale Offline-Garantie für Cloud-Modelle und externe Anbindungen.
+Roadmap-Einträge sind Entwicklungsziele, keine bereits ausgelieferten Funktionen.
+Versionsnummer, Plattform und KI-Konfiguration bei Produkttests nennen.
+

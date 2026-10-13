@@ -26,6 +26,8 @@ import {
 import { usePanelStore } from '../stores/usePanelStore.js';
 import type { ExtensionRecord, ExtensionPreset } from '../../main/extensions.js';
 import { McpHubStateModel } from './mcp-hub-state.js';
+import { BUILTIN_SKILLS_STORAGE_KEY, BUILTIN_SKILLS_CHANGED_EVENT } from '../terminal-feature.js';
+import { useOptionalAiPolicy } from '../optional-ai-policy.js';
 
 export type McpPermissionType =
   | 'read_only'
@@ -45,7 +47,7 @@ export interface McpSkillItem {
   autoApprove: boolean;
   enabled: boolean;
   type: 'builtin' | 'mcp_server';
-  serverType?: 'stdio' | 'sse';
+  serverType?: 'stdio' | 'sse' | 'http';
   endpoint?: string;
 }
 
@@ -59,19 +61,19 @@ export const BUILTIN_MCP_SKILLS: McpSkillItem[] = [
     workspaceScope: 'coding',
     permissions: ['terminal_execute', 'filesystem_write'],
     autoApprove: false,
-    enabled: true,
+    enabled: false,
     type: 'builtin'
   },
   {
     id: 'mcp-supermemory',
-    name: 'Supermemory Vector Search',
-    description: 'Semantische Vektorsuche und persistente Notiz- & Wissensverwaltung in lokalem SQLite Supermemory.',
+    name: 'Gedächtnis & Wissen',
+    description: 'Vorlieben, Fakten und Dokumente kontrollieren. Cloud-Suche nur nach separater Zustimmung.',
     category: 'research',
     icon: '🧠',
     workspaceScope: 'recherche',
     permissions: ['read_only', 'filesystem_write'],
     autoApprove: true,
-    enabled: true,
+    enabled: false,
     type: 'builtin'
   },
   {
@@ -143,6 +145,11 @@ export function UnifiedExtensionHub({
   onClose,
   activeSpace
 }: UnifiedExtensionHubProps): React.JSX.Element | null {
+  const optional = useOptionalAiPolicy(`${activeSpace || ''}:${open}`);
+  const openPanel = (panel: 'skills' | 'memory' | 'agents' | 'profiles' | 'kanban') => {
+    usePanelStore.getState().setActivePanel(panel);
+    onClose();
+  };
   const {
     extensionHubTab,
     setExtensionHubTab
@@ -159,11 +166,14 @@ export function UnifiedExtensionHub({
   // Pillar 2 (MCP Skills) state
   const [builtinSkills, setBuiltinSkills] = useState<McpSkillItem[]>(() => {
     try {
-      const stored: unknown = JSON.parse(localStorage.getItem('lastbrowser.mcp_skills.v1') || 'null');
+      const stored: unknown = JSON.parse(localStorage.getItem(BUILTIN_SKILLS_STORAGE_KEY) || 'null');
       if (Array.isArray(stored)) {
         const savedBuiltins = stored.filter((item): item is McpSkillItem => item && typeof item === 'object'
           && (item as McpSkillItem).type === 'builtin');
-        if (savedBuiltins.length) return savedBuiltins;
+        if (savedBuiltins.length) return BUILTIN_MCP_SKILLS.map(defaults => {
+          const saved = savedBuiltins.find(item => item.id === defaults.id);
+          return saved ? { ...defaults, ...saved, id: defaults.id, type: defaults.type } : defaults;
+        });
       }
     } catch {}
     return BUILTIN_MCP_SKILLS;
@@ -171,10 +181,10 @@ export function UnifiedExtensionHub({
   const [mcpModel] = useState(() => new McpHubStateModel(window.lastbrowser.mcp));
   const mcp = useSyncExternalStore(mcpModel.subscribe, mcpModel.getSnapshot);
   const skills = useMemo<McpSkillItem[]>(() => [
-    ...builtinSkills,
+    ...builtinSkills.map(skill => skill.id === 'mcp-supermemory' ? { ...skill, enabled: optional.loaded && optional.policy.enabled } : skill),
     ...mcp.servers.map((server): McpSkillItem => {
       const name = String(server.name || '');
-      const transport = server.transport === 'stdio' ? 'stdio' : 'sse';
+      const transport = server.transport === 'stdio' ? 'stdio' : server.transport === 'sse' ? 'sse' : 'http';
       return {
         id: `mcp-ext-${name}`,
         name: `MCP: ${name}`,
@@ -189,7 +199,7 @@ export function UnifiedExtensionHub({
         serverType: transport
       };
     })
-  ], [builtinSkills, mcp.servers]);
+  ], [builtinSkills, mcp.servers, optional.loaded, optional.policy.enabled]);
   const [skillSearch, setSkillSearch] = useState('');
   const [skillWorkspaceFilter, setSkillWorkspaceFilter] = useState<'all' | 'coding' | 'recherche' | 'design'>('all');
 
@@ -238,6 +248,10 @@ export function UnifiedExtensionHub({
 
   // Persist skills state
   const updateSkill = (id: string, updates: Partial<McpSkillItem>) => {
+    if (id === 'mcp-supermemory') {
+      if (typeof updates.enabled === 'boolean') void optional.update({ enabled: updates.enabled });
+      return;
+    }
     if (id.startsWith('mcp-ext-') && typeof updates.enabled === 'boolean') {
       void mcpModel.toggle(id.slice('mcp-ext-'.length), updates.enabled);
       return;
@@ -245,7 +259,8 @@ export function UnifiedExtensionHub({
     setBuiltinSkills((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, ...updates } : s));
       try {
-        localStorage.setItem('lastbrowser.mcp_skills.v1', JSON.stringify(next));
+        localStorage.setItem(BUILTIN_SKILLS_STORAGE_KEY, JSON.stringify(next));
+        queueMicrotask(() => window.dispatchEvent(new Event(BUILTIN_SKILLS_CHANGED_EVENT)));
       } catch {}
       return next;
     });
@@ -628,6 +643,39 @@ export function UnifiedExtensionHub({
         {/* ── PILLAR 2: NOVA AI SKILLS & TOOLS (MCP) ── */}
         {activePillar === 'skills' && (
           <div className="hub-content-pane skills-pane">
+            <section className="native-work-card" aria-label="Composio MCP-Anbindung">
+              <h3>Composio · MCP · Beta</h3>
+              <p>Verbinde externe Apps wie Slack, Gmail, GitHub und Notion über Composio. Standardmäßig deaktiviert; Konten und Zugriffe gibst du bei der Einrichtung frei.</p>
+              <div className="native-card-actions">
+                <button type="button" disabled={!mcp.loaded || mcp.busy} onClick={() => {
+                  if (mcpModel.prepareComposio()) setShowMcpConfig(true);
+                }}>Composio einrichten</button>
+                <a href="https://docs.composio.dev/docs/composio-connect" target="_blank" rel="noopener noreferrer">Einrichtung & Dokumentation</a>
+              </div>
+              <p>Cloud-Anbindung · benötigt Internet · Kontoverbindung in dieser Version noch nicht verifiziert.</p>
+            </section>
+            <section className="native-work-card" aria-label="Optionale KI-Funktionen">
+              <h3>Optionale KI-Funktionen</h3>
+              <p>Aktiviere nur, was du verwenden möchtest. Einstellungen gelten für das aktive KI-Profil.</p>
+              {optional.error && <p role="alert">{optional.error}</p>}
+              <div className="native-card-actions">
+                <label><input type="checkbox" checked={optional.policy.assistants_enabled} disabled={!optional.loaded || optional.busy}
+                  onChange={event => void optional.update({ assistants_enabled: event.target.checked })} /> Zusätzliche Assistenten</label>
+                <button type="button" onClick={() => openPanel('agents')}>Assistenten verwalten</button>
+                <button type="button" onClick={() => openPanel('skills')}>Skills verwalten</button>
+                <button type="button" onClick={() => openPanel('memory')}>Gedächtnis ansehen & kontrollieren</button>
+              </div>
+              <p>Gespeicherte Informationen bleiben auch bei deaktiviertem Gedächtnis einsehbar und löschbar.</p>
+              <div className="native-card-actions">
+                <label><input type="checkbox" checked={optional.policy.gmail_ai_enabled} disabled={!optional.loaded || optional.busy}
+                  onChange={event => void optional.update({ gmail_ai_enabled: event.target.checked })} /> Gmail AI · Beta · ungetestet</label>
+                <label><input type="checkbox" checked={optional.policy.discord_agents_enabled} disabled={!optional.loaded || optional.busy}
+                  onChange={event => void optional.update({ discord_agents_enabled: event.target.checked })} /> Discord Agents · Beta · ungetestet</label>
+                <label><input type="checkbox" checked={optional.policy.kanban_enabled} disabled={!optional.loaded || optional.busy}
+                  onChange={event => void optional.update({ kanban_enabled: event.target.checked })} /> Aufgaben-Board · Beta · unfertig / ungetestet</label>
+                <button type="button" onClick={() => openPanel('kanban')}>Gespeichertes Board ansehen</button>
+              </div>
+            </section>
             <div aria-live="polite">
               {mcp.error && <p className="hub-feedback-banner error" role="alert">{mcp.error}</p>}
               {mcp.notice && <p role="status">{mcp.notice}</p>}
@@ -739,6 +787,7 @@ export function UnifiedExtensionHub({
                       <input
                         type="checkbox"
                         checked={skill.enabled}
+                        disabled={skill.id === 'mcp-supermemory' && (!optional.loaded || optional.busy)}
                         onChange={(e) => updateSkill(skill.id, { enabled: e.target.checked })}
                       />
                       <span className="slider round" />

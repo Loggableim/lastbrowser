@@ -1041,6 +1041,11 @@ def chat_with_agent(
         "error": str|None
     }
     """
+    from runtime.memory_policy import require_assistants, memory_enabled
+    try:
+        require_assistants()
+    except PermissionError as exc:
+        return {"session_id": existing_session_id, "response": None, "error": str(exc)}
     # 1. Agent finden
     agent = get_agent(agent_slug)
     if not agent:
@@ -1058,7 +1063,7 @@ def chat_with_agent(
     append_agent_message(agent_slug, session_id, "user", user_message)
 
     # 4. Memory laden
-    memories = get_agent_memory(agent_slug)
+    memories = get_agent_memory(agent_slug) if memory_enabled() else []
 
     config = _load_llm_config()
     api_key = str(config.get("api_key") or "").strip()

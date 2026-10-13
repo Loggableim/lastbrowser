@@ -194,7 +194,7 @@ export type NativeModelResolution = Readonly<{ schemaVersion: 1; scope: Independ
   fallbackApplied: boolean; fallbackReasonCode: 'ollama_subscription_required' | null; fallbackAttempts: 0 | 1 }>;
 export type ScopedModelEntry = Readonly<{ id: string; label: string; supportsIndependent: boolean; reasoning_efforts?: readonly string[];
   modelSource?: 'explicit_config'; nativeAvailability?: NativeModelAvailability }>;
-export type ScopedModelGroup = Readonly<{ provider: string; provider_id: string; configured: boolean; models: readonly ScopedModelEntry[]; extra_models?: readonly ScopedModelEntry[] }>;
+export type ScopedModelGroup = Readonly<{ provider: string; provider_id: string; deployment?: 'local' | 'cloud' | 'remote' | 'unknown'; configured: boolean; models: readonly ScopedModelEntry[]; extra_models?: readonly ScopedModelEntry[] }>;
 export type ScopedModelProvider = Readonly<{id:string;display_name:string;has_key:boolean;oauth_connected:boolean;auth_state:string;provider_available:boolean;models:readonly string[]}>;
 export type ProviderModelCatalog = Readonly<{ schemaVersion: 1; scope: IndependentScope; providers: readonly Readonly<{
   providerId: string; label: string; configured: boolean;
@@ -248,6 +248,7 @@ export type NativeBrowserPreview = NativeBrowserDetails & Readonly<{ kind: 'nati
   preview: Readonly<{ mimeType: 'image/png'; base64: string; observedAt: string; navigationEpoch: number }> }>;
 export type NativeBrowserTakeover = NativeBrowserDetails & Readonly<{ kind: 'native_browser_takeover'; state: 'paused'; automationPaused: true; visible: true }>;
 export type IndependentOperations = {
+  companion: { payload: { action: 'get' } | { action: 'set'; personality: 'nova'|'analytical'|'developer'|'creative'|'mentor'; botName?: string; expectedRevision?: number; clientRequestId?: string }; response: { schemaVersion: 1; scope: IndependentScope; purpose: 'quickchat'; personality: 'nova'|'analytical'|'developer'|'creative'|'mentor'; botName: string; avatarKey: string; revision: number } };
   resolveScope: { payload: ScopeSelectionRequest; response: ResolvedAssistantScope };
   backendProfiles: { payload: Record<string, never>; response: BackendProfilesResponse };
   profileBindings: { payload: Readonly<{ browserProfileId?: string }>; response: ProfileBindingsResponse };

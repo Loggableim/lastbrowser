@@ -950,6 +950,7 @@ export const desktopTranslationKeys = [
   'settings.panels.providers.openrouterKeyRequired',
   'settings.panels.providers.openrouterKeyPlaceholder',
   'settings.panels.providers.openrouterUnavailable',
+  'settings.panels.providers.stableRelease',
   'settings.panels.providers.betaUntested',
   'settings.panels.providers.catalogFallbackUnverified',
   'settings.panels.providers.betaCatalogToggle',

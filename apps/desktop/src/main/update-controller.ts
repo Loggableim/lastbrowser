@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { UpdateInfo } from 'builder-util-runtime';
 
 export type UpdateState =
   | 'idle'
@@ -10,7 +11,19 @@ export type UpdateState =
   | 'downloaded'
   | 'error';
 
-export type UpdateChannel = 'stable' | 'preview';
+export type UpdateChannel = 'stable' | 'beta';
+type UpdateChannelInput = UpdateChannel | 'preview';
+
+/** The old Preview preference was already an opt-in to the beta feed. */
+export function normalizeUpdateChannel(value: unknown): UpdateChannel {
+  return value === 'beta' || value === 'preview' ? 'beta' : 'stable';
+}
+
+export function isVersionAllowedInChannel(version: unknown, channel: UpdateChannel): boolean {
+  if (typeof version !== 'string') return false;
+  const match = /^\d+\.\d+\.\d+(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(version);
+  return !!match && (!match[1] || channel === 'beta' && /^beta\.\d+$/.test(match[1]));
+}
 
 export type LastbrowserUpdateStatus = {
   state: UpdateState;
@@ -38,6 +51,7 @@ export type UpdaterLike = EventEmitter & {
   allowPrerelease: boolean;
   allowDowngrade: boolean;
   channel: string | null;
+  isUpdateSupported?: (info: UpdateInfo) => boolean | Promise<boolean>;
   checkForUpdates: () => Promise<unknown>;
   downloadUpdate: () => Promise<unknown>;
   /**
@@ -50,7 +64,7 @@ export type UpdaterLike = EventEmitter & {
 
 export type UpdateController = {
   getStatus: () => LastbrowserUpdateStatus;
-  setPreferences: (preferences: { automaticUpdatesEnabled: boolean; channel: UpdateChannel }) => void;
+  setPreferences: (preferences: { automaticUpdatesEnabled: boolean; channel: UpdateChannelInput }) => void;
   checkForUpdates: (startupCheck?: boolean) => Promise<LastbrowserUpdateStatus>;
   downloadUpdate: () => Promise<LastbrowserUpdateStatus>;
   quitAndInstall: () => LastbrowserUpdateStatus;
@@ -65,7 +79,7 @@ export type UpdateControllerOptions = {
   offlineTestBuild?: boolean;
   allowPrerelease?: boolean;
   automaticUpdatesEnabled?: boolean;
-  updateChannel?: UpdateChannel;
+  updateChannel?: UpdateChannelInput;
   onStatusChange?: (status: LastbrowserUpdateStatus) => void;
   onUpdateDownloaded?: (fromVersion: string, targetVersion: string) => void;
 };
@@ -76,8 +90,8 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   const unsupportedReason = options.unsupportedReason?.trim() || null;
   const enabled = !offlineTestBuild && !unsupportedReason && (options.isPackaged || options.forceDevUpdates === true);
   let automaticUpdatesEnabled = enabled && options.automaticUpdatesEnabled !== false;
-  let channel: UpdateChannel = options.updateChannel === 'preview'
-    || (options.updateChannel === undefined && options.allowPrerelease === true) ? 'preview' : 'stable';
+  let channel: UpdateChannel = normalizeUpdateChannel(options.updateChannel
+    ?? (options.allowPrerelease === true ? 'beta' : 'stable'));
   let checkInFlight: Promise<unknown> | null = null;
   let downloadStarted = false;
   let installing = false;
@@ -99,11 +113,17 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   // successful app quit when this is enabled. Its quit handler uses
   // install(true, false), so the app is not relaunched unexpectedly.
   updater.autoInstallOnAppQuit = automaticUpdatesEnabled;
-  updater.channel = channel === 'preview' ? 'beta' : 'latest';
+  updater.channel = channel === 'beta' ? 'beta' : 'latest';
   // electron-updater 6.8.3's channel setter enables downgrades. Reassert the
   // guard after assigning the channel so beta/stable changes cannot bypass it.
   updater.allowDowngrade = false;
-  updater.allowPrerelease = channel === 'preview';
+  updater.allowPrerelease = channel === 'beta';
+  // Enforce the selected channel before electron-updater offers/downloads an
+  // artifact, including a wrongly published beta in latest.yml. Keep its
+  // original OS/version support check instead of replacing that protection.
+  const previousSupportCheck = updater.isUpdateSupported?.bind(updater);
+  updater.isUpdateSupported = async (info) => isVersionAllowedInChannel(info.version, channel)
+    && (previousSupportCheck ? await previousSupportCheck(info) : true);
 
   function publish(next: Partial<LastbrowserUpdateStatus>): LastbrowserUpdateStatus {
     status = { ...status, ...next };
@@ -111,14 +131,24 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     return { ...status };
   }
 
-  function applyPreferences(preferences: { automaticUpdatesEnabled: boolean; channel: UpdateChannel }): void {
+  function applyPreferences(preferences: { automaticUpdatesEnabled: boolean; channel: UpdateChannelInput }): void {
     automaticUpdatesEnabled = enabled && preferences.automaticUpdatesEnabled;
-    channel = preferences.channel === 'preview' ? 'preview' : 'stable';
+    channel = normalizeUpdateChannel(preferences.channel);
     updater.autoDownload = automaticUpdatesEnabled;
     updater.autoInstallOnAppQuit = automaticUpdatesEnabled;
-    updater.channel = channel === 'preview' ? 'beta' : 'latest';
+    updater.channel = channel === 'beta' ? 'beta' : 'latest';
     updater.allowDowngrade = false;
-    updater.allowPrerelease = channel === 'preview';
+    updater.allowPrerelease = channel === 'beta';
+  }
+
+  function rejectChannelCandidate(version: unknown): boolean {
+    if (isVersionAllowedInChannel(version, channel)) return false;
+    downloadStarted = false;
+    updater.autoDownload = false;
+    updater.autoInstallOnAppQuit = false;
+    publish({ state: 'not-available', availableVersion: null, percent: null,
+      message: 'This update does not belong to the selected release channel.' });
+    return true;
   }
 
   function hasPendingUpdate(): boolean {
@@ -135,6 +165,9 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   });
   updater.on('update-available', (info: UpdateInfoLike) => {
     if (!enabled || status.state === 'downloaded' || status.state === 'downloading') return;
+    if (rejectChannelCandidate(info.version)) return;
+    updater.autoDownload = automaticUpdatesEnabled;
+    updater.autoInstallOnAppQuit = automaticUpdatesEnabled;
     downloadStarted = updater.autoDownload;
     publish({
       state: 'available',
@@ -162,6 +195,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
   });
   updater.on('update-downloaded', (info: UpdateInfoLike) => {
     if (!enabled) return;
+    if (rejectChannelCandidate(info.version || status.availableVersion)) return;
     if (info.version) options.onUpdateDownloaded?.(options.currentVersion, info.version);
     publish({
       state: 'downloaded',
@@ -218,6 +252,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     },
     async downloadUpdate(): Promise<LastbrowserUpdateStatus> {
       if (!enabled) return { ...status };
+      if (status.availableVersion && rejectChannelCandidate(status.availableVersion)) return { ...status };
       if ((status.state !== 'available' && status.state !== 'error') || downloadStarted) return { ...status };
       if (status.state === 'error' && !status.availableVersion) return { ...status };
       downloadStarted = true;
@@ -236,6 +271,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     },
     quitAndInstall(): LastbrowserUpdateStatus {
       if (status.state !== 'downloaded' || installing) return { ...status };
+      if (rejectChannelCandidate(status.availableVersion)) return { ...status };
       // `isSilent = true` is required: the NSIS installer is built with
       // `oneClick: false`, so a non-silent quitAndInstall shows the full setup
       // wizard and BLOCKS waiting for clicks. An auto-update must run without

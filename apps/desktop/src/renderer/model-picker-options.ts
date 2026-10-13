@@ -1,11 +1,13 @@
 import type { NativeAvailabilityReason, NativeModelAvailability, ScopedModelSelection } from './independent-contracts.js';
 import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { isRetiredProvider } from './retired-providers.js';
+import { providerDeployment, providerHostingLabel, type ProviderDeployment } from './provider-presentation.js';
 
 export type ModelPickerOptionGroup = Readonly<{
   provider: string;
   providerId: string;
   configured: boolean;
+  deployment?: ProviderDeployment;
   disabledReason?: 'unavailable' | 'notConfigured';
   models: readonly Readonly<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }>[];
 }>;
@@ -57,7 +59,8 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
           return { id: entry.id, label: entry.label, ...(listingStatus ? { listingStatus } : {}), reasoningEfforts: [...(entry.reasoning_efforts ?? [])], supportsIndependent: entry.supportsIndependent,
             ...(availability ? { nativeAvailability: identityMatches ? availability : { ...availability, supported: false, available: false, reasonCode: 'binding_mismatch' as const } } : {}) };
         });
-      return { provider: group.provider, providerId: group.provider_id, configured: group.configured,
+      const deployment = providerDeployment(group.provider_id, undefined, group.deployment);
+      return { provider: providerHostingLabel(group.provider_id, group.provider, deployment), deployment, providerId: group.provider_id, configured: group.configured,
         ...(!group.configured ? { disabledReason: provider?.provider_available === false ? 'unavailable' as const : 'notConfigured' as const } : {}), models };
     }).filter(group => group.models.length > 0);
 }

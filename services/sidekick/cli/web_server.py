@@ -1420,7 +1420,8 @@ async def host_header_middleware(request: Request, call_next):
     """
     # Store the bound host on app.state so this middleware can read it Ã¢â‚¬â€
     # set by start_server() at listen time.
-    bound_host = getattr(app.state, "bound_host", None)
+    # Integrated uvicorn startup can bypass start_server; stay loopback-only.
+    bound_host = getattr(app.state, "bound_host", "127.0.0.1")
     if bound_host:
         host_header = request.headers.get("host", "")
         if not _is_accepted_host(host_header, bound_host):

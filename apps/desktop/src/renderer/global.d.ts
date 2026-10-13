@@ -115,7 +115,7 @@ type LastbrowserUpdateStatus = {
 
 type LastbrowserUpdatePreferences = {
   automaticUpdatesEnabled: boolean;
-  channel: 'stable' | 'preview';
+  channel: 'stable' | 'beta';
 };
 
 type WebuiBridgeRequest = {
@@ -353,8 +353,10 @@ declare global {
         runCron: (request: { jobId: string }) => Promise<Record<string, unknown>>;
         pauseCron: (request: { jobId: string }) => Promise<{ job?: CronJobSummary; [key: string]: unknown }>;
         resumeCron: (request: { jobId: string }) => Promise<{ job?: CronJobSummary; [key: string]: unknown }>;
-        getKanbanBoard: (request?: { workspace?: string; board?: string }) => Promise<KanbanBoardResponse>;
+        getKanbanBoard: (request?: { workspace?: string; board?: string; profile?: string; workspacePath?: string }) => Promise<KanbanBoardResponse>;
         createKanbanTask: (request: {
+          profile?: string;
+          workspacePath?: string;
           title: string;
           body?: string;
           status?: string;
@@ -363,6 +365,8 @@ declare global {
           priority?: number | string;
         }) => Promise<{ task?: KanbanTaskSummary; [key: string]: unknown }>;
         updateKanbanTask: (request: {
+          profile?: string;
+          workspacePath?: string;
           taskId: string;
           title?: string;
           body?: string;
@@ -403,25 +407,28 @@ declare global {
         createAgent: (request: Record<string, unknown>) => Promise<Record<string, unknown>>;
         updateAgent: (request: { slug: string; patch: Record<string, unknown> }) => Promise<Record<string, unknown>>;
         deleteAgent: (request: { slug: string }) => Promise<Record<string, unknown>>;
-        startAgentWorkspaceStream: (request: { sessionId: string }) => Promise<{ streamId: string }>;
+        startAgentWorkspaceStream: (request: { sessionId: string; profile?: string }) => Promise<{ streamId: string }>;
         stopAgentWorkspaceStream: (request: { streamId: string }) => Promise<Record<string, unknown>>;
         onAgentWorkspaceEvent: (callback: (event: Record<string, unknown>) => void) => () => void;
         listProfiles: () => Promise<Record<string, unknown>>;
         switchProfile: (request: { name: string }) => Promise<Record<string, unknown>>;
         createProfile: (request: Record<string, unknown>) => Promise<Record<string, unknown>>;
         deleteProfile: (request: { name: string }) => Promise<Record<string, unknown>>;
-        getMemory: () => Promise<Record<string, unknown>>;
-        writeMemory: (request: { section: string; content: string }) => Promise<Record<string, unknown>>;
-        getSupermemoryStatus: () => Promise<Record<string, unknown>>;
-        listSupermemoryDocuments: () => Promise<Record<string, unknown>>;
-        getSupermemoryDocument: (request: { id?: string }) => Promise<Record<string, unknown>>;
-        searchSupermemory: (request: { query: string; limit?: number }) => Promise<Record<string, unknown>>;
+        getMemoryPolicy: (request?: { profile?: string }) => Promise<Record<string, unknown>>;
+        scopedAgentOperation: (request: { operation: string; profile: string; request?: Record<string, unknown> }) => Promise<Record<string, unknown>>;
+        setMemoryPolicy: (patch: Record<string, unknown>) => Promise<Record<string, unknown>>;
+        getMemory: (request?: { profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
+        writeMemory: (request: { section: string; content: string; profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
+        getSupermemoryStatus: (request?: { profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
+        listSupermemoryDocuments: (request?: { profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
+        getSupermemoryDocument: (request: { id?: string; profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
+        searchSupermemory: (request: { query: string; limit?: number; profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
         addSupermemoryDocument: (request: Record<string, unknown>) => Promise<Record<string, unknown>>;
-        forgetSupermemoryDocument: (request: { id?: string }) => Promise<Record<string, unknown>>;
+        forgetSupermemoryDocument: (request: { id?: string; profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
         reindexSupermemory: () => Promise<Record<string, unknown>>;
         dumpSupermemory: () => Promise<Record<string, unknown>>;
-        hybridMemorySearch: (request: { query: string; limit?: number }) => Promise<Record<string, unknown>>;
-        getInsights: (request?: { days?: number }) => Promise<Record<string, unknown>>;
+        hybridMemorySearch: (request: { query: string; limit?: number; profile?: string; workspacePath?: string }) => Promise<Record<string, unknown>>;
+        getInsights: (request?: { days?: number; profile?: string }) => Promise<Record<string, unknown>>;
         getWikiStatus: () => Promise<Record<string, unknown>>;
         getLogs: (request?: { file?: string; tail?: number }) => Promise<Record<string, unknown>>;
         listAppstore: (request?: { category?: string; query?: string; page?: string | number }) => Promise<Record<string, unknown>>;
@@ -431,7 +438,7 @@ declare global {
         uninstallAppstoreApp: (request: { appId: string }) => Promise<Record<string, unknown>>;
         updateAllAppstore: () => Promise<Record<string, unknown>>;
         submitAppstoreApp: (request: { manifest: Record<string, unknown> }) => Promise<Record<string, unknown>>;
-        getSettings: () => Promise<Record<string, unknown>>;
+        getSettings: (request?: { profile?: string }) => Promise<Record<string, unknown>>;
         getAccessAuthStartupPolicy: (requestId: number) => Promise<{
           policy: 'disabled' | 'enabled' | 'unknown';
           requestId: number;
@@ -498,7 +505,7 @@ declare global {
         whatsNewCandidate: () => Promise<{ fromVersion: string | null; toVersion: string } | null>;
         acknowledgeWhatsNew: (version: string) => Promise<{ acknowledged: boolean }>;
         setAutoCheckEnabled: (enabled: boolean) => Promise<{ enabled: boolean }>;
-        setChannel: (channel: 'stable' | 'preview') => Promise<LastbrowserUpdatePreferences & { persisted: boolean }>;
+        setChannel: (channel: 'stable' | 'beta') => Promise<LastbrowserUpdatePreferences & { persisted: boolean }>;
         onStatus: (callback: (status: LastbrowserUpdateStatus) => void) => () => void;
       };
       terminal: {
@@ -637,7 +644,22 @@ declare global {
           error?: string;
         }>;
       };
+      passwords: {
+        open: (request: { profileId: string }) => Promise<boolean>;
+        list: (request: { profileId: string }) => Promise<{ available: boolean; authorizationRequired?: boolean; entries: Array<{ id: string; origin: string; username: string; createdAt: number }> }>;
+        importCsv: (request: { profileId: string }) => Promise<{ imported: number; duplicates: number; conflicts: number; invalid: number; cancelled?: boolean }>;
+        remove: (request: { profileId: string; id: string }) => Promise<boolean>;
+      };
       system: {
+        discoverBrowserImport: () => Promise<{
+          defaultBrowser: string | null;
+          defaultBrowserId: string | null;
+          profiles: Array<{ id: string; browser: string; name: string; preferred: boolean }>;
+        }>;
+        importBrowserData: (request: { profileId: string; bookmarks: boolean; history: boolean }) => Promise<{
+          bookmarks: Array<{ url: string; title: string; createdAt: number }>;
+          history: Array<{ url: string; title: string; count: number; lastVisited: number }>;
+        }>;
         isDefaultBrowser: () => Promise<boolean>;
         setDefaultBrowser: () => Promise<boolean>;
         openExternal: (url: string) => Promise<boolean>;

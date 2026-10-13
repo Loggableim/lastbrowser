@@ -32,6 +32,8 @@ import { DEFAULT_WALLPAPER_PREFERENCE, START_PAGE_WALLPAPERS, parseStartPageWall
 import type { IndependentScope, GlobalActivitySpace } from '../independent-contracts.js';
 import type { IndependentAssistantController } from '../independent-assistant-controller.js';
 import './startpage-luminous.css';
+import './workplace.css';
+import { useWorkplaceState, WorkplaceUtilityWidgets, WorkplacePlugins, type WorkplaceWidgetId } from './workplace-widgets.js';
 
 export interface SpeedDialItem {
   id: string;
@@ -172,6 +174,15 @@ export function NativeBrowserStartPage({
   const historyCopy = browserStartHistoryCopy[locale];
   const wallpaperCopy = browserStartWallpaperCopy[locale];
   const [query, setQuery] = useState('');
+  const [workplacePage, setWorkplacePage] = useState<'overview' | 'widgets' | 'plugins'>('overview');
+  const workplaceKey = `lastbrowser.workplace.v1:${JSON.stringify([activeProfileId, activityScope?.backendProfileId || '', activeSpacePath])}`;
+  const [workplace, updateWorkplace, workplaceStorageError] = useWorkplaceState(workplaceKey);
+  const german = locale === 'de';
+  const widgetLabels: Record<WorkplaceWidgetId, string> = {
+    recent: historyCopy.recentSites, bookmarks: t('browser.chrome.bookmarks'), speedDial: t('browser.startPage.quickLaunch'),
+    quickActions: t('browser.startPage.quickActions'), notes: german ? 'Notizen' : 'Notes', tasks: german ? 'Aufgaben' : 'Tasks', focus: german ? 'Fokuszeit' : 'Focus timer'
+  };
+  useEffect(() => { setWorkplacePage('overview'); }, [workplaceKey]);
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
@@ -357,108 +368,24 @@ export function NativeBrowserStartPage({
   }
 
   return (
-    <section className="browser-main browser-start-page luminous-launchpad" data-testid="browser-start-dashboard" style={{
+    <section className="browser-main browser-start-page luminous-launchpad workplace-page" data-testid="browser-start-dashboard" style={{
       '--launchpad-wallpaper': `url("${wallpaperUrl}")`,
       '--launchpad-blur': `${wallpaperPreference.blur}px`,
       '--launchpad-dim-top': Math.min(.9, .3 + wallpaperPreference.dim / 100 * .55),
       '--launchpad-dim-bottom': Math.min(.95, .55 + wallpaperPreference.dim / 100 * .48),
       '--launchpad-light-dim': Math.min(.95, .4 + wallpaperPreference.dim / 100 * .6)
     } as React.CSSProperties}>
-      {/* 9.4 Atmospheric Hero Dashboard with Live Clock and Greeting */}
-      <div className="browser-start-hero startpage-dashboard-hero">
-        <div className="browser-start-brand">
-          <img src={brandAssets.logo} alt="lastbrowser" className="startpage-logo" />
-          <div className="startpage-welcome-text">
-            <div className="startpage-time-row">
-              <span className="startpage-clock" aria-label={t('browser.startPage.clockLabel')}>
-                {timeString}
-              </span>
-              <span className="startpage-date">
-                {dateString}
-              </span>
-            </div>
-            <h1 className="startpage-greeting">{t(greeting.greetingKey)}</h1>
-            <p className="startpage-subline">{t(greeting.sublineKey, { botName: effectiveBotName })}</p>
-          </div>
-        </div>
-
-        <div className="startpage-hero-aside">
+      <header className="workplace-header">
+        <div className="workplace-heading"><img src={brandAssets.logo} alt="" /><div><h1>{spaceDisplayName(displayedSpaces.find(isSpaceActive) || displayedSpaces[0])}</h1><p>{t(greeting.greetingKey)} · {german ? 'Dein Arbeitsplatz' : 'Your workspace'}</p></div></div>
+        <div className="workplace-header-actions"><time title={dateString}>{timeString}<small>{dateString}</small></time>
           <div className="startpage-wallpaper-toolbar" role="group" aria-label={wallpaperCopy.settings}>
             <button type="button" onClick={() => stepWallpaper(-1)} aria-label={wallpaperCopy.previous} title={wallpaperCopy.previous}><ChevronLeft size={15} /></button>
             <button type="button" ref={wallpaperButtonRef} onClick={() => setWallpaperOpen(true)} aria-label={wallpaperCopy.settings} aria-haspopup="dialog" aria-expanded={wallpaperOpen}><ImageIcon size={15} /><span>{wallpaperCopy.settings}</span></button>
             <button type="button" onClick={() => stepWallpaper(1)} aria-label={wallpaperCopy.next} title={wallpaperCopy.next}><ChevronRight size={15} /></button>
           </div>
-          <div className="browser-start-badge">
-            <Sparkles size={14} />
-            <span>{effectiveBotName} AI</span>
-          </div>
-          <button
-            type="button"
-            className="startpage-palette-trigger"
-            onClick={() => handleQuickAction(DASHBOARD_QUICK_ACTIONS[4])}
-            title={t('browser.startPage.openCommandPalette')}
-          >
-            <Command size={13} />
-            <span>{t('browser.startPage.commandPalette')}</span>
-          </button>
+        <button type="button" className="workplace-command" title={t('browser.startPage.openCommandPalette')} onClick={() => handleQuickAction(DASHBOARD_QUICK_ACTIONS[4])}><Command size={15} /><span>Ctrl K</span></button>
         </div>
-      </div>
-
-      {/* Dual Search & Prompt Bar */}
-      <form className="browser-start-search startpage-search-bar" onSubmit={submit}>
-        <Search size={18} />
-        <input
-          ref={searchInputRef}
-          value={query}
-          placeholder={aiConnected ? t('browser.startPage.searchPlaceholder', { botName: effectiveBotName }) : t('browser.chrome.searchPlaceholder')}
-          onChange={(event) => setQuery(event.target.value)}
-          data-testid="dashboard-search-input"
-        />
-        <div className="startpage-search-actions">
-          <button
-            type="button"
-            className="secondary-action compact startpage-ask-ai-btn"
-            disabled={!query.trim() || !aiConnected}
-            onClick={handleAskAi}
-            title={t('browser.startPage.askNovaTitle')}
-          >
-            <Bot size={15} />
-            <span>{t('browser.startPage.askNova', { botName: effectiveBotName })}</span>
-          </button>
-          <button type="submit" className="primary-action compact" disabled={!query.trim()}>
-            <Globe2 size={15} />
-            <span>{t('browser.startPage.open')}</span>
-          </button>
-        </div>
-      </form>
-
-      {/* Quick Action Chips */}
-      <div className="startpage-quick-chips" aria-label={t('browser.startPage.quickActions')}>
-        <span className="quick-chips-label">
-          <Wand2 size={13} />
-          <span>{t('browser.startPage.quickActions')}:</span>
-        </span>
-        {DASHBOARD_QUICK_ACTIONS.map((action) => (
-          <button
-            key={action.id}
-            type="button"
-            className="startpage-chip-btn"
-            onClick={() => handleQuickAction(action)}
-            disabled={!aiConnected && action.id !== 'palette'}
-            title={action.prompt}
-          >
-            <span className="chip-icon">{action.icon}</span>
-            <span className="chip-label">{t(action.labelKey)}</span>
-          </button>
-        ))}
-        {!aiConnected && (
-          <span className="startpage-ai-unavailable" role="status">
-            {t('spaceAssistant.notReady')}
-            {onOpenModelSettings && <button type="button" onClick={onOpenModelSettings}>{t('spaceAssistant.connectInSettings')}</button>}
-          </span>
-        )}
-      </div>
-
+      </header>
       {/* ── Space-Hub / Workspaces Overview ──────────────────────────────── */}
       <section className="startpage-spaces-section" data-testid="browser-start-spaces-hub">
         <div className="startpage-section-head">
@@ -524,7 +451,7 @@ export function NativeBrowserStartPage({
         {/* Modal / Dialog for New Space */}
         {isCreatingSpace && (
           <div className="startpage-modal-overlay" onClick={() => setIsCreatingSpace(false)}>
-            <div className="startpage-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="startpage-modal-card" role="dialog" aria-modal="true" aria-label={t('browser.startPage.createSpaceTitle')} onClick={(e) => e.stopPropagation()}>
               <div className="startpage-modal-header">
                 <div className="startpage-modal-title-wrap">
                   <div className="startpage-section-icon-badge">
@@ -584,8 +511,74 @@ export function NativeBrowserStartPage({
         )}
       </section>
 
-      {/* Speed Dial Quick Launch Section */}
-      <section className="speed-dial-section">
+      {/* Dual Search & Prompt Bar */}
+      <form className="browser-start-search startpage-search-bar" onSubmit={submit}>
+        <Search size={18} />
+        <input
+          ref={searchInputRef}
+          value={query}
+          placeholder={aiConnected ? t('browser.startPage.searchPlaceholder', { botName: effectiveBotName }) : t('browser.chrome.searchPlaceholder')}
+          onChange={(event) => setQuery(event.target.value)}
+          aria-label={t('browser.chrome.searchPlaceholder')}
+          data-testid="dashboard-search-input"
+        />
+        <div className="startpage-search-actions">
+          <button
+            type="button"
+            className="secondary-action compact startpage-ask-ai-btn"
+            disabled={!query.trim() || !aiConnected}
+            onClick={handleAskAi}
+            title={t('browser.startPage.askNovaTitle')}
+          >
+            <Bot size={15} />
+            <span>{t('browser.startPage.askNova', { botName: effectiveBotName })}</span>
+          </button>
+          <button type="submit" className="primary-action compact" disabled={!query.trim()}>
+            <Globe2 size={15} />
+            <span>{t('browser.startPage.open')}</span>
+          </button>
+        </div>
+      </form>
+
+      <nav className="workplace-pages" aria-label={german ? 'Arbeitsplatzseiten' : 'Workspace pages'}>
+        <button type="button" aria-pressed={workplacePage === 'overview'} onClick={() => setWorkplacePage('overview')}><Layers size={15} />{german ? 'Übersicht' : 'Overview'}</button>
+        <button type="button" aria-pressed={workplacePage === 'widgets'} onClick={() => setWorkplacePage('widgets')}><Compass size={15} />Widgets</button>
+        <button type="button" aria-pressed={workplacePage === 'plugins'} onClick={() => setWorkplacePage('plugins')}><Wand2 size={15} />Plugins</button>
+        <button type="button" className="workplace-customize" onClick={() => setWorkplacePage('widgets')}>{german ? 'Anpassen' : 'Customize'}</button>
+      </nav>
+      {workplaceStorageError && <p role="status">{german ? 'Änderungen können gerade nicht lokal gespeichert werden.' : 'Changes cannot be saved locally right now.'}</p>}
+      {workplacePage === 'overview' && <>
+        {workplace.enabled.quickActions && <>      {/* Quick Action Chips */}
+      <div className="startpage-quick-chips" aria-label={t('browser.startPage.quickActions')}>
+        <span className="quick-chips-label">
+          <Wand2 size={13} />
+          <span>{t('browser.startPage.quickActions')}:</span>
+        </span>
+        {DASHBOARD_QUICK_ACTIONS.map((action) => (
+          <button
+            key={action.id}
+            type="button"
+            className="startpage-chip-btn"
+            onClick={() => handleQuickAction(action)}
+            disabled={!aiConnected && action.id !== 'palette'}
+            title={action.prompt}
+          >
+            <span className="chip-icon">{action.icon}</span>
+            <span className="chip-label">{t(action.labelKey)}</span>
+          </button>
+        ))}
+        {!aiConnected && (
+          <span className="startpage-ai-unavailable" role="status">
+            {t('spaceAssistant.notReady')}
+            {onOpenModelSettings && <button type="button" onClick={onOpenModelSettings}>{t('spaceAssistant.connectInSettings')}</button>}
+          </span>
+        )}
+      </div>
+
+</>}
+        <div className="workplace-grid">
+          {workplace.enabled.speedDial && <>      {/* Speed Dial Quick Launch Section */}
+      <section className="speed-dial-section workplace-tile" data-tone="cyan">
         <div className="speed-dial-head">
           <div className="speed-dial-head-title">
             <Compass size={15} />
@@ -615,9 +608,10 @@ export function NativeBrowserStartPage({
         </div>
       </section>
 
+</>}
       {/* Favorites and Most Visited Grids */}
       <div className="browser-start-grid">
-        <section className="browser-start-card">
+        {workplace.enabled.bookmarks && <section className="browser-start-card workplace-tile" data-tone="purple">
           <div className="browser-start-card-head">
             <div>
               <span className="eyebrow">{historyCopy.favorites}</span>
@@ -642,9 +636,9 @@ export function NativeBrowserStartPage({
               <div className="browser-start-empty">{t('browser.chrome.noBookmarks')}</div>
             )}
           </div>
-        </section>
+        </section>}
 
-        <section className="browser-start-card">
+        {workplace.enabled.recent && <section className="browser-start-card workplace-tile" data-tone="cyan">
           <div className="browser-start-card-head">
             <div>
               <span className="eyebrow">{historyCopy.mostVisited}</span>
@@ -669,8 +663,17 @@ export function NativeBrowserStartPage({
               <div className="browser-start-empty">{historyCopy.empty}</div>
             )}
           </div>
-        </section>
+        </section>}
       </div>
+          <WorkplaceUtilityWidgets key={workplaceKey} state={workplace} update={updateWorkplace} now={currentTime.getTime()} german={german} />
+        </div>
+        {!Object.values(workplace.enabled).some(Boolean) && <p>{german ? 'Aktiviere deine gewünschten Widgets unter „Widgets“.' : 'Enable your preferred widgets on the Widgets page.'}</p>}
+      </>}
+      {workplacePage === 'widgets' && <section className="workplace-widget-settings"><h2>{german ? 'Dein Arbeitsplatz, deine Widgets' : 'Your workspace, your widgets'}</h2><p>{german ? 'Wähle, was in der Übersicht erscheint. Einstellungen, Notizen und Aufgaben bleiben lokal in diesem Profil und Space.' : 'Choose what appears in Overview. Preferences, notes and tasks stay local to this profile and Space.'}</p>
+        <div className="workplace-grid">{(Object.keys(widgetLabels) as WorkplaceWidgetId[]).map((id, index) => <label key={id} className="workplace-widget-toggle" data-tone={['cyan', 'purple', 'orange', 'green'][index % 4]}><input type="checkbox" checked={workplace.enabled[id]} onChange={event => updateWorkplace(previous => ({ ...previous, enabled: { ...previous.enabled, [id]: event.target.checked } }))} /><strong>{widgetLabels[id]}</strong></label>)}</div>
+        <button type="button" className="workplace-return" onClick={() => setWorkplacePage('overview')}>{german ? 'Zur Übersicht' : 'Back to Overview'}</button>
+      </section>}
+      {workplacePage === 'plugins' && <WorkplacePlugins key={workplaceKey} german={german} />}
       {wallpaperOpen && (
         <div className="startpage-wallpaper-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWallpaperDialog(); }}>
           <div className="startpage-wallpaper-dialog" ref={wallpaperDialogRef} role="dialog" aria-modal="true" aria-labelledby={wallpaperDialogTitleId}>

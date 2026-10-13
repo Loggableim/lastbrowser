@@ -4,112 +4,65 @@ import DOMPurify from 'dompurify';
 import { renderChatMarkdown } from './chat-markdown.js';
 import './chat-markdown.css';
 
-// Lightweight Mermaid/KaTeX renderer for chat content.
-// Uses CDN-loaded libraries — mermaid and katex are loaded on first use.
+// Lazy modules and KaTeX fonts/CSS are bundled by Vite, with no remote scripts.
+let mermaidModule: Promise<typeof import('mermaid')['default']> | undefined;
+let katexModule: Promise<typeof import('katex')['default']> | undefined;
+let diagramSequence = 0;
 
-declare global {
-  interface Window {
-    mermaid?: {
-      initialize: (options: { startOnLoad: boolean; theme: 'dark' | 'default' }) => void;
-      run: (opts: { nodes: HTMLElement[] }) => Promise<void>;
-    };
-    katex?: {
-      renderToString: (tex: string, opts?: { displayMode?: boolean; throwOnError?: boolean }) => string;
-    };
-  }
-}
-
-// ── Mermaid ──────────────────────────────────────────────────
-
-function loadMermaid(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof window.mermaid !== 'undefined' && typeof window.mermaid.run === 'function') {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js';
-    script.onload = () => {
-      // The CDN can serve a build whose API differs (or a partial load), so
-      // verify the method we actually call exists before resolving. Without
-      // this the caller throws "run is not a function" and the whole chat
-      // panel falls into the error boundary.
-      if (window.mermaid && typeof window.mermaid.run === 'function') {
-        window.mermaid.initialize({ startOnLoad: false, theme: 'dark' });
-        resolve();
-      } else {
-        reject(new Error('mermaid loaded without a usable run()'));
-      }
-    };
-    script.onerror = () => reject(new Error('Failed to load mermaid'));
-    document.head.appendChild(script);
-  });
+function loadMermaid(): Promise<typeof import('mermaid')['default']> {
+  if (!mermaidModule) mermaidModule = import('mermaid').then(({ default: mermaid }) => {
+    mermaid.initialize({
+      startOnLoad: false, theme: 'dark', securityLevel: 'strict',
+      suppressErrorRendering: true, maxTextSize: 50_000, maxEdges: 500,
+      flowchart: { htmlLabels: false },
+      secure: ['secure', 'securityLevel', 'startOnLoad', 'maxTextSize', 'maxEdges', 'suppressErrorRendering', 'dompurifyConfig'],
+    });
+    return mermaid;
+  }).catch(error => { mermaidModule = undefined; throw error; });
+  return mermaidModule;
 }
 
 function renderMermaidBlocks(container: HTMLElement): void {
-  const blocks = container.querySelectorAll<HTMLElement>('.mermaid-block');
+  const blocks = Array.from(container.querySelectorAll<HTMLElement>('.mermaid-block'));
   if (!blocks.length) return;
-  // Diagram rendering is a progressive enhancement: a missing CDN or an API
-  // mismatch must never break the chat transcript.
-  void loadMermaid()
-    .then(() => {
-      if (window.mermaid && typeof window.mermaid.run === 'function') {
-        void window.mermaid.run({ nodes: Array.from(blocks) });
-      }
-    })
-    .catch(() => {
-      /* leave the raw diagram text in place */
-    });
-}
-
-// ── KaTeX ────────────────────────────────────────────────────
-
-function loadKatex(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (typeof window.katex !== 'undefined' && typeof window.katex.renderToString === 'function') {
-      resolve();
-      return;
+  void loadMermaid().then(async mermaid => {
+    for (const block of blocks) {
+      const source = block.textContent || '';
+      if (!block.isConnected || source.length > 50_000) continue;
+      try {
+        const result = await mermaid.render(`lastbrowser-diagram-${++diagramSequence}`, source);
+        if (!block.isConnected || block.textContent !== source) continue;
+        block.innerHTML = DOMPurify.sanitize(result.svg, {
+          USE_PROFILES: { svg: true, svgFilters: true },
+          FORBID_TAGS: ['foreignObject', 'script', 'iframe', 'object', 'embed'],
+        });
+      } catch { /* retain readable diagram source on parse/render failure */ }
     }
-    // Load CSS first
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.css';
-    document.head.appendChild(link);
-    // Load JS
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/katex@0.16/dist/katex.min.js';
-    script.onload = () => {
-      // Same guard as mermaid: verify the method we call actually exists.
-      if (window.katex && typeof window.katex.renderToString === 'function') resolve();
-      else reject(new Error('katex loaded without renderToString()'));
-    };
-    script.onerror = () => reject(new Error('Failed to load katex'));
-    document.head.appendChild(script);
-  });
+  }).catch(() => { /* retain source if the bundled module cannot load */ });
 }
 
-function renderKatexInElement(el: HTMLElement): void {
-  const texBlocks = el.querySelectorAll<HTMLElement>('.katex-block');
-  const texInline = el.querySelectorAll<HTMLElement>('.katex-inline');
-  if (!texBlocks.length && !texInline.length) return;
-  // Math rendering is a progressive enhancement — never break the transcript.
-  void loadKatex().then(() => {
-    if (!window.katex || typeof window.katex.renderToString !== 'function') return;
-    texBlocks.forEach((block) => {
+function loadKatex(): Promise<typeof import('katex')['default']> {
+  if (!katexModule) katexModule = Promise.all([
+    import('katex'), import('katex/dist/katex.min.css'),
+  ]).then(([module]) => module.default).catch(error => { katexModule = undefined; throw error; });
+  return katexModule;
+}
+
+function renderKatexInElement(container: HTMLElement): void {
+  const elements = Array.from(container.querySelectorAll<HTMLElement>('.katex-block, .katex-inline'));
+  if (!elements.length) return;
+  void loadKatex().then(katex => {
+    elements.forEach(element => {
+      if (!element.isConnected) return;
       try {
-        block.innerHTML = window.katex!.renderToString(block.textContent || '', {
-          displayMode: true, throwOnError: false
+        const markup = katex.renderToString(element.textContent || '', {
+          displayMode: element.classList.contains('katex-block'), throwOnError: false,
+          trust: false, strict: 'warn', maxExpand: 1000, maxSize: 20,
         });
-      } catch { /* keep raw on error */ }
+        element.innerHTML = DOMPurify.sanitize(markup, { USE_PROFILES: { html: true, mathMl: true } });
+      } catch { /* retain readable math source on failure */ }
     });
-    texInline.forEach((span) => {
-      try {
-        span.innerHTML = window.katex!.renderToString(span.textContent || '', {
-          displayMode: false, throwOnError: false
-        });
-      } catch { /* keep raw on error */ }
-    });
-  });
+  }).catch(() => { /* retain source if the bundled module cannot load */ });
 }
 
 // ── Pre-process text: extract mermaid / math blocks ──────────
@@ -204,7 +157,7 @@ export function RichTextRenderer({ content, text }: { content?: string; text?: s
     <div
       ref={ref}
       className="rich-text-renderer"
-      dangerouslySetInnerHTML={{ __html: typeof DOMPurify.sanitize === 'function' ? DOMPurify.sanitize(html) : html }}
+      dangerouslySetInnerHTML={{ __html: typeof DOMPurify.sanitize === 'function' ? DOMPurify.sanitize(html) : escapeHtml(rawContent) }}
     />
   );
 }

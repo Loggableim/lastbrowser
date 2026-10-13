@@ -42,7 +42,8 @@ import {
   type AgenticWorkflowTemplate
 } from '../workflow-templates.js';
 import { useChatStore } from '../stores/useChatStore.js';
-import { brandAssets } from '../brand.js';
+import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
+import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
 import { chooseActiveModel, isModelActive, useActiveModelRevision } from '../active-model-selection.js';
@@ -54,13 +55,14 @@ import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningMod
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 import { ChatDraftSubmissionGate } from '../chat-draft-submission.js';
 import { submitQuickChatDraft } from '../quick-chat-draft.js';
+import { providerDeployment, providerHostingLabel } from '../provider-presentation.js';
 
 export interface AvailableModelItem {
   id: string;
   providerId?: string;
   label: string;
   provider: string;
-  category: 'gemini' | 'claude' | 'openai' | 'local' | 'teamwork' | 'other';
+  category: 'gemini' | 'claude' | 'openai' | 'local' | 'cloud' | 'teamwork' | 'other';
   badge: string;
   badgeClass: string;
   reasoningEfforts?: string[];
@@ -170,6 +172,20 @@ export function CopilotSplitView({
   onOpenSettings
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const { t, locale } = useDesktopI18n();
+  const companion = useCompanionAppearance();
+  const companionName = companion.botName;
+  const [companionPickerOpen, setCompanionPickerOpen] = useState(false);
+  const [companionDraft, setCompanionDraft] = useState<CompanionSelection>({ personality: 'nova', botName: 'Nova' });
+  const companionPickerRef = useRef<HTMLDivElement>(null);
+  const companionTriggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setCompanionPickerOpen(false); }, [browserProfileId, workspacePath, backendProfileName, isOpen]);
+  useEffect(() => {
+    if (!companionPickerOpen) return;
+    const outside = (event: PointerEvent) => { if (!companionPickerRef.current?.contains(event.target as Node)) setCompanionPickerOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } };
+    window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape);
+    return () => { window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
+  }, [companionPickerOpen]);
   const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
@@ -266,7 +282,7 @@ export function CopilotSplitView({
           method: 'GET',
           path: '/api/models',
           scopeSelection: orchestrationScope
-        })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; configured?: boolean; models?: Array<any>; extra_models?: Array<any> }> } | null;
+        })) as { groups?: Array<{ provider_id?: string; provider?: string; deployment?: string; account?: string; configured?: boolean; models?: Array<any>; extra_models?: Array<any> }> } | null;
         if (!alive || generation !== orchestrationScopeGenerationRef.current || orchestrationScopeKeyRef.current !== orchestrationScopeKey) return;
         if (!res || !Array.isArray(res.groups)) {
           if (!hasCachedCatalogForScope) {
@@ -294,7 +310,7 @@ export function CopilotSplitView({
           if (isRetiredProvider(pid)) continue;
           const gAccount = g.account;
 
-          let category: 'gemini' | 'claude' | 'openai' | 'local' | 'other' = 'other';
+          let category: 'gemini' | 'claude' | 'openai' | 'local' | 'cloud' | 'other' = 'other';
           let providerLabel = g.provider || pid;
           let badgeClass = 'other';
 
@@ -302,9 +318,10 @@ export function CopilotSplitView({
             category = 'gemini';
             providerLabel = pid.includes('antigravity') ? 'Antigravity' : 'Google Gemini (AI Studio)';
             badgeClass = 'gemini';
-          } else if (pid.includes('ollama')) {
-            category = 'local';
-            providerLabel = pid.includes('cloud') ? 'Ollama Cloud' : 'Ollama';
+          } else if (pid.includes('ollama') || ['localai', 'local-ai', 'lmstudio', 'lm-studio', 'custom'].includes(pid) || pid.startsWith('custom:')) {
+            const deployment = providerDeployment(pid, undefined, g.deployment);
+            category = deployment === 'local' ? 'local' : deployment === 'unknown' ? 'other' : 'cloud';
+            providerLabel = providerHostingLabel(pid, g.provider || pid, deployment);
             badgeClass = 'ollama';
           } else if (pid.includes('claude') || pid.includes('anthropic')) {
             category = 'claude';
@@ -329,7 +346,7 @@ export function CopilotSplitView({
             const account = m.account || gAccount;
             const badge = pct !== undefined
               ? `${pct}% Kontingent verfügbar`
-              : (pid.includes('cloud') ? 'Ollama Cloud' : (category === 'gemini' ? 'Live Quota Discovery' : providerLabel));
+              : (category === 'gemini' ? 'Live Quota Discovery' : providerLabel);
 
             if (dynamicModels.some(model => model.id === cleanId && model.providerId === identity.provider)) continue;
             dynamicModels.push({
@@ -628,16 +645,19 @@ export function CopilotSplitView({
           {visibleModelList.filter((m) => m.category === 'gemini').map(renderModelItem)}
 
           {/* 2. Anthropic */}
-          <div className="model-group-title">Anthropic</div>
+          {visibleModelList.some((m) => m.category === 'claude') && <div className="model-group-title">Anthropic</div>}
           {visibleModelList.filter((m) => m.category === 'claude').map(renderModelItem)}
 
           {/* 3. OpenAI */}
-          <div className="model-group-title">OpenAI</div>
+          {visibleModelList.some((m) => m.category === 'openai') && <div className="model-group-title">OpenAI</div>}
           {visibleModelList.filter((m) => m.category === 'openai').map(renderModelItem)}
 
           {/* 4. Lokale Modelle */}
-          <div className="model-group-title">Lokale Modelle (Ollama / LocalAI)</div>
+          {visibleModelList.some((m) => m.category === 'local') && <div className="model-group-title">{locale === 'de' ? 'Auf diesem Computer' : 'On this computer'}</div>}
           {visibleModelList.filter((m) => m.category === 'local').map(renderModelItem)}
+
+          {visibleModelList.some((m) => m.category === 'cloud') && <div className="model-group-title">{locale === 'de' ? 'Cloud & entfernte Endpunkte' : 'Cloud & remote endpoints'}</div>}
+          {visibleModelList.filter((m) => m.category === 'cloud').map(renderModelItem)}
 
           {/* 5. Weitere Engines */}
           {visibleModelList.some((m) => m.category === 'other') && (
@@ -727,14 +747,28 @@ export function CopilotSplitView({
   }
 
   return (
-    <aside className="copilot-split-panel" aria-label={`${botName} AI Workspace`}>
+    <aside className="copilot-split-panel" aria-label={`${companionName} AI Workspace`}>
       {/* Top Header */}
       <div className="copilot-header">
-        <div className="copilot-header-brand">
+        <div ref={companionPickerRef} style={{ position: 'relative' }}>
+        <button type="button" className="copilot-header-brand" ref={companionTriggerRef} aria-label="Space-Persönlichkeit wechseln" aria-haspopup="dialog" aria-expanded={companionPickerOpen}
+          style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}
+          onClick={() => { setCompanionDraft({ personality: companion.personality, botName: companion.botName }); setCompanionPickerOpen(current => !current); }}>
           <div className="copilot-logo-circle">
-            <img src={brandAssets.sidekickAvatar} alt="" className="copilot-header-avatar" draggable={false} />
+            <img src={companion.avatar} alt="" className="copilot-header-avatar" draggable={false} />
           </div>
-          <span className="copilot-header-title">{botName} AI</span>
+          <span className="copilot-header-title">{companionName} AI</span>
+        </button>
+        {companionPickerOpen && <section role="dialog" aria-label="Space-Persönlichkeit" style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300, boxSizing: 'border-box', maxWidth: 'calc(100vw - 32px)', padding: 16, borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-primary, #101522)', color: 'var(--text-primary)', zIndex: 1000, boxShadow: '0 12px 32px rgba(0,0,0,.4)' }}>
+          <strong>Persönlichkeit für diesen Space</strong>
+          <CompanionPicker value={companionDraft} onChange={setCompanionDraft} disabled={!companion.loaded || companion.busy} />
+          {companion.error && <p role="alert">{companion.error}</p>}
+          {!companion.loaded && !companion.error && <p role="status">Wird geladen …</p>}
+          <div className="native-card-actions">
+            <button type="button" disabled={!companion.loaded || companion.busy} onClick={async () => { if (await companion.setSelection(companionDraft.personality, companionDraft.botName)) { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } }}>Speichern</button>
+            <button type="button" onClick={() => { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); }}>Abbrechen</button>
+          </div>
+        </section>}
         </div>
         <div className="copilot-header-actions">
           {/* Universal Model Picker in Header */}
@@ -879,11 +913,12 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn copilot-new-chat-btn"
-              title={t('sidebar.drawer.newChat')}
+              title="Reset Chat"
+              aria-label="Reset Chat"
               onClick={onNewChat}
             >
               <Plus size={13} />
-              <span>{t('common.add')}</span>
+              <span>Reset Chat</span>
             </button>
           )}
 
@@ -1002,12 +1037,12 @@ export function CopilotSplitView({
             {error && <div className="copilot-stream-error" role="alert">{error}</div>}
             {status && <div className="copilot-reset-status" role="status">{status}</div>}
             <div className="copilot-empty-icon">
-              <img src={brandAssets.sidekickAvatar} alt={botName} className="copilot-empty-avatar" draggable={false} />
+              <img src={companion.avatar} alt={companionName} className="copilot-empty-avatar" draggable={false} />
             </div>
-            <h4>{t('copilot.emptyTitle', { botName })}</h4>
+            <h4>{t('copilot.emptyTitle', { botName: companionName })}</h4>
             <p>{t('copilot.emptyDescription')}</p>
             <p>{t('copilot.quickChatDescription')}</p>
-            <span className="copilot-quick-chat-label">{botName} · {t('copilot.quickChat')}</span>
+            <span className="copilot-quick-chat-label">{companionName} · {t('copilot.quickChat')}</span>
 
             {quickActions && quickActions.length > 0 && (
               <div className="copilot-starter-chips">
@@ -1030,6 +1065,7 @@ export function CopilotSplitView({
             {error && <div className="copilot-stream-error" role="alert">{error}</div>}
             {status && <div className="copilot-reset-status" role="status">{status}</div>}
             {messages.map((msg, index) => {
+              const messageAppearance = messageCompanionAppearance(msg.companion, companion);
               const isUser = msg.role === 'user';
               const isAssistant = msg.role === 'assistant';
 
@@ -1039,8 +1075,8 @@ export function CopilotSplitView({
                   className={`copilot-message-row ${isUser ? 'user-row' : 'assistant-row'}`}
                 >
                   {!isUser && (
-                    <div className="copilot-avatar-circle" title={botName}>
-                      <img src={brandAssets.sidekickAvatar} alt="" className="copilot-msg-avatar" draggable={false} />
+                    <div className="copilot-avatar-circle" title={messageAppearance.botName}>
+                      <img src={messageAppearance.avatar} alt="" className="copilot-msg-avatar" draggable={false} />
                     </div>
                   )}
 

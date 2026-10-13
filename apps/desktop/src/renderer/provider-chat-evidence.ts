@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isStableProvider } from './provider-verification.js';
 
 let evidenceRevision = 0;
 const evidenceListeners = new Set<() => void>();
@@ -179,7 +180,10 @@ export function getProviderModelEvidence(providerId: string, modelId: string, br
 
 export function isProviderModelQualified(providerId: string, modelId: string, browserProfileId: string,
   backendProfileName: string, storage: Pick<Storage, 'getItem' | 'setItem'>, now = Date.now()): boolean {
-  return Boolean(getProviderModelEvidence(providerId, modelId, browserProfileId, backendProfileName, storage, now));
+  // Stable release eligibility does not invent a successful chat record.
+  // Callers still supply models from the scoped catalog and validate credentials.
+  return Boolean(modelId.trim()) && (isStableProvider(providerId)
+    || Boolean(getProviderModelEvidence(providerId, modelId, browserProfileId, backendProfileName, storage, now)));
 }
 
 export function getQualifiedProviderModels(providerId: string, browserProfileId: string, backendProfileName: string,

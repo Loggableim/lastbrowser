@@ -264,12 +264,15 @@ _sessions_lock = threading.Lock()
 
 def create_workspace_session(agent_slug: str, workdir: str = "") -> dict:
     """Erstelle eine neue Arbeits-Session für einen Agenten."""
+    from runtime.memory_policy import require_assistants, profile_home
+    require_assistants()
     session_id = str(uuid.uuid4())[:8]
     ws_dir = ensure_agent_workspace(agent_slug, workdir)
 
     session = {
         "id": session_id,
         "agent_slug": agent_slug,
+        "policy_home": str(profile_home()),
         "state": STATE_IDLE,
         "workdir": ws_dir,
         "process": None,
@@ -315,6 +318,8 @@ def destroy_workspace_session(session_id: str):
 
 def _run_in_terminal(session: dict, command: str, timeout: int = 120) -> dict:
     """Führe einen Befehl im Terminal aus und streame die Ausgabe per SSE."""
+    from runtime.memory_policy import require_assistants
+    require_assistants(Path(session["policy_home"]))
     session["events"].append({
         "type": "command", "command": command,
         "timestamp": time.time(), "output": "",
@@ -601,6 +606,8 @@ def process_agent_request(agent_slug: str, user_message: str,
 
 def send_command_to_agent(session_id: str, command: str) -> dict:
     """Sende einen Befehl direkt an die Agent-Session."""
+    from runtime.memory_policy import require_assistants
+    require_assistants()
     session = get_workspace_session(session_id)
     if not session:
         return {"error": "Session not found"}

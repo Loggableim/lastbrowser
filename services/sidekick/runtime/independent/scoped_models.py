@@ -89,6 +89,7 @@ def _text(value, maximum=512):
 def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
     """Allowlist public fields; never return account emails, URLs or raw config."""
     providers = []
+    from runtime.provider_deployment import provider_deployment
     connections = {}
     for row in accounts.get("providers", []) if isinstance(accounts, dict) else []:
         if not isinstance(row, dict) or not _text(row.get("id"), 128):
@@ -133,7 +134,8 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
         if not pid:
             continue
         clean = {"provider_id": pid, "provider": _text(group.get("provider"), 256) or pid,
-                 "configured": connections.get(pid, False), "models": []}
+                 "configured": connections.get(pid, False), "models": [],
+                 "deployment": provider_deployment(pid, configuration, active_provider=raw.get("active_provider"))}
         explicit_model_ids = set()
         provider_config = configured_providers.get(pid) if isinstance(configured_providers, dict) else None
         if isinstance(provider_config, dict):

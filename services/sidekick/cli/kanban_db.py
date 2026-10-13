@@ -3849,6 +3849,9 @@ def dispatch_once(
     ``board`` pins workspace/log/db resolution for this tick to a specific
     board. When omitted, the current-board resolution chain is used.
     """
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        return DispatchResult()
     # Reap zombie children from previously spawned workers.
     # The gateway-embedded dispatcher is the parent of every worker spawned
     # via _default_spawn (start_new_session=True only detaches the

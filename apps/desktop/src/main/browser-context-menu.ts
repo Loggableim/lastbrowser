@@ -315,7 +315,8 @@ export function registerBrowserContextMenu({
   getAssistantName,
   getLocale,
   getSearchEngine,
-  getSearchEngineId
+  getSearchEngineId,
+  getPasswordItems
 }: {
   app: App;
   Menu: MenuLike;
@@ -326,6 +327,7 @@ export function registerBrowserContextMenu({
   getLocale?: () => string;
   getSearchEngine?: () => { label: string; search: (query: string) => string };
   getSearchEngineId?: () => string;
+  getPasswordItems?: (contents: WebContents, params: ContextMenuParams) => Promise<MenuItemConstructorOptions[]>;
 }): void {
   app.on('web-contents-created', (_event, contents) => {
     installWindowOpenBridge(contents, getWindow, shell);
@@ -366,7 +368,9 @@ export function registerBrowserContextMenu({
         searchEngine: getSearchEngine?.(),
         searchEngineId: getSearchEngineId?.()
       });
-      Menu.buildFromTemplate(template).popup({ window: getWindow() ?? undefined });
+      const passwordItems = await getPasswordItems?.(contents, params).catch(() => []) || [];
+      if (contents.isDestroyed()) return;
+      Menu.buildFromTemplate([...template, ...passwordItems]).popup({ window: getWindow() ?? undefined });
     });
   });
 }

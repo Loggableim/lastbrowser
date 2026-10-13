@@ -1,4 +1,4 @@
-import React, { FormEvent, useCallback, useEffect, useState, useSyncExternalStore } from 'react';
+import React, { FormEvent, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
 import {
   Bot,
   Brain,
@@ -20,6 +20,7 @@ import { useDesktopI18n } from '../i18n.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { extractLinkedFiles, normalizeSkillCategories, normalizeSkillCategory } from './skill-categories.js';
 import { MemoryPanelStateModel, memoryDocumentId, type MemorySection } from './memory-panel-state.js';
+import { OptionalAiProfileContext, OptionalAiWorkspaceContext, useOptionalAiPolicy } from '../optional-ai-policy.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -199,16 +200,45 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
   );
 }
 
+export function NativeAssistantsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const { locale } = useDesktopI18n();
+  const optional = useOptionalAiPolicy();
+  const [settings, setSettings] = useState(activeContextItem === 'Profiles');
+  return <div className="browser-main native-rest-main">
+    <div className="native-card-actions" role="tablist" aria-label={locale === 'de' ? 'Assistenten' : 'Assistants'}>
+      <button type="button" role="tab" aria-selected={!settings} onClick={() => setSettings(false)}>{locale === 'de' ? 'Assistenten' : 'Assistants'}</button>
+      <button type="button" role="tab" aria-selected={settings} onClick={() => setSettings(true)}>{locale === 'de' ? 'Erweiterte Einstellungen' : 'Advanced settings'}</button>
+    </div>
+    {!optional.policy.assistants_enabled && <p role="status">{locale === 'de' ? 'Zusätzliche Assistenten sind deaktiviert. Im Extension & Skill Hub aktivieren.' : 'Additional assistants are disabled. Enable them in the Extension & Skill Hub.'}</p>}
+    {optional.error && <p role="alert">{optional.error}</p>}
+    {settings ? <NativeProfilesMain serviceStatus={serviceStatus} activeContextItem="Profiles" /> : <NativeAgentsMain serviceStatus={serviceStatus} activeContextItem={activeContextItem} />}
+  </div>;
+}
+
 export function NativeAgentsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const profile = useContext(OptionalAiProfileContext);
+  if (!profile) return <p role="status">Resolving AI profile …</p>;
+  return <ScopedAgentsMain key={profile} profile={profile} serviceStatus={serviceStatus} activeContextItem={activeContextItem} />;
+}
+
+function ScopedAgentsMain({ profile, serviceStatus, activeContextItem }: { profile: string; serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const [api] = useState(() => {
+    const bridge = window.lastbrowser.sidekick;
+    const methods = ['listAgents', 'getCurrentAgent', 'getAgentSplashStatus', 'getAgentStats', 'getAgentActivities', 'getAgentProfiles', 'getAgentWorkspaces', 'getAgent', 'getAgentMemory', 'getAgentSoul', 'createAgent', 'updateAgent', 'deleteAgent', 'activateAgent', 'setCurrentAgent', 'saveAgentProfile', 'startAgentChat', 'listAgentSessions', 'listAgentWorkspace', 'startAgentWorkspaceProcess', 'sendAgentWorkspaceCommand', 'stopAgentWorkspace'];
+    const scoped = Object.fromEntries(methods.map(operation => [operation, (request?: Record<string, unknown>) => bridge.scopedAgentOperation({ operation, profile, request })]));
+    return { ...bridge, ...scoped } as typeof bridge;
+  });
+  const optional = useOptionalAiPolicy();
+  const mayRun = optional.loaded && optional.policy.assistants_enabled;
   const { t } = useDesktopI18n();
   const ready = isReady(serviceStatus);
-  const agentsState = useApiState(() => window.lastbrowser.sidekick.listAgents(), [ready], ready);
-  const currentState = useApiState(() => window.lastbrowser.sidekick.getCurrentAgent(), [ready], ready);
-  const splashState = useApiState(() => window.lastbrowser.sidekick.getAgentSplashStatus(), [ready], ready);
-  const statsState = useApiState(() => window.lastbrowser.sidekick.getAgentStats(), [ready], ready);
-  const activitiesState = useApiState(() => window.lastbrowser.sidekick.getAgentActivities({ limit: 50 }), [ready], ready);
-  const profilesState = useApiState(() => window.lastbrowser.sidekick.getAgentProfiles(), [ready], ready);
-  const workspacesState = useApiState(() => window.lastbrowser.sidekick.getAgentWorkspaces(), [ready], ready);
+  const agentsState = useApiState(() => api.listAgents(), [ready], ready);
+  const currentState = useApiState(() => api.getCurrentAgent(), [ready], ready);
+  const splashState = useApiState(() => api.getAgentSplashStatus(), [ready], ready);
+  const statsState = useApiState(() => api.getAgentStats(), [ready], ready);
+  const activitiesState = useApiState(() => api.getAgentActivities({ limit: 50 }), [ready], ready);
+  const profilesState = useApiState(() => api.getAgentProfiles(), [ready], ready);
+  const workspacesState = useApiState(() => api.getAgentWorkspaces(), [ready], ready);
   const agents = arrayFrom(agentsState.data, ['agents', 'items']);
   const [selectedSlug, setSelectedSlug] = useState('');
   const [sessions, setSessions] = useState<AnyRecord[]>([]);
@@ -246,7 +276,7 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
   const refreshAgentSessions = useCallback(async (): Promise<void> => {
     if (!ready || !selectedSlug) return;
     try {
-      const payload = await window.lastbrowser.sidekick.listAgentSessions({ slug: selectedSlug });
+      const payload = await api.listAgentSessions({ slug: selectedSlug });
       const nextSessions = arrayFrom(payload, ['sessions', 'items']);
       setSessions(nextSessions);
       setSelectedSessionId((current) => current || (nextSessions[0] ? idOf(nextSessions[0]) : ''));
@@ -263,9 +293,9 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
   useEffect(() => {
     if (!ready || !selectedSlug) return;
     void Promise.all([
-      window.lastbrowser.sidekick.getAgent({ slug: selectedSlug }),
-      window.lastbrowser.sidekick.getAgentMemory({ slug: selectedSlug }),
-      window.lastbrowser.sidekick.getAgentSoul({ slug: selectedSlug })
+      api.getAgent({ slug: selectedSlug }),
+      api.getAgentMemory({ slug: selectedSlug }),
+      api.getAgentSoul({ slug: selectedSlug })
     ]).then(([detail, memory, soul]) => {
       setAgentDetail(detail);
       setAgentMemory(memory);
@@ -284,7 +314,7 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
     const slug = window.prompt(t('agentPanels.agentSlugPrompt'), 'researcher');
     if (!slug?.trim()) return;
     const name = window.prompt(t('agentPanels.agentNamePrompt'), slug.trim()) || slug.trim();
-    await window.lastbrowser.sidekick.createAgent({ slug: slug.trim(), name });
+    await api.createAgent({ slug: slug.trim(), name });
     setSelectedSlug(slug.trim());
     await agentsState.refresh();
   }
@@ -293,28 +323,28 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
     if (!selectedSlug) return;
     const name = window.prompt(t('agentPanels.agentNamePrompt'), titleOf(selectedAgent || {}, selectedSlug));
     if (!name?.trim()) return;
-    await window.lastbrowser.sidekick.updateAgent({ slug: selectedSlug, patch: { name: name.trim() } });
+    await api.updateAgent({ slug: selectedSlug, patch: { name: name.trim() } });
     await agentsState.refresh();
   }
 
   async function removeAgent(): Promise<void> {
     if (!selectedSlug || !window.confirm(t('agentPanels.deleteAgentConfirm', { name: selectedSlug }))) return;
-    await window.lastbrowser.sidekick.deleteAgent({ slug: selectedSlug });
+    await api.deleteAgent({ slug: selectedSlug });
     setSelectedSlug('');
     await agentsState.refresh();
   }
 
   async function activateSelectedAgent(): Promise<void> {
-    if (!selectedSlug) return;
-    await window.lastbrowser.sidekick.activateAgent({ slug: selectedSlug });
-    await window.lastbrowser.sidekick.setCurrentAgent({ slug: selectedSlug });
+    if (!selectedSlug || !mayRun) return;
+    await api.activateAgent({ slug: selectedSlug });
+    await api.setCurrentAgent({ slug: selectedSlug });
     await currentState.refresh();
     await agentsState.refresh();
   }
 
   async function saveSelectedProfile(): Promise<void> {
     if (!selectedSlug) return;
-    await window.lastbrowser.sidekick.saveAgentProfile({
+    await api.saveAgentProfile({
       slug: selectedSlug,
       profile: isRecord(agentDetail.profile) ? agentDetail.profile : agentDetail
     });
@@ -322,8 +352,8 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
 
   async function sendAgentChat(event: FormEvent): Promise<void> {
     event.preventDefault();
-    if (!selectedSlug || !chatText.trim()) return;
-    const payload = await window.lastbrowser.sidekick.startAgentChat({
+    if (!selectedSlug || !chatText.trim() || !mayRun) return;
+    const payload = await api.startAgentChat({
       slug: selectedSlug,
       sessionId: selectedSessionId,
       message: chatText.trim()
@@ -334,23 +364,22 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
   }
 
   async function startWorkspace(): Promise<void> {
-    if (!selectedSlug || !selectedSessionId) return;
-    await window.lastbrowser.sidekick.startAgentWorkspaceProcess({ slug: selectedSlug, sessionId: selectedSessionId });
-    const result = await window.lastbrowser.sidekick.startAgentWorkspaceStream({ sessionId: selectedSessionId });
+    if (!selectedSlug || !selectedSessionId || !mayRun) return;
+    await api.startAgentWorkspaceProcess({ slug: selectedSlug, sessionId: selectedSessionId });
+    const result = await window.lastbrowser.sidekick.startAgentWorkspaceStream({ sessionId: selectedSessionId, profile });
     setEvents((current) => [...current, t('agentPanels.streamStarted', { id: result.streamId })]);
   }
 
   async function sendCommand(event: FormEvent): Promise<void> {
     event.preventDefault();
-    if (!selectedSessionId || !command.trim()) return;
-    await window.lastbrowser.sidekick.sendAgentWorkspaceCommand({ sessionId: selectedSessionId, command: command.trim() });
+    if (!selectedSessionId || !command.trim() || !mayRun) return;
+    await api.sendAgentWorkspaceCommand({ sessionId: selectedSessionId, command: command.trim() });
     setCommand('');
   }
 
   return (
     <section className="browser-main native-rest-main agents-main">
       <NativeHeader icon={<Bot size={21} />} title={t('agentPanels.agents')} kicker={t('agentPanels.agents')} detail={t('agentPanels.agentDetail')} loading={agentsState.loading} ready={ready} onRefresh={agentsState.refresh} />
-      <AdvancedWebUiTools panel="agents" serviceStatus={serviceStatus} compact />
       <div className="native-card-actions insights-tabs">
         {[
           ['Dashboard', t('agentPanels.dashboard')],
@@ -384,7 +413,7 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
           <div className="native-card-actions">
             <button type="button" onClick={() => void createAgentRecord()} disabled={!ready}><Plus size={13} /><span>{t('common.create')}</span></button>
             <button type="button" onClick={() => void renameAgent()} disabled={!ready || !selectedSlug}><Edit3 size={13} /><span>{t('agentPanels.edit')}</span></button>
-            <button type="button" onClick={() => void activateSelectedAgent()} disabled={!ready || !selectedSlug}><CheckCircle2 size={13} /><span>{t('common.enable')}</span></button>
+            <button type="button" onClick={() => void activateSelectedAgent()} disabled={!ready || !selectedSlug || !mayRun}><CheckCircle2 size={13} /><span>{t('common.enable')}</span></button>
             <button type="button" className="danger" onClick={() => void removeAgent()} disabled={!ready || !selectedSlug}><Trash2 size={13} /><span>{t('common.delete')}</span></button>
           </div>
           <section className="agent-splash-status">
@@ -437,7 +466,7 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
             </select>
             <form onSubmit={(event) => void sendAgentChat(event)} className="inline-form">
               <input value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder={t('agentPanels.messageAgentPlaceholder')} />
-              <button type="submit" disabled={!ready || !selectedSlug || !chatText.trim()}><Send size={14} /></button>
+              <button type="submit" disabled={!ready || !selectedSlug || !chatText.trim() || !mayRun}><Send size={14} /></button>
             </form>
             <div className="agent-session-list">
               {sessions.map((session) => <button key={idOf(session)} type="button" onClick={() => setSelectedSessionId(idOf(session))}>{titleOf(session, idOf(session))}</button>)}
@@ -461,13 +490,13 @@ export function NativeAgentsMain({ serviceStatus, activeContextItem }: { service
             <header>
               <strong>{t('agentPanels.terminalTitle')}</strong>
               <div className="native-card-actions">
-                <button type="button" onClick={() => void startWorkspace()} disabled={!ready || !selectedSessionId}><Terminal size={13} /><span>{t('agentPanels.startTerminal')}</span></button>
-                <button type="button" onClick={() => selectedSessionId && window.lastbrowser.sidekick.stopAgentWorkspace({ sessionId: selectedSessionId })} disabled={!ready || !selectedSessionId}><Trash2 size={13} /><span>{t('agentPanels.stopTerminal')}</span></button>
+                <button type="button" onClick={() => void startWorkspace()} disabled={!ready || !selectedSessionId || !mayRun}><Terminal size={13} /><span>{t('agentPanels.startTerminal')}</span></button>
+                <button type="button" onClick={() => selectedSessionId && api.stopAgentWorkspace({ sessionId: selectedSessionId })} disabled={!ready || !selectedSessionId}><Trash2 size={13} /><span>{t('agentPanels.stopTerminal')}</span></button>
               </div>
             </header>
             <form onSubmit={(event) => void sendCommand(event)} className="inline-form">
               <input value={command} onChange={(event) => setCommand(event.target.value)} placeholder={t('agentPanels.commandPlaceholder')} />
-              <button type="submit" disabled={!ready || !selectedSessionId || !command.trim()}><Send size={14} /></button>
+              <button type="submit" disabled={!ready || !selectedSessionId || !command.trim() || !mayRun}><Send size={14} /></button>
             </form>
             <pre>{events.length ? events.join('\n') : t('agentPanels.terminalEventsPlaceholder')}</pre>
           </section>
@@ -521,7 +550,6 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
   return (
     <section className="browser-main native-rest-main profiles-main">
       <NativeHeader icon={<Users size={21} />} title={t('sidebar.items.profiles.title')} kicker={t('agentPanels.profiles')} detail={t('agentPanels.profileDetail')} loading={state.loading} ready={ready} onRefresh={state.refresh} />
-      <AdvancedWebUiTools panel="profiles" serviceStatus={serviceStatus} compact />
       <div className="native-card-actions insights-tabs">
         {[
           ['Profiles', t('agentPanels.profiles')],
@@ -682,12 +710,35 @@ export function NativeProfilesMain({ serviceStatus, activeContextItem }: { servi
 }
 
 export function NativeMemoryMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
-  const { t } = useDesktopI18n();
+  const profile = useContext(OptionalAiProfileContext);
+  const workspacePath = useContext(OptionalAiWorkspaceContext);
+  const { locale } = useDesktopI18n();
+  if (!profile || !workspacePath) return <section className="browser-main native-rest-main"><p role="status">{locale === 'de' ? 'KI-Profil und Space werden aufgelöst …' : 'Resolving AI profile and Space …'}</p></section>;
+  return <ScopedMemoryMain key={`${profile}::${workspacePath}`} profile={profile} workspacePath={workspacePath} serviceStatus={serviceStatus} activeContextItem={activeContextItem} />;
+}
+
+function ScopedMemoryMain({ profile, workspacePath, serviceStatus, activeContextItem }: { profile: string; workspacePath: string; serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const { t, locale } = useDesktopI18n();
+  const optional = useOptionalAiPolicy();
+  const de = locale === 'de';
   const ready = isReady(serviceStatus);
-  const [model] = useState(() => new MemoryPanelStateModel(window.lastbrowser.sidekick));
+  const [model] = useState(() => {
+    const api = window.lastbrowser.sidekick;
+    return new MemoryPanelStateModel({
+      getMemory: () => api.getMemory({ profile, workspacePath }),
+      writeMemory: request => api.writeMemory({ ...request, profile, workspacePath }),
+      getSupermemoryStatus: () => api.getSupermemoryStatus({ profile, workspacePath }),
+      listSupermemoryDocuments: () => api.listSupermemoryDocuments({ profile, workspacePath }),
+      getSupermemoryDocument: request => api.getSupermemoryDocument({ ...request, profile, workspacePath }),
+      searchSupermemory: request => api.searchSupermemory({ ...request, profile, workspacePath }),
+      hybridMemorySearch: request => api.hybridMemorySearch({ ...request, profile, workspacePath }),
+      addSupermemoryDocument: request => api.addSupermemoryDocument({ ...request, profile, workspacePath }),
+      forgetSupermemoryDocument: request => api.forgetSupermemoryDocument({ ...request, profile, workspacePath })
+    });
+  });
   const state = useSyncExternalStore(model.subscribe, model.getSnapshot);
   const [section, setSection] = useState<MemorySection>('memory');
-  const [focus, setFocus] = useState(activeContextItem || 'Core memory');
+  const [focus, setFocus] = useState('about');
   const [search, setSearch] = useState('');
   const [adding, setAdding] = useState(false);
   const [documentTitle, setDocumentTitle] = useState('');
@@ -699,7 +750,7 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
     return model.dispose;
   }, [model, ready]);
   useEffect(() => {
-    setFocus(activeContextItem || 'Core memory');
+    setFocus(activeContextItem === 'Supermemory' || activeContextItem === 'Hybrid search' ? 'knowledge' : 'about');
     if (activeContextItem === 'User facts') setSection('user');
     else if (activeContextItem === 'Core memory') setSection('memory');
     model.clearSearch();
@@ -707,7 +758,6 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
 
   function selectFocus(item: string): void {
     setFocus(item);
-    if (item === 'User facts' || item === 'Core memory') setSection(item === 'User facts' ? 'user' : 'memory');
     model.clearSearch();
   }
   async function addDocument(event: FormEvent): Promise<void> {
@@ -729,27 +779,46 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
   const canForget = !!memoryDocumentId(state.selected) && !!state.detail && !state.documentBusy;
   return (
     <section className="browser-main native-rest-main memory-main">
-      <NativeHeader icon={<Brain size={21} />} title={t('memory.title')} kicker={t('memory.localStorage')}
-        detail={t('memory.detail')} loading={state.loading} ready={ready} onRefresh={model.refresh} />
-      <AdvancedWebUiTools panel="memory" serviceStatus={serviceStatus} compact />
+      <NativeHeader icon={<Brain size={21} />} title={de ? 'Gedächtnis & Wissen' : 'Memory & Knowledge'} kicker={de ? 'Deine Informationen' : 'Your information'}
+        detail={de ? 'Du entscheidest, was dein Assistent verwenden darf.' : 'You decide what your assistant may use.'} loading={state.loading} ready={ready} onRefresh={model.refresh} />
+      <p role="status">{optional.loaded ? optional.policy.enabled
+        ? (de ? 'Gedächtnis aktiv' : 'Memory enabled')
+        : (de ? 'Gedächtnis deaktiviert. Vorhandene Daten kannst du weiterhin ansehen, bearbeiten und löschen.' : 'Memory disabled. Existing data can still be reviewed, edited and deleted.')
+        : (de ? 'Einstellungen werden geladen …' : 'Loading settings …')}</p>
+      {optional.error && <p role="alert">{optional.error}</p>}
       <div aria-live="polite"><ErrorLine error={state.error} /></div>
       <div className="native-card-actions insights-tabs" role="tablist" aria-label={t('memory.title')}>
         {[
-          ['Core memory', t('memory.coreMemory')], ['User facts', t('memory.userFacts')],
-          ['Supermemory', t('memory.supermemory')], ['Hybrid search', t('memory.hybridSearch')]
+          ['about', de ? 'Über mich' : 'About me'], ['knowledge', de ? 'Wissen' : 'Knowledge'], ['controls', de ? 'Kontrolle' : 'Controls']
         ].map(([item, label]) => (
           <button key={item} type="button" role="tab" aria-selected={item === focus} className={item === focus ? 'active' : ''}
             onClick={() => selectFocus(item)}>{label}</button>
         ))}
       </div>
-      <div className="memory-grid">
-        <section className="native-work-card memory-editor">
+      {focus === 'controls' && <section className="native-work-card">
+        <h3>{de ? 'Verwendung kontrollieren' : 'Control usage'}</h3>
+        <label><input type="checkbox" checked={optional.policy.enabled} disabled={!optional.loaded || optional.busy}
+          onChange={event => void optional.update({ enabled: event.target.checked })} /> {de ? 'Gedächtnis für KI-Antworten aktivieren' : 'Enable memory for AI responses'}</label>
+        <p>{de ? 'Deaktivieren stoppt automatische Speicherung und Suche. Es löscht keine Daten.' : 'Disabling stops automatic storage and retrieval. It does not delete data.'}</p>
+        <label><input type="checkbox" checked={optional.policy.cloud_search_enabled} disabled={!optional.loaded || optional.busy}
+          onChange={event => void optional.update({ cloud_search_enabled: event.target.checked })} /> {de ? 'Cloud-Suche erlauben' : 'Allow cloud search'}</label>
+        <p>{de ? 'Bei Cloud-Suche können Dokument- und Suchtexte an den konfigurierten externen Anbieter gesendet werden. Ohne Zustimmung bleibt die Suche lokal.' : 'Cloud search may send document and query text to the configured external provider. Without consent, search stays local.'}</p>
+        <label>{de ? 'Geltungsbereich' : 'Scope'} <select value={optional.policy.scope} disabled={!optional.loaded || optional.busy}
+          onChange={event => void optional.update({ scope: event.target.value as 'profile' | 'space' })}>
+          {optional.policy.supported_scopes.map(scope => <option key={scope} value={scope}>{scope === 'profile' ? (de ? 'Aktives KI-Profil' : 'Active AI profile') : 'Space'}</option>)}
+        </select></label>
+        <p>{de ? 'Einzelne Dokumente löschst du unter Wissen. Fakten kannst du unter Über mich entfernen und speichern.' : 'Delete individual documents under Knowledge. Remove facts under About me and save.'}</p>
+        <p>{de ? 'Kontextauszüge früherer Antworten bleiben im Chatverlauf gespeichert. Um sie zu entfernen, lösche den jeweiligen Chat.' : 'Context excerpts from earlier responses remain in chat history. Delete the corresponding chat to remove them.'}</p>
+      </section>}
+      <div className="memory-grid" style={{ gridTemplateColumns: 'minmax(0, 1fr)' }}>
+        {focus === 'about' && <section className="native-work-card memory-editor">
+          <p>{de ? 'Vorlieben, wichtige Fakten und Notizen. Diese Angaben werden nur bei aktiviertem Gedächtnis verwendet.' : 'Preferences, important facts and notes. These details are used only when memory is enabled.'}</p>
           <header>
             <div className="settings-section-nav">
               {(['memory', 'user'] as const).map((item) => <button key={item} type="button"
                 className={item === section ? 'active' : ''} aria-pressed={item === section}
-                onClick={() => { setSection(item); setFocus(item === 'user' ? 'User facts' : 'Core memory'); }}>
-                {t(item === 'user' ? 'memory.userFacts' : 'memory.coreMemory')}
+                onClick={() => setSection(item)}>
+                {item === 'user' ? (de ? 'Fakten über mich' : 'Facts about me') : (de ? 'Notizen & Vorlieben' : 'Notes & preferences')}
               </button>)}
             </div>
             <button type="button" onClick={() => void model.save(section)} disabled={!ready || !state.loaded || state.saving || !model.isDirty(section)}>
@@ -760,11 +829,10 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
           <textarea id="memory-note-editor" value={state.drafts[section]} disabled={!ready || !state.loaded}
             onChange={(event) => model.setDraft(section, event.target.value)} />
           <p className="memory-edit-status" role="status">{model.isDirty(section) ? t('memory.unsavedChanges') : state.loaded ? t('memory.saved') : t('common.loading')}</p>
-          {state.paths[section] && <code className="memory-storage-path">{state.paths[section]}</code>}
-        </section>
-        <section className="native-work-card memory-super">
+        </section>}
+        {focus === 'knowledge' && <section className="native-work-card memory-super">
           <header>
-            <strong>{focus === 'Hybrid search' ? t('memory.hybridSearch') : t('memory.supermemory')}</strong>
+            <strong>{de ? 'Deine Wissensbibliothek' : 'Your knowledge library'}</strong>
             <div className="native-card-actions">
               <button type="button" onClick={() => setAdding((value) => !value)} disabled={!ready || state.documentBusy}><Plus size={13} />{t('memory.add')}</button>
               <button type="button" className="danger" onClick={forgetDocument} disabled={!ready || !canForget}><Trash2 size={13} />{t('memory.forget')}</button>
@@ -783,11 +851,11 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
               <button type="button" onClick={() => setAdding(false)} disabled={state.documentBusy}>{t('common.cancel')}</button>
             </div>
           </form>}
-          <form onSubmit={(event) => { event.preventDefault(); void model.search(search, focus === 'Hybrid search'); }}>
+          <form onSubmit={(event) => { event.preventDefault(); if (optional.loaded && optional.policy.enabled) void model.search(search, true); }}>
             <label className="native-search"><Search size={14} /><input value={search} aria-label={t('agentPanels.memorySearchPlaceholder')}
               onChange={(event) => { setSearch(event.target.value); model.clearSearch(); }} placeholder={t('agentPanels.memorySearchPlaceholder')} /></label>
             <div className="native-card-actions">
-              <button type="submit" disabled={!ready || state.searching || !search.trim()}><Search size={13} />{t('memory.search')}</button>
+              <button type="submit" disabled={!ready || !optional.loaded || !optional.policy.enabled || state.searching || !search.trim()}><Search size={13} />{t('memory.search')}</button>
               {state.searched && <button type="button" onClick={() => { setSearch(''); model.clearSearch(); }}>{t('memory.clearSearch')}</button>}
             </div>
           </form>
@@ -807,7 +875,7 @@ export function NativeMemoryMain({ serviceStatus, activeContextItem }: { service
               <pre>{text(state.detail.content || state.detail.text)}</pre>
             </> : <p>{t('agentPanels.supermemorySelectDocument')}</p>}
           </section>
-        </section>
+        </section>}
       </div>
     </section>
   );

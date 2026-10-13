@@ -4,6 +4,7 @@ import type { DesktopTranslationKey } from '../i18n/keys.js';
 import type { BackendProfileEntry, BackendProfilesResponse, ProfilePatch } from '../independent-contracts.js';
 import { isBackendProfilesResponse } from '../independent-assistant-client.js';
 import { backendProfileCopy } from '../i18n/backend-profile-copy.js';
+import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
 import {
   X,
   Sparkles,
@@ -31,6 +32,7 @@ export interface SpaceSetupData {
   startUrl: string;
   assistantSeed?: ProfilePatch;
   backendProfileName?: string;
+  companion?: CompanionSelection;
 }
 
 export interface SpaceSetupModalProps {
@@ -220,6 +222,7 @@ export function SpaceSetupModal({
   const [backendProfileName, setBackendProfileName] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [companion, setCompanion] = useState<CompanionSelection>({ personality: 'nova', botName: 'Nova' });
 
   useEffect(() => {
     if (!isOpen) return;
@@ -239,6 +242,7 @@ export function SpaceSetupModal({
     setIsSubmitting(false);
     setBackendProfiles([]);
     setBackendProfileName('');
+    setCompanion({ personality: 'nova', botName: 'Nova' });
     let active = true;
     if (window?.lastbrowser?.independent?.request) {
       window.lastbrowser.independent.request({
@@ -319,6 +323,7 @@ export function SpaceSetupModal({
       pinnedApps: selectedApps,
       startUrl: startUrl.trim() || 'app://browser-home',
       backendProfileName: backendProfileName.trim() || undefined,
+      companion,
       assistantSeed: selectedPreset.id === 'custom-blank' ? undefined : { purpose: t(({
         'coding-dev': 'spaceSetup.preset.codingDescription',
         'research-writing': 'spaceSetup.preset.researchDescription',
@@ -482,6 +487,9 @@ export function SpaceSetupModal({
           {/* STEP 2: AI Model Selection */}
           {step === 2 && (
             <div className="space-step-content">
+              <h3>Space-Persönlichkeit</h3>
+              <p>Prägt Schnellchat und Antwortstil. Basis-Profil und Werkzeuge bleiben erhalten.</p>
+              <CompanionPicker value={companion} onChange={setCompanion} disabled={isSubmitting} />
               <label className="space-setup-label">{t('spaceSetup.modelLabel')}</label>
               <p className="space-step-description">
                 {t('spaceSetup.modelDescription')}

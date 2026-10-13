@@ -31,7 +31,7 @@ export const brandAssets = {
   }
 } as const;
 
-const sidebarIconsByPanel: Partial<Record<LastbrowserPanelId, string>> = brandAssets.sidebarIcons;
+const sidebarIconsByPanel: Partial<Record<LastbrowserPanelId, string>> = { ...brandAssets.sidebarIcons, 'task-center': brandAssets.sidebarIcons.tasks };
 
 export function sidebarIconForPanel(panelId: LastbrowserPanelId): string {
   return sidebarIconsByPanel[panelId] ?? brandAssets.sidebarIcons.spark;

@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DownloadDockTrigger } from '../NativeDownloads.js';
 import {
+  Archive,
+  Trash2,
   Bell,
   Check,
   ChevronLeft,
@@ -41,6 +43,9 @@ import type { DesktopSessionSummary } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
 import { useSidebarDrawerEdgeScroll } from './useSidebarDrawerEdgeScroll.js';
 import './sidebar-drawer-tabs.css';
+import './sidebar-sessions.css';
+import { useTerminalEnabled } from '../terminal-feature.js';
+import { useOptionalAiPolicy } from '../optional-ai-policy.js';
 
 export interface DrawerItem {
   id: LastbrowserPanelId;
@@ -98,6 +103,11 @@ export interface SidekickSidebarProps {
   activeSessionId?: string | null;
   /** Callback when a session is selected */
   onSelectSession?: (sessionId: string) => void;
+  onPinSession?: (session: DesktopSessionSummary) => void;
+  onArchiveSession?: (session: DesktopSessionSummary) => void;
+  onDeleteSession?: (session: DesktopSessionSummary) => void;
+  onDeleteSessions?: (sessions: DesktopSessionSummary[]) => Promise<{ deletedIds: string[]; failedIds: string[] }>;
+  sessionScopeKey?: string;
   /** Callback when a new session is requested */
   onCreateSession?: () => void;
   /** Active split tabs (up to 4) */
@@ -156,6 +166,11 @@ export function SidekickSidebar({
   sessions = [],
   activeSessionId = null,
   onSelectSession,
+  onPinSession,
+  onArchiveSession,
+  onDeleteSession,
+  onDeleteSessions,
+  sessionScopeKey = '',
   onCreateSession,
   splitTabIds = [],
   onAddSplitTab,
@@ -165,38 +180,101 @@ export function SidekickSidebar({
   onCloseOverlay,
   onDock
 }: SidekickSidebarProps): React.JSX.Element {
-  const { t } = useDesktopI18n();
+  const { t, locale } = useDesktopI18n();
+  const terminalEnabled = useTerminalEnabled();
+  const { policy, loaded: optionalFeaturesLoaded } = useOptionalAiPolicy(activeSpacePath);
+  const [deleteArm, setDeleteArm] = useState<{ sessionId: string; scope: string; expiresAt: number } | null>(null);
+  const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
+  const selectionAnchor = useRef<string | null>(null);
+  const [batchDeleting, setBatchDeleting] = useState(false);
+  const selectionScope = `${sessionScopeKey}::${activeSpacePath}`;
+  const currentSelectionScope = useRef(selectionScope);
+  currentSelectionScope.current = selectionScope;
+  const recentChatKey = sessions.filter(session => !session.archived).sort((left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned))).slice(0, 5).map(session => session.session_id).join('|');
+  useEffect(() => { setSelectedChatIds([]); selectionAnchor.current = null; setDeleteArm(null); setBatchDeleting(false); }, [selectionScope]);
+  useEffect(() => {
+    const available = new Set(recentChatKey.split('|'));
+    setSelectedChatIds(current => current.filter(id => available.has(id)));
+    if (selectionAnchor.current && !available.has(selectionAnchor.current)) selectionAnchor.current = null;
+    setDeleteArm(null);
+  }, [recentChatKey]);
+  useEffect(() => {
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setSelectedChatIds([]); setDeleteArm(null); selectionAnchor.current = null; } };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, []);
+  const deleteScope = `${sessionScopeKey}::${activeSpacePath}::${activeSessionId || ''}::${activePanel}`;
+  useEffect(() => { setDeleteArm(null); }, [deleteScope, drawerTab, mode]);
+  useEffect(() => {
+    if (!deleteArm) return;
+    const timer = window.setTimeout(() => setDeleteArm(null), Math.max(0, deleteArm.expiresAt - Date.now()));
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setDeleteArm(null); };
+    window.addEventListener('keydown', escape);
+    return () => { window.clearTimeout(timer); window.removeEventListener('keydown', escape); };
+  }, [deleteArm]);
+  const deleteConfirmationLabel = locale === 'de' ? 'Sicher? Zum Löschen erneut klicken.' : 'Sure? Click again to delete.';
+  function requestSessionDelete(event: React.MouseEvent<HTMLButtonElement>, session: DesktopSessionSummary) {
+    event.preventDefault(); event.stopPropagation();
+    if (deleteArm?.sessionId === session.session_id && deleteArm.scope === deleteScope && Date.now() < deleteArm.expiresAt) {
+      setDeleteArm(null);
+      onDeleteSession?.(session);
+    } else setDeleteArm({ sessionId: session.session_id, scope: deleteScope, expiresAt: Date.now() + 5000 });
+  }
+  function selectChat(event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>, session: DesktopSessionSummary) {
+    event.stopPropagation();
+    if (batchDeleting) return;
+    setDeleteArm(null);
+    if (event.shiftKey) {
+      const ids = recentSessions.map(item => item.session_id);
+      const index = ids.indexOf(session.session_id);
+      const anchor = Math.max(0, ids.indexOf(selectionAnchor.current || session.session_id));
+      setSelectedChatIds(ids.slice(Math.min(index, anchor), Math.max(index, anchor) + 1));
+      if (!selectionAnchor.current) selectionAnchor.current = session.session_id;
+    } else if (event.ctrlKey || event.metaKey) {
+      setSelectedChatIds(current => current.includes(session.session_id) ? current.filter(id => id !== session.session_id) : [...current, session.session_id]);
+      selectionAnchor.current = session.session_id;
+    } else {
+      setSelectedChatIds([]); selectionAnchor.current = session.session_id;
+      onSelectSession?.(session.session_id);
+    }
+  }
+  async function deleteSelectedChats(event: React.MouseEvent<HTMLButtonElement>) {
+    event.preventDefault(); event.stopPropagation();
+    if (!onDeleteSessions || batchDeleting || !selectedChatIds.length) return;
+    if (deleteArm?.sessionId !== '__batch' || deleteArm.scope !== deleteScope || Date.now() >= deleteArm.expiresAt) {
+      setDeleteArm({ sessionId: '__batch', scope: deleteScope, expiresAt: Date.now() + 5000 }); return;
+    }
+    const scope = selectionScope;
+    setDeleteArm(null); setBatchDeleting(true);
+    try {
+      const result = await onDeleteSessions(recentSessions.filter(session => selectedChatIds.includes(session.session_id)));
+      if (currentSelectionScope.current === scope) setSelectedChatIds(result.failedIds);
+    } finally { if (currentSelectionScope.current === scope) setBatchDeleting(false); }
+  }
+  const archiveLabel = ({ de: 'Archivieren', en: 'Archive', es: 'Archivar', fr: 'Archiver', it: 'Archivia', 'pt-BR': 'Arquivar', ru: 'Архивировать', ja: 'アーカイブ' })[locale];
+  const recentSessions = sessions.filter(session => !session.archived)
+    .sort((left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned))).slice(0, 5);
   const downloadsOpen = usePanelStore((state) => state.downloadsOpen);
   const [dragOverInfo, setDragOverInfo] = useState<{ id: string; mode: 'before' | 'after' | 'split' } | null>(null);
   const [internalDrawerTab, setInternalDrawerTab] = useState<SidebarDrawerTab>(drawerTab);
   const currentDrawerTab = onSelectDrawerTab ? drawerTab : internalDrawerTab;
   const drawerTabsRef=useSidebarDrawerEdgeScroll<HTMLDivElement>();
-  const [drawerTabScroll, setDrawerTabScroll] = useState({ hasOverflow: false, atStart: true, atEnd: true });
-  const updateDrawerTabScroll = useCallback(() => {
-    const element = drawerTabsRef.current;
-    if (!element) return;
-    const maxScroll = Math.max(0, element.scrollWidth - element.clientWidth);
-    const next = { hasOverflow: maxScroll > 1, atStart: element.scrollLeft <= 1, atEnd: element.scrollLeft >= maxScroll - 1 };
-    setDrawerTabScroll((current) => current.hasOverflow === next.hasOverflow && current.atStart === next.atStart && current.atEnd === next.atEnd ? current : next);
-  }, [drawerTabsRef]);
+  const drawerTabOrder: SidebarDrawerTab[] = ['tabs', 'ai', 'workflows', 'tools'];
+  const drawerTabIndex = drawerTabOrder.indexOf(currentDrawerTab);
   useEffect(() => {
     const element = drawerTabsRef.current;
-    if (!element) return;
-    updateDrawerTabScroll();
-    element.addEventListener('scroll', updateDrawerTabScroll, { passive: true });
-    const observer = new ResizeObserver(updateDrawerTabScroll);
-    observer.observe(element);
-    Array.from(element.children).forEach((child) => observer.observe(child));
-    return () => {
-      element.removeEventListener('scroll', updateDrawerTabScroll);
-      observer.disconnect();
-    };
-  }, [drawerTabsRef, updateDrawerTabScroll]);
-  const scrollDrawerTabs = (direction: -1 | 1) => {
-    const element = drawerTabsRef.current;
-    if (!element) return;
+    const selected = element?.querySelector<HTMLElement>('[aria-selected="true"]');
+    if (!element || !selected) return;
+    const left = selected.offsetLeft - element.offsetLeft;
+    const right = left + selected.offsetWidth;
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    element.scrollBy({ left: direction * Math.max(80, element.clientWidth * 0.9), behavior: reducedMotion ? 'auto' : 'smooth' });
+    if (left < element.scrollLeft || right > element.scrollLeft + element.clientWidth) {
+      element.scrollTo({ left: Math.max(0, left - (element.clientWidth - selected.offsetWidth) / 2), behavior: reducedMotion ? 'auto' : 'smooth' });
+    }
+  }, [currentDrawerTab, mode, locale, drawerTabsRef]);
+  const stepDrawerTab = (direction: -1 | 1) => {
+    const next = drawerTabOrder[drawerTabIndex + direction];
+    if (next) handleDrawerTabChange(next);
   };
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const [spacePickerOpen, setSpacePickerOpen] = useState(false);
@@ -217,30 +295,25 @@ export function SidekickSidebar({
   // Preserves panel references: 'browser', 'terminal', 'gmail', 'discord', 'appstore', 'logs', 'settings',
   // and brandAssets: brandAssets.sidebarIcons.appstore, brandAssets.sidebarIcons.settings
   const aiDrawerItems: DrawerItem[] = useMemo(() => [
-    { id: 'chat', title: t('sidebar.items.chat.title'), desc: t('sidebar.items.chat.desc'), iconSrc: brandAssets.sidebarIcons.chat },
-    { id: 'agents', title: t('sidebar.items.agents.title'), desc: t('sidebar.items.agents.desc'), iconSrc: brandAssets.sidebarIcons.agents },
-    { id: 'skills', title: t('sidebar.items.skills.title'), desc: t('sidebar.items.skills.desc'), iconSrc: brandAssets.sidebarIcons.skills },
-    { id: 'memory', title: t('sidebar.items.memory.title'), desc: t('sidebar.items.memory.desc'), iconSrc: brandAssets.sidebarIcons.memory },
-    { id: 'profiles', title: t('sidebar.items.profiles.title'), desc: t('sidebar.items.profiles.desc'), iconSrc: brandAssets.sidebarIcons.profiles }
-  ], [t]);
+    { id: 'chat', title: `${botName} Chat`, desc: t('sidebar.items.chat.desc'), iconSrc: brandAssets.sidebarIcons.chat },
+    ...(optionalFeaturesLoaded && policy.assistants_enabled ? [{ id: 'agents' as const, title: locale === 'de' ? 'Assistenten' : 'Assistants', desc: locale === 'de' ? 'Zusätzliche Helfer und Aufgaben' : 'Additional helpers and tasks', iconSrc: brandAssets.sidebarIcons.agents }] : []),
+    ...(optionalFeaturesLoaded && policy.enabled ? [{ id: 'memory' as const, title: locale === 'de' ? 'Gedächtnis & Wissen' : 'Memory & Knowledge', desc: locale === 'de' ? 'Informationen ansehen und kontrollieren' : 'Review and control saved information', iconSrc: brandAssets.sidebarIcons.memory }] : [])
+  ], [t, botName, locale, optionalFeaturesLoaded, policy.assistants_enabled, policy.enabled]);
   const AI_DRAWER_ITEMS = aiDrawerItems;
 
   const workflowDrawerItems: DrawerItem[] = useMemo(() => [
-    { id: 'kanban', title: t('sidebar.items.kanban.title'), desc: t('sidebar.items.kanban.desc'), iconSrc: brandAssets.sidebarIcons.kanban },
-    { id: 'tasks', title: t('sidebar.items.tasks.title'), desc: t('sidebar.items.tasks.desc'), iconSrc: brandAssets.sidebarIcons.tasks },
-    { id: 'workspaces', title: t('sidebar.items.workspaces.title'), desc: t('sidebar.items.workspaces.desc'), iconSrc: brandAssets.sidebarIcons.workspaces },
-    { id: 'todos', title: t('sidebar.items.todos.title'), desc: t('sidebar.items.todos.desc'), iconSrc: brandAssets.sidebarIcons.todos },
-    { id: 'insights', title: t('sidebar.items.insights.title'), desc: t('sidebar.items.insights.desc'), iconSrc: brandAssets.sidebarIcons.insights }
-  ], [t]);
+    { id: 'task-center', title: locale === 'de' ? 'Aufgaben' : 'Tasks', desc: locale === 'de' ? 'Jetzt und geplant' : 'Now and scheduled', iconSrc: brandAssets.sidebarIcons.tasks },
+    { id: 'workspaces', title: t('sidebar.items.workspaces.title'), desc: t('sidebar.items.workspaces.desc'), iconSrc: brandAssets.sidebarIcons.workspaces }
+  ], [t, locale]);
   const WORKFLOW_DRAWER_ITEMS = workflowDrawerItems;
 
   const toolsDrawerItems: DrawerItem[] = useMemo(() => [
-    { id: 'browser', title: t('sidebar.items.browser.title'), desc: t('sidebar.items.browser.desc'), iconSrc: brandAssets.sidebarIcons.browser },
-    { id: 'terminal', title: t('sidebar.items.terminal.title'), desc: t('sidebar.items.terminal.desc'), iconSrc: brandAssets.sidebarIcons.spark },
-    { id: 'gmail', title: t('sidebar.items.gmail.title'), desc: t('sidebar.items.gmail.desc'), iconSrc: brandAssets.sidebarIcons.gmail },
-    { id: 'discord', title: t('sidebar.items.discord.title'), desc: t('sidebar.items.discord.desc'), iconSrc: brandAssets.sidebarIcons.discord },
+    { id: 'insights', title: t('sidebar.items.insights.title'), desc: t('sidebar.items.insights.desc'), iconSrc: brandAssets.sidebarIcons.insights },
+    ...(optionalFeaturesLoaded && policy.gmail_ai_enabled ? [{ id: 'gmail' as const, title: 'Gmail AI · Beta', desc: locale === 'de' ? 'Ungetestet' : 'Untested', iconSrc: brandAssets.sidebarIcons.spark }] : []),
+    ...(optionalFeaturesLoaded && policy.discord_agents_enabled ? [{ id: 'discord' as const, title: 'Discord Agents · Beta', desc: locale === 'de' ? 'Ungetestet' : 'Untested', iconSrc: brandAssets.sidebarIcons.spark }] : []),
+    ...(terminalEnabled ? [{ id: 'terminal' as const, title: t('sidebar.items.terminal.title'), desc: t('sidebar.items.terminal.desc'), iconSrc: brandAssets.sidebarIcons.spark }] : []),
     { id: 'logs', title: t('sidebar.items.logs.title'), desc: t('sidebar.items.logs.desc'), iconSrc: brandAssets.sidebarIcons.logs }
-  ], [t]);
+  ], [t, terminalEnabled, optionalFeaturesLoaded, policy.gmail_ai_enabled, policy.discord_agents_enabled, locale]);
   const TOOLS_DRAWER_ITEMS = toolsDrawerItems;
 
   function handleDrawerTabChange(tab: SidebarDrawerTab) {
@@ -401,12 +474,10 @@ export function SidekickSidebar({
 
           {/* Variante B: Segmented Multi-Tier Drawer Tabs */}
           <div className="sidebar-drawer-tabs-shell">
-          {drawerTabScroll.hasOverflow && (
-            <button type="button" className="sidebar-drawer-scroll-control" aria-label={`${t('sidebar.drawer.sections')}: ${t('common.back')}`} title={`${t('sidebar.drawer.sections')}: ${t('common.back')}`} disabled={drawerTabScroll.atStart} onClick={() => scrollDrawerTabs(-1)}>
+            <button type="button" className="sidebar-drawer-scroll-control" aria-label={`${t('sidebar.drawer.sections')}: ${t('common.back')}`} title={`${t('sidebar.drawer.sections')}: ${t('common.back')}`} disabled={drawerTabIndex <= 0} onClick={() => stepDrawerTab(-1)}>
               <ChevronLeft size={15} aria-hidden="true" />
             </button>
-          )}
-          <div ref={drawerTabsRef} onScroll={updateDrawerTabScroll} className="sidebar-drawer-tabs" role="tablist" aria-label={t('sidebar.drawer.sections')}>
+          <div ref={drawerTabsRef} className="sidebar-drawer-tabs" role="tablist" aria-label={t('sidebar.drawer.sections')}>
             <button
               type="button"
               role="tab"
@@ -424,7 +495,7 @@ export function SidekickSidebar({
               aria-selected={currentDrawerTab === 'ai'}
               className={`drawer-tab-btn ${currentDrawerTab === 'ai' ? 'active' : ''}`}
               onClick={() => handleDrawerTabChange('ai')}
-              title={t('sidebar.drawer.aiTitle')}
+              title={`${botName} AI`}
             >
               <Sparkles size={13} />
               <span>{t('sidebar.drawer.ai')}</span>
@@ -452,11 +523,9 @@ export function SidekickSidebar({
               <span>{t('sidebar.drawer.tools')}</span>
             </button>
           </div>
-          {drawerTabScroll.hasOverflow && (
-            <button type="button" className="sidebar-drawer-scroll-control" aria-label={`${t('sidebar.drawer.sections')}: ${t('common.next')}`} title={`${t('sidebar.drawer.sections')}: ${t('common.next')}`} disabled={drawerTabScroll.atEnd} onClick={() => scrollDrawerTabs(1)}>
+            <button type="button" className="sidebar-drawer-scroll-control" aria-label={`${t('sidebar.drawer.sections')}: ${t('common.next')}`} title={`${t('sidebar.drawer.sections')}: ${t('common.next')}`} disabled={drawerTabIndex >= drawerTabOrder.length - 1} onClick={() => stepDrawerTab(1)}>
               <ChevronRight size={15} aria-hidden="true" />
             </button>
-          )}
           </div>
 
           {/* Drawer Body depending on active drawer tab */}
@@ -692,30 +761,57 @@ export function SidekickSidebar({
               </div>
 
               {/* Recent Sessions List */}
-              {sessions && sessions.length > 0 && (
+              {recentSessions.length > 0 && (
                 <div className="sidebar-recent-sessions">
                   <div className="drawer-section-title">{t('sidebar.drawer.recentSessions')}</div>
+                  {selectedChatIds.length > 0 && <div className="sidebar-chat-selection" onPointerLeave={() => setDeleteArm(current => current?.sessionId === '__batch' ? null : current)}>
+                    <span role="status">{deleteArm?.sessionId === '__batch'
+                      ? (locale === 'de' ? `${selectedChatIds.length} Chats löschen?` : `Delete ${selectedChatIds.length} chats?`)
+                      : `${selectedChatIds.length} ${locale === 'de' ? 'markiert' : 'selected'}`}</span>
+                    {onDeleteSessions && <button type="button" className={`sidebar-session-action is-delete ${deleteArm?.sessionId === '__batch' ? 'is-armed' : ''}`}
+                      disabled={batchDeleting} title={deleteArm?.sessionId === '__batch' ? deleteConfirmationLabel : (locale === 'de' ? 'Markierte Chats löschen' : 'Delete selected chats')}
+                      aria-label={deleteArm?.sessionId === '__batch' ? deleteConfirmationLabel : (locale === 'de' ? 'Markierte Chats löschen' : 'Delete selected chats')}
+                      onClick={event => void deleteSelectedChats(event)}>{deleteArm?.sessionId === '__batch' ? <span aria-hidden="true">?</span> : <Trash2 size={13} />}</button>}
+                  </div>}
                   <div className="sidebar-session-list">
-                    {sessions.slice(0, 5).map((session) => {
+                    {recentSessions.map((session) => {
                       const isActive = session.session_id === activeSessionId && activePanel === 'chat';
+                      const deleteArmed = deleteArm?.sessionId === session.session_id && deleteArm.scope === deleteScope;
                       return (
-                        <button
-                          key={session.session_id}
-                          type="button"
-                          className={`sidebar-session-item ${isActive ? 'is-active' : ''}`}
-                          onClick={() => onSelectSession?.(session.session_id)}
-                          title={session.title || t('sidebar.drawer.newChat')}
-                        >
-                          <Sparkles size={12} className="session-item-icon" />
-                          <span className="session-item-title">{session.title || t('sidebar.drawer.newChat')}</span>
-                        </button>
+                        <div key={session.session_id} className={`sidebar-session-item ${isActive ? 'is-active' : ''} ${selectedChatIds.includes(session.session_id) ? 'is-selected' : ''}`}
+                          onPointerLeave={() => setDeleteArm(current => current?.sessionId === session.session_id ? null : current)}>
+                          <button type="button" className="sidebar-session-open"
+                            aria-pressed={selectedChatIds.includes(session.session_id)} disabled={batchDeleting}
+                            onClick={event => selectChat(event, session)}
+                            onKeyDown={event => {
+                              if ((event.key === ' ' || event.key === 'Enter') && (event.shiftKey || event.ctrlKey || event.metaKey)) {
+                                event.preventDefault(); selectChat(event, session);
+                              }
+                            }}
+                            title={session.title || t('sidebar.drawer.newChat')}>
+                            {session.pinned ? <Pin size={12} className="session-item-icon" /> : <Sparkles size={12} className="session-item-icon" />}
+                            <span className="session-item-title" role={deleteArmed ? 'status' : undefined}>{deleteArmed ? (locale === 'de' ? 'Sicher?' : 'Sure?') : session.title || t('sidebar.drawer.newChat')}</span>
+                          </button>
+                          <div className="sidebar-session-actions">
+                            {onPinSession && <button type="button" className="sidebar-session-action"
+                              title={t(session.pinned ? 'sidebar.tabs.unpin' : 'sidebar.tabs.pin')}
+                              aria-label={t(session.pinned ? 'sidebar.tabs.unpin' : 'sidebar.tabs.pin')}
+                              onClick={event => { event.stopPropagation(); setDeleteArm(null); onPinSession(session); }}>{session.pinned ? <PinOff size={13} /> : <Pin size={13} />}</button>}
+                            {onArchiveSession && <button type="button" className="sidebar-session-action" title={archiveLabel}
+                              aria-label={archiveLabel} onClick={event => { event.stopPropagation(); setDeleteArm(null); onArchiveSession(session); }}><Archive size={13} /></button>}
+                            {onDeleteSession && <button type="button" className={`sidebar-session-action is-delete ${deleteArmed ? 'is-armed' : ''}`}
+                              title={deleteArmed ? deleteConfirmationLabel : t('common.delete')}
+                              aria-label={deleteArmed ? deleteConfirmationLabel : t('common.delete')}
+                              onClick={event => requestSessionDelete(event, session)}>{deleteArmed ? <span aria-hidden="true">?</span> : <Trash2 size={13} />}</button>}
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                 </div>
               )}
 
-              <div className="drawer-section-title" style={{ marginTop: 12 }}>{t('sidebar.drawer.aiHeading')}</div>
+              <div className="drawer-section-title" style={{ marginTop: 12 }}>{botName} AI</div>
               <div className="drawer-cards-list">
                 {aiDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;
@@ -748,7 +844,7 @@ export function SidekickSidebar({
               <div className="drawer-section-title">{t('sidebar.drawer.workflowHeading')}</div>
               <div className="drawer-cards-list">
                 {workflowDrawerItems.map((item) => {
-                  const isCurrent = activePanel === item.id;
+                  const isCurrent = activePanel === item.id || item.id === 'task-center' && ['tasks', 'todos', 'kanban'].includes(activePanel);
                   return (
                     <button
                       key={item.id}

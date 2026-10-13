@@ -1,3 +1,7 @@
+import { PasswordVaultPanel } from './PasswordVaultPanel.js';
+import { IndependentAssistantClient } from '../independent-assistant-client.js';
+import { parseProviderModelId } from '../provider-model-selection.js';
+import { browserImportCopy } from '../i18n/browser-import.js';
 /**
  * First-run setup assistant for Lastbrowser.
  *
@@ -34,15 +38,17 @@ import {
   X
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
+import { companionDefaultNames, personalityAvatar, type CompanionPersonality } from '../personality-avatar.js';
 import { importBookmarksFromHtml, importBookmarksFromJson, mergeBookmarks } from '../bookmark-io.js';
 import { loadBookmarks, saveBookmarks } from '../bookmarks.js';
-import { loadVisitedSites, saveVisitedSites, recordVisit } from '../history.js';
+import { loadVisitedSites, saveVisitedSites } from '../history.js';
 import { usePinnedAppStore, PRESET_PINNED_APPS } from '../stores/usePinnedAppStore.js';
 import {
   modelNote,
   providerPresentation,
   tierLabels,
   PROVIDER_RECOMMENDATIONS,
+  RECOMMENDED_PROVIDER_IDS,
   PERSONALITY_PROFILES,
   BOT_NAME_PRESETS,
   type PersonalityProfile
@@ -52,7 +58,7 @@ import { recommendedSearchEngines, moreSearchEngines } from '../../main/browser-
 import { useTabStore } from '../stores/useTabStore.js';
 import { localizedProviderRecommendation } from '../i18n/provider-recommendations.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
-import { providerVerification } from '../provider-verification.js';
+import { providerVerification, isStableProvider } from '../provider-verification.js';
 import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { ProviderBetaCatalogToggle } from './ProviderBetaCatalogToggle.js';
@@ -86,6 +92,7 @@ export const BROWSER_CHOICES = [
   { id: 'chrome', name: 'Google Chrome', color: '#4285F4', icon: '🌐', hint: 'Lesezeichen, Verlauf & Favoriten' },
   { id: 'edge', name: 'Microsoft Edge', color: '#0078D7', icon: '🌊', hint: 'Favoriten & Browser-Chronik' },
   { id: 'firefox', name: 'Mozilla Firefox', color: '#FF7139', icon: '🦊', hint: 'Lesezeichen & Chronik' },
+  { id: 'zen', name: 'Zen Browser', color: '#F0C9A0', icon: '🌅', hint: 'Firefox · Lesezeichen & Chronik' },
   { id: 'brave', name: 'Brave Browser', color: '#FB542B', icon: '🦁', hint: 'Shields & Bookmarks' }
 ];
 
@@ -144,33 +151,44 @@ export function FirstRunSetupPane({
   const [liveProviderModels, setLiveProviderModels] = useState<Record<string, Array<{ id: string; label: string }>>>({});
   const [modelProbeLoading, setModelProbeLoading] = useState(false);
   const [modelProbeError, setModelProbeError] = useState('');
-  // A provider is a default only after an exact successful chat in this profile
-  // and the current app session. Otherwise the empty choice is intentional.
+  // Stable providers are available immediately. Experimental providers still
+  // require explicit beta visibility or successful chat evidence in this scope.
   const evidenceStorage = typeof window === 'undefined' ? undefined : window.localStorage;
-  const qualifiedProviders = providers.filter(item => Boolean(browserProfileId && evidenceStorage
+  const qualifiedProviders = providers.filter(item => isStableProvider(item.id) || Boolean(browserProfileId && evidenceStorage
     && getProviderChatEvidence(item.id, browserProfileId, backendProfileName || 'default', evidenceStorage)));
   const defaultProviderId = qualifiedProviders.some((p) => p.id === 'openai-codex')
     ? 'openai-codex'
     : (qualifiedProviders[0]?.id || '');
 
   const [provider, setProvider] = useState<string>(defaultProviderId);
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState<string>('');
+  const modelRequestKey = JSON.stringify([browserProfileId, workspacePath, backendProfileName, provider, apiKey, baseUrl]);
+  const activeModelRequestKey = useRef(modelRequestKey);
+  activeModelRequestKey.current = modelRequestKey;
+  const modelRequestSerial = useRef(0);
+  const [modelCatalogKey, setModelCatalogKey] = useState('');
+  const [providerAuth, setProviderAuth] = useState({ key: '', configured: false });
+  const savedProviderCredentials = providerAuth.key === modelRequestKey && providerAuth.configured;
   const providerModelOptions = useMemo(() => {
-    const catalog = liveProviderModels[provider] ?? [];
+    const catalog = modelCatalogKey === modelRequestKey ? liveProviderModels[provider] ?? [] : [];
     return showUntestedBetas || !browserProfileId ? catalog
       : catalog.filter(item => isProviderModelQualified(provider, item.id, browserProfileId, backendProfileName || 'default', window.localStorage));
-  }, [liveProviderModels, provider, showUntestedBetas, browserProfileId]);
+  }, [liveProviderModels, provider, showUntestedBetas, browserProfileId, backendProfileName, modelCatalogKey, modelRequestKey]);
   const models = providerModelOptions;
   const [model, setModel] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const [oauthState, setOAuthState] = useState<CodexOAuthState>(idleCodexOAuth);
 
   // Identity & Personality state
-  const [botName, setBotName] = useState<string>('Nova');
+  const [selectedBotPreset, setSelectedBotPreset] = useState<string>('Nova');
+  const [customBotNames, setCustomBotNames] = useState<Record<string, string>>({});
+  const botName = customBotNames[selectedBotPreset] ?? selectedBotPreset;
+  const effectiveBotName = botName.trim() || selectedBotPreset;
+  const setBotName = (name: string) => setCustomBotNames(current => ({ ...current, [selectedBotPreset]: name }));
   const [personality, setPersonality] = useState<string>('nova');
 
   // Setup mode tab: featured recommendations vs API-key providers.
   const [activeTab, setActiveTab] = useState<'featured' | 'custom'>('featured');
-  const [baseUrl, setBaseUrl] = useState<string>('');
 
   // Standalone Sidekick install migration (first-run assistant).
   const [standaloneReport, setStandaloneReport] = useState<{
@@ -191,13 +209,13 @@ export function FirstRunSetupPane({
   const oauthAlreadyReady = Boolean(oauthProviderId)
     && onboardingStatus?.system?.chat_ready === true
     && String(onboardingStatus.system.current_provider || '').toLowerCase() === oauthProviderId;
-  const oauthNeedsLogin = Boolean(oauthProviderId) && oauthState.status !== 'success' && !oauthAlreadyReady;
+  const oauthNeedsLogin = Boolean(oauthProviderId) && oauthState.status !== 'success' && !oauthAlreadyReady && !savedProviderCredentials;
   // Anthropic supports both linking an existing Claude Code session and
   // entering a regular Anthropic API key. Either credential path is valid.
   const oauthLoginReady = !oauthNeedsLogin || (provider === 'anthropic' && Boolean(apiKey.trim()));
   const providerModelsReady = !['google-gemini-cli', 'openai-codex'].includes(provider) || models.length > 0;
   const keyRequired = Boolean(activeProviderOption && !activeProviderOption.oauthProvider && !activeProviderOption.keyOptional);
-  const credentialsReady = !keyRequired || Boolean(apiKey.trim());
+  const credentialsReady = !keyRequired || Boolean(apiKey.trim()) || savedProviderCredentials;
   const canSubmitForm = canSubmit && oauthLoginReady && providerModelsReady && credentialsReady && Boolean(model);
 
   const chooseAi = async (choice: FirstRunAiChoice) => {
@@ -283,37 +301,74 @@ export function FirstRunSetupPane({
     }
   }, []);
 
-  const loadLiveModels = useCallback(async () => {
-    if (aiChoice !== 'enabled') return;
-    if (!['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek', 'gemini'].includes(provider)) return;
-    if (!apiKey.trim()) return;
+  const loadLiveModels = useCallback(async (): Promise<Array<{ id: string; label: string }>> => {
+    const capturedKey = modelRequestKey;
+    const serial = ++modelRequestSerial.current;
+    const current = () => activeModelRequestKey.current === capturedKey && modelRequestSerial.current === serial;
+    if (aiChoice !== 'enabled' || !provider || !canSubmit) { setModelProbeLoading(false); return []; }
     setModelProbeLoading(true);
     setModelProbeError('');
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      const response = await window.lastbrowser.sidekick.requestWebui({
-        method: 'POST',
-        path: '/api/models/probe',
-        body: { provider, api_key: apiKey.trim(), ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) }
-      }) as { models?: Array<Record<string, unknown>>; error?: string };
-      const models = (response?.models || []).map((item) => {
-        const id = String(item.id || item.name || '').trim();
-        return id ? { id, label: String(item.label || item.name || id) } : null;
-      }).filter((item): item is { id: string; label: string } => Boolean(item));
-      if (models.length) {
-        setLiveProviderModels((current) => ({ ...current, [provider]: models }));
-        setModel((current) => models.some((item) => item.id === current) ? current : models[0].id);
-      } else {
-        setModelProbeError(response?.error || 'Dieser Schlüssel hat keine verfügbaren Modelle zurückgegeben.');
+      const readCatalog = async () => {
+        if (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider)) {
+          const response = await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/models/probe',
+            body: { provider, api_key: apiKey.trim(), ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) }
+          }) as { models?: Array<{ id?: string; name?: string; label?: string }>; error?: string };
+          if (response.error) throw new Error(response.error);
+          return { models: response.models || [], configured: false };
+        }
+        if (!browserProfileId || !backendProfileName) throw new Error('Das aktive Browserprofil wird noch vorbereitet. Bitte erneut laden.');
+        const scopeSelection = { browserProfileId, workspacePath: workspacePath || null, backendProfileName };
+        const client = new IndependentAssistantClient(window.lastbrowser.independent);
+        const resolved = await client.request({ schemaVersion: 1, operation: 'resolveScope',
+          payload: { browserProfileId, workspacePath: workspacePath || null }, backendProfileName });
+        if (!resolved.ok) throw new Error(resolved.error.message);
+        if (resolved.value.scope.browserProfileId !== browserProfileId) throw new Error('Modellkatalog gehört zu einem anderen Profil.');
+        const [catalog, auth] = await Promise.all([
+          client.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get', includeCatalog: true } }),
+          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection }) as Promise<{ providers?: Array<{ id: string; has_key?: boolean; oauth_connected?: boolean; provider_available?: boolean }> }>
+        ]);
+        if (!catalog.ok) throw new Error(catalog.error.message);
+        if (catalog.value.scope.browserProfileId !== resolved.value.scope.browserProfileId
+          || catalog.value.scope.backendProfileId !== resolved.value.scope.backendProfileId
+          || catalog.value.scope.spaceId !== resolved.value.scope.spaceId) throw new Error('Modellkatalog-Profil hat sich geändert.');
+        const group = catalog.value.groups?.find(item => item.provider_id === provider);
+        const credentials = auth.providers?.find(item => item.id === provider);
+        const configured = credentials?.provider_available !== false && Boolean(credentials?.has_key || credentials?.oauth_connected || (group?.configured && activeProviderOption?.keyOptional));
+        return { models: group ? [...group.models, ...(group.extra_models || [])] : [], configured };
+      };
+      const result = await Promise.race([readCatalog(), new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => reject(new Error('Modellliste antwortet nicht. Bitte erneut laden oder den Browser ohne KI starten.')), 20000);
+      })]);
+      if (!current()) return [];
+      const available = [...new Map(result.models.map(item => {
+        const raw = String(item.id || ('name' in item ? item.name : '') || '').trim();
+        const id = parseProviderModelId(raw, provider).model;
+        return [id, { id, label: String(item.label || id) }] as const;
+      }).filter(([id]) => id)).values()];
+      setProviderAuth({ key: capturedKey, configured: result.configured });
+      setModelCatalogKey(capturedKey);
+      setLiveProviderModels(previous => ({ ...previous, [provider]: available }));
+      setModel(previous => available.some(item => item.id === previous) ? previous : available[0]?.id || '');
+      if (!available.length) setModelProbeError(oauthProviderId ? 'Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.' : 'Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.');
+      return available;
+    } catch (cause) {
+      if (current()) {
+        setModelProbeError(cause instanceof Error ? cause.message : 'Modelle konnten nicht geladen werden.');
+        setModelCatalogKey('');
+        setModel('');
       }
-    } catch (error) {
-      setModelProbeError(error instanceof Error ? error.message : 'Modelle konnten nicht geladen werden.');
+      return [];
     } finally {
-      setModelProbeLoading(false);
+      if (deadline) clearTimeout(deadline);
+      if (current()) setModelProbeLoading(false);
     }
-  }, [aiChoice, apiKey, baseUrl, provider]);
+  }, [aiChoice, apiKey, baseUrl, provider, browserProfileId, workspacePath, backendProfileName, modelRequestKey, canSubmit, oauthProviderId, activeProviderOption?.keyOptional]);
 
   useEffect(() => {
     void loadLiveModels();
+    return () => { modelRequestSerial.current++; };
   }, [loadLiveModels]);
 
   // OAuth polling
@@ -322,10 +377,11 @@ export function FirstRunSetupPane({
     let cancelled = false;
     let timer = 0;
     let transientFailures = 0;
+    const capturedLoginKey = modelRequestKey;
     const poll = async (): Promise<void> => {
       try {
         const response = await window.lastbrowser.sidekick.pollOAuth(oauthState.flowId || '');
-        if (cancelled) return;
+        if (cancelled || activeModelRequestKey.current !== capturedLoginKey) return;
         const nextStatus = String(response.status || 'error') as CodexOAuthState['status'];
         if (nextStatus === 'pending') {
           transientFailures = 0;
@@ -382,9 +438,11 @@ export function FirstRunSetupPane({
     }
     clearProviderChatEvidence(provider, window.localStorage);
     const providerLabel = activeProviderOption?.label || 'Provider';
+    const capturedLoginKey = modelRequestKey;
     setOAuthState({ status: 'starting', message: t('firstRun.startingLogin', { provider: providerLabel }) });
     try {
       const response = await window.lastbrowser.sidekick.startOAuth({ provider: oauthProviderId });
+      if (activeModelRequestKey.current !== capturedLoginKey) return;
       if (response.error) throw new Error(response.error);
       const flowId = String(response.flow_id || '');
 
@@ -440,6 +498,7 @@ export function FirstRunSetupPane({
         }
       }
     } catch (loginError) {
+      if (activeModelRequestKey.current !== capturedLoginKey) return;
       setOAuthState({
         status: 'error',
         message: loginError instanceof Error ? loginError.message : String(loginError)
@@ -449,18 +508,21 @@ export function FirstRunSetupPane({
 
   async function activateProviderAfterLogin(): Promise<void> {
     if (!provider) return;
+    const capturedKey = modelRequestKey;
+    const freshModels = await loadLiveModels();
+    if (activeModelRequestKey.current !== capturedKey || !freshModels.length) return;
+    const modelToUse = freshModels.some(item => item.id === model) ? model : freshModels[0].id;
     try {
-      const modelToUse = model || models[0]?.id || '';
-      await window.lastbrowser.sidekick.applyCloudSetup({
-        provider,
-        model: modelToUse,
-        apiKey: apiKey.trim() || undefined,
-        baseUrl: baseUrl.trim() || undefined,
-        confirmOverwrite: true
-      });
+      const setupRequest = { provider, model: modelToUse,
+        apiKey: apiKey.trim() || undefined, baseUrl: baseUrl.trim() || undefined, confirmOverwrite: true,
+        scopeSelection: { browserProfileId, workspacePath: workspacePath || null, backendProfileName } };
+      const result = await window.lastbrowser.sidekick.applyCloudSetup(setupRequest);
+      if (activeModelRequestKey.current !== capturedKey) return;
+      if (result.error || result.ok === false) throw new Error(String(result.error || 'Provider konnte nicht aktiviert werden.'));
+      setModel(modelToUse);
       await onRefreshOnboarding();
-    } catch {
-      // Setup completion will retry or notify
+    } catch (cause) {
+      if (activeModelRequestKey.current === capturedKey) setModelProbeError(cause instanceof Error ? cause.message : 'Provider konnte nicht aktiviert werden.');
     }
   }
 
@@ -478,10 +540,29 @@ export function FirstRunSetupPane({
   }
 
   // Browser import state
-  const [selectedBrowser, setSelectedBrowser] = useState<string>('chrome');
+  const importCopy = browserImportCopy(locale);
+  const [selectedBrowser, setSelectedBrowser] = useState<string>('');
+  const manuallySelectedBrowser = useRef(false);
+  const [browserDiscovery, setBrowserDiscovery] = useState<Awaited<ReturnType<typeof window.lastbrowser.system.discoverBrowserImport>> | null>(null);
+  const [selectedProfile, setSelectedProfile] = useState('');
+  const [importRunning, setImportRunning] = useState(false);
+  const [importError, setImportError] = useState(false);
+  const [defaultBrowserMessage, setDefaultBrowserMessage] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    void window.lastbrowser.system.discoverBrowserImport().then(result => {
+      if (cancelled) return;
+      setBrowserDiscovery(result);
+      if (!manuallySelectedBrowser.current) setSelectedBrowser(result.defaultBrowserId || result.profiles[0]?.browser || 'chrome');
+    }).catch(() => null);
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    const profiles = browserDiscovery?.profiles.filter(p => p.browser === selectedBrowser) || [];
+    setSelectedProfile(profiles.find(p => p.preferred)?.id || profiles[0]?.id || '');
+  }, [selectedBrowser, browserDiscovery]);
   const [importBookmarksChecked, setImportBookmarksChecked] = useState<boolean>(true);
   const [importHistoryChecked, setImportHistoryChecked] = useState<boolean>(true);
-  const [importSearchChecked, setImportSearchChecked] = useState<boolean>(false);
   const [importedBookmarksCount, setImportedBookmarksCount] = useState<number>(0);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -497,20 +578,23 @@ export function FirstRunSetupPane({
 
   // Default browser state
   const [isDefaultBrowser, setIsDefaultBrowser] = useState<boolean | null>(null);
-  const [defaultBrowserDone, setDefaultBrowserDone] = useState(false);
   const [defaultBrowserLoading, setDefaultBrowserLoading] = useState(false);
 
   useEffect(() => {
-    void window.lastbrowser?.system?.isDefaultBrowser?.().then((isDef) => {
-      if (typeof isDef === 'boolean') {
-        setIsDefaultBrowser(isDef);
-      }
-    }).catch(() => null);
+    let cancelled = false;
+    const check = () => void window.lastbrowser.system.isDefaultBrowser().then(value => {
+      if (!cancelled) setIsDefaultBrowser(value);
+    }).catch(() => { if (!cancelled) setIsDefaultBrowser(null); });
+    check();
+    window.addEventListener('focus', check);
+    return () => { cancelled = true; window.removeEventListener('focus', check); };
   }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImportError(false);
+    setImportSuccessMsg('');
     try {
       const text = await file.text();
       const imported = file.name.endsWith('.json')
@@ -526,7 +610,7 @@ export function FirstRunSetupPane({
         setImportSuccessMsg('Keine gültigen Lesezeichen in der Datei gefunden.');
       }
     } catch (err) {
-      console.error('Failed to import bookmarks', err);
+      setImportError(true);
       setImportSuccessMsg('Fehler beim Einlesen der Lesezeichendatei.');
     }
     if (fileInputRef.current) {
@@ -534,23 +618,45 @@ export function FirstRunSetupPane({
     }
   };
 
-  const handleQuickImport = () => {
-    const browser = BROWSER_CHOICES.find((b) => b.id === selectedBrowser);
-    if (importHistoryChecked) {
-      const existingVisits = loadVisitedSites();
-      let updated = [...existingVisits];
-      const popularSites = [
-        { url: 'https://github.com', title: 'GitHub' },
-        { url: 'https://news.ycombinator.com', title: 'Hacker News' },
-        { url: 'https://wikipedia.org', title: 'Wikipedia' },
-        { url: 'https://youtube.com', title: 'YouTube' }
-      ];
-      for (const site of popularSites) {
-        updated = recordVisit(updated, site.url, site.title);
+  const handleQuickImport = async () => {
+    setImportRunning(true);
+    setImportError(false);
+    setImportSuccessMsg('');
+    try {
+      const result = await window.lastbrowser.system.importBrowserData({ profileId: selectedProfile, bookmarks: importBookmarksChecked, history: importHistoryChecked });
+      const imported = result.bookmarks.map(item => ({ ...item, id: `bookmark-${crypto.randomUUID()}` }));
+      const existingBookmarks = loadBookmarks();
+      const merged = mergeBookmarks(existingBookmarks, imported);
+      if (imported.length) {
+        saveBookmarks(window.localStorage, merged);
+        const saved = loadBookmarks();
+        if (merged.some(item => !saved.some(stored => stored.url === item.url))) throw new Error('Bookmark storage unavailable.');
       }
-      saveVisitedSites(window.localStorage, updated);
-    }
-    setImportSuccessMsg(t('firstRun.importSuccess', { browser: browser?.name || 'Browser' }));
+      const addedBookmarks = merged.length - existingBookmarks.length;
+      setImportedBookmarksCount(current => current + addedBookmarks);
+      const visits = loadVisitedSites();
+      let addedHistory = 0;
+      for (const importedVisit of result.history) {
+        const url = new URL(importedVisit.url);
+        url.hash = '';
+        const item = { ...importedVisit, url: url.toString().replace(/\/$/, '') };
+        const existing = visits.find(v => v.url === item.url && v.profileId === browserProfileId);
+        if (existing) {
+          existing.count = Math.max(existing.count, item.count);
+          existing.lastVisited = Math.max(existing.lastVisited, item.lastVisited);
+        } else { visits.push({ ...item, ...(browserProfileId ? { profileId: browserProfileId } : {}) }); addedHistory++; }
+      }
+      if (result.history.length) {
+        const finalVisits = visits.sort((a, b) => b.lastVisited - a.lastVisited).slice(0, 500);
+        saveVisitedSites(window.localStorage, finalVisits);
+        const saved = loadVisitedSites();
+        if (finalVisits.some(item => !saved.some(stored => stored.url === item.url && stored.profileId === item.profileId))) throw new Error('History storage unavailable.');
+      }
+      setImportSuccessMsg(imported.length || result.history.length ? importCopy.done(addedBookmarks, addedHistory) : importCopy.empty);
+    } catch {
+      setImportError(true);
+      setImportSuccessMsg(importCopy.failed);
+    } finally { setImportRunning(false); }
   };
 
   const togglePinnedApp = (appId: string) => {
@@ -564,18 +670,13 @@ export function FirstRunSetupPane({
 
   async function handleSetDefaultBrowser(): Promise<void> {
     setDefaultBrowserLoading(true);
+    setDefaultBrowserMessage('');
     try {
-      await window.lastbrowser?.system?.setDefaultBrowser?.();
-      setDefaultBrowserDone(true);
-      const isDef = await window.lastbrowser?.system?.isDefaultBrowser?.().catch(() => null);
-      if (typeof isDef === 'boolean') {
-        setIsDefaultBrowser(isDef);
-      }
-    } catch {
-      setDefaultBrowserDone(true);
-    } finally {
-      setDefaultBrowserLoading(false);
-    }
+      const opened = await window.lastbrowser.system.setDefaultBrowser();
+      setDefaultBrowserMessage(opened ? importCopy.defaultPending : importCopy.defaultFailed);
+      setIsDefaultBrowser(await window.lastbrowser.system.isDefaultBrowser());
+    } catch { setDefaultBrowserMessage(importCopy.defaultFailed); }
+    finally { setDefaultBrowserLoading(false); }
   }
 
   function submit(event: FormEvent): void {
@@ -593,15 +694,15 @@ export function FirstRunSetupPane({
       model,
       apiKey,
       baseUrl: baseUrl.trim() || undefined,
-      botName: botName.trim() || 'Nova',
+      botName: effectiveBotName,
       personality: personality || 'nova',
-      defaultBrowser: Boolean(isDefaultBrowser || defaultBrowserDone),
+      defaultBrowser: isDefaultBrowser === true,
       importedBookmarksCount: importedBookmarksCount || 0
     });
   }
 
   // Identify top featured recommendation cards
-  const featuredIds = ['openai-codex', 'ollama', 'openrouter'] as const;
+  const featuredIds = RECOMMENDED_PROVIDER_IDS;
   const browserOnly = aiChoice === 'disabled';
 
   if (aiChoice === null) {
@@ -616,7 +717,7 @@ export function FirstRunSetupPane({
           </header>
           <div className="first-run-ai-choice-card">
             <div className="hero-avatar-wrap">
-              <img src={brandAssets.sidekickAvatar} alt="" className="hero-avatar" />
+              <img src={personalityAvatar(personality)} alt="" className="hero-avatar" />
               <span className="hero-glow" />
             </div>
             <h1>{t('firstRun.aiChoiceTitle')}</h1>
@@ -668,7 +769,7 @@ export function FirstRunSetupPane({
         {/* Hero title & introductory copy */}
         <div className="first-run-hero-banner">
           <div className="hero-avatar-wrap">
-            <img src={brandAssets.sidekickAvatar} alt="" className="hero-avatar" />
+            <img src={personalityAvatar(personality)} alt="" className="hero-avatar" />
             <span className="hero-glow" />
           </div>
           <div className="hero-content">
@@ -775,8 +876,8 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">1</span>
               <div>
-                <h2>{t('firstRun.section1Title')}</h2>
-                <p>{t('firstRun.section1Desc')}</p>
+                <h2>Persönlichkeit für diesen Space</h2>
+                <p>Dein Begleiter prägt den Schnellchat und den Antwortstil normaler Chats. Deren Basis-Profil und Werkzeuge bleiben erhalten.</p>
               </div>
             </div>
 
@@ -797,13 +898,13 @@ export function FirstRunSetupPane({
                 />
                 <div className="name-preset-chips" role="group" aria-label="Namensvorschläge">
                   {BOT_NAME_PRESETS.map((preset) => {
-                    const isPresetActive = botName.trim().toLowerCase() === preset.name.toLowerCase();
+                    const isPresetActive = selectedBotPreset === preset.name;
                     return (
                       <button
                         key={preset.name}
                         type="button"
                         className={`name-preset-pill ${isPresetActive ? 'active' : ''}`}
-                        onClick={() => setBotName(preset.name)}
+                        onClick={() => { setSelectedBotPreset(preset.name); setPersonality(Object.keys(companionDefaultNames).find(id => companionDefaultNames[id as CompanionPersonality] === preset.name) || 'nova'); }}
                         title={preset.desc}
                       >
                         <span className="preset-name">{preset.name}</span>
@@ -816,6 +917,10 @@ export function FirstRunSetupPane({
             </div>
 
             {/* Personality Cards Grid */}
+            <div className="personality-selected-preview" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBlock: 16 }}>
+              <img src={personalityAvatar(personality)} alt="" style={{ width: 80, height: 80, objectFit: 'contain' }} />
+              <div><strong>{effectiveBotName}</strong><p>{PERSONALITY_PROFILES.find(profile => profile.id === personality)?.name}</p></div>
+            </div>
             <div className="personality-cards-grid" role="radiogroup" aria-label="Persönlichkeitsprofil auswählen">
               {PERSONALITY_PROFILES.map((profile) => {
                 const isSelected = personality === profile.id;
@@ -823,13 +928,14 @@ export function FirstRunSetupPane({
                   <div
                     key={profile.id}
                     className={`personality-card ${profile.badgeType} ${isSelected ? 'is-selected' : ''}`}
-                    onClick={() => setPersonality(profile.id)}
+                    onClick={() => { setPersonality(profile.id); setSelectedBotPreset(companionDefaultNames[profile.id as CompanionPersonality]); }}
                     role="radio"
                     aria-checked={isSelected}
                     tabIndex={0}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         setPersonality(profile.id);
+                        setSelectedBotPreset(companionDefaultNames[profile.id as CompanionPersonality]);
                       }
                     }}
                   >
@@ -841,9 +947,9 @@ export function FirstRunSetupPane({
                     </div>
 
                     <div className="persona-header">
-                      <span className="persona-icon">{profile.icon}</span>
+                      <img className="persona-icon" src={personalityAvatar(profile.id)} alt="" style={{ width: 56, height: 56, objectFit: 'contain', flexShrink: 0 }} />
                       <div>
-                        <h3 className="persona-name">{profile.name}</h3>
+                        <h3 className="persona-name">{profile.id === 'nova' ? `${effectiveBotName} (Standard)` : profile.name}</h3>
                         <span className="persona-tagline">{profile.tagline}</span>
                       </div>
                     </div>
@@ -869,7 +975,7 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">2</span>
               <div>
-                <h2>{t('firstRun.section2Title', { botName: botName.trim() || 'Nova' })}</h2>
+                <h2>{t('firstRun.section2Title', { botName: effectiveBotName })}</h2>
                 <p>{t('firstRun.section2Desc')}</p>
               </div>
             </div>
@@ -1117,7 +1223,7 @@ export function FirstRunSetupPane({
                         className="key-input"
                       />
                       <div className="field-hint" style={{ marginTop: '0.5rem' }}>
-                        <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={!apiKey.trim() || modelProbeLoading}>
+                        <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
                           {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
                         </button>
                         {modelProbeError && <p role="alert">{modelProbeError}</p>}
@@ -1161,7 +1267,7 @@ export function FirstRunSetupPane({
                   )}
                   {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
                     <div className="field-hint" style={{ marginTop: '0.5rem' }}>
-                      <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={!apiKey.trim() || modelProbeLoading}>
+                      <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
                         {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
                       </button>
                       {modelProbeError && <p role="alert">{modelProbeError}</p>}
@@ -1200,10 +1306,11 @@ export function FirstRunSetupPane({
             {/* Model picker within chosen provider */}
             <div className="model-selection-area">
               <label className="input-label">{t('firstRun.preferredModelLabel')}</label>
+              {modelProbeError && models.length > 0 && <p role="alert">{modelProbeError}</p>}
               {models.length === 0 ? (
                 <div className="field-hint">
-                  <p>Für diesen Anbieter sind aktuell keine Modelle verfügbar. API-Key eingeben und Modellliste erneut laden.</p>
-                  <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()}>Modelle neu laden</button>
+                  <p>{modelProbeLoading ? 'Modelle werden geladen …' : modelProbeError || (oauthProviderId ? 'Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.' : 'Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.')}</p>
+                  <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>Modelle neu laden</button>
                 </div>
               ) : <div className="models-pills-row">
                 {models.map((m) => {
@@ -1238,6 +1345,7 @@ export function FirstRunSetupPane({
               </div>
             </div>
 
+            <p>{importCopy.detected} <strong>{browserDiscovery?.defaultBrowser || importCopy.unknown}</strong></p>
             <div className="setup-browser-grid" role="radiogroup" aria-label="Quell-Browser auswählen">
               {BROWSER_CHOICES.map((b) => {
                 const isSelected = selectedBrowser === b.id;
@@ -1246,7 +1354,7 @@ export function FirstRunSetupPane({
                     key={b.id}
                     type="button"
                     className={`browser-import-card ${isSelected ? 'active' : ''}`}
-                    onClick={() => setSelectedBrowser(b.id)}
+                    onClick={() => { manuallySelectedBrowser.current = true; setSelectedBrowser(b.id); }}
                   >
                     <span className="browser-card-icon" style={{ borderColor: b.color }}>
                       {b.icon}
@@ -1264,6 +1372,13 @@ export function FirstRunSetupPane({
             </div>
 
             <div className="import-options-panel">
+              <label>{importCopy.profile}
+                <select value={selectedProfile} onChange={e => setSelectedProfile(e.target.value)} disabled={importRunning}>
+                  {!selectedProfile && <option value="">{importCopy.noProfile}</option>}
+                  {(browserDiscovery?.profiles || []).filter(p => p.browser === selectedBrowser).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </label>
+              <p>{importCopy.capabilities}</p>
               <div className="import-checkboxes-row">
                 <label className="import-check-label">
                   <input
@@ -1280,14 +1395,6 @@ export function FirstRunSetupPane({
                     onChange={(e) => setImportHistoryChecked(e.target.checked)}
                   />
                   <span>{t('firstRun.importHistory')}</span>
-                </label>
-                <label className="import-check-label">
-                  <input
-                    type="checkbox"
-                    checked={importSearchChecked}
-                    onChange={(e) => setImportSearchChecked(e.target.checked)}
-                  />
-                  <span>{t('firstRun.importSearch')}</span>
                 </label>
               </div>
 
@@ -1311,20 +1418,26 @@ export function FirstRunSetupPane({
                 <button
                   type="button"
                   className="import-execute-btn"
-                  onClick={handleQuickImport}
+                  onClick={() => void handleQuickImport()}
+                  disabled={importRunning || !selectedProfile || (!importBookmarksChecked && !importHistoryChecked)}
                 >
                   <Download size={15} />
-                  <span>{t('firstRun.importNow', { browser: BROWSER_CHOICES.find((b) => b.id === selectedBrowser)?.name || 'Browser' })}</span>
+                  <span>{importRunning ? importCopy.running : t('firstRun.importNow', { browser: BROWSER_CHOICES.find((b) => b.id === selectedBrowser)?.name || 'Browser' })}</span>
                 </button>
               </div>
 
               {importSuccessMsg && (
-                <div className="import-success-badge">
-                  <CheckCircle2 size={16} />
+                <div className="import-success-badge" role={importError ? 'alert' : 'status'}>
+                  {!importError && <CheckCircle2 size={16} />}
                   <span>{importSuccessMsg}</span>
                 </div>
               )}
             </div>
+          </div>
+
+          <div className="setup-section-block">
+            <h3>{locale.startsWith('de') ? 'Passwörter aus deinem Browser übernehmen' : 'Import passwords from your browser'}</h3>
+            <PasswordVaultPanel key={browserProfileId} profileId={browserProfileId} compact />
           </div>
 
           {/* ── SECTION 4: PINNED APPS FAVORITEN-AUSWAHL ── */}
@@ -1385,15 +1498,16 @@ export function FirstRunSetupPane({
                 </div>
                 <div>
                   <strong>{isDefaultBrowser ? t('firstRun.defaultBrowserCardTitleActive') : t('firstRun.defaultBrowserCardTitle')}</strong>
-                  <p>{browserOnly ? t('firstRun.defaultBrowserCardDescNoAi') : t('firstRun.defaultBrowserCardDesc')}</p>
+                  <p>{isDefaultBrowser === true ? importCopy.defaultActive : importCopy.defaultRecommend}</p>
+                  {defaultBrowserMessage && isDefaultBrowser !== true && <p role="status">{defaultBrowserMessage}</p>}
                 </div>
               </div>
 
               <div className="default-browser-actions">
-                {isDefaultBrowser || defaultBrowserDone ? (
+                {isDefaultBrowser === true ? (
                   <span className="default-browser-registered-badge">
                     <CheckCircle2 size={16} />
-                    <span>{t('firstRun.defaultBrowserRegistered')}</span>
+                    <span>{importCopy.defaultActive}</span>
                   </span>
                 ) : (
                   <button
@@ -1455,15 +1569,23 @@ export function FirstRunSetupPane({
                 className="primary-btn launch-btn"
                 disabled={saving || !provider || !model || !canSubmitForm}
               >
-                {saving || !canSubmitForm ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
+                {saving || modelProbeLoading || !canSubmit ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
                 <span>
                   {saving
                     ? t('firstRun.configuring')
                     : canSubmitForm
-                    ? t('firstRun.launchWithBot', { botName: botName.trim() || 'Nova' })
+                    ? t('firstRun.launchWithBot', { botName: effectiveBotName })
+                    : !canSubmit
+                    ? readiness.id === 'error' ? 'Runtime prüfen' : t('firstRun.runtimePreparing')
                     : oauthNeedsLogin
                     ? t('firstRun.loginFirst')
-                    : t('firstRun.runtimePreparing')}
+                    : modelProbeLoading
+                    ? 'Modelle werden geladen …'
+                    : modelProbeError
+                    ? 'Modellliste erneut laden'
+                    : !credentialsReady
+                    ? 'Zugangsdaten eingeben'
+                    : 'Modell auswählen'}
                 </span>
                 {canSubmitForm && !saving && <ArrowRight size={15} />}
               </button>

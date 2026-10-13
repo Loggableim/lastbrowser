@@ -1,3 +1,6 @@
+import { PasswordVault } from './password-vault.js';
+import { passwordContextMenu } from './password-autofill.js';
+import { discoverBrowserImport, importBrowserData } from './browser-import.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
@@ -70,6 +73,9 @@ import {
   getKanbanBoard,
   getLogs,
   getMemory,
+  getMemoryPolicy,
+  setMemoryPolicy,
+  scopedAgentOperation,
   getOnboardingStatus,
   getSessionDraft,
   getSettings,
@@ -521,11 +527,110 @@ const openUrlLifecycle = createOpenUrlLifecycle({
   isAppReady: () => appReady
 });
 
+let passwordAccessEpoch = 0;
+type PasswordDestination = { profileId: string; epoch: number };
+let passwordDestinations = new WeakMap<Electron.WebContents, PasswordDestination>();
+let passwordHumanGuests = new WeakMap<Electron.WebContents, { guest: Electron.WebContents; targetSession: Electron.Session }>();
+const passwordVault = new PasswordVault(() => app.getPath('userData'));
+async function authorizePasswordAccess(): Promise<() => void> {
+  const epoch = passwordAccessEpoch;
+  const check = () => { if (passwordAccessEpoch !== epoch) throw new Error('Unlock LastBrowser before accessing passwords.'); };
+  try {
+    const auth = await getAccessAuthStatus(requireWebuiUrl());
+    check();
+    if (!(auth.auth_enabled === false || auth.auth_enabled === true && auth.logged_in === true)) throw new Error('Locked');
+    return check;
+  } catch { throw new Error('Unlock LastBrowser before accessing passwords.'); }
+}
 function broadcastAccessAuthLocked(): void {
+  passwordAccessEpoch++;
+  passwordDestinations = new WeakMap();
+  passwordHumanGuests = new WeakMap();
   for (const window of BrowserWindow.getAllWindows()) {
     if (window.isDestroyed() || window.webContents.isDestroyed()) continue;
     try { window.webContents.send('lastbrowser:access-auth-locked'); } catch { /* Window closed during broadcast. */ }
   }
+}
+
+function isHumanPasswordGuest(guest: Electron.WebContents): boolean {
+  const owner = guest.hostWebContents;
+  return !guest.isDestroyed() && guest.getType() === 'webview' && Boolean(owner && !owner.isDestroyed() && isTrustedShell(owner)
+    && isGuestOwnedByRenderer(guest, owner.id) && !independentController?.ownsWebContents(guest.id));
+}
+async function observePasswordGuestFocus(guest: Electron.WebContents): Promise<void> {
+  if (!isHumanPasswordGuest(guest) || !guest.isFocused()) return;
+  const owner = guest.hostWebContents!;
+  const captured = { guest, targetSession: guest.session };
+  passwordHumanGuests.set(owner, captured);
+  passwordDestinations.delete(owner);
+  guest.once('destroyed', () => { if (passwordHumanGuests.get(owner) === captured) { passwordHumanGuests.delete(owner); passwordDestinations.delete(owner); } });
+  const epoch = passwordAccessEpoch;
+  try {
+    const profileId = await independentController?.browserProfileForSession(captured.targetSession);
+    if (profileId && epoch === passwordAccessEpoch && passwordHumanGuests.get(owner) === captured && isHumanPasswordGuest(guest)
+      && guest.isFocused() && guest.session === captured.targetSession && !passwordDestinations.has(owner))
+      passwordDestinations.set(owner, { profileId, epoch });
+  } catch { /* Unknown or agent sessions never establish password authority. */ }
+}
+async function passwordDestination(event: Electron.IpcMainInvokeEvent, requested: unknown, mayConfirm: boolean): Promise<{ profileId: string; check: () => void } | null> {
+  const recheck = captureTrustedShellSender(event, isTrustedShell);
+  const owner = recheck();
+  if (typeof requested !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(requested)) throw new Error('Invalid browser profile.');
+  const epoch = passwordAccessEpoch;
+  let binding = passwordDestinations.get(owner);
+  if (!binding || binding.epoch !== epoch || binding.profileId !== requested) {
+    const observed = passwordHumanGuests.get(owner);
+    if ((!binding || binding.epoch !== epoch) && observed && isHumanPasswordGuest(observed.guest) && observed.guest.session === observed.targetSession) {
+      const mainProfile = await independentController?.browserProfileForSession(observed.targetSession);
+      recheck();
+      if (epoch !== passwordAccessEpoch || passwordHumanGuests.get(owner) !== observed) throw new Error('Password destination changed.');
+      const currentBinding = passwordDestinations.get(owner);
+      if (currentBinding !== binding) {
+        if (currentBinding?.profileId !== requested || currentBinding.epoch !== epoch) throw new Error('Password destination changed.');
+        binding = currentBinding;
+      }
+      if (!binding && mainProfile === requested) { binding = { profileId: mainProfile, epoch }; passwordDestinations.set(owner, binding); }
+    }
+  }
+  if (!binding || binding.epoch !== epoch || binding.profileId !== requested) {
+    if (!mayConfirm) return null;
+    const parent = BrowserWindow.fromWebContents(owner);
+    if (!parent || parent.isDestroyed()) throw new Error('Password access needs a browser window.');
+    const prior = passwordDestinations.get(owner);
+    const de = currentLocale.startsWith('de');
+    const answer = await dialog.showMessageBox(parent, { type: 'question', title: de ? 'Passwortspeicher freigeben' : 'Authorize password vault',
+      message: de ? 'Passwortspeicher für dieses Browserprofil öffnen?' : 'Open the password vault for this browser profile?',
+      detail: (de ? 'Browserprofil-ID: ' : 'Browser profile ID: ') + requested + (de
+        ? '\n\nPasswörter und Kontodaten werden ausschließlich diesem Profil zugeordnet. Bestätige das Ziel, bevor du Metadaten siehst oder eine Exportdatei importierst.'
+        : '\n\nPasswords and account metadata belong only to this profile. Confirm the destination before viewing metadata or importing an export file.'),
+      buttons: de ? ['Speicher öffnen', 'Abbrechen'] : ['Open vault', 'Cancel'], defaultId: 1, cancelId: 1, noLink: true });
+    recheck();
+    if (epoch !== passwordAccessEpoch || passwordDestinations.get(owner) !== prior) throw new Error('Password destination changed.');
+    if (answer.response !== 0) return null;
+    const checkAuth = await authorizePasswordAccess(); recheck(); checkAuth();
+    if (epoch !== passwordAccessEpoch || passwordDestinations.get(owner) !== prior) throw new Error('Password destination changed.');
+    binding = { profileId: requested, epoch }; passwordDestinations.set(owner, binding);
+  }
+  if (!binding || binding.epoch !== epoch || binding.profileId !== requested) throw new Error('Authorize the exact requested password profile.');
+  const capturedBinding = binding;
+  const check = () => { recheck(); if (epoch !== passwordAccessEpoch || passwordDestinations.get(owner) !== capturedBinding || capturedBinding.profileId !== requested) throw new Error('Password destination changed.'); };
+  check();
+  return { profileId: capturedBinding.profileId, check };
+}
+
+async function resolveSetupProfile(event: Electron.IpcMainInvokeEvent, selected: unknown): Promise<string> {
+  const recheck = captureTrustedShellSender(event, isTrustedShell);
+  if (!selected || typeof selected !== 'object' || Array.isArray(selected)) throw new Error('Invalid setup Space');
+  const value = selected as Record<string, unknown>;
+  if (Object.keys(value).some(key => !['browserProfileId', 'workspacePath', 'backendProfileName'].includes(key))
+    || typeof value.browserProfileId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(value.browserProfileId)
+    || !(value.workspacePath === null || typeof value.workspacePath === 'string' && value.workspacePath.length <= 2048 && !/[\x00-\x1f]/.test(value.workspacePath))
+    || typeof value.backendProfileName !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(value.backendProfileName)) throw new Error('Invalid setup Space');
+  const binding = await independentController?.lookupBinding(value.browserProfileId, value.workspacePath as string | null, value.backendProfileName);
+  recheck();
+  if (!binding || binding.scope.browserProfileId !== value.browserProfileId || binding.backendProfileName !== value.backendProfileName)
+    throw new Error('The selected Space has no matching backend profile binding');
+  return binding.backendProfileName;
 }
 
 function registerIpc(): void {
@@ -562,19 +667,64 @@ function registerIpc(): void {
     if (!guest || guest.isDestroyed() || !rect || !isGuestOwnedByRenderer(guest, event.sender.id)) return null;
     return capturePageDataUrl(() => guest.capturePage(rect));
   });
-  ipcMain.handle('lastbrowser:system:isDefaultBrowser', () => {
+  ipcMain.handle('lastbrowser:passwords:open', async (event, request) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    const checkAuth = await authorizePasswordAccess(); recheck(); checkAuth();
+    const destination = await passwordDestination(event, request?.profileId, true); checkAuth();
+    if (!destination) return false;
+    destination.check(); return true;
+  });
+  ipcMain.handle('lastbrowser:passwords:list', async (event, request) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    const checkAuth = await authorizePasswordAccess(); recheck(); checkAuth();
+    const destination = await passwordDestination(event, request?.profileId, false); checkAuth();
+    if (!destination) return { available: passwordVault.available(), entries: [], authorizationRequired: true };
+    const result = await passwordVault.list(destination.profileId); destination.check(); checkAuth();
+    return { ...result, authorizationRequired: false };
+  });
+  ipcMain.handle('lastbrowser:passwords:importCsv', async (event, request) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    const checkAuth = await authorizePasswordAccess(); const owner = recheck(); checkAuth();
+    const destination = await passwordDestination(event, request?.profileId, true); checkAuth();
+    if (!destination) return { cancelled: true, imported: 0, duplicates: 0, conflicts: 0, invalid: 0 };
+    destination.check();
+    if (!passwordVault.available()) throw new Error('Windows password encryption is unavailable. Nothing was imported.');
+    const parent = BrowserWindow.fromWebContents(owner);
+    if (!parent) throw new Error('Password import needs a browser window.');
+    const result = await dialog.showOpenDialog(parent, { title: currentLocale.startsWith('de') ? 'Passwörter aus Browser-CSV importieren' : 'Import passwords from browser CSV', properties: ['openFile'], filters: [{ name: 'Browser password CSV', extensions: ['csv'] }] });
+    destination.check(); checkAuth();
+    if (result.canceled || result.filePaths.length !== 1) return { cancelled: true, imported: 0, duplicates: 0, conflicts: 0, invalid: 0 };
+    const checkFreshAuth = await authorizePasswordAccess(); destination.check(); checkAuth(); checkFreshAuth();
+    return passwordVault.importFile(destination.profileId, result.filePaths[0], () => { destination.check(); checkAuth(); checkFreshAuth(); });
+  });
+  ipcMain.handle('lastbrowser:passwords:remove', async (event, request) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    const checkAuth = await authorizePasswordAccess(); recheck(); checkAuth();
+    const destination = await passwordDestination(event, request?.profileId, false); checkAuth();
+    if (!destination) throw new Error('Authorize the password vault for this browser profile first.');
+    return passwordVault.remove(destination.profileId, request?.id, () => { destination.check(); checkAuth(); });
+  });
+  ipcMain.handle('lastbrowser:system:discoverBrowserImport', (event) => {
+    if (!isTrustedShell(event.sender)) throw new Error('Untrusted import caller.');
+    return discoverBrowserImport();
+  });
+  ipcMain.handle('lastbrowser:system:importBrowserData', (event, value: unknown) => {
+    if (!isTrustedShell(event.sender)) throw new Error('Untrusted import caller.');
+    return importBrowserData(value, resolveServiceLayout(appResourcesDir(), undefined, process.env, process.platform, app.isPackaged).pythonExe);
+  });
+  ipcMain.handle('lastbrowser:system:isDefaultBrowser', (event) => {
+    if (!isTrustedShell(event.sender)) return false;
     if (typeof app?.isDefaultProtocolClient !== 'function') return false;
     return app.isDefaultProtocolClient('http') && app.isDefaultProtocolClient('https');
   });
-  ipcMain.handle('lastbrowser:system:setDefaultBrowser', (event) => {
+  ipcMain.handle('lastbrowser:system:setDefaultBrowser', async (event) => {
     if (!isTrustedShell(event.sender)) return false;
-    if (typeof app?.setAsDefaultProtocolClient !== 'function') return false;
-    const httpOk = app.setAsDefaultProtocolClient('http');
-    const httpsOk = app.setAsDefaultProtocolClient('https');
     if (process.platform === 'win32') {
-      void shell.openExternal('ms-settings:defaultapps');
+      await shell.openExternal('ms-settings:defaultapps');
+      return true; // Settings opened; only isDefaultBrowser confirms the OS choice.
     }
-    return httpOk && httpsOk;
+    if (typeof app?.setAsDefaultProtocolClient !== 'function') return false;
+    return app.setAsDefaultProtocolClient('http') && app.setAsDefaultProtocolClient('https');
   });
   ipcMain.handle('lastbrowser:system:openExternal', (_event, url: string) => openExternalUrl(url, {
     platform: process.platform,
@@ -645,8 +795,33 @@ function registerIpc(): void {
   });
   registerDefaultSidekickMigrationIpc(ipcMain, requireWebuiUrl);
   ipcMain.handle('lastbrowser:sidekick:onboardingStatus', () => getOnboardingStatus(requireWebuiUrl()));
-  ipcMain.handle('lastbrowser:sidekick:applyCloudSetup', (_event, request) => applyCloudSetup(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:setDefaultModel', (_event, request) => setDefaultModel(requireWebuiUrl(), String(request?.model || '')));
+  ipcMain.handle('lastbrowser:sidekick:applyCloudSetup', async (event, request) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    if (!request || typeof request !== 'object' || Array.isArray(request)) throw new Error('Invalid setup request');
+    // Existing callers retain their route; the first-run activation explicitly binds its selected Space.
+    if (request.scopeSelection === undefined) return applyCloudSetup(requireWebuiUrl(), request);
+    const profile = await resolveSetupProfile(event, request.scopeSelection);
+    recheck();
+    if (typeof request.provider !== 'string' || !request.provider.trim() || typeof request.model !== 'string' || !request.model.trim())
+      throw new Error('Select a provider and model before setup');
+    const result = await requestWebui(requireWebuiUrl(), { method: 'POST', path: '/api/onboarding/setup', profile,
+      body: { provider: request.provider, model: request.model,
+        ...(typeof request.apiKey === 'string' && request.apiKey.trim() ? { api_key: request.apiKey.trim() } : {}),
+        ...(typeof request.baseUrl === 'string' && request.baseUrl.trim() ? { base_url: request.baseUrl.trim() } : {}),
+        ...(request.confirmOverwrite === true ? { confirm_overwrite: true } : {}) } });
+    recheck();
+    return result;
+  });
+  ipcMain.handle('lastbrowser:sidekick:setDefaultModel', async (event, request) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    if (request?.scopeSelection === undefined) return setDefaultModel(requireWebuiUrl(), String(request?.model || ''));
+    const profile = await resolveSetupProfile(event, request.scopeSelection);
+    recheck();
+    if (typeof request.model !== 'string' || !request.model.trim()) throw new Error('Select a model');
+    const result = await requestWebui(requireWebuiUrl(), { method: 'POST', path: '/api/default-model', profile, body: { model: request.model } });
+    recheck();
+    return result;
+  });
   ipcMain.handle('lastbrowser:sidekick:getFallbackModel', () => getFallbackModel(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:setFallbackModel', (_event, request) => setFallbackModel(requireWebuiUrl(), {
     model: String(request?.model || ''),
@@ -803,12 +978,14 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:deleteAgent', (_event, request) => deleteAgent(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:startAgentWorkspaceStream', async (event, request) => {
     const sessionId = String(request?.sessionId || '');
+    const profile = String(request?.profile || '');
     if (!sessionId) throw new Error('Agent workspace stream needs a session id.');
-    const streamId = `agent-workspace-${sessionId}`;
+    if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(profile)) throw new Error('Agent workspace stream needs an active profile.');
+    const streamId = `agent-workspace-${profile}-${sessionId}`;
     agentWorkspaceStreams.get(streamId)?.abort();
     const controller = new AbortController();
     agentWorkspaceStreams.set(streamId, controller);
-    void runAgentWorkspaceStream(requireWebuiUrl(), sessionId, streamId, controller, (payload) => {
+    void runAgentWorkspaceStream(requireWebuiUrl(), sessionId, streamId, controller, profile, (payload) => {
       event.sender.send('lastbrowser:sidekick:agentWorkspaceEvent', payload);
     });
     return { streamId };
@@ -823,10 +1000,13 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:switchProfile', (_event, request) => switchProfile(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:createProfile', (_event, request) => createProfile(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:deleteProfile', (_event, request) => deleteProfile(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:getMemory', () => getMemory(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:getMemory', (_event, request) => getMemory(requireWebuiUrl(), undefined, request || {}));
+  ipcMain.handle('lastbrowser:sidekick:getMemoryPolicy', (_event, request) => getMemoryPolicy(requireWebuiUrl(), request || {}));
+  ipcMain.handle('lastbrowser:sidekick:scopedAgentOperation', (_event, request) => scopedAgentOperation(requireWebuiUrl(), request || {}));
+  ipcMain.handle('lastbrowser:sidekick:setMemoryPolicy', (_event, request) => setMemoryPolicy(requireWebuiUrl(), request || {}));
   ipcMain.handle('lastbrowser:sidekick:writeMemory', (_event, request) => writeMemory(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:getSupermemoryStatus', () => getSupermemoryStatus(requireWebuiUrl()));
-  ipcMain.handle('lastbrowser:sidekick:listSupermemoryDocuments', () => listSupermemoryDocuments(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:getSupermemoryStatus', (_event, request) => getSupermemoryStatus(requireWebuiUrl(), undefined, request || {}));
+  ipcMain.handle('lastbrowser:sidekick:listSupermemoryDocuments', (_event, request) => listSupermemoryDocuments(requireWebuiUrl(), undefined, request || {}));
   ipcMain.handle('lastbrowser:sidekick:getSupermemoryDocument', (_event, request) => getSupermemoryDocument(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:searchSupermemory', (_event, request) => searchSupermemory(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:addSupermemoryDocument', (_event, request) => addSupermemoryDocument(requireWebuiUrl(), request));
@@ -848,7 +1028,7 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:uninstallAppstoreApp', (_event, request) => uninstallAppstoreApp(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:updateAllAppstore', () => updateAllAppstore(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:submitAppstoreApp', (_event, request) => submitAppstoreApp(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:getSettings', () => getSettings(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:getSettings', (_event, request) => getSettings(requireWebuiUrl(), undefined, request || {}));
   ipcMain.handle('lastbrowser:sidekick:getAccessAuthStartupPolicy', async (event, rawRequestId: unknown) => {
     const recheck = captureTrustedShellSender(event, isTrustedShell);
     const sender = recheck();
@@ -888,7 +1068,16 @@ function registerIpc(): void {
     broadcastAccessAuthLocked();
     return { ok: true };
   });
-  ipcMain.handle('lastbrowser:sidekick:saveSettings', (_event, request) => saveSettings(requireWebuiUrl(), request));
+  ipcMain.handle('lastbrowser:sidekick:saveSettings', async (event, request) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    if (request?.scopeSelection === undefined) return saveSettings(requireWebuiUrl(), request);
+    const profile = await resolveSetupProfile(event, request.scopeSelection);
+    recheck();
+    if (!request.settings || typeof request.settings !== 'object' || Array.isArray(request.settings)) throw new Error('Invalid settings');
+    const result = await requestWebui(requireWebuiUrl(), { method: 'POST', path: '/api/settings', profile, body: request.settings });
+    recheck();
+    return result;
+  });
   ipcMain.handle('lastbrowser:sidekick:listGmailAccounts', () => listGmailAccounts(requireWebuiUrl()));
   ipcMain.handle('lastbrowser:sidekick:listGmailMessages', (_event, request) => listGmailMessages(requireWebuiUrl(), request || {}));
   ipcMain.handle('lastbrowser:sidekick:readGmailMessage', (_event, request) => readGmailMessage(requireWebuiUrl(), request));
@@ -1316,11 +1505,19 @@ async function runAgentWorkspaceStream(
   sessionId: string,
   streamId: string,
   controller: AbortController,
+  profile: string,
   emit: (payload: Record<string, unknown>) => void
 ): Promise<void> {
   try {
     const endpoint = new URL(`/api/agents/workspace/stream/${encodeURIComponent(sessionId)}`, webuiUrl).toString();
-    const response = await fetch(endpoint, { signal: controller.signal });
+    await ensureWebuiAuth(webuiUrl);
+    const sessionToken = getWebuiSessionToken();
+    const scopedHeaders = nativeChatReadHeaders({ profile });
+    const cookie = [getAccessAuthCookie(), scopedHeaders.cookie].filter(Boolean).join('; ');
+    const response = await fetch(endpoint, { signal: controller.signal, headers: {
+      ...scopedHeaders, ...(cookie ? { cookie } : {}),
+      ...(sessionToken ? { 'X-Sidekick-Session-Token': sessionToken } : {})
+    } });
     if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -1431,6 +1628,9 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     clipboard,
     shell,
     getWindow: () => mainWindow,
+    getPasswordItems: passwordContextMenu({ vault: passwordVault, authorize: authorizePasswordAccess,
+      profileForSession: target => independentController?.browserProfileForSession(target) ?? Promise.resolve(null),
+      isHumanGuest: isHumanPasswordGuest, locale: () => currentLocale }),
     getAssistantName: () => currentAssistantName,
     getLocale: () => currentLocale,
     getSearchEngine: () => {
@@ -1509,14 +1709,13 @@ function attachSessionHandlers(targetSession: Session): void {
     policyController ??= independentController;
     return policyController?.requestPolicy(details, targetSession) ?? { owned: false, allowed: true };
   });
-  // Strip X-Frame-Options and CSP frame-ancestors from streaming service login pages.
+  // Strip X-Frame-Options and CSP frame-ancestors only on top-level streaming login pages.
   // Disney+ (sso.id.bamgrid.com), Amazon, HBO/Max and others send these headers to
   // prevent embedding — but Electron interprets them the same way a browser does and
   // refuses to load the page inside the webview, resulting in a blank login screen.
-  // We remove those headers only for known streaming identity provider origins so
-  // normal same-origin protections remain in place for all other sites.
+  // Embedded responses retain their provider framing protections, even on these hosts.
   targetSession.webRequest.onHeadersReceived((details, callback) => {
-    if (!isStreamingLoginUrl(details.url)) {
+    if (details.resourceType !== 'mainFrame' || !isStreamingLoginUrl(details.url)) {
       callback({});
       return;
     }
@@ -1564,6 +1763,7 @@ function attachSessionHandlers(targetSession: Session): void {
 }
 
 app.on('web-contents-created', (_event, contents) => {
+  contents.on('focus', () => { void observePasswordGuestFocus(contents); });
   downloadOrigins.observe(contents);
   // Shell windows are privileged renderers and host remote browser WebViews.
   // Harden guest preferences before any renderer-controlled attachment. This

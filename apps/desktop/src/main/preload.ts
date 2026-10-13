@@ -24,7 +24,15 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     load: () => ipcRenderer.invoke('lastbrowser:setup:load'),
     save: (state: unknown) => ipcRenderer.invoke('lastbrowser:setup:save', state)
   },
+  passwords: {
+    open: (request: { profileId: string }) => ipcRenderer.invoke('lastbrowser:passwords:open', request),
+    list: (request: { profileId: string }) => ipcRenderer.invoke('lastbrowser:passwords:list', request),
+    importCsv: (request: { profileId: string }) => ipcRenderer.invoke('lastbrowser:passwords:importCsv', request),
+    remove: (request: { profileId: string; id: string }) => ipcRenderer.invoke('lastbrowser:passwords:remove', request)
+  },
   system: {
+    discoverBrowserImport: () => ipcRenderer.invoke('lastbrowser:system:discoverBrowserImport'),
+    importBrowserData: (request: { profileId: string; bookmarks: boolean; history: boolean }) => ipcRenderer.invoke('lastbrowser:system:importBrowserData', request),
     isDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:isDefaultBrowser'),
     setDefaultBrowser: () => ipcRenderer.invoke('lastbrowser:system:setDefaultBrowser'),
     openExternal: (url: string) => ipcRenderer.invoke('lastbrowser:system:openExternal', url),
@@ -168,10 +176,13 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     switchProfile: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:switchProfile', request),
     createProfile: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:createProfile', request),
     deleteProfile: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:deleteProfile', request),
-    getMemory: () => ipcRenderer.invoke('lastbrowser:sidekick:getMemory'),
+    getMemory: (request?: { profile?: string; workspacePath?: string }) => ipcRenderer.invoke('lastbrowser:sidekick:getMemory', request),
+    getMemoryPolicy: (request?: { profile?: string }) => ipcRenderer.invoke('lastbrowser:sidekick:getMemoryPolicy', request),
+    scopedAgentOperation: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:scopedAgentOperation', request),
+    setMemoryPolicy: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:setMemoryPolicy', request),
     writeMemory: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:writeMemory', request),
-    getSupermemoryStatus: () => ipcRenderer.invoke('lastbrowser:sidekick:getSupermemoryStatus'),
-    listSupermemoryDocuments: () => ipcRenderer.invoke('lastbrowser:sidekick:listSupermemoryDocuments'),
+    getSupermemoryStatus: (request?: { profile?: string }) => ipcRenderer.invoke('lastbrowser:sidekick:getSupermemoryStatus', request),
+    listSupermemoryDocuments: (request?: { profile?: string }) => ipcRenderer.invoke('lastbrowser:sidekick:listSupermemoryDocuments', request),
     getSupermemoryDocument: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:getSupermemoryDocument', request),
     searchSupermemory: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:searchSupermemory', request),
     addSupermemoryDocument: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:addSupermemoryDocument', request),
@@ -189,7 +200,7 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     uninstallAppstoreApp: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:uninstallAppstoreApp', request),
     updateAllAppstore: () => ipcRenderer.invoke('lastbrowser:sidekick:updateAllAppstore'),
     submitAppstoreApp: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:submitAppstoreApp', request),
-    getSettings: () => ipcRenderer.invoke('lastbrowser:sidekick:getSettings'),
+    getSettings: (request?: { profile?: string }) => ipcRenderer.invoke('lastbrowser:sidekick:getSettings', request),
     getAccessAuthStartupPolicy: (requestId: number) => ipcRenderer.invoke('lastbrowser:sidekick:getAccessAuthStartupPolicy', requestId) as Promise<{
       policy: 'disabled' | 'enabled' | 'unknown';
       requestId: number;
@@ -275,7 +286,7 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     whatsNewCandidate: () => ipcRenderer.invoke('lastbrowser:updates:whats-new-candidate'),
     acknowledgeWhatsNew: (version: string) => ipcRenderer.invoke('lastbrowser:updates:whats-new-acknowledge', version),
     setAutoCheckEnabled: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:updates:set-auto-check-enabled', enabled),
-    setChannel: (channel: 'stable' | 'preview') => ipcRenderer.invoke('lastbrowser:updates:set-channel', channel),
+    setChannel: (channel: 'stable' | 'beta') => ipcRenderer.invoke('lastbrowser:updates:set-channel', channel),
     onStatus: (callback: (status: unknown) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);
       ipcRenderer.on('lastbrowser:updates:status', listener);

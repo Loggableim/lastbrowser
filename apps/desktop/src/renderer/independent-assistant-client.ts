@@ -369,6 +369,9 @@ const isResetResult: Guard<AssistantResetResult> = (v): v is AssistantResetResul
   && ref(v.conversationId) && nullable(v.confirmedProfileId, uuid) && typeof v.previewDigest === 'string' && /^[a-f0-9]{64}$/.test(v.previewDigest);
 const decoders: { [K in IndependentOperation]: (value: unknown) => IndependentOperations[K]['response'] } = {
   resolveScope: decode(isResolvedScope),
+  companion: decode((v): v is IndependentOperations['companion']['response'] => versioned(v) && isIndependentScope(v.scope) && v.purpose === 'quickchat'
+    && oneOf(v.personality, ['nova','analytical','developer','creative','mentor']) && text(v.botName) && v.botName.trim().length > 0 && v.botName.length <= 80
+    && v.avatarKey === v.personality && integer(v.revision)),
   backendProfiles: decode(isBackendProfilesResponse),
   profileBindings: decode(isProfileBindingsResponse),
   assistantSnapshot: decodeSnapshot, assistantTurn: decodeSnapshot,

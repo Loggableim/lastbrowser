@@ -1,7 +1,7 @@
 appId: com.lastbrowser.desktop
 productName: Lastbrowser
 npmRebuild: false
-electronVersion: 37.10.3+wvcus
+electronVersion: 45.0.0-alpha.14+wvcus
 electronDownload:
   mirror: https://github.com/castlabs/electron-releases/releases/download/v
 directories:
@@ -63,4 +63,5 @@ publish:
   - provider: github
     owner: Loggableim
     repo: lastbrowser
-    releaseType: release
+    releaseType: prerelease
+    channel: beta

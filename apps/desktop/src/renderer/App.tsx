@@ -203,7 +203,8 @@ import {
 import { canCallSidekickApi } from './runtime-readiness.js';
 import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
 import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
-import { readReducedMotionPreference, StartupScreen } from './startup/StartupScreen.js';
+import { StartupScreen } from './startup/StartupScreen.js';
+import { chooseStartupSound, playStartupSound, readStartupPreferences, startupAnimations, useStartupPreferences, type StartupSound } from './startup/startup-preferences.js';
 import { reduceStartupOpeningState, type StartupOpeningState } from './startup/startup-opening-state.js';
 import { describeChatContent, partitionChatMessages } from './chat-display.js';
 import { AdvancedWebUiTools } from './panels/AdvancedWebUiTools.js';
@@ -217,12 +218,13 @@ import {
   NativeInsightsMain,
   NativeLogsMain,
   NativeMemoryMain,
+  NativeAssistantsMain,
   NativeProfilesMain,
   NativeSettingsMain,
   NativeSkillsMain,
   jsonPreview
 } from './panels/NativeRestPanels.js';
-import { NativeTasksMain, NativeKanbanMain, NativeTodosMain } from './panels/TaskPanels.js';
+import { NativeTaskCenterMain } from './panels/TaskPanels.js';
 import { NativeTerminalMain } from './panels/NativeTerminalMain.js';
 import { ControlCenter } from './NativeControlCenter.js';
 import { ApprovalPollManager, ApprovalCard } from './NativeApproval.js';
@@ -255,6 +257,9 @@ import { AmbiguousBackendProfileModal } from './components/AmbiguousBackendProfi
 import { WhatsNewModal } from './components/WhatsNewModal.js';
 import { releaseNotesBetween, type UpdateNoticeCandidate } from './release-notes.js';
 import { UnifiedExtensionHub } from './components/UnifiedExtensionHub.js';
+import { OptionalAiProfileContext, OptionalAiWorkspaceContext } from './optional-ai-policy.js';
+import { attachCompanionSnapshot, CompanionAppearanceProvider, normalizeCompanionSnapshot, readCompanionSnapshotEvent, type CompanionPersonality } from './personality-avatar.js';
+import { attachMemoryUsage, readMemoryUsageEvent } from './memory-usage.js';
 import { CursorLoupeHUD } from './components/CursorLoupeHUD.js';
 import { SplitScreenMagnifier } from './components/SplitScreenMagnifier.js';
 import { SuperSizedTabStrip } from './components/SuperSizedTabStrip.js';
@@ -812,6 +817,7 @@ class PanelErrorBoundary extends React.Component<
 const panelIcons: Record<LastbrowserPanelId, React.ComponentType<{ size?: number; strokeWidth?: number }>> = {
   chat: MessageSquare,
   tasks: CalendarDays,
+  'task-center': CalendarDays,
   kanban: Columns3,
   skills: Sparkles,
   agents: Bot,
@@ -1225,6 +1231,10 @@ function AppContent(): JSX.Element {
   const [startupRetryVersion, setStartupRetryVersion] = useState(0);
   const [startupReadyAcknowledged, setStartupReadyAcknowledged] = useState(false);
   const [startupOpeningState, setStartupOpeningState] = useState<StartupOpeningState>('idle');
+  const startupPreferences = useStartupPreferences();
+  const [startupOpeningDurationMs, setStartupOpeningDurationMs] = useState<number | undefined>(undefined);
+  const pendingStartupSoundRef = useRef<{ profileId: string; expiresAt: number; sound: StartupSound | null } | null>(null);
+  const stopStartupSoundRef = useRef<(() => void) | null>(null);
   const appShellRef = useRef<HTMLDivElement | null>(null);
   const previousStartupOpeningStateRef = useRef<StartupOpeningState>('idle');
   const [pendingDetachedTransfer, setPendingDetachedTransfer] = useState<{ transferId: string; tabId: string } | null>(null);
@@ -1369,6 +1379,11 @@ function AppContent(): JSX.Element {
       || event.streamId !== binding.streamId || event.scope.spaceId !== binding.scope.spaceId
       || event.scope.backendProfileId !== binding.scope.backendProfileId
       || event.scope.browserProfileId !== binding.scope.browserProfileId) return;
+    if (event.event === 'companion') {
+      const snapshot = normalizeCompanionSnapshot(event.data);
+      if (snapshot && quickChatBindingScopeKeyRef.current) updateQuickChatMessagesForScope(quickChatBindingScopeKeyRef.current, current => attachCompanionSnapshot(current, snapshot));
+      return;
+    }
     if (event.event === 'token' || event.event === 'delta' || event.event === 'reasoning') {
       const delta = readLiveChatDelta(event.event, event.data);
       if (delta && quickChatBindingScopeKeyRef.current) updateQuickChatMessagesForScope(quickChatBindingScopeKeyRef.current, current => applyLiveChatDelta(current, delta.kind, delta.text));
@@ -1504,6 +1519,9 @@ function AppContent(): JSX.Element {
     setStartupReadyAcknowledged(startupPhase === 'ready' && startupAuthAllowsShell);
   }, [startupPhase, startupAuthAllowsShell]);
   useEffect(() => {
+    pendingStartupSoundRef.current = null;
+    stopStartupSoundRef.current?.();
+    stopStartupSoundRef.current = null;
     setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'scope-change' }));
   }, [activeProfileId]);
   useEffect(() => {
@@ -1511,9 +1529,32 @@ function AppContent(): JSX.Element {
       type: 'readiness',
       authAllowed: startupAuthAllowsShell,
       ready: startupPhase === 'ready' && startupReadyAcknowledged,
-      reducedMotion: readReducedMotionPreference()
+      reducedMotion: false // StartupScreen handles the accessible 100 ms fade itself.
     }));
   }, [startupAuthAllowsShell, startupOpeningState, startupPhase, startupReadyAcknowledged]);
+  useEffect(() => {
+    if (!startupAuthAllowsShell) {
+      stopStartupSoundRef.current?.();
+      stopStartupSoundRef.current = null;
+      return;
+    }
+    if (startupPhase !== 'ready' || !startupReadyAcknowledged) return;
+    const pending = pendingStartupSoundRef.current;
+    if (!pending) return;
+    pendingStartupSoundRef.current = null; // One attempt per verified password unlock.
+    const preferences = readStartupPreferences();
+    if (pending.profileId !== activeProfileId || pending.expiresAt < Date.now() || !preferences.soundEnabled || !pending.sound) { setStartupOpeningDurationMs(undefined); return; }
+    stopStartupSoundRef.current?.();
+    const stop = playStartupSound(preferences, () => {
+      if (pending.profileId === activeProfileIdRef.current) setStartupOpeningDurationMs(undefined);
+    }, pending.sound);
+    const timer = window.setTimeout(stop, pending.sound.durationMs + 2_000);
+    stopStartupSoundRef.current = () => { window.clearTimeout(timer); stop(); };
+  }, [activeProfileId, startupAuthAllowsShell, startupPhase, startupReadyAcknowledged]);
+  useEffect(() => {
+    if (!startupPreferences.soundEnabled) { stopStartupSoundRef.current?.(); stopStartupSoundRef.current = null; setStartupOpeningDurationMs(undefined); }
+  }, [startupPreferences.soundEnabled]);
+  useEffect(() => () => { pendingStartupSoundRef.current = null; stopStartupSoundRef.current?.(); }, []);
   useEffect(() => {
     const previousState = previousStartupOpeningStateRef.current;
     const finishedOpening = startupOpeningState === 'completed' && (previousState === 'opening' || previousState === 'pending');
@@ -1622,6 +1663,9 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     const lockBrowser = () => {
       const state = accessAuthGateRef.current!.dispatch({ type: 'lock' });
+      pendingStartupSoundRef.current = null;
+      stopStartupSoundRef.current?.();
+      stopStartupSoundRef.current = null;
       setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'lock' }));
       setAccessPassword('');
       setAccessAuthError(state.error);
@@ -1635,6 +1679,7 @@ function AppContent(): JSX.Element {
     event.preventDefault();
     if (!accessPassword || accessAuthBusy) return;
     const passwordProtectedAtSubmit = accessAuthRequired;
+    const loginProfileId = activeProfileIdRef.current;
     const retry = accessAuthGateRef.current!.dispatch({ type: 'retry' });
     const loginGeneration = retry.generation;
     setAccessAuthRequired(retry.required);
@@ -1646,6 +1691,12 @@ function AppContent(): JSX.Element {
       const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
       if (!isVerifiedAccessAuthLogin(auth)) throw new Error('Login did not create an authenticated session.');
       const state = accessAuthGateRef.current!.dispatch({ type: 'login-success', generation: loginGeneration });
+      if (state.generation !== loginGeneration || loginProfileId !== activeProfileIdRef.current || state.required || !state.checked) return;
+      const openingPreferences = readStartupPreferences();
+      const openingSound = openingPreferences.soundEnabled ? chooseStartupSound(openingPreferences) : null;
+      setStartupOpeningDurationMs(openingSound?.durationMs);
+      pendingStartupSoundRef.current = passwordProtectedAtSubmit && auth.auth_enabled === true
+        ? { profileId: loginProfileId, expiresAt: Date.now() + 20_000, sound: openingSound } : null;
       setAccessAuthRequired(state.required);
       setAccessAuthChecked(state.checked);
       setAccessPassword('');
@@ -3125,6 +3176,18 @@ function AppContent(): JSX.Element {
     setTabs((current) => togglePinnedTab(current, tabId));
   }
 
+  const pendingCreatedCompanionSpacesRef = useRef(new Set<string>());
+  async function saveSpaceCompanion(scope: IndependentScope, preference: { personality: string; botName: string }): Promise<void> {
+    const personality: CompanionPersonality = ['nova', 'analytical', 'developer', 'creative', 'mentor'].includes(preference.personality)
+      ? preference.personality as CompanionPersonality : 'nova';
+    const current = await assistantController.request({ schemaVersion: 1, operation: 'companion', scope, payload: { action: 'get' } });
+    if (!current.ok) throw new Error(current.error.message);
+    const saved = await assistantController.request({ schemaVersion: 1, operation: 'companion', scope,
+      payload: { action: 'set', personality, botName: preference.botName, expectedRevision: current.value.revision, clientRequestId: newIndependentRequestId() } });
+    if (!saved.ok) throw new Error(saved.error.message);
+    window.dispatchEvent(new Event('lastbrowser:companion-changed'));
+  }
+
   async function completeSetup(form: SetupForm): Promise<void> {
     setSetupError('');
     if (firstRunAiChoiceForSetup(setupState) !== 'enabled') {
@@ -3135,46 +3198,50 @@ function AppContent(): JSX.Element {
       setSetupError('Choose a provider and model before continuing.');
       return;
     }
+    const captured = { browserProfileId: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current || null,
+      backendProfileName: activeBackendProfileNameRef.current };
+    const isCurrent = () => activeProfileIdRef.current === captured.browserProfileId
+      && (activeSpacePathRef.current || null) === captured.workspacePath
+      && activeBackendProfileNameRef.current === captured.backendProfileName;
+    const ensureCurrent = () => { if (!isCurrent()) throw new Error('The active browser profile changed. Reopen setup for the selected profile.'); };
+    const requireSuccess = (result: Record<string, unknown>) => {
+      if (result.error || result.ok === false) throw new Error(String(result.message || result.error || 'Setup could not be saved.'));
+      ensureCurrent();
+    };
     setSetupSaving(true);
     try {
+      if (!captured.backendProfileName) throw new Error('The browser profile is still preparing. Please retry.');
+      const scopeSelection = { ...captured, backendProfileName: captured.backendProfileName };
+      const resolved = await assistantController.resolveScope({ browserProfileId: captured.browserProfileId, workspacePath: captured.workspacePath }, captured.backendProfileName);
+      ensureCurrent();
+      if (!resolved.ok) throw new Error(resolved.error.message);
+      if (resolved.value.scope.browserProfileId !== captured.browserProfileId) throw new Error('Setup profile binding changed.');
       if (form.provider === 'openai-codex') {
-        await window.lastbrowser.sidekick.setDefaultModel({
-          model: form.model.startsWith('@openai-codex:') ? form.model : `@openai-codex:${form.model}`
-        });
+        const request = { model: form.model.startsWith('@openai-codex:') ? form.model : `@openai-codex:${form.model}`, scopeSelection };
+        requireSuccess(await window.lastbrowser.sidekick.setDefaultModel(request));
       }
       const botName = form.botName?.trim() || 'Nova';
       const personality = form.personality?.trim() || 'nova';
-
-      await window.lastbrowser.sidekick.saveSettings({
-        settings: {
-          bot_name: botName,
-          personality: personality
-        }
-      }).catch(() => null);
-
-      const nextStatus = await window.lastbrowser.sidekick.applyCloudSetup({
-        provider: form.provider,
-        model: form.model,
-        apiKey: form.apiKey,
-        baseUrl: form.baseUrl
-      });
-      const completeStatus = await window.lastbrowser.sidekick.completeCloudSetup().catch(() => nextStatus);
-      const nextState = await window.lastbrowser.setup.save({
-        cloudSetupComplete: true,
-        provider: form.provider,
-        model: form.model,
-        botName: botName,
-        personality: personality
-      });
+      const setupRequest = { provider: form.provider, model: form.model, apiKey: form.apiKey, baseUrl: form.baseUrl,
+        confirmOverwrite: true, scopeSelection };
+      const nextStatus = await window.lastbrowser.sidekick.applyCloudSetup(setupRequest);
+      requireSuccess(nextStatus);
+      await saveSpaceCompanion(resolved.value.scope, { botName, personality });
+      ensureCurrent();
+      // Save completion without replacing the normal chat's base profile.
+      // The legacy no-argument completion endpoint would target the backend default profile.
+      const settingsRequest = { settings: { onboarding_completed: true }, scopeSelection };
+      requireSuccess(await window.lastbrowser.sidekick.saveSettings(settingsRequest));
+      const nextState = await window.lastbrowser.setup.save({ cloudSetupComplete: true, provider: form.provider,
+        model: form.model, botName, personality });
+      ensureCurrent();
       setSetupState(nextState);
       setSetupReopenRequested(false);
-      setOnboardingStatus((completeStatus || nextStatus) as OnboardingStatus);
+      setOnboardingStatus(nextStatus as OnboardingStatus);
       void refreshSessions();
     } catch (error) {
-      setSetupError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setSetupSaving(false);
-    }
+      if (isCurrent()) setSetupError(error instanceof Error ? error.message : String(error));
+    } finally { setSetupSaving(false); }
   }
 
   async function saveFirstRunAiChoice(choice: SetupState['aiChoice']): Promise<boolean> {
@@ -3343,55 +3410,43 @@ function AppContent(): JSX.Element {
     });
   }
 
-  function pinNativeSession(session: DesktopSessionSummary): void {
-    void window.lastbrowser.sidekick
-      .requestWebui({
-        method: 'POST',
-        path: '/api/session/pin',
-        body: { session_id: session.session_id, pinned: true }
-      })
-      .then(() => {
-        setSessions((current) =>
-          current.map((item) =>
-            item.session_id === session.session_id ? { ...item, pinned: true } : item
-          )
-        );
-      })
-      .catch(() => {});
+  async function updateNativeSessionFlag(session: DesktopSessionSummary, flag: 'pinned' | 'archived', enabled: boolean): Promise<void> {
+    const scope: SessionListScope = { profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current, backendProfileName: activeBackendProfileNameRef.current };
+    const isCurrent = () => sessionListResponseMatchesScope(scope, { profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current, backendProfileName: activeBackendProfileNameRef.current });
+    try {
+      const result = await window.lastbrowser.sidekick.requestWebui({ method: 'POST',
+        path: flag === 'pinned' ? '/api/session/pin' : '/api/session/archive', body: { session_id: session.session_id, [flag]: enabled },
+        scopeSelection: { browserProfileId: scope.profile, workspacePath: scope.workspacePath || null, backendProfileName: scope.backendProfileName || undefined } });
+      if (result.ok !== true) throw new Error(typeof result.error === 'string' ? result.error : 'Session update failed');
+      if (!isCurrent()) return;
+      setSessions(current => current.map(item => item.session_id === session.session_id ? { ...item, [flag]: enabled } : item));
+      setActiveSession(current => current?.session_id === session.session_id ? { ...current, [flag]: enabled } : current);
+      setSessionError('');
+    } catch (error) { if (isCurrent()) setSessionError(error instanceof Error ? error.message : String(error)); }
   }
+  function pinNativeSession(session: DesktopSessionSummary): void { void updateNativeSessionFlag(session, 'pinned', true); }
+  function unpinNativeSession(session: DesktopSessionSummary): void { void updateNativeSessionFlag(session, 'pinned', false); }
+  function archiveNativeSession(session: DesktopSessionSummary): void { void updateNativeSessionFlag(session, 'archived', true); }
 
-  function unpinNativeSession(session: DesktopSessionSummary): void {
-    void window.lastbrowser.sidekick
-      .requestWebui({
-        method: 'POST',
-        path: '/api/session/pin',
-        body: { session_id: session.session_id, pinned: false }
-      })
-      .then(() => {
-        setSessions((current) =>
-          current.map((item) =>
-            item.session_id === session.session_id ? { ...item, pinned: false } : item
-          )
-        );
-      })
-      .catch(() => {});
-  }
-
-  function archiveNativeSession(session: DesktopSessionSummary): void {
-    void window.lastbrowser.sidekick
-      .requestWebui({
-        method: 'POST',
-        path: '/api/session/archive',
-        body: { session_id: session.session_id, archived: true }
-      })
-      .then(() => {
-        setSessions((current) =>
-          current.map((item) =>
-            item.session_id === session.session_id ? { ...item, archived: true } : item
-          )
-        );
-      })
-      .catch(() => {});
+  async function nameNativeSessionFromPrompt(sessionId: string, prompt: string, scope: SessionListScope): Promise<void> {
+    const title = sessions.find(session => session.session_id === sessionId)?.title?.trim() || '';
+    if (title && !/^(new chat|new session|untitled|sidekick|neuer chat|nouvelle conversation)$/i.test(title) && !/^Chat 20/.test(title)) return;
+    const cleaned = prompt.replace(/```(?:[a-zA-Z0-9_-]+)?/g, ' ').replace(/[#*_`>]/g, '').replace(/\s+/g, ' ').trim();
+    if (!cleaned) return;
+    const chars = Array.from(cleaned);
+    const autoTitle = chars.length > 64 ? chars.slice(0, 61).join('').replace(/\s+\S*$/, '') + '…' : cleaned;
+    try {
+      const result = await window.lastbrowser.sidekick.renameSession({ sessionId, title: autoTitle, ...scope });
+      if (!result.session || result.session.session_id !== sessionId) throw new Error('Session title was not saved');
+      if (!sessionListResponseMatchesScope(scope, { profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current, backendProfileName: activeBackendProfileNameRef.current })) return;
+      setSessions(current => {
+        const named = { session_id: sessionId, title: autoTitle, workspace: scope.workspacePath || undefined, ...result.session };
+        return current.some(session => session.session_id === sessionId)
+          ? current.map(session => session.session_id === sessionId ? { ...session, ...named } : session)
+          : [named, ...current];
+      });
+      setActiveSession(current => current?.session_id === sessionId ? { ...current, title: autoTitle, ...result.session } : current);
+    } catch (error) { console.warn('Could not name chat session', error instanceof Error ? error.message : String(error)); }
   }
 
   /**
@@ -3457,6 +3512,22 @@ function AppContent(): JSX.Element {
         ...(eventError ? { errorKind: classifyRendererChatError(eventError) } : {})
       });
       if (!streamMatches) return;
+      if (event.event === 'companion') {
+        const snapshot = ownsContext ? readCompanionSnapshotEvent(event, nativeBinding) : null;
+        if (snapshot) {
+          setChatMessages(current => isOwningContextCurrent() ? attachCompanionSnapshot(current, snapshot, streamId, sessionId) : current);
+          setMessages(current => isOwningContextCurrent() ? attachCompanionSnapshot(current, snapshot, streamId, sessionId) : current);
+        }
+        return;
+      }
+      if (event.event === 'memory_usage') {
+        const usage = ownsContext ? readMemoryUsageEvent(event, nativeBinding) : null;
+        if (usage) {
+          setChatMessages(current => isOwningContextCurrent() ? attachMemoryUsage(current, streamId, sessionId, usage) : current);
+          setMessages(current => isOwningContextCurrent() ? attachMemoryUsage(current, streamId, sessionId, usage) : current);
+        }
+        return;
+      }
       if(nativeBinding)useNativeChatControls.getState().event(event);
       if (event.event === 'nativeModelResolution') {
         const controls = useNativeChatControls.getState();
@@ -4159,6 +4230,9 @@ function AppContent(): JSX.Element {
       if (!response?.streamId) throw new Error('Sidekick did not return a chat stream ID.');
       chatStartAccepted = true;
       if (reasoningEffort) saveChatReasoningEffort(response.sessionId, reasoningEffort, window.localStorage);
+      const sessionTitleSaved = nameNativeSessionFromPrompt(response.sessionId, displayText, {
+        profile: turnContext.profileId, workspacePath: turnContext.spacePath, backendProfileName: turnBackendProfileName
+      });
       const currentTurnContext = adoptCreatedTurnSession(turnContext, {
         sessionId: activeSessionIdRef.current,
         profileId: activeProfileIdRef.current,
@@ -4268,31 +4342,7 @@ function AppContent(): JSX.Element {
         if (streamResult.goalError) setChatError(streamResult.goalError);
       }
 
-      // Auto-generate a concise session title from first user prompt if untitled or generic
-      const currentSessionSummary = sessions.find((s) => s.session_id === response.sessionId);
-      const isUntitled = !currentSessionSummary?.title ||
-        currentSessionSummary.title === 'New chat' ||
-        currentSessionSummary.title.startsWith('Chat 20') ||
-        currentSessionSummary.title === 'Sidekick';
-
-      if (isUntitled && trimmed) {
-        const cleanPrompt = trimmed.replace(/\n+/g, ' ').trim();
-        const autoTitle = cleanPrompt.length > 36 ? `${cleanPrompt.slice(0, 36)}…` : cleanPrompt;
-        void window.lastbrowser.sidekick.renameSession({
-          sessionId: response.sessionId,
-          title: autoTitle,
-          profile: turnContext.profileId,
-          workspacePath: turnContext.spacePath
-        }).then(() => {
-          if (!sessionListResponseMatchesScope({ profile: turnContext.profileId, workspacePath: turnContext.spacePath }, {
-            profile: activeProfileIdRef.current,
-            workspacePath: activeSpacePathRef.current
-          })) return;
-          setSessions((current) =>
-            current.map((s) => (s.session_id === response.sessionId ? { ...s, title: autoTitle } : s))
-          );
-        }).catch(() => null);
-      }
+      await sessionTitleSaved;
 
       void refreshSessions();
       if (streamResult.continuationPrompt && turnContextStillCurrentAfterStream) {
@@ -4449,8 +4499,8 @@ function AppContent(): JSX.Element {
     }
   }
 
-  async function deleteNativeSession(session: DesktopSessionSummary): Promise<void> {
-    if (!window.confirm(`Delete "${sessionTitle(session)}"?`)) return;
+  async function deleteNativeSession(session: DesktopSessionSummary, confirmation?: 'sidebar-inline-confirmed'): Promise<void> {
+    if (confirmation !== 'sidebar-inline-confirmed' && !window.confirm(`Delete "${sessionTitle(session)}"?`)) return;
     const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };
     try {
       await window.lastbrowser.sidekick.deleteSession({ sessionId: session.session_id, ...sessionScope });
@@ -4472,6 +4522,36 @@ function AppContent(): JSX.Element {
     } catch (error) {
       setSessionError(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  async function deleteSelectedNativeSessions(selected: DesktopSessionSummary[]): Promise<{ deletedIds: string[]; failedIds: string[] }> {
+    const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };
+    const ids = Array.from(new Set(selected.map(session => session.session_id)));
+    const deletedIds: string[] = [];
+    const failedIds: string[] = [];
+    const currentScope = () => sessionListResponseMatchesScope(sessionScope, {
+      profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current, backendProfileName: activeBackendProfileNameRef.current
+    });
+    for (const sessionId of ids) {
+      if (!currentScope()) { failedIds.push(...ids.filter(id => !deletedIds.includes(id) && !failedIds.includes(id))); break; }
+      try {
+        const result = await window.lastbrowser.sidekick.deleteSession({ sessionId, ...sessionScope });
+        if (result && typeof result === 'object' && ('error' in result && result.error || 'ok' in result && result.ok === false || 'deleted' in result && result.deleted === false)) failedIds.push(sessionId);
+        else deletedIds.push(sessionId);
+      } catch { failedIds.push(sessionId); }
+    }
+    if (currentScope()) {
+      const deleted = new Set(deletedIds);
+      const remaining = sessionsRef.current.filter(session => !deleted.has(session.session_id));
+      setSessions(current => current.filter(session => !deleted.has(session.session_id)));
+      if (activeSessionIdRef.current && deleted.has(activeSessionIdRef.current)) {
+        const nextId = remaining[0]?.session_id || null;
+        activeSessionIdRef.current = nextId;
+        setActiveSessionId(nextId);
+      }
+      setSessionError(failedIds.length ? (locale === 'de' ? `${failedIds.length} Chat(s) konnten nicht gelöscht werden. Sie bleiben markiert.` : `${failedIds.length} chat(s) could not be deleted. They remain selected.`) : '');
+    }
+    return { deletedIds, failedIds };
   }
 
   async function duplicateNativeSession(session: DesktopSessionSummary): Promise<void> {
@@ -5036,6 +5116,15 @@ function AppContent(): JSX.Element {
         ? { browserProfileId: creationProfileId, backendProfileName: data.backendProfileName } : undefined);
       if (!recovered.ok) return created.ok ? recovered.error : `${created.error} ${recovered.error}`;
       const createdSpacePath = recovered.path;
+      const companionCreationKey = JSON.stringify([creationProfileId, createdSpacePath]);
+      if (created.ok) pendingCreatedCompanionSpacesRef.current.add(companionCreationKey);
+      if (pendingCreatedCompanionSpacesRef.current.has(companionCreationKey) && data.companion) {
+        const identityScope = await assistantController.resolveScope({ browserProfileId: creationProfileId, workspacePath: createdSpacePath },
+          data.backendProfileName ?? recovered.backendProfileName);
+        if (!identityScope.ok) throw new Error(identityScope.error.message);
+        await saveSpaceCompanion(identityScope.value.scope, data.companion);
+        pendingCreatedCompanionSpacesRef.current.delete(companionCreationKey);
+      }
       if (data.model) {
         try {
           const resolved = await assistantController.resolveScope({ browserProfileId: creationProfileId, workspacePath: createdSpacePath }, data.backendProfileName ?? recovered.backendProfileName);
@@ -5295,6 +5384,8 @@ function AppContent(): JSX.Element {
     setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'complete' }));
   }, []);
 
+  const startupIsOpening = startupOpeningState === 'pending' || startupOpeningState === 'opening';
+  const openingDuration = startupOpeningDurationMs ?? startupAnimations.find(item => item.id === startupPreferences.animation)!.duration;
   if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged) {
     return (
       <StartupScreen
@@ -5309,13 +5400,16 @@ function AppContent(): JSX.Element {
   }
 
   return (
-    <>
+    <OptionalAiProfileContext.Provider value={activeBackendProfileName || null}>
+    <OptionalAiWorkspaceContext.Provider value={activeSpacePath || null}>
+    <CompanionAppearanceProvider browserProfileId={activeProfileId} workspacePath={activeSpacePath} backendProfileName={activeBackendProfileName || null}>
     <div
       ref={appShellRef}
       tabIndex={-1}
-      inert={startupOpeningState === 'opening'}
-      aria-hidden={startupOpeningState === 'opening' || undefined}
-      className={`app-shell panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}
+      inert={startupIsOpening}
+      aria-hidden={startupIsOpening || undefined}
+      style={{ '--startup-opening-duration': `${openingDuration}ms` } as React.CSSProperties}
+      className={`app-shell ${startupIsOpening ? `startup-desktop-${startupPreferences.animation}` : ''} panel-${activePanel} ${isModernBrowser ? 'modern-mode' : ''} ${windowMaximized ? 'is-maximized' : ''} ${sidebarMode === 'hidden' ? 'zen-mode' : ''}`}
     >
       {startupBackgroundPhase && (
         <div className="startup-background-status" role="status" aria-live="polite">
@@ -5593,6 +5687,11 @@ function AppContent(): JSX.Element {
                     setZenSidebarRevealed(false);
                   }}
                   onCreateSession={() => void createNativeSession()}
+                  onPinSession={session => (session.pinned ? unpinNativeSession : pinNativeSession)(session)}
+                  onArchiveSession={archiveNativeSession}
+                  sessionScopeKey={`${activeProfileId}::${activeBackendProfileName || ''}`}
+                  onDeleteSessions={deleteSelectedNativeSessions}
+                  onDeleteSession={session => void deleteNativeSession(session, 'sidebar-inline-confirmed')}
                   splitTabIds={splitTabIds}
                   onAddSplitTab={addSplitTab}
                   onRemoveSplitTab={removeSplitTab}
@@ -5680,6 +5779,11 @@ function AppContent(): JSX.Element {
                 selectNativeSession(sessionId);
               }}
               onCreateSession={() => void createNativeSession()}
+                  onPinSession={session => (session.pinned ? unpinNativeSession : pinNativeSession)(session)}
+                  onArchiveSession={archiveNativeSession}
+                  sessionScopeKey={`${activeProfileId}::${activeBackendProfileName || ''}`}
+                  onDeleteSessions={deleteSelectedNativeSessions}
+                  onDeleteSession={session => void deleteNativeSession(session, 'sidebar-inline-confirmed')}
               splitTabIds={splitTabIds}
               onAddSplitTab={addSplitTab}
               onRemoveSplitTab={removeSplitTab}
@@ -6274,16 +6378,19 @@ function AppContent(): JSX.Element {
         <CommandPalette onToggleTabPinned={toggleTabPinned} onToggleTabMute={toggleTabMute} />
 
     </div>
-    {startupOpeningState === 'opening' && (
+    {startupIsOpening && (
       <StartupScreen
         locale={locale}
         launchIcon={startupLaunchIcon}
         phase="ready"
         opening
+        openingDurationMs={startupOpeningDurationMs}
         onOpeningComplete={completeStartupOpening}
       />
     )}
-    </>
+    </CompanionAppearanceProvider>
+    </OptionalAiWorkspaceContext.Provider>
+    </OptionalAiProfileContext.Provider>
   );
 }
 
@@ -6890,7 +6997,11 @@ function BrowserMain({
     let attempts = 0;
 
     const onNavigate = (event: Event) => {
-      const url = (event as unknown as { url?: string }).url;
+      // Embedded frames (e.g. Gmail's Workspace sidepanel) must never replace
+      // the tab URL: that URL is also the React-controlled webview source.
+      const navigation = event as Event & { url?: string; isMainFrame?: boolean };
+      if (navigation.isMainFrame === false) return;
+      const url = navigation.url;
       if (typeof url === 'string' && url) onWebviewNavigate(activeTab.id, url);
     };
     const onTitle = (event: Event) => {
@@ -6964,7 +7075,9 @@ function BrowserMain({
       const view = allWebviewRefs.current[tabId];
       if (!view) continue;
       const onNavigate = (event: Event) => {
-        const url = (event as Event & { url?: string }).url;
+        const navigation = event as Event & { url?: string; isMainFrame?: boolean };
+        if (navigation.isMainFrame === false) return;
+        const url = navigation.url;
         if (url) onWebviewNavigate(tabId, url);
       };
       const onTitle = (event: Event) => {
@@ -7272,18 +7385,17 @@ function BrowserMain({
             />
           </PanelErrorBoundary>
         );
+      case 'task-center':
       case 'tasks':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTasksMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'kanban':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeKanbanMain activeContextItem={activeContextItem} activeSpacePath={activeSpacePath} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'todos':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTodosMain activeContextItem={activeContextItem} activeSession={activeSession} messages={chatMessages} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTaskCenterMain initialSection={activePanel === 'tasks' ? 'scheduled' : activePanel === 'kanban' ? 'board' : 'now'} activeContextItem={activeContextItem} activeSpacePath={activeSpacePath} activeSession={activeSession} messages={chatMessages} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'skills':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSkillsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'agents':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeAgentsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeAssistantsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'profiles':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeProfilesMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeAssistantsMain activeContextItem="Profiles" serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'memory':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeMemoryMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'insights':

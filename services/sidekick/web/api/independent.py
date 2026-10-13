@@ -516,6 +516,10 @@ def dispatch_operation(operation: str, request: OperationRequest, actor: str):
             raise ScopeError("Backend profile is not configured; no default fallback")
         return hub().bind(actor, payload)
     scope = _scope(request)
+    if operation == "companion":
+        from runtime.independent.companion import companion_operation
+        store, resolver = hub().by_scope(scope, actor)
+        return companion_operation(store, resolver, scope, actor, payload)
     if (operation == "localAi.runtime" and isinstance(payload.get("request"), dict)
             and payload["request"].get("operation") == "receipt"):
         from web.api.local_ai_runtime_host import read_local_ai_runtime_receipt

@@ -3292,6 +3292,15 @@ def _openai_api_key_provider_ids(env_values: dict) -> set[str]:
     return set()
 
 
+def _annotate_provider_deployment(catalog):
+    from runtime.provider_deployment import provider_deployment
+    configuration = get_config()
+    for group in catalog.get("groups", []) if isinstance(catalog, dict) else []:
+        if isinstance(group, dict):
+            group["deployment"] = provider_deployment(group.get("provider_id"), configuration,
+                                                       active_provider=catalog.get("active_provider"))
+
+
 def get_available_models() -> dict:
     """
     Return available models grouped by provider.
@@ -4649,6 +4658,7 @@ def get_available_models() -> dict:
             if cached is not None:
                 _remove_unavailable_antigravity_catalog(cached)
                 _annotate_model_reasoning_efforts(cached.get("groups"))
+                _annotate_provider_deployment(cached)
                 return cached
 
         # Reload config if changed
@@ -4665,6 +4675,7 @@ def get_available_models() -> dict:
         if cached is not None:
             _remove_unavailable_antigravity_catalog(cached)
             _annotate_model_reasoning_efforts(cached.get("groups"))
+            _annotate_provider_deployment(cached)
             return cached
 
         # Cold path: disk cache hit — use it (fast, no lock contention)
@@ -4675,6 +4686,7 @@ def get_available_models() -> dict:
             _available_models_cache_ts = now
             _available_models_cache_source_fingerprint = _models_cache_source_fingerprint()
             _save_models_cache_to_disk(disk_groups)
+            _annotate_provider_deployment(disk_groups)
             return copy.deepcopy(disk_groups)
 
         # Cold path: full rebuild — only one thread reaches here at a time
@@ -4696,6 +4708,7 @@ def get_available_models() -> dict:
             _cache_build_in_progress = False
             _cache_build_cv.notify_all()
         _save_models_cache_to_disk(result)
+        _annotate_provider_deployment(result)
         return copy.deepcopy(result)
 
 

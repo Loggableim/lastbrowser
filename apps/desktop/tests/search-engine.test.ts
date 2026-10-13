@@ -31,7 +31,8 @@ describe('searchUrlFor', () => {
 
   it('uses the requested engine', () => {
     expect(searchUrlFor('test', 'duckduckgo')).toBe('https://duckduckgo.com/?q=test');
-    expect(searchUrlFor('test', 'wikipedia')).toContain('wikipedia.org');
+    expect(searchUrlFor('test', 'qwant')).toContain('qwant.com');
+    expect(searchUrlFor('test', 'yahoo')).toContain('search.yahoo.com');
   });
 
   it('falls back to the first engine for an unknown id', () => {
@@ -53,6 +54,12 @@ describe('searchEngineById', () => {
     expect(ids).toContain('duckduckgo');
     expect(ids).toContain('startpage');
     expect(ids).toContain('brave');
+  });
+
+  it('loads the three recommendations and six additional engines from configuration', async () => {
+    const { recommendedSearchEngines, moreSearchEngines } = await import('../src/main/browser-search.js');
+    expect(recommendedSearchEngines.map(engine => engine.id)).toEqual(['google', 'bing', 'duckduckgo']);
+    expect(moreSearchEngines.map(engine => engine.id)).toEqual(['ecosia', 'qwant', 'brave', 'startpage', 'yahoo', 'mojeek']);
   });
 
   it('gives every engine a %s placeholder', () => {

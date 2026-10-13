@@ -28,8 +28,9 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.build.linux.target).toEqual(['tar.gz', 'AppImage']);
     expect(packageJson.build.linux.icon).toBe('../../brand/assets/app-icon-256.png');
     expect(packageJson.build.linux.artifactName).toBe('Lastbrowser-${version}-${arch}.${ext}');
-    expect(packageJson.build.files).not.toContain('!node_modules/node-pty/prebuilds/linux-*/**/*');
     expect(packageJson.build.files).toContain('!node_modules/node-pty/prebuilds/darwin-*/**/*');
+    expect(packageJson.build.win.files).toContain('!node_modules/node-pty/prebuilds/linux-*/**/*');
+    expect(packageJson.build.linux.files).toContain('!node_modules/node-pty/prebuilds/win32-*/**/*');
   });
 
   it('ships the prepared Python runtime as an Electron resource', () => {

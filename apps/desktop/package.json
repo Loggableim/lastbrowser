@@ -147,6 +147,9 @@
         "nsis",
         "portable"
       ],
+      "files": [
+        "!node_modules/node-pty/prebuilds/linux-*/**/*"
+      ],
       "icon": "build/icon.ico",
       "verifyUpdateCodeSignature": true,
       "signExts": [
@@ -179,6 +182,9 @@
       "target": [
         "tar.gz",
         "AppImage"
+      ],
+      "files": [
+        "!node_modules/node-pty/prebuilds/win32-*/**/*"
       ],
       "category": "Network",
       "icon": "../../brand/assets/app-icon-256.png",

@@ -434,7 +434,6 @@ export type ChatComposerProps = {
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
   emptyQualifiedCatalog?: boolean;
   noActiveModels?: boolean;
-  onOpenModelSettings?: () => void;
   modelCatalogError?: boolean;
   modelCatalogLoading?: boolean;
   antigravityCatalogUnavailable?: boolean;
@@ -489,7 +488,6 @@ export function ChatComposer({
   modelOptions,
   emptyQualifiedCatalog = false,
   noActiveModels = false,
-  onOpenModelSettings,
   modelCatalogError=false,
   modelCatalogLoading=false,
   antigravityCatalogUnavailable=false,
@@ -619,14 +617,6 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {noActiveModels && !modelCatalogError && <div className="composer-model-notice" role="status">
-        <span>{t('settings.panels.providers.noActiveModels')}</span>
-        {onOpenModelSettings && <button type="button" className="secondary-action compact" onClick={onOpenModelSettings}>{t('settings.panels.providers.openActiveModels')}</button>}
-      </div>}
-      {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-model-notice composer-beta-catalog-opt-in">
-        <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
-        <ProviderBetaCatalogToggle />
-      </div>}
       {betaSelectionBlocked&&!modelCatalogLoading&&!modelCatalogError&&!emptyQualifiedCatalog&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
         ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</div>}
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
@@ -641,10 +631,6 @@ export function ChatComposer({
             :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknown'
               :'settings.panels.providers.antigravityCatalogReady')}
         </p>}
-        {emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-model-notice composer-beta-catalog-opt-in">
-          <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
-          <ProviderBetaCatalogToggle />
-        </div>}
         {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
           {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);
@@ -709,6 +695,10 @@ export function ChatComposer({
           }}>
             <summary aria-label={t('chat.chooseModelShort')}><MoreHorizontal size={16} aria-hidden="true" /><span>{t('chat.chooseModelShort')}</span></summary>
             <div className="composer-more-content">
+          {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-beta-catalog-opt-in">
+              <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
+              <ProviderBetaCatalogToggle />
+          </div>}
           <span className={`composer-model-qualification ${displayedModelQualified?'qualified':'untested'}`} role="status"
             title={`${displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')} · ${qualificationScope}`}>
             {displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}

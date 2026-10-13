@@ -1,0 +1,203 @@
+.browser-main.browser-start-page.luminous-launchpad {
+  position: relative;
+  isolation: isolate;
+  gap: 26px;
+  padding: clamp(20px, 4vw, 44px);
+  color: var(--lb-text);
+  background: #0b0f19;
+}
+
+.luminous-launchpad::before {
+  content: '';
+  position: fixed;
+  z-index: -2;
+  inset: -24px;
+  background: var(--launchpad-wallpaper) center / cover no-repeat;
+  opacity: .55;
+  filter: blur(var(--launchpad-blur, 0px));
+  pointer-events: none;
+}
+
+.luminous-launchpad::after {
+  content: '';
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(7, 10, 20, var(--launchpad-dim-top, .63)), rgba(7, 10, 20, var(--launchpad-dim-bottom, .84))),
+    radial-gradient(ellipse at 52% 18%, color-mix(in srgb, var(--lb-accent) 14%, transparent), transparent 65%);
+  pointer-events: none;
+}
+
+.luminous-launchpad .browser-start-hero,
+.luminous-launchpad .browser-start-search,
+.luminous-launchpad .browser-start-card,
+.luminous-launchpad .startpage-space-card,
+.luminous-launchpad .speed-dial-tile {
+  border: 1px solid rgba(255, 255, 255, .14);
+  border-radius: 8px;
+  background: rgba(22, 27, 43, .64);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .18);
+  backdrop-filter: blur(18px);
+}
+
+.luminous-launchpad .browser-start-hero {
+  padding: clamp(24px, 4vw, 42px);
+  min-height: 170px;
+  background: linear-gradient(115deg, rgba(24, 30, 49, .73), rgba(24, 30, 49, .38));
+}
+
+.luminous-launchpad .startpage-clock {
+  font-size: clamp(42px, 5vw, 68px);
+  line-height: 1;
+  color: #fff;
+}
+
+.luminous-launchpad .startpage-greeting { font-size: clamp(25px, 2.5vw, 36px); }
+.luminous-launchpad .startpage-wallpaper-toolbar {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.luminous-launchpad .startpage-wallpaper-toolbar button,
+.luminous-launchpad .startpage-wallpaper-dialog-header button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 8px;
+  background: rgba(18,25,42,.72);
+  color: var(--lb-text);
+  cursor: pointer;
+}
+.luminous-launchpad .startpage-wallpaper-toolbar button:hover,
+.luminous-launchpad .startpage-wallpaper-dialog-header button:hover { border-color: var(--lb-accent); }
+.luminous-launchpad .startpage-wallpaper-backdrop {
+  position: fixed;
+  z-index: 1500;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(3,7,16,.66);
+}
+.luminous-launchpad .startpage-wallpaper-dialog {
+  width: min(660px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid color-mix(in srgb, var(--lb-accent) 38%, transparent);
+  border-radius: 10px;
+  background: rgba(15,22,38,.96);
+  box-shadow: 0 24px 72px rgba(0,0,0,.55);
+  color: #f1f5f9;
+}
+.luminous-launchpad .startpage-wallpaper-dialog-header,
+.luminous-launchpad .startpage-wallpaper-dialog-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.luminous-launchpad .startpage-wallpaper-dialog-header { justify-content: space-between; margin-bottom: 18px; }
+.luminous-launchpad .startpage-wallpaper-dialog-header h2 { margin: 0; font-size: 18px; }
+.luminous-launchpad .startpage-wallpaper-gallery {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.luminous-launchpad .startpage-wallpaper-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 6px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: rgba(255,255,255,.05);
+  color: #e2e8f0;
+  text-align: left;
+  cursor: pointer;
+}
+.luminous-launchpad .startpage-wallpaper-choice:hover,
+.luminous-launchpad .startpage-wallpaper-choice:focus-visible,
+.luminous-launchpad .startpage-wallpaper-choice[aria-pressed="true"] { border-color: var(--lb-accent); }
+.luminous-launchpad .startpage-wallpaper-choice img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 5px; }
+.luminous-launchpad .startpage-wallpaper-choice span { padding: 0 3px 3px; font-size: 12px; }
+.luminous-launchpad .startpage-wallpaper-sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 20px; }
+.luminous-launchpad .startpage-wallpaper-sliders label { display: grid; grid-template-columns: 1fr auto; gap: 8px; font-size: 12px; }
+.luminous-launchpad .startpage-wallpaper-sliders input { grid-column: 1 / -1; width: 100%; accent-color: var(--lb-accent); }
+.luminous-launchpad .startpage-search-bar { border-color: color-mix(in srgb, var(--lb-accent) 35%, transparent); }
+.luminous-launchpad .browser-start-search input { font-weight: 500; }
+.luminous-launchpad .startpage-chip-btn:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+  transform: none;
+}
+.luminous-launchpad .startpage-ai-unavailable {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--lb-muted);
+  font-size: 12px;
+}
+.luminous-launchpad .startpage-ai-unavailable button {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--lb-accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.luminous-launchpad .startpage-chip-btn,
+.luminous-launchpad .startpage-palette-trigger,
+.luminous-launchpad .startpage-add-space-btn { border-radius: 8px; }
+
+.luminous-launchpad .startpage-spaces-section,
+.luminous-launchpad .speed-dial-section { margin: 0; }
+.luminous-launchpad .startpage-spaces-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.luminous-launchpad .startpage-space-card { min-height: 92px; padding: 18px; }
+.luminous-launchpad .startpage-space-card.is-active { border-color: var(--lb-accent); }
+.luminous-launchpad .startpage-space-card-body { gap: 10px; }
+.luminous-launchpad .startpage-space-name { font-size: 16px; }
+.luminous-launchpad .startpage-space-agents { color: var(--lb-muted); font-size: 12px; }
+.luminous-launchpad .speed-dial-grid { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
+.luminous-launchpad .speed-dial-tile { min-height: 106px; }
+.luminous-launchpad .speed-dial-tile-icon {
+  position: relative;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .93) !important;
+  border-color: rgba(255, 255, 255, .3) !important;
+  color: #253149;
+}
+.luminous-launchpad .speed-dial-tile-icon img { position: absolute; inset: 9px; object-fit: contain; }
+.luminous-launchpad .browser-start-grid { gap: 16px; }
+.luminous-launchpad .browser-start-card { min-width: 0; }
+
+html.theme-light .browser-main.browser-start-page.luminous-launchpad { color: #172034; background: #e6ebf5; }
+html.theme-light .luminous-launchpad::before { opacity: .17; }
+html.theme-light .luminous-launchpad::after { background: rgba(245, 248, 253, var(--launchpad-light-dim, .78)); }
+html.theme-light .luminous-launchpad .browser-start-hero,
+html.theme-light .luminous-launchpad .browser-start-search,
+html.theme-light .luminous-launchpad .browser-start-card,
+html.theme-light .luminous-launchpad .startpage-space-card,
+html.theme-light .luminous-launchpad .speed-dial-tile {
+  color: #172034;
+  background: rgba(255, 255, 255, .77);
+  border-color: rgba(30, 48, 83, .16);
+}
+html.theme-light .luminous-launchpad .startpage-clock { color: #172034; }
+
+@media (max-width: 760px) {
+  .luminous-launchpad .browser-start-hero { flex-direction: column; align-items: stretch; }
+  .luminous-launchpad .startpage-hero-aside { justify-content: flex-start; }
+  .luminous-launchpad .startpage-spaces-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+  .luminous-launchpad .startpage-wallpaper-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .luminous-launchpad .startpage-wallpaper-sliders { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .luminous-launchpad .speed-dial-tile,
+  .luminous-launchpad .startpage-space-card { transition: none; }
+}

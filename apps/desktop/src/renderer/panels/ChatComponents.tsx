@@ -24,6 +24,7 @@ import {
   Cpu,
   Layers,
   Loader2,
+  MoreHorizontal,
   Plus,
   Send,
   Sparkles,
@@ -41,6 +42,7 @@ import { qualifyModelForProvider } from '../provider-model-selection.js';
 import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker.js';
 import { toBionicSegments } from '../utils/bionic-reading.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
+import './chat-composer.css';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -503,6 +505,8 @@ export function ChatComposer({
   return (
     <form className="chat-composer" onSubmit={submit}>
       <div className="composer-toolbar">
+        <div className="composer-toolbar-leading">
+          <img className="composer-sidekick" src={brandAssets.sidekickAvatar} alt="" aria-hidden="true" />
         <div className="composer-mode" role="group" aria-label="Composer mode">
           <button type="button" className={mode === 'action' ? 'active' : ''} onClick={() => onMode('action')}>
             <Sparkles size={13} />
@@ -512,6 +516,7 @@ export function ChatComposer({
             <Columns3 size={13} />
             <span>Plan</span>
           </button>
+        </div>
         </div>
         <button
           type="button"
@@ -523,20 +528,7 @@ export function ChatComposer({
               onText(text ? `@tabs ${text}` : '@tabs ');
             }
           }}
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            border: 'none',
-            background: isTabsActive ? 'rgba(56, 189, 248, 0.2)' : 'rgba(255, 255, 255, 0.06)',
-            color: isTabsActive ? '#38bdf8' : 'rgba(232, 242, 255, 0.65)',
-            padding: '3px 8px',
-            borderRadius: '6px',
-            fontSize: '11px',
-            fontWeight: 600,
-            cursor: 'pointer',
-            transition: 'all 0.15s ease'
-          }}
+          aria-pressed={isTabsActive}
           title="Offene Browser-Tabs als Kontext einbinden (@tabs)"
         >
           <Layers size={13} />
@@ -548,19 +540,19 @@ export function ChatComposer({
               value={qualifyModelForProvider(model, modelProvider)}
               disabled={!ready || running}
               onChange={(event) => onModelChange(event.target.value)}
-              style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}
+              aria-label={t('chat.model')}
             >
               {/* Keep the current model visible even when the catalog has not
                   loaded yet or the model is no longer offered. */}
               {!modelOptions.some((group) => group.models.some((m) => m.id === model && (!modelProvider || group.providerId === modelProvider))) && (
-                <option value={qualifyModelForProvider(model, modelProvider)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                <option value={qualifyModelForProvider(model, modelProvider)}>
                   {model || 'default'}
                 </option>
               )}
               {modelOptions.map((group) => (
-                <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
+                <optgroup key={group.providerId || group.provider} label={group.provider}>
                   {group.models.map((m) => (
-                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)}>
                       {m.label}
                     </option>
                   ))}
@@ -568,12 +560,24 @@ export function ChatComposer({
               ))}
             </select>
         </label>
-        <ReasoningEffortPicker
-          value={reasoningEffort}
-          efforts={reasoningEfforts}
-          disabled={!ready || running}
-          onChange={onReasoningEffort}
-        />
+        <details className="composer-more-options" onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.currentTarget.open = false;
+            event.currentTarget.querySelector('summary')?.focus();
+          }
+        }}>
+          <summary aria-label={t('chat.reasoningEffort')} title={t('chat.reasoningEffort')}>
+            <MoreHorizontal size={16} aria-hidden="true" /><span>{t('chat.reasoningEffort')}</span>
+          </summary>
+          <div className="composer-more-content">
+            <ReasoningEffortPicker
+              value={reasoningEffort}
+              efforts={reasoningEfforts}
+              disabled={!ready || running}
+              onChange={onReasoningEffort}
+            />
+          </div>
+        </details>
       </div>
       <div className="composer-input-row" ref={slashRef}>
         {showSlashDropdown && filteredSlashCommands.length > 0 && (
@@ -611,14 +615,7 @@ export function ChatComposer({
           </button>
         )}
       </div>
-      <div className="composer-chips">
-        <span>{mode}</span>
-        {isTabsActive && (
-          <span style={{ color: '#38bdf8', borderColor: 'rgba(56, 189, 248, 0.3)', background: 'rgba(56, 189, 248, 0.1)' }}>
-            @tabs aktiv
-          </span>
-        )}
-        <span>{model}</span>
+      <div className="composer-chips" aria-label={`${profile} · ${workspaceLabel(workspace)}`}>
         <span>{profile}</span>
         <span>{workspaceLabel(workspace)}</span>
       </div>

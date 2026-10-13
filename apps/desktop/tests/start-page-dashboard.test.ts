@@ -8,6 +8,7 @@ import {
   DASHBOARD_QUICK_ACTIONS,
   DEFAULT_SPEED_DIAL_ITEMS
 } from '../src/renderer/panels/NativeBrowserStartPage.js';
+import { DEFAULT_WALLPAPER_PREFERENCE, START_PAGE_WALLPAPERS, parseStartPageWallpaperPreference, startPageWallpaperStorageKey } from '../src/renderer/panels/startpage-wallpaper.js';
 
 describe('startpage atmospheric dashboard helpers', () => {
   it('returns morning greeting between 5:00 and 11:59', () => {
@@ -71,6 +72,30 @@ describe('startpage atmospheric dashboard helpers', () => {
 
   it('maintains compatibility with default speed dial items', () => {
     expect(DEFAULT_SPEED_DIAL_ITEMS.length).toBe(8);
+  });
+
+  it('keeps wallpaper preferences separate by browser profile and Space', () => {
+    expect(startPageWallpaperStorageKey('profile-a', '', 'workspaces/one'))
+      .not.toBe(startPageWallpaperStorageKey('profile-a', '', 'workspaces/two'));
+    expect(startPageWallpaperStorageKey('profile-a', '', 'workspaces/one'))
+      .not.toBe(startPageWallpaperStorageKey('profile-b', '', 'workspaces/one'));
+  });
+
+  it('validates wallpaper preferences and bounds dim and blur settings', () => {
+    expect(parseStartPageWallpaperPreference(null)).toEqual(DEFAULT_WALLPAPER_PREFERENCE);
+    expect(parseStartPageWallpaperPreference(JSON.stringify({ wallpaperId: 'missing', dim: 100, blur: -4 })))
+      .toEqual({ wallpaperId: DEFAULT_WALLPAPER_PREFERENCE.wallpaperId, dim: 80, blur: 0 });
+    expect(START_PAGE_WALLPAPERS).toHaveLength(6);
+  });
+
+  it('renders an accessible wallpaper picker over a locally bundled launchpad background', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/renderer/panels/NativeBrowserStartPage.tsx'), 'utf8');
+    const styles = fs.readFileSync(path.resolve(__dirname, '../src/renderer/panels/startpage-luminous.css'), 'utf8');
+    expect(source).toContain('aria-modal="true"');
+    expect(source).toContain('aria-pressed={wallpaperPreference.wallpaperId === wallpaper.id}');
+    expect(source).toContain('onClick={() => stepWallpaper(1)}');
+    expect(styles).toContain('var(--launchpad-wallpaper)');
+    expect(fs.existsSync(path.resolve(__dirname, '../../../brand/assets/launchpad-wallpaper.jpg'))).toBe(true);
   });
 
   it('does not reference undefined setupState in BrowserMain', () => {

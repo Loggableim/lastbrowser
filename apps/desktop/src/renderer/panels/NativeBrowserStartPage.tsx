@@ -1,4 +1,4 @@
-import React, { FormEvent, useEffect, useMemo, useState } from 'react';
+import React, { FormEvent, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Globe2,
   Search,
@@ -15,7 +15,10 @@ import {
   Plus,
   Check,
   X,
-  ShieldCheck
+  ShieldCheck,
+  ChevronLeft,
+  ChevronRight,
+  Image as ImageIcon
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import type { BrowserBookmark } from '../bookmarks.js';
@@ -25,6 +28,10 @@ import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
 import { getSpaceTabCount } from '../tab-sessions.js';
 import { useDesktopI18n } from '../i18n.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
+import { browserStartWallpaperCopy } from '../i18n/browser-start-wallpaper-copy.js';
+import { DEFAULT_WALLPAPER_PREFERENCE, START_PAGE_WALLPAPERS, parseStartPageWallpaperPreference,
+  startPageWallpaperStorageKey, type StartPageWallpaperPreference } from './startpage-wallpaper.js';
+import './startpage-luminous.css';
 
 export interface SpeedDialItem {
   id: string;
@@ -133,6 +140,64 @@ export function NativeBrowserStartPage({
   const [currentTime, setCurrentTime] = useState(() => new Date());
   const [isCreatingSpace, setIsCreatingSpace] = useState(false);
   const [newSpaceName, setNewSpaceName] = useState('');
+  const wallpaperCopy = browserStartWallpaperCopy[locale];
+  const wallpaperButtonRef = useRef<HTMLButtonElement>(null);
+  const wallpaperDialogRef = useRef<HTMLDivElement>(null);
+  const wallpaperDialogTitleId = useId();
+  const [wallpaperOpen, setWallpaperOpen] = useState(false);
+  const [wallpaperPreviewId, setWallpaperPreviewId] = useState<string | null>(null);
+  const wallpaperScopeKey = useMemo(() => startPageWallpaperStorageKey(activeProfileId, '', activeSpacePath || ''), [activeProfileId, activeSpacePath]);
+  const persistedWallpaper = useMemo(() => {
+    try { return parseStartPageWallpaperPreference(window.localStorage.getItem(wallpaperScopeKey)); }
+    catch { return DEFAULT_WALLPAPER_PREFERENCE; }
+  }, [wallpaperScopeKey]);
+  const [wallpaperOverride, setWallpaperOverride] = useState<{ key: string; value: StartPageWallpaperPreference } | null>(null);
+  const wallpaperPreference = wallpaperOverride?.key === wallpaperScopeKey ? wallpaperOverride.value : persistedWallpaper;
+  const currentWallpaper = START_PAGE_WALLPAPERS.find(item => item.id === (wallpaperPreviewId || wallpaperPreference.wallpaperId)) || START_PAGE_WALLPAPERS[0];
+  const wallpaperUrl = new URL(currentWallpaper.path, document.baseURI).href;
+
+  const saveWallpaperPreference = (value: StartPageWallpaperPreference) => {
+    setWallpaperOverride({ key: wallpaperScopeKey, value });
+    try { window.localStorage.setItem(wallpaperScopeKey, JSON.stringify(value)); } catch { /* Browsing still works without storage. */ }
+  };
+  const closeWallpaperDialog = useCallback(() => {
+    setWallpaperPreviewId(null);
+    setWallpaperOpen(false);
+  }, []);
+  const stepWallpaper = (offset: number) => {
+    const currentIndex = START_PAGE_WALLPAPERS.findIndex(item => item.id === wallpaperPreference.wallpaperId);
+    const nextIndex = (currentIndex + offset + START_PAGE_WALLPAPERS.length) % START_PAGE_WALLPAPERS.length;
+    saveWallpaperPreference({ ...wallpaperPreference, wallpaperId: START_PAGE_WALLPAPERS[nextIndex].id });
+    setWallpaperPreviewId(null);
+  };
+
+  useEffect(() => {
+    closeWallpaperDialog();
+  }, [wallpaperScopeKey, closeWallpaperDialog]);
+
+  useEffect(() => {
+    if (!wallpaperOpen) return;
+    const frame = window.requestAnimationFrame(() => wallpaperDialogRef.current?.querySelector<HTMLElement>('[aria-pressed="true"]')?.focus());
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeWallpaperDialog();
+      } else if (event.key === 'Tab' && wallpaperDialogRef.current) {
+        const focusable = [...wallpaperDialogRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled])')];
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener('keydown', onKeyDown);
+      wallpaperButtonRef.current?.focus();
+    };
+  }, [wallpaperOpen, closeWallpaperDialog]);
 
   const displayedSpaces = useMemo(() => {
     if (spaces && spaces.length > 0) {
@@ -213,7 +278,13 @@ export function NativeBrowserStartPage({
   }
 
   return (
-    <section className="browser-main browser-start-page" data-testid="browser-start-dashboard">
+    <section className="browser-main browser-start-page luminous-launchpad" data-testid="browser-start-dashboard" style={{
+      '--launchpad-wallpaper': `url("${wallpaperUrl}")`,
+      '--launchpad-blur': `${wallpaperPreference.blur}px`,
+      '--launchpad-dim-top': Math.min(.9, .3 + wallpaperPreference.dim / 100 * .55),
+      '--launchpad-dim-bottom': Math.min(.95, .55 + wallpaperPreference.dim / 100 * .48),
+      '--launchpad-light-dim': Math.min(.95, .4 + wallpaperPreference.dim / 100 * .6)
+    } as React.CSSProperties}>
       {/* 9.4 Atmospheric Hero Dashboard with Live Clock and Greeting */}
       <div className="browser-start-hero startpage-dashboard-hero">
         <div className="browser-start-brand">
@@ -233,6 +304,11 @@ export function NativeBrowserStartPage({
         </div>
 
         <div className="startpage-hero-aside">
+          <div className="startpage-wallpaper-toolbar" role="group" aria-label={wallpaperCopy.settings}>
+            <button type="button" onClick={() => stepWallpaper(-1)} aria-label={wallpaperCopy.previous} title={wallpaperCopy.previous}><ChevronLeft size={15} /></button>
+            <button type="button" ref={wallpaperButtonRef} onClick={() => setWallpaperOpen(true)} aria-label={wallpaperCopy.settings} aria-haspopup="dialog" aria-expanded={wallpaperOpen}><ImageIcon size={15} /><span>{wallpaperCopy.settings}</span></button>
+            <button type="button" onClick={() => stepWallpaper(1)} aria-label={wallpaperCopy.next} title={wallpaperCopy.next}><ChevronRight size={15} /></button>
+          </div>
           <div className="browser-start-badge">
             <Sparkles size={14} />
             <span>{effectiveBotName} AI</span>
@@ -550,6 +626,37 @@ export function NativeBrowserStartPage({
           </div>
         </section>
       </div>
+      {wallpaperOpen && (
+        <div className="startpage-wallpaper-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeWallpaperDialog(); }}>
+          <div className="startpage-wallpaper-dialog" ref={wallpaperDialogRef} role="dialog" aria-modal="true" aria-labelledby={wallpaperDialogTitleId}>
+            <div className="startpage-wallpaper-dialog-header">
+              <h2 id={wallpaperDialogTitleId}><ImageIcon size={18} />{wallpaperCopy.settings}</h2>
+              <button type="button" onClick={closeWallpaperDialog} aria-label={wallpaperCopy.close}><X size={18} /></button>
+            </div>
+            <div className="startpage-wallpaper-gallery">
+              {START_PAGE_WALLPAPERS.map((wallpaper) => (
+                <button key={wallpaper.id} type="button" className="startpage-wallpaper-choice" aria-pressed={wallpaperPreference.wallpaperId === wallpaper.id}
+                  onMouseEnter={() => setWallpaperPreviewId(wallpaper.id)} onMouseLeave={() => setWallpaperPreviewId(null)}
+                  onFocus={() => setWallpaperPreviewId(wallpaper.id)} onBlur={() => setWallpaperPreviewId(null)}
+                  onClick={() => { saveWallpaperPreference({ ...wallpaperPreference, wallpaperId: wallpaper.id }); setWallpaperPreviewId(null); }}>
+                  <img src={wallpaper.path} alt="" loading="lazy" />
+                  <span>{wallpaperCopy.images[wallpaper.id]}</span>
+                </button>
+              ))}
+            </div>
+            <div className="startpage-wallpaper-sliders">
+              <label>{wallpaperCopy.dim}<span>{wallpaperPreference.dim}%</span>
+                <input aria-label={wallpaperCopy.dim} type="range" min="0" max="80" value={wallpaperPreference.dim}
+                  onChange={(event) => saveWallpaperPreference({ ...wallpaperPreference, dim: Number(event.target.value) })} />
+              </label>
+              <label>{wallpaperCopy.blur}<span>{wallpaperPreference.blur}px</span>
+                <input aria-label={wallpaperCopy.blur} type="range" min="0" max="20" value={wallpaperPreference.blur}
+                  onChange={(event) => saveWallpaperPreference({ ...wallpaperPreference, blur: Number(event.target.value) })} />
+              </label>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }

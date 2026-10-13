@@ -9,10 +9,13 @@
  *   • ControlCenter drawer
  */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Plus, Settings } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, Eye, EyeOff, MoreHorizontal, Plus, Settings } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import { canCallSidekickApi } from '../runtime-readiness.js';
+import { resolveChatHeaderStatus } from '../chat-header-status.js';
+import { chatHeaderCopy } from '../i18n/chat-header-copy.js';
+import './native-chat-header.css';
 import { partitionChatMessages } from '../chat-display.js';
 import { useChatQueue, CompressButton, QueueIndicator } from '../NativeCompressQueue.js';
 import { ChatTranscript, ChatComposer } from './ChatComponents.js';
@@ -92,11 +95,15 @@ export function NativeChatMain({
   onSend,
   onStop
 }: NativeChatMainProps): React.JSX.Element {
-  const { t } = useDesktopI18n();
+  const { locale, t } = useDesktopI18n();
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
   const ready = canCallSidekickApi(serviceStatus);
+  const headerStatus = resolveChatHeaderStatus(serviceStatus);
+  const headerCopy = chatHeaderCopy[locale];
   const [showDeveloperTools, setShowDeveloperTools] = useState(false);
   const [showControlCenter, setShowControlCenter] = useState(false);
+  const [showHeaderActions, setShowHeaderActions] = useState(false);
+  const headerActionsRef = useRef<HTMLDivElement>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const { queue, enqueue, dequeue, clearQueue, removeAt } = useChatQueue();
   const { visible: visibleMessages, developer: developerMessages } = useMemo(
@@ -109,6 +116,25 @@ export function NativeChatMain({
   const selectedModelProvider = useChatStore((state) => state.selectedModelProvider);
   const setSelectedModel = useChatStore((state) => state.setSelectedModel);
   const setSelectedModelProvider = useChatStore((state) => state.setSelectedModelProvider);
+
+  useEffect(() => {
+    if (!showHeaderActions) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !headerActionsRef.current?.contains(event.target)) setShowHeaderActions(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setShowHeaderActions(false);
+        headerActionsRef.current?.querySelector<HTMLButtonElement>('[data-header-menu-trigger]')?.focus();
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showHeaderActions]);
   const spaceModelSelection = loadSpaceModelSelection(activeSpacePath, window.localStorage);
   const [catalogDefaultModel, setCatalogDefaultModel] = useState('');
   const model = resolvePreferredChatModel(
@@ -292,9 +318,10 @@ export function NativeChatMain({
       <div className="native-chat-header">
         <div className="native-chat-title">
           <img src={brandAssets.sidekickAvatar} alt="" />
-          <div>
-            <span>{activeSessionId ? shortSessionId(activeSessionId) : 'New chat'}</span>
-            <h1>{activeSession ? sessionTitle(activeSession) : 'Sidekick'}</h1>
+          <div className="native-chat-title-copy">
+            <h1>{activeSession ? sessionTitle(activeSession) : t('chat.newSession')}</h1>
+            <span className="native-chat-space-context">{activeSession ? ((activeSession.workspace || activeSpacePath).split(/[\\/]/).filter(Boolean).at(-1) || t('chat.workspace')) : t('chat.kicker')}</span>
+            {activeSessionId && <span className="native-chat-session-id">{shortSessionId(activeSessionId)}</span>}
           </div>
         </div>
         <div className="native-chat-header-actions">
@@ -302,12 +329,12 @@ export function NativeChatMain({
             type="button"
             className="secondary-action compact new-chat-btn"
             onClick={onCreateSession}
-            title="Neuen Chat starten (+)"
+            title={`${t('chat.newSession')} (+)`}
+            aria-label={t('chat.newSession')}
           >
             <Plus size={14} />
-            <span>Neuer Chat</span>
+            <span>{t('chat.newSession')}</span>
           </button>
-          <CompressButton activeSessionId={activeSessionId} ready={ready} onResult={setStatusMessage} />
           <QueueIndicator queue={queue} onDrain={() => {
             if (running) { setStatusMessage('Wait for current turn to finish first.'); return; }
               const msg = dequeue();
@@ -315,24 +342,32 @@ export function NativeChatMain({
           }} onClear={clearQueue} onRemoveAt={removeAt} busy={running} />
           <button
             type="button"
-            className="secondary-action compact"
+            className="secondary-action compact native-chat-settings-action"
             onClick={() => setShowControlCenter(true)}
-            title="Control Center"
+            title={t('settings.title')}
+            aria-label={t('settings.title')}
           >
             <Settings size={14} />
-            <span>Control</span>
+            <span>{t('settings.title')}</span>
           </button>
-          <button
-            type="button"
-            className={`secondary-action compact developer-toggle ${showDeveloperTools ? 'active' : ''}`}
-            onClick={() => setShowDeveloperTools((current) => !current)}
-          >
-            {showDeveloperTools ? <Eye size={14} /> : <EyeOff size={14} />}
-            <span>Developer</span>
-          </button>
-          <div className={`native-chat-status ${ready ? 'ready' : 'starting'}`}>
-            <span className={ready ? 'status-dot ready' : 'status-dot'} />
-            <span>{ready ? 'Online' : 'Starting'}</span>
+          <div className="native-chat-menu-anchor" ref={headerActionsRef}>
+            <button type="button" className="secondary-action compact native-chat-menu-trigger" data-header-menu-trigger
+              aria-label={headerCopy.moreActions} aria-expanded={showHeaderActions} aria-controls="native-chat-actions-menu"
+              title={headerCopy.moreActions} onClick={() => setShowHeaderActions((current) => !current)}>
+              <MoreHorizontal size={16} /><ChevronDown size={12} />
+            </button>
+            {showHeaderActions && <div id="native-chat-actions-menu" className="native-chat-actions-menu" role="group" aria-label={headerCopy.moreActions}>
+              <div className="native-chat-menu-action">
+                <CompressButton activeSessionId={activeSessionId} ready={ready} onResult={(message) => { setStatusMessage(message); setShowHeaderActions(false); }} />
+              </div>
+              <button type="button" aria-pressed={showDeveloperTools} onClick={() => { setShowDeveloperTools((current) => !current); setShowHeaderActions(false); }}>
+                {showDeveloperTools ? <Eye size={15} /> : <EyeOff size={15} />}<span>{t('settings.panels.system.developerApiTools')}</span>
+              </button>
+            </div>}
+          </div>
+          <div className={`native-chat-status ${headerStatus}`} role="status" aria-live="polite" title={headerCopy.status[headerStatus]}>
+            <span className={`status-dot ${headerStatus}`} aria-hidden="true" />
+            <span>{headerCopy.status[headerStatus]}</span>
           </div>
         </div>
       </div>

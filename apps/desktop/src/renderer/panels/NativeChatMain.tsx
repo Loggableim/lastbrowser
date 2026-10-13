@@ -112,7 +112,6 @@ export type NativeChatMainProps = {
   simplifiedToolCalling: boolean;
   latestTurnUsage: NativeChatTurnUsage | null;
   modelFallbackNotice?: string | null;
-  onOpenModelSettings?: () => void;
   onComposerMode: (mode: ComposerMode) => void;
   onComposerText: (text: string) => void;
   onCreateSession: () => void;
@@ -143,7 +142,6 @@ export function NativeChatMain({
   simplifiedToolCalling,
   latestTurnUsage,
   modelFallbackNotice = null,
-  onOpenModelSettings,
   onComposerMode,
   onComposerText,
   onCreateSession,
@@ -987,7 +985,6 @@ export function NativeChatMain({
         emptyQualifiedCatalog={emptyQualifiedCatalog}
         noActiveModels={modelCatalogLoaded && !visibleModelCatalog.some(group => group.configured && group.providerId
           && group.models.some(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)))}
-        onOpenModelSettings={onOpenModelSettings}
         requestedLunaInCatalog={modelCatalogLoaded ? requestedLunaInCatalog : undefined}
         modelCatalogError={modelCatalogError}
         modelCatalogLoading={modelCatalogLoading}

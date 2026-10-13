@@ -22,9 +22,12 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
     expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
     expect(packageJson.scripts['package:linux']).toContain('npm run prepare:python && npm run build && electron-builder --linux tar.gz');
+    expect(packageJson.build.linux.target).toContain('AppImage');
     expect(packageJson.scripts['package:linux']).toContain('node scripts/write-linux-checksums.mjs');
     expect(packageJson.scripts['smoke:linux:fresh-profile']).toBe('node scripts/smoke-linux-fresh-profile.mjs');
-    expect(packageJson.build.linux.target).toEqual(['tar.gz']);
+    expect(packageJson.build.linux.target).toEqual(['tar.gz', 'AppImage']);
+    expect(packageJson.build.linux.icon).toBe('../../brand/assets/app-icon-256.png');
+    expect(packageJson.build.linux.artifactName).toBe('Lastbrowser-${version}-${arch}.${ext}');
     expect(packageJson.build.files).not.toContain('!node_modules/node-pty/prebuilds/linux-*/**/*');
     expect(packageJson.build.files).toContain('!node_modules/node-pty/prebuilds/darwin-*/**/*');
   });

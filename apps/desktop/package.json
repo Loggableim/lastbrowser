@@ -177,10 +177,12 @@
     },
     "linux": {
       "target": [
-        "tar.gz"
+        "tar.gz",
+        "AppImage"
       ],
       "category": "Network",
-      "artifactName": "Lastbrowser-${version}-${arch}.tar.gz"
+      "icon": "../../brand/assets/app-icon-256.png",
+      "artifactName": "Lastbrowser-${version}-${arch}.${ext}"
     },
     "publish": [
       {

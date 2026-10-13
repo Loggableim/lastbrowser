@@ -1,0 +1,9 @@
+# Immediate standard-chat send feedback — 2026-10-11
+
+Scope: 0.1.55 source following OpenCode PR #67. Previously, the composer cleared immediately but the user message was only appended after asynchronous scope resolution and a full model-catalog probe. The probe uses a backend worker and can delay the visible echo independently of inference.
+
+Change: append the user's message synchronously after the existing submission reservation, before the first asynchronous preflight. The normal chat and direct browser-command paths reuse that echo rather than append a duplicate. A definite rejection removes only this submission's own echo in the unchanged scope and restores the untouched draft. Ambiguous transport outcomes retain the echo without restoring a duplicate-sendable draft. No provider/model/security checks are removed. Full catalog discovery and model inference latency are not optimized by this patch.
+
+Validation: regression harness executes the actual App submission function with a deliberately unresolved backend promise. It verifies immediate echo/input clearing before resolution, duplicate-send reservation, definite rejection recovery, scope-switch isolation and ambiguous transport behavior. 39 focused tests passed across send feedback, draft submission and guarded native starts. Desktop TypeScript/Vite build passed; store preflight 39 passed, 2 warnings, 0 failures; full Python compileall passed. No paid provider calls were needed. This run does not claim a new installer or GUI acceptance test.
+
+Full frontend run: 2165 passed, 10 known pre-existing locale assertion failures across 3 files (239 files total). No additional failures. PR https://github.com/Loggableim/lastbrowser/pull/71 ; source commit bfc39d88. Depends on PR #67 and #65. All source/report changes pushed.

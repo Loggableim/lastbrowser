@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "candidate": "test-0.1.49-5f90bb56-20261008",
+  "orderCommit": "bb7902f631399e919c9e61d9c7aa09e9f70d5819",
+  "report": "docs/test-reports/2026-10-08-0.1.49-guest-retest.md",
+  "reportBlob": "823be6ef9183d680e8924168d42d532f6064e559",
+  "reportSha256": "ec5fe2fe9c6141851c77a88e371bdcbed3bb421bcffd6e8735a0ed3c931a8bea",
+  "caseCounts": {
+    "BLOCKED": 14,
+    "PASS": 0,
+    "FAIL": 3
+  },
+  "providerTurns": {
+    "mimo": 0,
+    "openrouter": 0,
+    "ollama": 0,
+    "antigravity": 0,
+    "gpt": 0
+  },
+  "evidence": [
+    {
+      "file": "02-provider-qualification-gate.jpg",
+      "bytes": 163464,
+      "sha256": "493bcba8c8bc414ebcef085b28adb57fccfceeb476b95741d58ef0af8e827716"
+    },
+    {
+      "file": "03-assistant-profile-error.jpg",
+      "bytes": 179055,
+      "sha256": "d7c17dd35530a27cc950f5b238fd2a721f0d0afa0c33a0cc9fed24b7dbc0b688"
+    },
+    {
+      "file": "04-font-default-open.jpg",
+      "bytes": 171712,
+      "sha256": "0a7558ec2d4e19847b89d3b6c858a63c4b27d3263e18c3c56f231e6189c06e85"
+    },
+    {
+      "file": "05-font-small-open.jpg",
+      "bytes": 172597,
+      "sha256": "7defa00d2c7e994bab9e555a49620a581e7f5dd4b6b4910afaea39f6254677f9"
+    },
+    {
+      "file": "06-font-large-open.jpg",
+      "bytes": 172235,
+      "sha256": "9045152be00917a71ef1b8e02403445bfd36b620b4130c134a1a507d6b08bce2"
+    },
+    {
+      "file": "07-appearance-1100-open.jpg",
+      "bytes": 111845,
+      "sha256": "b8c2c2c2f9bb8187ab1a9a2a286a06b1244db8151605b45a7c255702ffa31680"
+    },
+    {
+      "file": "08-appearance-1100-closed-comparison.jpg",
+      "bytes": 129408,
+      "sha256": "77fa56b739ca3784e68bb6828077bdd42ff0ba866cda0e774fff3123fe3e5f02"
+    }
+  ]
+}

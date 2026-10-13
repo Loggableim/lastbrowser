@@ -28,6 +28,8 @@ export type TerminalOptions = {
   env?: Record<string, string>;
   cols?: number;
   rows?: number;
+  sessionId?: string;
+  onExit?: (id: string, exitCode: number) => void;
 };
 
 export type TerminalInstance = {
@@ -58,7 +60,7 @@ function createId(): string {
  * subcommands (doctor, status, model, gateway, etc.) work directly.
  *
  * In 'tui' mode:
- * Spawns the Sidekick Interactive Terminal UI (`python -m sidekick_cli.main --tui`)
+ * Spawns the Sidekick Interactive Terminal UI (`python -m cli.lastbrowser_tui`)
  * in the real ConPTY allocated by node-pty.
  */
 export function startTerminal(
@@ -95,7 +97,8 @@ export function startTerminal(
 
   if (mode === 'tui') {
     file = options?.pythonExe || 'python';
-    args = ['-m', 'sidekick_cli.main', '--tui'];
+    args = ['-m', 'cli.lastbrowser_tui'];
+    if (options?.sessionId) args.push('--session', options.sessionId);
     if (options?.sidekickDir && !cwd) {
       spawnCwd = options.sidekickDir;
     }
@@ -141,6 +144,7 @@ export function startTerminal(
 
     ptyProcess.onExit(({ exitCode }: { exitCode: number }) => {
       onData(id, `\r\n[Process exited with code ${exitCode}]\r\n`);
+      options?.onExit?.(id, exitCode);
       terminals.delete(id);
     });
 
@@ -194,7 +198,12 @@ export function closeTerminal(id: string): { ok: boolean; error?: string } {
   const instance = terminals.get(id);
   if (!instance) return { ok: false, error: 'Terminal not found' };
   try {
-    instance.pty.kill();
+    if (instance.mode === 'tui') {
+      instance.pty.write('\x11');
+      const fallback = setTimeout(() => { try { instance.pty.kill(); } catch {} }, 2000);
+      fallback.unref();
+      instance.pty.onExit(() => clearTimeout(fallback));
+    } else instance.pty.kill();
     terminals.delete(id);
     return { ok: true };
   } catch (error) {

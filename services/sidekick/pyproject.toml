@@ -13,11 +13,13 @@ dependencies = [
     "PyYAML>=6.0",
     "rich>=13.0",
     "prompt_toolkit>=3.0",
+    "cryptography>=41.0",
     "fire>=0.5",
     "wcwidth>=0.2",
     "tzdata>=2024.1",
     "anthropic>=0.39.0",
     "openai>=1.0,<3",
+    "mcp==1.26.0",
 ]
 
 [project.optional-dependencies]

@@ -692,6 +692,10 @@ class ShellFileOperations(FileOperations):
             total_lines = int(wc_output.strip())
         except ValueError:
             total_lines = 0
+        # wc counts newline characters, so an unterminated last line may be
+        # missing. Never report fewer lines than this page actually contains.
+        if read_output:
+            total_lines = max(total_lines, offset - 1 + len(read_output.splitlines()))
         
         # Check if truncated
         truncated = total_lines > end_line

@@ -1,0 +1,38 @@
+{
+  "first": [
+    {
+      "elapsedMs": 764,
+      "focus": "9 document Lastbrowser Value: app://bundle/index.html ID: 384384"
+    },
+    {
+      "elapsedMs": 12447,
+      "focus": "9 document Lastbrowser Value: app://bundle/index.html ID: 384384"
+    }
+  ],
+  "second": [
+    {
+      "targetMs": 0,
+      "elapsedMs": 354,
+      "focus": "9 document Lastbrowser Value: app://bundle/index.html ID: 384384",
+      "text": "Guest focus check"
+    },
+    {
+      "targetMs": 1000,
+      "elapsedMs": 1039,
+      "focus": "9 document Lastbrowser Value: app://bundle/index.html ID: 384384",
+      "text": "Guest focus check"
+    },
+    {
+      "targetMs": 3000,
+      "elapsedMs": 3036,
+      "focus": "9 document Lastbrowser Value: app://bundle/index.html ID: 384384",
+      "text": "Guest focus check"
+    },
+    {
+      "targetMs": 10000,
+      "elapsedMs": 10117,
+      "focus": "9 document Lastbrowser Value: app://bundle/index.html ID: 384384",
+      "text": "Guest focus check"
+    }
+  ]
+}

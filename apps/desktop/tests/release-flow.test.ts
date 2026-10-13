@@ -80,7 +80,7 @@ describe('GitHub release auto-update flow', () => {
     expect(workflow).toContain('actions/download-artifact@v4');
     expect(workflow).toContain('token: ${{ secrets.GITHUB_TOKEN }}');
     expect(workflow).toContain('npm --workspace apps/desktop run prepare:python');
-    expect(workflow).toContain('npm --workspace apps/desktop run build:installer-assets');
+    expect(workflow).not.toContain('build:installer-assets');
     expect(workflow).toContain('npm --workspace apps/desktop run build');
     expect(workflow).toContain('npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never');
     expect(workflow).toContain('apps/desktop/release/*.blockmap');
@@ -91,8 +91,9 @@ describe('GitHub release auto-update flow', () => {
     const workflow = readFileSync(releaseWorkflowPath, 'utf8').replace(/\r\n/g, '\n');
     const setupIndex = workflow.indexOf('- name: Setup Node');
     const runtimeIndex = workflow.indexOf('- name: Prepare Python runtime');
-    const installerAssetsIndex = workflow.indexOf('- name: Build installer assets');
     const desktopBuildIndex = workflow.indexOf('- name: Build desktop application');
+    const runtimeSigningIndex = workflow.indexOf('- name: Sign bundled local AI runtime before packaging');
+    const runtimeVerifyIndex = workflow.indexOf('- name: Verify bundled local AI signatures');
     const buildIndex = workflow.indexOf('- name: Package Windows installers with VMP signing');
     const inventoryIndex = workflow.indexOf('- name: Require exactly the expected Windows executables');
     const signingIndex = workflow.indexOf('- name: Sign binaries with Azure Trusted Signing');
@@ -101,9 +102,11 @@ describe('GitHub release auto-update flow', () => {
 
     expect(setupIndex).toBeGreaterThan(-1);
     expect(runtimeIndex).toBeGreaterThan(setupIndex);
-    expect(installerAssetsIndex).toBeGreaterThan(runtimeIndex);
-    expect(desktopBuildIndex).toBeGreaterThan(installerAssetsIndex);
+    expect(desktopBuildIndex).toBeGreaterThan(runtimeIndex);
     expect(buildIndex).toBeGreaterThan(desktopBuildIndex);
+    expect(runtimeSigningIndex).toBeGreaterThan(desktopBuildIndex);
+    expect(runtimeVerifyIndex).toBeGreaterThan(runtimeSigningIndex);
+    expect(buildIndex).toBeGreaterThan(runtimeVerifyIndex);
     expect(inventoryIndex).toBeGreaterThan(buildIndex);
     expect(signingIndex).toBeGreaterThan(inventoryIndex);
     expect(metadataIndex).toBeGreaterThan(signingIndex);
@@ -113,9 +116,13 @@ describe('GitHub release auto-update flow', () => {
     expect(workflow).not.toMatch(/^    env:/m);
     expect(workflow).toContain('persist-credentials: false');
 
-    const dependencyAndTestSteps = workflow.slice(setupIndex, buildIndex);
+    const dependencyAndTestSteps = workflow.slice(setupIndex, runtimeSigningIndex);
     expect(dependencyAndTestSteps).not.toContain('secrets.');
     expect(dependencyAndTestSteps).not.toMatch(/\b(?:AZURE_|EVS_)[A-Z_]+\b/);
+    const runtimeSigningStep = workflow.slice(runtimeSigningIndex, runtimeVerifyIndex);
+    expect(runtimeSigningStep).toContain('Azure/trusted-signing-action@v0.5.1');
+    expect(runtimeSigningStep).toContain('files: ${{ steps.local-ai-signing.outputs.files }}');
+    expect(workflow.slice(runtimeVerifyIndex, buildIndex)).not.toContain('secrets.');
     const buildJob = workflow.slice(workflow.indexOf('\n  windows:'), publishJobIndex);
     expect(buildJob).toContain('contents: read');
     expect(buildJob).not.toContain('contents: write');
@@ -148,7 +155,6 @@ describe('GitHub release auto-update flow', () => {
     const pythonSyntaxIndex = workflow.indexOf('Check Sidekick Python syntax');
     const backendTestIndex = workflow.indexOf('Test Sidekick backend');
     const runtimeIndex = workflow.indexOf('Prepare Python runtime');
-    const installerAssetsIndex = workflow.indexOf('Build installer assets');
     const desktopBuildIndex = workflow.indexOf('Build desktop application');
     const buildIndex = workflow.indexOf('Package Windows installers with VMP signing');
     const signingIndex = workflow.indexOf('Sign binaries with Azure Trusted Signing');
@@ -166,8 +172,7 @@ describe('GitHub release auto-update flow', () => {
     expect(backendTestIndex).toBeGreaterThan(pythonSyntaxIndex);
     expect(backendTestIndex).toBeLessThan(buildIndex);
     expect(runtimeIndex).toBeGreaterThan(backendTestIndex);
-    expect(installerAssetsIndex).toBeGreaterThan(runtimeIndex);
-    expect(desktopBuildIndex).toBeGreaterThan(installerAssetsIndex);
+    expect(desktopBuildIndex).toBeGreaterThan(runtimeIndex);
     expect(buildIndex).toBeGreaterThan(desktopBuildIndex);
     expect(backendTestIndex).toBeLessThan(signingIndex);
     expect(backendTestIndex).toBeLessThan(publishIndex);

@@ -1,0 +1,147 @@
+P004 repaired source build, 2026-10-11.
+Enter snapshot at 501 ms: composer empty.
+First controlled MiMo reply observed: MIMO READY.
+No Refresh/internal stream ID button or Working chat browser block during plain response.
+Window: "Lastbrowser", App: electron.exe.
+	0 pane Lastbrowser Secondary Actions: Raise
+		9 document Lastbrowser Value: app://bundle/index.html ID: 306336
+			18 banner
+				19 button Toggle sidebar
+					20 image
+				21 button Back
+					22 image
+				23 button Forward
+					24 image
+				25 button Reload
+					26 image
+				27 button Zurück zum Web
+					28 image
+				29 text Chat
+				30 button Summarize
+					31 image
+				32 tool bar Contextual quick actions
+					33 button ⚡ TL;DR
+				34 button Adblock and privacy shield statistics
+					35 image
+				36 button Find in page
+					37 image
+				38 button Cursor magnifier
+					39 image
+				40 button Downloads
+					41 image
+				42 button Extensions and add-ons
+					43 image
+				44 button Report a problem / GitHub issues
+					45 image
+				46 button Toggle Nova AI (70/30 split view)
+				47 button Minimize
+					48 image
+				49 button Maximize
+					50 image
+				51 button Close
+					52 image
+			53 complementary
+				54 menu item H Home
+					55 text H
+					56 text Home
+					57 image
+				58 button Toggle sidebar (Ctrl+B)
+					59 image
+				125 button (disabled) Sidebar sections: Back
+				60 tab Sidebar sections
+					61 tab item (selectable) Tabs
+						62 image
+					63 tab item (selectable) AI
+						64 image
+					65 tab item (selectable) Flows
+						66 image
+					67 tab item (selectable) Tools
+						68 image
+				126 button Sidebar sections: Next
+				69 region AI and agents
+					70 button + New Chat
+						71 image
+					145 text RECENT SESSIONS
+					146 button P004-FIX-MIMO-1. Remember amber. Rep…
+						147 image
+					148 button hi
+						149 image
+					150 button P004-SC-155-1. Remember amber. Reply only SC READY. No tools.
+						151 image
+					152 button A033 standard chat MiMo smoke. Remem…
+						153 image
+					154 button VM-TEAMWORK-UI-046: Nenne gemeinsam …
+						155 image
+					72 text NOVA AI AND AGENTS
+					73 button Nova Chat AI Conversation & Prompts
+						74 text Nova Chat
+						75 text AI Conversation & Prompts
+					76 button Sub-Agents Specialized Agent Fleet
+						77 text Sub-Agents
+						78 text Specialized Agent Fleet
+					79 button Agent Skills Abilities & MCP Tools
+						80 text Agent Skills
+						81 text Abilities & MCP Tools
+					82 button Supermemory Long-term Memory & Facts
+						83 text Supermemory
+						84 text Long-term Memory & Facts
+					85 button Agent Profiles Model & System Profiles
+						86 text Agent Profiles
+						87 text Model & System Profiles
+				88 button Settings
+					89 image
+				90 button Focus Mode
+					91 image
+			92 text 7C1898A2
+			93 button New chat
+				94 image
+			95 button Compress
+				96 image
+			97 button Settings
+				98 image
+			99 button Developer API tools
+				100 image
+			101 text ONLINE
+			160 document
+				161 image
+				162 text You
+				649 text P004-FIX-MIMO-1. Remember amber. Reply only MIMO READY. Do not use tools.
+			164 document
+				165 text Sidekick
+				650 text MIMO READY
+				397 button Reasoning
+				398 button Compact tool activity · 0
+					399 text Compact tool activity
+					400 text ·
+					401 text 0
+			105 button Chat commands
+			106 button Action
+				107 image
+			108 button Plan
+				109 image
+			110 button @tabs
+				111 image
+			112 image
+			113 combo box (settable, string) Model: mimo-v2.6-flash Value: Mimo V2.6 Flash · Beta · untested · Xiaomi
+			114 status Beta · untested · Xiaomi · mimo-v2.6-flash · default / default
+				115 text Beta · untested
+			116 button Choose model manually
+			117 button Reasoning depth
+			120 edit (settable, string) Message Sidekick... Value: P004-FIX-MIMO-2. What word did I ask you to remember? Reply with a two-item Markdown list, then a fenced Python block containing print("ok"). No tools.
+			121 button Send
+				432 image
+			123 text default
+			124 text workspace
+			158 button 4,858
+				159 image
+		2 pane
+			3 pane
+				4 pane
+					5 pane
+						6 pane
+							7 pane
+							8 pane
+
+Document text: ```
+Sidekick MIMO READY  Reasoning  Compact tool activity · 0
+```

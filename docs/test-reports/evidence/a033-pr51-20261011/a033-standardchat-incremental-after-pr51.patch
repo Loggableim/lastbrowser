@@ -1,0 +1,473 @@
+diff --git a/apps/desktop/src/renderer/App.tsx b/apps/desktop/src/renderer/App.tsx
+index a1209b4..42374d8 100644
+--- a/apps/desktop/src/renderer/App.tsx
++++ b/apps/desktop/src/renderer/App.tsx
+@@ -4238,6 +4238,9 @@ function AppContent(): JSX.Element {
+     if (!virtualChoice && (activeChoice.changed || preferredSelection.migratedFromMultiAgent)) setQuickChatStatusForScope(capturedScopeKey,
+       t('settings.panels.providers.activeModelFallback'));
+     quickChatBusyRef.current = true;
++    // Catalog preflight is complete; the busy lock now owns this turn.
++    // Leaving the temporary pending lock set silently rejects every follow-up.
++    quickChatStopPendingRef.current = false;
+     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
+     quickChatErrorScopeKeyRef.current = capturedScopeKey;
+     setQuickChatBusy(true);
+@@ -4307,6 +4310,7 @@ function AppContent(): JSX.Element {
+     }
+     const generation = quickChatGenerationRef.current;
+     quickChatStoppedStreamIdRef.current = binding.streamId;
++    quickChatStopPendingRef.current = true;
+     quickChatBusyRef.current = false;
+     setQuickChatBusy(false);
+     const bindingScopeKey = quickChatBindingScopeKeyRef.current;
+diff --git a/apps/desktop/src/renderer/chat-live-stream.ts b/apps/desktop/src/renderer/chat-live-stream.ts
+index 6e2ed6c..c472756 100644
+--- a/apps/desktop/src/renderer/chat-live-stream.ts
++++ b/apps/desktop/src/renderer/chat-live-stream.ts
+@@ -284,7 +284,8 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
+ export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[], streamId?: string): T[] {
+   return messages.map((message) => {
+     if (!(message.pending || message.streaming || message.progress) || streamId && message.chatStreamId !== streamId) return message;
+-    return { ...message, pending: false, streaming: false, progress: undefined };
++    return { ...message, content: message.content === 'Working on it...' ? '' : message.content,
++      pending: false, streaming: false, progress: undefined };
+   });
+ }
+ 
+diff --git a/apps/desktop/src/renderer/guarded-native-chat-start.ts b/apps/desktop/src/renderer/guarded-native-chat-start.ts
+index fa6bd83..cc94139 100644
+--- a/apps/desktop/src/renderer/guarded-native-chat-start.ts
++++ b/apps/desktop/src/renderer/guarded-native-chat-start.ts
+@@ -28,7 +28,7 @@ export type NativeChatStartPayload = Readonly<{
+   modelProvider?: string;
+   profile: string;
+   workspace: string;
+-  backendProfileName: string;
++  backendProfileName?: string;
+   reasoningEffort?: string;
+   groundingContext?: TeamworkGroundingContext;
+ }>;
+@@ -112,7 +112,7 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
+       modelProvider: input.selection.provider || undefined,
+       profile: input.captured.profileId,
+       workspace: input.captured.spacePath,
+-      backendProfileName: input.captured.backendProfileName,
++      ...(input.captured.backendProfileName ? { backendProfileName: input.captured.backendProfileName } : {}),
+       ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
+       ...(input.groundingContext ? { groundingContext: input.groundingContext } : {}),
+     },
+diff --git a/apps/desktop/tests/chat-completion.test.ts b/apps/desktop/tests/chat-completion.test.ts
+index 9e239a3..697feb1 100644
+--- a/apps/desktop/tests/chat-completion.test.ts
++++ b/apps/desktop/tests/chat-completion.test.ts
+@@ -298,7 +298,7 @@ describe('native chat completion signals', () => {
+       pending: false,
+     });
+     expect(finishLiveChatMessage(withProgress)[0]).toMatchObject({
+-      content: 'Working on it...',
++      content: '',
+       progress: undefined,
+       pending: false,
+     });
+@@ -307,7 +307,7 @@ describe('native chat completion signals', () => {
+   it('clears a pending placeholder when a stream terminates before any visible output', () => {
+     const initial = [{ id: 'assistant-1', role: 'assistant' as const, content: 'Working on it...', pending: true }];
+     expect(finishLiveChatMessage(initial)[0]).toMatchObject({
+-      content: 'Working on it...',
++      content: '',
+       pending: false,
+       streaming: false,
+       progress: undefined,
+diff --git a/apps/desktop/tests/guarded-native-chat-start.test.ts b/apps/desktop/tests/guarded-native-chat-start.test.ts
+index b5da92f..3d12cbc 100644
+--- a/apps/desktop/tests/guarded-native-chat-start.test.ts
++++ b/apps/desktop/tests/guarded-native-chat-start.test.ts
+@@ -29,6 +29,18 @@ function input(storage: Storage, overrides: Partial<GuardedNativeChatStartInput>
+ }
+ 
+ describe('guarded native chat start', () => {
++  it('omits an unresolved backend profile hint rather than sending an invalid empty name', async () => {
++    const storage = memoryStorage();
++    const request = input(storage, { allowUntestedBetas: true,
++      captured: { sessionId: 'session-a', profileId: 'profile-a', spacePath: '', backendProfileName: '' },
++      current: { sessionId: 'session-a', profileId: 'profile-a', spacePath: '', backendProfileName: '' },
++    });
++    const result = await startGuardedNativeChat(request, async payload => {
++      expect(payload).not.toHaveProperty('backendProfileName');
++      return { sessionId: 'session-a', streamId: 'stream-a' };
++    });
++    expect(result.ok).toBe(true);
++  });
+   beforeEach(() => setProviderChatEvidenceRuntime('runtime-test', 'build-test'));
+ 
+   it('does not dispatch an unqualified model before opt-in or after opt-out', async () => {
+diff --git a/services/sidekick/cli/codex_models.py b/services/sidekick/cli/codex_models.py
+index 8a41a7f..7c72ee4 100644
+--- a/services/sidekick/cli/codex_models.py
++++ b/services/sidekick/cli/codex_models.py
+@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
+ _SUPPORTED_API_REASONING_EFFORTS = {"none", "minimal", "low", "medium", "high", "xhigh", "max"}
+ _MODEL_REASONING_EFFORTS: dict[str, list[str]] = {}
+ _MODEL_REASONING_SOURCES: dict[str, str] = {}
++_MODEL_CONTEXT_LENGTHS: dict[str, int] = {}
+ # Exact, officially documented models only. This is capability metadata,
+ # never evidence of account entitlement or successful OAuth inference.
+ # https://developers.openai.com/api/docs/models/gpt-5.3-codex
+@@ -91,6 +92,30 @@ def get_codex_model_reasoning_efforts(model_id: str) -> list[str]:
+     """Return model-specific effort levels without provider/network requests."""
+     return get_codex_model_reasoning_metadata(model_id)[0]
+ 
++
++def get_codex_model_context_length(model_id: str) -> Optional[int]:
++    """Read exact OAuth catalog metadata; never substitute OpenAI API limits."""
++    model = str(model_id or "").strip()
++    prefix = "@openai-codex:"
++    if model.startswith(prefix):
++        model = model[len(prefix):]
++    if not model or model.startswith("@"):
++        return None
++    if model in _MODEL_CONTEXT_LENGTHS:
++        return _MODEL_CONTEXT_LENGTHS[model]
++    codex_home = os.getenv("CODEX_HOME", "").strip() or str(Path.home() / ".codex")
++    try:
++        raw = json.loads((Path(codex_home).expanduser() / "models_cache.json").read_text(encoding="utf-8"))
++    except (OSError, ValueError):
++        return None
++    entries = raw.get("models") if isinstance(raw, dict) else None
++    for entry in entries if isinstance(entries, list) else []:
++        if not isinstance(entry, dict) or entry.get("slug") != model:
++            continue
++        length = entry.get("context_window")
++        return length if type(length) is int and 1 <= length <= 16000000 else None
++    return None
++
+ DEFAULT_CODEX_MODELS: List[str] = [
+     "gpt-5.5",
+     "gpt-5.4-mini",
+@@ -153,6 +178,7 @@ def _fetch_models_from_api(access_token: str) -> List[str]:
+ 
+     sortable = []
+     discovered_efforts: dict[str, list[str]] = {}
++    discovered_contexts: dict[str, int] = {}
+     for item in entries:
+         if not isinstance(item, dict):
+             continue
+@@ -170,6 +196,9 @@ def _fetch_models_from_api(access_token: str) -> List[str]:
+         priority = item.get("priority")
+         rank = int(priority) if isinstance(priority, (int, float)) else 10_000
+         sortable.append((rank, slug))
++        context = item.get("context_window")
++        if type(context) is int and 1 <= context <= 16000000:
++            discovered_contexts[slug] = context
+         efforts = _read_supported_reasoning_levels(item)
+         if isinstance(item.get('supported_reasoning_levels'), list):
+             discovered_efforts[_reasoning_model_id(slug)] = efforts
+@@ -179,6 +208,8 @@ def _fetch_models_from_api(access_token: str) -> List[str]:
+     _MODEL_REASONING_EFFORTS.update(discovered_efforts)
+     _MODEL_REASONING_SOURCES.clear()
+     _MODEL_REASONING_SOURCES.update({model: 'live_catalog' for model in discovered_efforts})
++    _MODEL_CONTEXT_LENGTHS.clear()
++    _MODEL_CONTEXT_LENGTHS.update(discovered_contexts)
+     return _add_forward_compat_models([slug for _, slug in sortable])
+ 
+ 
+diff --git a/services/sidekick/cli/models.py b/services/sidekick/cli/models.py
+index 65e74fd..eb5629f 100644
+--- a/services/sidekick/cli/models.py
++++ b/services/sidekick/cli/models.py
+@@ -1442,9 +1442,11 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False)
+         # or the endpoint is unreachable.
+         access_token = None
+         try:
+-            from cli.auth import resolve_codex_runtime_credentials
++            from cli.runtime_provider import resolve_runtime_provider
+ 
+-            creds = resolve_codex_runtime_credentials(refresh_if_expiring=True)
++            # Match inference: connected profile pools take precedence over
++            # the legacy auth store. Never consult another profile's store.
++            creds = resolve_runtime_provider(requested="openai-codex")
+             access_token = creds.get("api_key")
+         except Exception:
+             access_token = None
+diff --git a/services/sidekick/runtime/independent/capabilities.py b/services/sidekick/runtime/independent/capabilities.py
+index c84cf09..1790cc3 100644
+--- a/services/sidekick/runtime/independent/capabilities.py
++++ b/services/sidekick/runtime/independent/capabilities.py
+@@ -117,7 +117,7 @@ class CapabilityService:
+             self._cache = manager._capability_evidence
+         self._lock = manager._lock
+ 
+-    def catalog(self, scope: Scope, *, refresh: bool = False) -> dict[str, Any]:
++    def catalog(self, scope: Scope, *, refresh: bool = False, discovered_catalog: dict | None = None) -> dict[str, Any]:
+         resolved = self.manager.resolver.resolve(scope)
+         fingerprint = evidence_digest(resolved.profile_home)
+         with self._lock:
+@@ -129,7 +129,8 @@ class CapabilityService:
+         if cached_catalog is not None:
+             return self._with_browser_entries(scope, cached_catalog)
+         from .scoped_models import probe_catalog
+-        raw = probe_catalog(self.manager, scope, resolved=resolved, include_capabilities=True)
++        raw = discovered_catalog if discovered_catalog is not None else probe_catalog(
++            self.manager, scope, resolved=resolved, include_capabilities=True)
+         inventory = raw.get("capabilityInventory") or {}
+         if inventory.get("evidenceDigest") != fingerprint or evidence_digest(resolved.profile_home) != fingerprint:
+             raise PolicyDenied("capability_configuration_changed")
+diff --git a/services/sidekick/runtime/independent/native_sdk_broker.py b/services/sidekick/runtime/independent/native_sdk_broker.py
+index cdf4b42..3b1e826 100644
+--- a/services/sidekick/runtime/independent/native_sdk_broker.py
++++ b/services/sidekick/runtime/independent/native_sdk_broker.py
+@@ -120,7 +120,7 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
+     if not model or not provider or (not native_sdk_supported(provider)
+             and not (provider == "antigravity" and antigravity_binding is not None)):
+         raise PolicyDenied("native_fixed_sdk_adapter_unavailable")
+-    catalog = probe_catalog(service.manager, scope, resolved=resolved, include_capabilities=False)
++    catalog = probe_catalog(service.manager, scope, resolved=resolved, include_capabilities=True)
+     group, entry = _entry(catalog, model, provider)
+     if not group or group.get("configured") is not True or not entry or entry.get("supportsIndependent") is not True:
+         raise PolicyDenied("native_fixed_model_not_in_bound_catalog")
+@@ -129,7 +129,7 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
+         raise PolicyDenied("context_metadata_required")
+     selected = ProviderSelection(provider=provider, model=model, provider_config_ref=catalog["providerConfigurationDigest"], context_length=length)
+     capabilities = service.manager.capabilities
+-    capabilities.catalog(scope, refresh=True)
++    capabilities.catalog(scope, refresh=True, discovered_catalog=catalog)
+     # A fixed UI-selected native call can use its explicit own-profile legacy
+     # configuration. Existing confirmed bindings are captured, never minted.
+     refs = tuple(capabilities.capture_provider(scope, selected, purpose="conversation"))
+diff --git a/services/sidekick/runtime/independent/runner.py b/services/sidekick/runtime/independent/runner.py
+index 22c8fa6..14060bd 100644
+--- a/services/sidekick/runtime/independent/runner.py
++++ b/services/sidekick/runtime/independent/runner.py
+@@ -432,6 +432,19 @@ def run_agent(context: RunContext, payload: dict[str, Any], channel: ParentChann
+             "messages": result.get("messages", []), "interrupted": bool(result.get("interrupted"))}
+ 
+ 
++def discover_public_model_catalog(context, *, include_capabilities=False):
++    """Keep connection evidence identical for picker and fixed-inference probes."""
++    from web.api.config import get_available_models, get_config
++    from web.api.providers import get_providers
++    from .scoped_models import public_catalog
++    configuration = get_config()
++    result = public_catalog(get_available_models(), get_providers(), configuration)
++    if include_capabilities:
++        from .capabilities import public_inventory
++        result["capabilityInventory"] = public_inventory(context, configuration)
++    return result
++
++
+ def main() -> int:
+     # -I ignores PYTHONIOENCODING/PYTHONUTF8. Windows redirected pipes
+     # otherwise use the local code page while the parent protocol is UTF-8.
+@@ -460,16 +473,8 @@ def main() -> int:
+                 # catalogs without touching parent environment/module caches.
+                 if provider_configuration_digest(Path(context.resolved_profile_home)) != payload.get("providerConfigurationDigest"):
+                     raise PolicyDenied("provider_connection_changed")
+-                from web.api.config import get_available_models, get_config
+-                from .scoped_models import public_catalog
+-                accounts = {}
+-                if payload.get("includeCapabilities") is True:
+-                    from web.api.providers import get_providers
+-                    accounts = get_providers()
+-                result = public_catalog(get_available_models(), accounts, get_config())
+-                if payload.get("includeCapabilities") is True:
+-                    from .capabilities import public_inventory
+-                    result["capabilityInventory"] = public_inventory(context, get_config())
++                result = discover_public_model_catalog(context,
++                    include_capabilities=payload.get("includeCapabilities") is True)
+                 result["providerConfigurationDigest"] = payload["providerConfigurationDigest"]
+                 if provider_configuration_digest(Path(context.resolved_profile_home)) != result["providerConfigurationDigest"]:
+                     raise PolicyDenied("provider_connection_changed")
+diff --git a/services/sidekick/runtime/independent/scoped_models.py b/services/sidekick/runtime/independent/scoped_models.py
+index 229a247..b76923b 100644
+--- a/services/sidekick/runtime/independent/scoped_models.py
++++ b/services/sidekick/runtime/independent/scoped_models.py
+@@ -97,6 +97,17 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
+                 length = model.get("context_length")
+                 if type(length) is not int or not 1 <= length <= 16000000:
+                     length = configured_context_length(configuration, model_id, pid)
++                if length is None and pid == "openai-codex":
++                    from cli.codex_models import get_codex_model_context_length
++                    length = get_codex_model_context_length(model_id)
++                elif length is None:
++                    # Ordinary live discovery often returns only IDs/labels.
++                    # Use exact provider metadata, never a family/default guess.
++                    # Codex OAuth has a distinct catalog from the OpenAI API.
++                    from runtime.models_dev import lookup_models_dev_context
++                    length = lookup_models_dev_context(pid, model_id)
++                    if type(length) is not int or not 1 <= length <= 16000000:
++                        length = None
+                 if length is not None:
+                     clean_model["contextLength"] = length
+                 for source, public in (("supportsVision", "supportsVision"), ("supportsTools", "supportsTools"),
+diff --git a/services/sidekick/tests/test_a033_catalog_context.py b/services/sidekick/tests/test_a033_catalog_context.py
+new file mode 100644
+index 0000000..376e616
+--- /dev/null
++++ b/services/sidekick/tests/test_a033_catalog_context.py
+@@ -0,0 +1,112 @@
++"""Exact context metadata regression; runs without optional pytest tooling."""
++import unittest
++import json
++import tempfile
++from pathlib import Path
++from unittest.mock import patch
++
++from runtime.independent.scoped_models import public_catalog
++
++
++class CatalogContextTests(unittest.TestCase):
++    def test_capability_capture_reuses_probe_but_rejects_stale_evidence(self):
++        import threading
++        from types import SimpleNamespace
++        from runtime.independent.capabilities import CapabilityService
++        from runtime.independent.contracts import Scope, new_id
++        from runtime.independent.policy import PolicyDenied
++        scope = Scope(backend_profile_id=new_id(), space_id=new_id(), browser_profile_id="default")
++        manager = SimpleNamespace(store=None, _lock=threading.RLock(),
++            resolver=SimpleNamespace(resolve=lambda scope: SimpleNamespace(profile_home=Path('.'))))
++        capabilities = CapabilityService(manager)
++        catalog = {"groups": [], "providers": [], "capabilityInventory":
++            {"plugins": [], "mcp": [], "evidenceDigest": "same-fixture"}}
++        with patch("runtime.independent.capabilities.evidence_digest", return_value="same-fixture"), \
++                patch("runtime.independent.scoped_models.probe_catalog") as probe:
++            self.assertIn("entries", capabilities.catalog(scope, refresh=True, discovered_catalog=catalog))
++            probe.assert_not_called()
++        with patch("runtime.independent.capabilities.evidence_digest", return_value="changed-fixture"):
++            with self.assertRaises(PolicyDenied):
++                capabilities.catalog(scope, refresh=True, discovered_catalog=catalog)
++
++    def test_codex_catalog_uses_inference_credential_resolver(self):
++        from cli.models import provider_model_ids
++        with patch("cli.runtime_provider.resolve_runtime_provider", return_value={"api_key": "synthetic-fixture"}) as resolve, \
++                patch("cli.codex_models.get_codex_model_ids", return_value=["gpt-fixture"]) as catalog:
++            self.assertEqual(provider_model_ids("openai-codex"), ["gpt-fixture"])
++            resolve.assert_called_once_with(requested="openai-codex")
++            catalog.assert_called_once_with(access_token="synthetic-fixture")
++
++    def test_codex_live_context_survives_without_host_cache(self):
++        import cli.codex_models as codex
++        response = unittest.mock.Mock()
++        response.status_code = 200
++        response.json.return_value = {"models": [{"slug": "gpt-live-fixture", "context_window": 272000}]}
++        with tempfile.TemporaryDirectory() as home, patch.dict("os.environ", {"CODEX_HOME": home}), \
++                patch("httpx.get", return_value=response), patch.dict(codex._MODEL_CONTEXT_LENGTHS, {}, clear=True):
++            self.assertIn("gpt-live-fixture", codex._fetch_models_from_api("synthetic-fixture"))
++            self.assertEqual(codex.get_codex_model_context_length("gpt-live-fixture"), 272000)
++            self.assertEqual(self.catalog("openai-codex", "gpt-live-fixture")["contextLength"], 272000)
++            self.assertIsNone(codex.get_codex_model_context_length("gpt-unknown-fixture"))
++    def test_fixed_and_picker_probes_keep_same_connection_evidence(self):
++        from runtime.independent.runner import discover_public_model_catalog
++        raw = {"groups": [{"provider_id": "xiaomi", "models": [
++            {"id": "mimo-v2.6-flash", "context_length": 1048576}]}]}
++        accounts = {"providers": [{"id": "xiaomi", "has_key": True}]}
++        with patch("web.api.config.get_available_models", return_value=raw), \
++                patch("web.api.config.get_config", return_value={}), \
++                patch("web.api.providers.get_providers", return_value=accounts), \
++                patch("runtime.independent.capabilities.public_inventory", return_value={}) as inventory:
++            fixed = discover_public_model_catalog(None, include_capabilities=False)
++            inventory.assert_not_called()
++            picker = discover_public_model_catalog(None, include_capabilities=True)
++            self.assertTrue(fixed["groups"][0]["configured"])
++            self.assertEqual(fixed["groups"], picker["groups"])
++            self.assertNotIn("capabilityInventory", fixed)
++            self.assertIn("capabilityInventory", picker)
++
++    def catalog(self, provider="xiaomi", model="mimo-v2.6-flash", configuration=None):
++        return public_catalog({"groups": [{"provider_id": provider,
++            "models": [{"id": model}]}]}, {}, configuration or {})["groups"][0]["models"][0]
++
++    @patch("runtime.models_dev.lookup_models_dev_context", return_value=1048576)
++    def test_live_id_only_catalog_retains_exact_context(self, lookup):
++        row = self.catalog(model="@xiaomi:mimo-v2.6-flash")
++        self.assertEqual(row["contextLength"], 1048576)
++        lookup.assert_called_once_with("xiaomi", "mimo-v2.6-flash")
++
++    @patch("runtime.models_dev.lookup_models_dev_context", return_value=None)
++    def test_unknown_context_stays_unknown(self, lookup):
++        self.assertNotIn("contextLength", self.catalog(model="unknown-fixture"))
++
++    @patch("runtime.models_dev.lookup_models_dev_context", return_value=True)
++    def test_invalid_metadata_is_rejected(self, lookup):
++        self.assertNotIn("contextLength", self.catalog())
++
++    @patch("runtime.models_dev.lookup_models_dev_context", return_value=1048576)
++    def test_explicit_context_wins(self, lookup):
++        row = self.catalog(configuration={"model": {"provider": "xiaomi",
++            "default": "mimo-v2.6-flash", "context_length": 131072}})
++        self.assertEqual(row["contextLength"], 131072)
++        lookup.assert_not_called()
++
++    @patch("runtime.models_dev.lookup_models_dev_context", return_value=1050000)
++    def test_codex_does_not_inherit_direct_api_context(self, lookup):
++        with patch("cli.codex_models.get_codex_model_context_length", return_value=None):
++            self.assertNotIn("contextLength", self.catalog("openai-codex", "unknown-fixture"))
++        lookup.assert_not_called()
++
++    def test_codex_exact_local_context_and_unknown_model(self):
++        from cli.codex_models import get_codex_model_context_length
++        with tempfile.TemporaryDirectory() as home, patch.dict("os.environ", {"CODEX_HOME": home}):
++            Path(home, "models_cache.json").write_text(json.dumps({"models": [
++                {"slug": "gpt-fixture", "context_window": 272000},
++                {"slug": "invalid-fixture", "context_window": True}]}), encoding="utf-8")
++            self.assertEqual(get_codex_model_context_length("@openai-codex:gpt-fixture"), 272000)
++            self.assertIsNone(get_codex_model_context_length("gpt-fixture-new"))
++            self.assertIsNone(get_codex_model_context_length("invalid-fixture"))
++            self.assertEqual(self.catalog("openai-codex", "gpt-fixture")["contextLength"], 272000)
++
++
++if __name__ == "__main__":
++    unittest.main()
+diff --git a/services/sidekick/web/api/config.py b/services/sidekick/web/api/config.py
+index 74881d9..3358ea6 100644
+--- a/services/sidekick/web/api/config.py
++++ b/services/sidekick/web/api/config.py
+@@ -2052,6 +2052,14 @@ def _annotate_model_reasoning_efforts(groups):
+         if not isinstance(group, dict):
+             continue
+         provider = group.get("provider_id") or group.get("provider")
++        if _normalize_reasoning_provider(provider) == 'openai-codex':
++            from cli.codex_models import get_codex_model_context_length
++            codex_entries = [entry for bucket in ('models', 'extra_models')
++                for entry in (group.get(bucket) or []) if isinstance(entry, dict)]
++            for entry in codex_entries:
++                length = get_codex_model_context_length(entry.get('id'))
++                if length is not None:
++                    entry['context_length'] = length
+         for bucket in ("models", "extra_models"):
+             entries = group.get(bucket)
+             if not isinstance(entries, list):
+@@ -2448,7 +2456,9 @@ def _current_webui_version() -> str | None:
+ # guarantees that even if a future release accidentally reuses the same
+ # WebUI version string (or a debug build doesn't have a version), a structural
+ # change still invalidates the cache.
+-_MODELS_CACHE_SCHEMA_VERSION = 5
++# OAuth context metadata is required by native admission; old ID-only disk
++# catalogs must rebuild once through profile-bound discovery.
++_MODELS_CACHE_SCHEMA_VERSION = 6
+ 
+ 
+ _models_cache_path = STATE_DIR / "models_cache.json"
+@@ -4179,9 +4189,9 @@ def get_available_models() -> dict:
+                     raw_models = []
+                     codex_ids = []
+                     try:
+-                        from cli.codex_models import get_codex_model_ids
++                        from cli.models import provider_model_ids
+ 
+-                        codex_ids = [mid for mid in (get_codex_model_ids(access_token=None) or []) if mid]
++                        codex_ids = [mid for mid in (provider_model_ids("openai-codex") or []) if mid]
+                     except Exception:
+                         logger.warning("Failed to load OpenAI Codex models from local cache")
+ 
+@@ -4189,8 +4199,10 @@ def get_available_models() -> dict:
+                         if mid not in codex_ids:
+                             codex_ids.append(mid)
+ 
++                    from cli.codex_models import get_codex_model_context_length
+                     raw_models = [
+-                        {"id": mid, "label": _get_label_for_model(mid, [])}
++                        {"id": mid, "label": _get_label_for_model(mid, []),
++                         **({"context_length": length} if (length := get_codex_model_context_length(mid)) is not None else {})}
+                         for mid in codex_ids
+                     ]
+ 

@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "version": "0.1.55",
+  "sourceCommit": "04593080169462375cfa6209bcb70e148ad242d8",
+  "createdAtUtc": "2026-10-12T06:41:25.2319999Z",
+  "buildKind": "local Certum signed release",
+  "artifacts": [
+    {
+      "name": "Lastbrowser-0.1.55-x64-setup.exe",
+      "bytes": 167267992,
+      "sha256": "0b827dd9069edd74aab5c457422483c82ed4f57a4b18bb2648affa94556897f2"
+    },
+    {
+      "name": "Lastbrowser-0.1.55-x64-portable.exe",
+      "bytes": 166904592,
+      "sha256": "fb62b810fdab8a46cc7ca8861ee1e9b2caeb13ee2efcd8000a8d5f101faf8aa6"
+    },
+    {
+      "name": "Lastbrowser-0.1.55-x64-setup.exe.blockmap",
+      "bytes": 167608,
+      "sha256": "63964a9f2e765362a4765c025e8d5d38eb0d0a524d7cfdb5173853ebf66cae3c"
+    },
+    {
+      "name": "latest.yml",
+      "bytes": 528,
+      "sha256": "d9d568ee703a1bb1fcaf32dbcadd941d82f597da09839ea9c5f9c873d530897d"
+    }
+  ],
+  "authenticode": {
+    "checkedFiles": 119,
+    "failedFiles": 0,
+    "setupAndPayloadTimestamped": true,
+    "portableValidAndTimestamped": true
+  },
+  "widevineVmp": "verify-pkg passed",
+  "packagedIntegration": "28/28 local mock checks passed",
+  "storePreflight": "40 PASS, 1 WARN, 0 FAIL",
+  "priorVmAcceptance": "NOT ACCEPTED",
+  "knownIssue": "Prior unsigned VM candidate showed black client area at first startup until Ctrl+R; not reverified on this artifact",
+  "latency": "No comparable end-to-end improvement established",
+  "publicationStatusAtReceiptCreation": "draft"
+}

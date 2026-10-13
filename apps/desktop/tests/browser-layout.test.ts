@@ -236,7 +236,7 @@ describe('browser shell layout', () => {
     expect(source).toContain('<NativeMemoryMain');
     expect(source).toContain('<NativeInsightsMain');
     expect(source).toContain('<NativeLogsMain');
-    expect(source).toContain('<NativeGmailMain');
+    expect(source).toContain('<NativeMailMain');
     expect(source).toContain('<NativeDiscordMain');
     expect(source).toContain('<NativeAppstoreMain');
     expect(source).toContain('<NativeSettingsMain');
@@ -327,6 +327,7 @@ describe('browser shell layout', () => {
     const source = readRendererFile('App.tsx');
     const restPanels = [
       readRendererFile('panels/AgentPanels.tsx'),
+      readRendererFile('panels/memory-panel-state.ts'),
       readRendererFile('panels/IntegrationPanels.tsx'),
       readRendererFile('panels/SystemPanels.tsx')
     ].join('\n');
@@ -370,10 +371,10 @@ describe('browser shell layout', () => {
     expect(source).toContain('<NativeProfilesMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeMemoryMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeLogsMain activeContextItem={activeContextItem}');
-    expect(source).toContain('<NativeGmailMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeMailMain workspace={activeSpacePath}');
     expect(source).toContain('<NativeDiscordMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeAppstoreMain');
-    expect(source).toContain('<NativeSettingsMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeSettingsMain workspacePath={activeSpacePath} activeContextItem={activeContextItem}');
     expect(restPanels).toContain('agent-terminal');
     expect(restPanels).toContain('memory-editor');
     expect(restPanels).toContain('skill-linked-files');

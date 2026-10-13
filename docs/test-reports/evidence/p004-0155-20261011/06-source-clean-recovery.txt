@@ -1,0 +1,182 @@
+Repaired source build10,2026-10-11.
+Fresh synthetic session024ddcda151e. Stop confirmed active=false,pending=false.
+Recovery reply CLEAN RECOVERY. Saved display:2users,1assistant,0Workspace::v1markers,0combinedSTOP+RECOVERYblocks.
+Quickchat MiMo firstturn accepted,composeremptywhileStopvisible.
+Window: "Lastbrowser", App: electron.exe.
+	0 pane Lastbrowser Secondary Actions: Raise
+		10 document Lastbrowser Value: app://bundle/index.html ID: 302112
+			13 banner
+				14 button Toggle sidebar
+					15 image
+				16 button Back
+					17 image
+				18 button Forward
+					19 image
+				20 button Reload
+					21 image
+				22 button Zurück zum Web
+					23 image
+				24 text Chat
+				25 button Summarize
+					26 image
+				27 tool bar Contextual quick actions
+					28 button ⚡ TL;DR
+				29 button Adblock and privacy shield statistics
+					30 image
+				31 button Find in page
+					32 image
+				33 button Cursor magnifier
+					34 image
+				35 button Downloads
+					36 image
+				37 button Extensions and add-ons
+					38 image
+				39 button Report a problem / GitHub issues
+					40 image
+				41 button Toggle Nova AI (70/30 split view)
+				42 button Minimize
+					43 image
+				44 button Maximize
+					45 image
+				46 button Close
+					47 image
+			48 complementary
+				49 menu item H Home
+					50 text H
+					51 text Home
+					52 image
+				53 button Toggle sidebar (Ctrl+B)
+					54 image
+				124 button (disabled) Sidebar sections: Back
+				55 tab Sidebar sections
+					56 tab item (selectable) Tabs
+						57 image
+					58 tab item (selectable) AI
+						59 image
+					60 tab item (selectable) Flows
+						61 image
+					62 tab item (selectable) Tools
+						63 image
+				125 button Sidebar sections: Next
+				64 region AI and agents
+					65 button + New Chat
+						66 image
+					757 text RECENT SESSIONS
+					768 button P004-FIX2-STOP. Write 100 numbered l…
+						769 image
+					758 button P004-FIX-MIMO-1. Remember amber. Rep…
+						759 image
+					760 button hi
+						761 image
+					762 button P004-SC-155-1. Remember amber. Reply only SC READY. No tools.
+						763 image
+					764 button A033 standard chat MiMo smoke. Remem…
+						765 image
+					67 text NOVA AI AND AGENTS
+					68 button Nova Chat AI Conversation & Prompts
+						69 text Nova Chat
+						70 text AI Conversation & Prompts
+					71 button Sub-Agents Specialized Agent Fleet
+						72 text Sub-Agents
+						73 text Specialized Agent Fleet
+					74 button Agent Skills Abilities & MCP Tools
+						75 text Agent Skills
+						76 text Abilities & MCP Tools
+					77 button Supermemory Long-term Memory & Facts
+						78 text Supermemory
+						79 text Long-term Memory & Facts
+					80 button Agent Profiles Model & System Profiles
+						81 text Agent Profiles
+						82 text Model & System Profiles
+				83 button Settings
+					84 image
+				85 button Focus Mode
+					86 image
+			87 text 024DDCDA
+			88 button New chat
+				89 image
+			90 button Compress
+				91 image
+			92 button Settings
+				93 image
+			94 button Developer API tools
+				95 image
+			96 text ONLINE
+			774 document
+				775 image
+				776 text You
+				2062 text P004-FIX2-STOP. Write 100 numbered lines about colors. No tools.
+			895 document
+				896 image
+				897 text You
+				2063 text P004-FIX2-RECOVERY. Reply only CLEAN RECOVERY. No tools.
+			899 document
+				900 text Sidekick
+				2064 text CLEAN RECOVERY
+				1079 button Reasoning
+				1080 button Compact tool activity · 0
+					1081 text Compact tool activity
+					1082 text ·
+					1083 text 0
+			100 button Chat commands
+			101 button Action
+				102 image
+			103 button Plan
+				104 image
+			105 button @tabs
+				106 image
+			107 image
+			108 combo box (settable, string) Model: gpt-5.6-luna Value: gpt-5.6-luna · Beta · untested · OpenAI Codex
+			109 status Beta · untested · OpenAI Codex · gpt-5.6-luna · default / default
+				110 text Beta · untested
+			111 button Choose model manually
+			112 button Reasoning depth
+			115 edit (settable, string) Message Sidekick...
+			116 button (disabled) Send
+				1099 image
+			118 text default
+			119 text workspace
+			772 button 4,936
+				773 image
+			1223 complementary Nova AI Workspace
+				1224 text Nova
+				1225 text AI
+				1226 menu item KI-Modell auswählen
+					1227 image
+					1228 text Mimo V2.6 Flash
+					1229 image
+				1230 button Add
+					1231 image
+				1232 button Close
+					1233 image
+				2065 text P004-FIX2-QC-MIMO-1. Remember teal. Reply only QC READY. No tools.
+				2066 text Working on it...
+				2054 button Nachricht kopieren
+					2055 image
+				2056 button Gute Antwort (Upvote)
+					2057 image
+				2058 button Problem melden (Feedback)
+					2059 image
+				2060 image
+				1239 text Modell:
+				1240 button KI-Modell auswählen
+					1241 text Mimo V2.6 Flash
+					1242 image
+				1919 text Reasoning depth
+				1243 combo box (disabled, settable, string) Reasoning depth Value: Reasoning levels are missing from this model catalog. Reload the model list.
+				1244 button Tonalität & Prompts
+					1245 image
+				1246 edit (disabled, settable, string) Message Sidekick...
+				1247 button Stop
+					2061 image
+		2 pane
+			3 pane
+				4 pane
+					5 pane
+						6 pane
+							7 pane
+							8 pane
+
+Document text: ```
+Sidekick CLEAN RECOVERY  Reasoning  Compact tool activity · 0
+```

@@ -48,12 +48,12 @@ win:
 nsis:
   artifactName: Lastbrowser-${version}-${arch}-setup.${ext}
   include: build/installer.nsh
-  installerHeader: build/installerHeader.bmp
-  installerSidebar: build/installerSidebar.bmp
-  uninstallerSidebar: build/installerSidebar.bmp
-  oneClick: false
+  oneClick: true
+  runAfterFinish: true
+  installerHeaderIcon: build/icon.ico
+  installerLanguages: [en_US, de_DE]
+  language: "1033"
   perMachine: false
-  allowToChangeInstallationDirectory: true
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Lastbrowser

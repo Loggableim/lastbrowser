@@ -397,6 +397,8 @@ class SupermemoryEngine:
 
         for score, item in scored_results[:limit]:
             norm_score = max(0.0, min(1.0, float(score)))
+            if norm_score == 0.0:
+                continue
             item["score"] = round(norm_score, 4)
             results.append(item)
 

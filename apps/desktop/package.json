@@ -20,6 +20,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "smoke:browser": "node scripts/smoke-browser.mjs",
+    "smoke:linux:fresh-profile": "node scripts/smoke-linux-fresh-profile.mjs",
     "sync:sidekick": "node -e \"console.log('[sync:sidekick] Sidekick is integrated directly in-tree.')\"",
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
     "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",

@@ -102,6 +102,24 @@ describe('sidecar service layout', () => {
     }
   });
 
+  it('uses the packaged Linux venv even if the launching shell exports system Python', () => {
+    const resourcesRoot = mkdtempResourceRoot();
+    const python3 = path.join(resourcesRoot, 'runtime', 'python', 'python3');
+    mkdirSync(path.dirname(python3), { recursive: true });
+    writeFileSync(python3, '#!/bin/sh\n');
+    try {
+      const layout = resolveServiceLayout(resourcesRoot, undefined, {
+        LASTBROWSER_WEBUI_PYTHON: '/usr/bin/python3'
+      }, 'linux', true);
+      expect(layout.pythonExe).toBe(python3);
+      expect(() => resolveServiceLayout(path.join(resourcesRoot, 'missing'), undefined, {
+        LASTBROWSER_WEBUI_PYTHON: '/usr/bin/python3'
+      }, 'linux', true)).toThrow(/Packaged Linux Sidekick runtime is missing/);
+    } finally {
+      rmSync(resourcesRoot, { recursive: true, force: true });
+    }
+  });
+
   it('respects an explicit public Python override for development and portable installs', () => {
     const layout = resolveServiceLayout('D:/Lastbrowser/resources', undefined, {
       LASTBROWSER_WEBUI_PYTHON: 'D:/Portable/Python/python.exe'

@@ -13,6 +13,7 @@ export type ProviderDeployment = 'local' | 'cloud' | 'remote' | 'unknown';
 export function providerDeployment(providerId: string, endpoint?: string, deployment?: string): ProviderDeployment {
   const id = providerId.trim().toLowerCase().replace(/[_\s]+/g, '-');
   if (id === 'ollama-cloud') return 'cloud';
+  if (id === 'local-store') return 'local';
   if (endpoint) {
     try {
       const url = new URL(endpoint);
@@ -34,6 +35,7 @@ export function providerHostingLabel(providerId: string, fallback: string, deplo
   const id = providerId.trim().toLowerCase().replace(/[_\s]+/g, '-');
   const hosting = providerDeployment(id, undefined, deployment);
   if (id === 'ollama-cloud') return 'Ollama Cloud';
+  if (id === 'local-store') return 'LastBrowser Local AI · Local';
   const brand = id === 'ollama' ? 'Ollama' : ['localai', 'local-ai'].includes(id) ? 'LocalAI' : fallback;
   if (['ollama', 'localai', 'local-ai', 'lmstudio', 'lm-studio', 'custom'].includes(id) || id.startsWith('custom:')) {
     return `${brand} · ${hosting === 'local' ? 'Local' : hosting === 'cloud' ? 'Cloud' : hosting === 'remote' ? 'Remote' : 'Endpoint'}`;
@@ -54,6 +56,10 @@ export type ProviderPresentation = {
 };
 
 const PRESENTATION: Record<string, ProviderPresentation> = {
+  'local-store': {
+    description: 'Use a verified model installed on this computer.', category: 'local', mark: '▣', color: '#29a8a0',
+    keyHint: 'Managed by LastBrowser. No API key or cloud account is needed.'
+  },
   'openai-codex': {
     description: 'Sign in with your ChatGPT account — no API key needed.',
     category: 'connect',

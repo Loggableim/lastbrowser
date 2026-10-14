@@ -278,11 +278,26 @@ const decodeNativePreview=decode<NativeBrowserPreview>((v):v is NativeBrowserPre
   &&integer(v.preview.navigationEpoch)&&v.preview.navigationEpoch===v.navigationEpoch);
 const decodeNativeTakeover=decode<NativeBrowserTakeover>((v):v is NativeBrowserTakeover=>isNativeBrowserDetails(v)&&v.kind==='native_browser_takeover'
   &&v.state==='paused'&&v.automationPaused===true&&v.visible===true);
+export function isLocalStoreRuntimeCapability(v:unknown):boolean {
+  if(!isIndependentRecord(v))return false;
+  if(v.state==='unavailable')return ref(v.reasonCode);
+  return v.state==='ready'&&['artifactId','artifactRevision','runtimeBuild','evidenceRef'].every(key=>ref(v[key]))
+    &&['bundleDigest','runtimeDigest'].every(key=>typeof v[key]==='string'&&/^[a-f0-9]{64}$/.test(v[key]))
+    &&oneOf(v.backend,['cpu','vulkan'])&&boolean(v.toolCallingQualified)
+    &&Number.isSafeInteger(v.contextTokens)&&Number(v.contextTokens)>=1024&&Number(v.contextTokens)<=131072
+    &&Number.isSafeInteger(v.maxOutputTokens)&&Number(v.maxOutputTokens)>0&&Number(v.maxOutputTokens)<Number(v.contextTokens)
+    &&v.parallelRequests===1;
+}
 const isModelEntry: Guard<ScopedModelEntry> = (v): v is ScopedModelEntry => isIndependentRecord(v) && ref(v.id) && ref(v.label)
   && boolean(v.supportsIndependent) && optional(v.reasoning_efforts, values => list(values, ref))
+  && optional(v.deploymentKind,value=>oneOf(value,['local','cloud','remote','unknown']))
+  && optional(v.contextLength,value=>nullable(value,revision))
+  && optional(v.contextLengthSource,value=>oneOf(value,['local_catalog','unknown']))
+  && optional(v.localRuntime,isLocalStoreRuntimeCapability)
   && optional(v.nativeAvailability, isNativeModelAvailability);
 const isModelGroup: Guard<ScopedModelGroup> = (v): v is ScopedModelGroup => isIndependentRecord(v) && ref(v.provider) && text(v.provider_id)
-  && boolean(v.configured) && list(v.models, isModelEntry) && optional(v.extra_models, values => list(values, isModelEntry));
+  && boolean(v.configured) && optional(v.deploymentKind,value=>oneOf(value,['local','cloud','remote','unknown']))
+  && list(v.models, isModelEntry) && optional(v.extra_models, values => list(values, isModelEntry));
 const isModelProvider: Guard<ScopedModelProvider> = (v): v is ScopedModelProvider => isIndependentRecord(v) && ref(v.id)
   && ref(v.display_name) && boolean(v.has_key) && boolean(v.oauth_connected) && ref(v.auth_state)
   && boolean(v.provider_available) && list(v.models, ref);

@@ -128,7 +128,12 @@ def hash_contained_file(root: Path, relative: str, expected_bytes: int) -> tuple
 
 
 class _WindowsProbeJob:
-    def __init__(self, *, memory_limit_bytes=None):
+    def __init__(self, *, memory_limit_bytes=None, production_budget=None):
+        if production_budget is not None:
+            from .store_budget import StoreMemoryBudget
+            if type(production_budget) is not StoreMemoryBudget:
+                raise ValueError('runtime_job_memory_budget_invalid')
+            production_budget.validate(memory_limit_bytes)
         import ctypes
         from ctypes import wintypes as w
         class Basic(ctypes.Structure):
@@ -150,7 +155,8 @@ class _WindowsProbeJob:
             raise OSError('runtime_probe_job_create_failed')
         info = Extended(); info.basic.flags = 0x2000  # KILL_ON_JOB_CLOSE, only own probe descendants
         if memory_limit_bytes is not None:
-            if type(memory_limit_bytes) is not int or not 16777216 <= memory_limit_bytes <= 17179869184:
+            if (type(memory_limit_bytes) is not int or memory_limit_bytes<16777216
+                    or (production_budget is None and memory_limit_bytes>17179869184)):
                 self.close(); raise ValueError('runtime_job_memory_budget_invalid')
             info.basic.flags |= 0x100 | 0x200  # Own process and aggregate Job commit ceilings.
             info.processMemory = memory_limit_bytes; info.jobMemory = memory_limit_bytes

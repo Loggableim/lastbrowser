@@ -2311,9 +2311,18 @@ class AIAgent:
         # Persist for reuse on switch_model / fallback activation. Must come
         # AFTER the custom_providers branch so per-model overrides aren't lost.
         from web.api.local_inference import is_owned_runtime
-        self._lastbrowser_local = is_owned_runtime(self.model, self.base_url, self.api_key)
+        from runtime.local_ai.store_provider_host import get_bound_store_runtime
+        self._native_local_runtime = get_bound_store_runtime(model=self.model,
+            provider=self.provider, base_url=self.base_url, api_key=self.api_key)
+        self._lastbrowser_local = self._native_local_runtime is None and is_owned_runtime(self.model, self.base_url, self.api_key)
         if self._lastbrowser_local:
             _config_context_length = 8192
+        if self._native_local_runtime is not None:
+            _config_context_length = self._native_local_runtime.context_tokens
+            if self.api_mode != 'chat_completions':
+                raise PermissionError('local_runtime_api_mode_invalid')
+            self.max_tokens = min(self.max_tokens or self._native_local_runtime.max_output_tokens,
+                self._native_local_runtime.max_output_tokens)
         self._config_context_length = _config_context_length
 
         self._ensure_lmstudio_runtime_loaded(_config_context_length)
@@ -2333,7 +2342,7 @@ class AIAgent:
         except Exception:
             pass
 
-        if self._native_auto_bridge is not None:
+        if self._native_auto_bridge is not None or self._native_local_runtime is not None:
             # A configured plugin is not a native action capability. Block
             # before importing/loading custom context engines or their hooks.
             _engine_name = "compressor"
@@ -2397,6 +2406,7 @@ class AIAgent:
                 config_context_length=_config_context_length,
                 provider=self.provider,
                 api_mode=self.api_mode,
+                native_local_runtime=self._native_local_runtime,
             )
         self.compression_enabled = compression_enabled
 
@@ -2404,7 +2414,7 @@ class AIAgent:
         # for reliable tool-calling workflows (64K tokens).
         from runtime.model_metadata import MINIMUM_CONTEXT_LENGTH
         _ctx = getattr(self.context_compressor, "context_length", 0)
-        if _ctx and _ctx < MINIMUM_CONTEXT_LENGTH and not self._lastbrowser_local:
+        if _ctx and _ctx < MINIMUM_CONTEXT_LENGTH and not self._lastbrowser_local and self._native_local_runtime is None:
             raise ValueError(
                 f"Model {self.model} has a context window of {_ctx:,} tokens, "
                 f"which is below the minimum {MINIMUM_CONTEXT_LENGTH:,} required "
@@ -9682,6 +9692,35 @@ class AIAgent:
                 break
 
     def _build_api_kwargs(self, api_messages: list) -> dict:
+        request = self._build_api_kwargs_unchecked(api_messages)
+        capture = getattr(self, '_native_local_runtime', None)
+        if capture is not None or self.provider == 'local-store':
+            from runtime.local_ai.store_provider_host import get_bound_store_runtime
+            from runtime.independent.native_token_bounds import serialized_text_bound
+            from runtime.independent.policy import PolicyDenied
+            current = get_bound_store_runtime(model=self.model, provider=self.provider,
+                base_url=self.base_url, api_key=self.api_key)
+            if current is None or current != capture or self.api_mode != 'chat_completions':
+                raise PolicyDenied('local_runtime_binding_changed')
+            if request.get('tools') and not current.tool_calling_qualified:
+                raise PolicyDenied('local_runtime_tools_not_qualified')
+            extra = request.get('extra_body')
+            if isinstance(extra, dict) and any(key in extra for key in
+                    ('messages', 'input', 'instructions', 'system', 'tools', 'functions',
+                     'max_tokens', 'max_completion_tokens', 'max_output_tokens', 'n_predict', 'num_ctx')):
+                # The SDK merges extra_body into the actual wire body. It must
+                # not replace the fields whose budgets/qualification we check.
+                raise PolicyDenied('local_runtime_request_override_invalid')
+            outputs = [request[key] for key in ('max_tokens', 'max_completion_tokens') if key in request]
+            if len(outputs) != 1 or type(outputs[0]) is not int or not 1 <= outputs[0] <= current.max_output_tokens:
+                raise PolicyDenied('local_runtime_output_budget_invalid')
+            # A deliberately conservative UTF-8 JSON reservation, not a model
+            # tokenizer measurement. Includes system messages and tool schemas.
+            if serialized_text_bound(request) + outputs[0] > current.context_tokens:
+                raise PolicyDenied('context_budget_exceeded')
+        return request
+
+    def _build_api_kwargs_unchecked(self, api_messages: list) -> dict:
         """Build the keyword arguments dict for the active API mode."""
         tools_for_api = self.tools
 

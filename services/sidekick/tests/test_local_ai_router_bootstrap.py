@@ -85,7 +85,7 @@ def test_offline_retries_are_bounded_and_request_replay_is_idempotent(tmp_path):
 
 
 @pytest.mark.parametrize('operation', [
-    'localAi.bootstrap', 'localAi.roleProfile', 'localAi.store', 'localAi.setup',
+    'localAi.bootstrap', 'localAi.roleProfile', 'localAi.setup',
     'localAi.runtime', 'localAi.catalog', 'localAi.recommend',
 ])
 def test_reduced_test_build_fails_closed_for_bundled_local_ai_operations(operation):
@@ -93,3 +93,11 @@ def test_reduced_test_build_fails_closed_for_bundled_local_ai_operations(operati
     request = independent.OperationRequest(scope=None, payload={})
     with pytest.raises(ValueError, match='local_ai_unavailable_in_test_build'):
         independent.dispatch_operation(operation, request, 'default')
+
+
+def test_registry_store_requires_concrete_scope_before_any_operation():
+    from web.api import independent
+    from runtime.independent.scope import ScopeError
+    request=independent.OperationRequest(scope=None,payload={})
+    with pytest.raises(ScopeError,match='concrete Space scope'):
+        independent.dispatch_operation('localAi.store',request,'default')

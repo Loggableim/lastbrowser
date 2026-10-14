@@ -46,7 +46,7 @@ import { useSpaceAssistantStore } from '../stores/useSpaceAssistantStore.js';
 import type { NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, resolveSessionReasoningEffort, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
-import { mapScopedModelPickerOptions } from '../model-picker-options.js';
+import { mapScopedModelPickerOptions, isLocalStoreModelQualified, type ModelPickerOptionGroup } from '../model-picker-options.js';
 import { canSelectNativeModel } from '../model-picker-options.js';
 import { chooseActiveModel, isModelActive, useActiveModelRevision } from '../active-model-selection.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
@@ -205,7 +205,7 @@ export function NativeChatMain({
   }, [activeSessionId, reasoningPreferenceKey]);
 
   // Discovery runs in the captured profile worker. No global model default is written.
-  type CatalogGroup = { provider: string; providerId: string; configured: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability }> };
+  type CatalogGroup = Omit<ModelPickerOptionGroup,'models'> & {models:Array<ModelPickerOptionGroup['models'][number]>};
   const [catalogSnapshot, setCatalogSnapshot] = useState<{ viewKey: string; phase: 'loading' | 'ready' | 'error'; groups: CatalogGroup[] }>({ viewKey: modelViewKey, phase: 'loading', groups: [] });
   const modelCatalog = catalogSnapshot.viewKey === modelViewKey ? catalogSnapshot.groups : [];
   const modelCatalogLoaded = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'ready';
@@ -284,8 +284,10 @@ export function NativeChatMain({
         const isSelectedAntigravity = selectionForView.provider === 'antigravity';
         const selectedModelQualified = Boolean(selectionForView.provider && selectionForView.model
           && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)
-          && isProviderModelQualified(selectionForView.provider, selectionForView.model, activeBrowserProfileId,
-            activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage));
+          && (selectionForView.provider==='local-store'
+            ? rawParsed.some(group=>group.providerId==='local-store'&&group.configured&&group.models.some(entry=>entry.id===selectionForView.model&&isLocalStoreModelQualified(group.providerId,entry)))
+            : isProviderModelQualified(selectionForView.provider, selectionForView.model, activeBrowserProfileId,
+              activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
         setCatalogDefaultModel((selectedModelQualified && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) ? selectionForView.model : '');
         if (selectedModelQualified && selectionForView.model && activeSpacePath && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) saveSpaceModel(activeSpacePath, selectionForView.model, window.localStorage, selectionForView.provider);
         setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: isAntigravityCatalogUnverified
@@ -313,6 +315,7 @@ export function NativeChatMain({
     const selectedEntry = modelCatalog.find(group => group.providerId === (candidate.provider ?? '') && group.models.some(entry => entry.id === candidate.model))
       ?.models.find(entry => entry.id === candidate.model);
     if (!canSelectNativeModel(candidate.provider, selectedEntry?.nativeAvailability)) return;
+    if(candidate.provider==='local-store'&&(!selectedEntry||!isLocalStoreModelQualified(candidate.provider,selectedEntry)))return;
     const nextModel = candidate.model, provider = candidate.provider ?? '';
     if (nextModel === model && provider === modelProvider) return;
     const capturedKey = modelViewKey;
@@ -399,8 +402,9 @@ export function NativeChatMain({
       group.providerId, entry.id)).map(entry => {
       const evidence = getProviderModelEvidence(group.providerId, entry.id, activeBrowserProfileId,
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
-      return { ...entry, qualified: Boolean(evidence), qualification: evidence,
-        label: evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
+      const local=group.providerId==='local-store';
+      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence), qualification: local?undefined:evidence,
+        label: local||evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
     });
     return models.length ? [{ ...group, models }] : [];
   }), [modelCatalog, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, isAntigravityCatalogUnverified, t, activeModelRevision, showUntestedBetas, providerEvidenceRevision]);
@@ -426,8 +430,10 @@ export function NativeChatMain({
     || (modelProvider === requestedChatDefault.provider && requestedChatDefault.provider === 'openai-codex' ? 'OpenAI Codex' : modelProvider);
   const modelQualified = Boolean((!isAntigravityCatalogUnverified || (currentModelPair.provider || modelProvider) !== 'antigravity')
     && (currentModelPair.provider || modelProvider) && currentModelPair.model
-    && isProviderModelQualified(currentModelPair.provider || modelProvider, currentModelPair.model, activeBrowserProfileId,
-      activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage));
+    && ((currentModelPair.provider || modelProvider)==='local-store'
+      ? modelCatalog.some(group=>group.providerId==='local-store'&&group.configured&&group.models.some(entry=>entry.id===currentModelPair.model&&isLocalStoreModelQualified(group.providerId,entry)))
+      : isProviderModelQualified(currentModelPair.provider || modelProvider, currentModelPair.model, activeBrowserProfileId,
+        activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
   const selectableModels = visibleModelCatalog.flatMap(group => group.configured && group.providerId
     ? group.models.filter(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)) : []);
   const emptyQualifiedCatalog = modelCatalogLoaded && selectableModels.length > 0 && selectableModels.every(entry => !entry.qualified);
@@ -474,11 +480,13 @@ export function NativeChatMain({
   const currentPolicy=policyGate?.viewKey===policyOperationKey?policyGate:null;
   const automaticSelected=Boolean(currentPolicy?.response.policy.mode==='auto');
   const automaticAllowedModels=currentPolicy?.response.policy.allowedModels||[];
-  const automaticModelsQualified=automaticAllowedModels.length>0&&automaticAllowedModels.every(pair => isProviderModelQualified(
-    pair.provider, pair.model, activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage));
+  const catalogPairQualified=(pair:{provider:string;model:string})=>pair.provider==='local-store'
+    ? modelCatalog.some(group=>group.providerId==='local-store'&&group.configured&&group.models.some(entry=>entry.id===pair.model&&isLocalStoreModelQualified(group.providerId,entry)))
+    : isProviderModelQualified(pair.provider,pair.model,activeBrowserProfileId,activeBackendProfileName || (activeSession as any)?.profile || 'default',window.localStorage);
+  const automaticModelsQualified=automaticAllowedModels.length>0&&automaticAllowedModels.every(catalogPairQualified);
   const unqualifiedAutoModels = !currentPolicy?.response.policy.allowedModels.length
     || (!showUntestedBetas && currentPolicy.response.policy.allowedModels.some(pair =>
-      !isProviderModelQualified(pair.provider, pair.model, activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
+      !catalogPairQualified(pair)));
   const multiAgentSelection = isMultiAgentModelSelection({ model, provider: modelProvider });
   const multiAgentBetaBlocked = (!AI_ORCHESTRATION_ENABLED || !showUntestedBetas)
     && (multiAgentSelection || Boolean(automaticSelected && currentPolicy?.response.policy.orchestrator));

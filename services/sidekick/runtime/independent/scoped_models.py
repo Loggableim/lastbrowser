@@ -257,11 +257,13 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
                 inflight[key] = pending
     if cached is not None:
         _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
-        return cached
+        from runtime.local_ai.store_provider_host import with_store_catalog
+        return with_store_catalog(cached, scope, resolved.profile.name)
     if not owner:
         result = copy.deepcopy(pending.result())
         _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
-        return result
+        from runtime.local_ai.store_provider_host import with_store_catalog
+        return with_store_catalog(result, scope, resolved.profile.name)
 
     provider = selection or ProviderSelection(provider_config_ref=digest, model="__catalog__", provider="")
     try:
@@ -276,8 +278,10 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
             if len(cache) > 16:
                 del cache[min(cache, key=lambda item: cache[item][0])]
             inflight.pop(key, None)
+        from runtime.local_ai.store_provider_host import with_store_catalog
+        combined = with_store_catalog(result, scope, resolved.profile.name)
         pending.set_result(copy.deepcopy(result))
-        return result
+        return combined
     except BaseException as exc:
         with lock:
             inflight.pop(key, None)
@@ -334,6 +338,16 @@ def _native_availability(scope, revision, catalog, provider, model, *, profile_h
             antigravity_binding_available = False
 
     group, entry = _entry(catalog, model, provider)
+    managed_local = False
+    if provider == 'local-store' and entry:
+        from runtime.local_ai.store_provider_host import capture_from_capability
+        try:
+            captured_local = capture_from_capability(entry.get('localRuntime'))
+            managed_local = (captured_local.artifact_id == model
+                and captured_local.context_tokens == entry.get('contextLength')
+                and captured_local.tool_calling_qualified)
+        except (PermissionError, ValueError, KeyError, TypeError):
+            managed_local = False
     if model in _VIRTUAL:
         supported, reason = False, "independent_unsupported"
     else:
@@ -352,7 +366,8 @@ def _native_availability(scope, revision, catalog, provider, model, *, profile_h
         reason = "binding_mismatch"
     elif entry.get("supportsIndependent") is not True:
         reason = "independent_unsupported"
-    elif type(entry.get("contextLength")) is not int or entry["contextLength"] < MINIMUM_CONTEXT_LENGTH:
+    elif (provider == 'local-store' and not managed_local) or (provider != 'local-store'
+            and (type(entry.get("contextLength")) is not int or entry["contextLength"] < MINIMUM_CONTEXT_LENGTH)):
         reason = "context_missing"
     else:
         reason = None
@@ -404,6 +419,8 @@ def _provider_model_catalog(scope, catalog, groups):
                     continue
                 model_id = entry["id"]
                 is_current = model_id in current_ids
+                is_managed_local = provider_id == 'local-store' and entry.get('deploymentKind') == 'local'
+                qualified_listing = is_current or is_managed_local
                 availability = entry.get("nativeAvailability") if isinstance(entry.get("nativeAvailability"), dict) else {}
                 is_explicitly_configured = entry.get("modelSource") == "explicit_config"
                 fallback_sources = {"curated_fallback", "metadata_registry", "local_catalog"}
@@ -411,6 +428,8 @@ def _provider_model_catalog(scope, catalog, groups):
                 is_explicit_only = is_explicitly_configured and not is_current
                 source_state = "current" if is_current else "configured" if is_explicit_only else "fallback" if is_fallback_candidate else "stale" if observed.get("status") == "stale" or source == "stale_provider_cache" else (
                     "unavailable" if observed.get("status") == "unavailable" else "unknown")
+                if is_managed_local:
+                    source_state = 'configured'
                 reasoning_source = entry.get("reasoning_effort_source")
                 reasoning_known = reasoning_source in {"live_catalog", "local_catalog", "official_model_docs", "catalog", "provided_catalog"}
                 context = entry.get("contextLength")
@@ -421,7 +440,7 @@ def _provider_model_catalog(scope, catalog, groups):
                 models.append({
                     "id": model_id,
                     "label": entry.get("label", model_id),
-                    "listed": {"status": source_state, "source": "provider_api" if is_current else "explicit_config" if is_explicitly_configured else source,
+                    "listed": {"status": source_state, "source": 'local_catalog' if is_managed_local else "provider_api" if is_current else "explicit_config" if is_explicitly_configured else source,
                                "freshness": "stale" if source_state == "stale" else "unknown"},
                     "features": {
                         "contextLength": {"status": "known" if context_known else "unknown",
@@ -435,12 +454,12 @@ def _provider_model_catalog(scope, catalog, groups):
                     "qualification": {
                         "independent": {"status": (
                             "unknown" if is_explicit_only or is_fallback_candidate else
-                            "available" if is_current and availability.get("available") is True else
-                            "unavailable" if is_current else "unknown"),
-                            "available": bool(not is_explicit_only and not is_fallback_candidate and is_current and availability.get("available") is True),
+                            "available" if qualified_listing and availability.get("available") is True else
+                            "unavailable" if qualified_listing else "unknown"),
+                            "available": bool(not is_explicit_only and not is_fallback_candidate and qualified_listing and availability.get("available") is True),
                             "reasonCode": ("explicit_configuration_unverified" if is_explicit_only else
                                            "curated_fallback_unverified" if is_fallback_candidate else
-                                           availability.get("reasonCode") if is_current else "catalog_not_currently_listed")},
+                                           availability.get("reasonCode") if qualified_listing else "catalog_not_currently_listed")},
                     },
                     "liveTest": {"status": "not_run"},
                 })
@@ -489,6 +508,7 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
         raise PolicyDenied("scope_mismatch")
     if action == "get" and payload.get("includeCatalog") is False:
         from runtime.quickchat_metrics import read_latency_summaries
+        from runtime.local_ai.store_provider_host import has_installed_store_text
         config = resolved.space.load_config()
         if config.get("_space_config_malformed"):
             raise ScopeError("Space configuration is malformed")
@@ -496,6 +516,7 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
         return {"schemaVersion": 1, "scope": scope.model_dump(mode="json", by_alias=True),
                 "revision": _revision(config, model, provider), "model": model, "provider": provider,
                 "quickchatLatency": read_latency_summaries(resolved.profile_home),
+                "localStoreInstalled": has_installed_store_text(scope, resolved.profile.name),
                 "configurationOnly": True, "configured": bool(model), "supportsIndependent": False,
                 "reasonCode": "independent_orchestration_not_supported" if model in _VIRTUAL else "catalog_not_checked"}
     if action == "set":

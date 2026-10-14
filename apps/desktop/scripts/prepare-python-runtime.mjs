@@ -12,6 +12,15 @@ const pythonRuntimeDir = resolve(runtimeDir, 'python');
 const markerPath = join(pythonRuntimeDir, '.lastbrowser-runtime.json');
 const requirementsPath = resolve(scriptDir, 'requirements-runtime.txt');
 
+export function runtimeDependencyDigest(paths = [requirementsPath, resolve(repoRoot, 'services', 'sidekick', 'pyproject.toml')]) {
+  const digest = createHash('sha256');
+  for (const filePath of paths) {
+    const bytes = readFileSync(filePath);
+    digest.update(String(bytes.length)).update(':').update(bytes);
+  }
+  return digest.digest('hex');
+}
+
 export function pythonRuntimeExecutableName(platform = process.platform) {
   return platform === 'win32' ? 'python.exe' : 'python3';
 }
@@ -133,7 +142,8 @@ function main() {
     // Bump when the bundled runtime dependency set changes. In particular,
     // older prepared trees can otherwise pass the cache check without the
     // OpenAI-compatible client needed by Ollama providers.
-    runtimeSchema: 6
+    runtimeSchema: 6,
+    dependencyDigest: runtimeDependencyDigest()
   };
 
   if (isPreparedRuntimeCompatible(marker, desired, existsSync(join(pythonRuntimeDir, 'python.exe')))) {
@@ -181,7 +191,7 @@ function main() {
 
   run(join(pythonRuntimeDir, 'python.exe'), [
     '-c',
-    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, yaml; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
+    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, yaml, PIL, psutil; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
   ]);
 
   writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');
@@ -347,7 +357,8 @@ function preparePosixPythonCommand() {
   const desired = {
     sourcePythonHome: executable,
     sourceVersion: pythonVersion(executable),
-    runtimeSchema: isLinux ? 7 : 6
+    runtimeSchema: isLinux ? 7 : 6,
+    dependencyDigest: runtimeDependencyDigest()
   };
   const runtimeImportsReady = !isLinux || hasLinuxRuntimeImports(venvPython);
   if (isPreparedRuntimeCompatible(readMarker(), desired, existsSync(venvPython), runtimeImportsReady)) {
@@ -384,7 +395,7 @@ function preparePosixPythonCommand() {
   }
   run(venvPython, [
     '-c',
-    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, uvicorn, yaml; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
+    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, uvicorn, yaml, PIL, psutil; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
   ]);
   writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');
   const launcher = writePosixLauncher();
@@ -496,13 +507,16 @@ export function isPreparedRuntimeCompatible(marker, desired, hasPythonExecutable
     desired &&
     marker.sourcePythonHome === desired.sourcePythonHome &&
     marker.sourceVersion === desired.sourceVersion &&
-    marker.runtimeSchema === desired.runtimeSchema
+    marker.runtimeSchema === desired.runtimeSchema &&
+    typeof desired.dependencyDigest === 'string' &&
+    /^[a-f0-9]{64}$/.test(desired.dependencyDigest) &&
+    marker.dependencyDigest === desired.dependencyDigest
   );
 }
 
 function hasLinuxRuntimeImports(pythonExe) {
   if (!existsSync(pythonExe)) return false;
-  const result = spawnSync(pythonExe, ['-c', 'import fastapi, uvicorn, requests, httpx, yaml'], {
+  const result = spawnSync(pythonExe, ['-c', 'import fastapi, uvicorn, requests, httpx, yaml, PIL, psutil'], {
     encoding: 'utf8',
     timeout: 15_000
   });

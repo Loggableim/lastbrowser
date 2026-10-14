@@ -456,7 +456,14 @@ class NativeAutoBridge:
             antigravity_binding = None
         if type(client) not in accepted_types:
             raise PolicyDenied("native_auto_sdk_adapter_unavailable")
-        endpoint = provider_endpoint(Path(self.context.profile_home), agent.provider)
+        local_capture = None
+        if (agent.provider == 'local-store' and self.context.selection_mode == 'fixed'
+                and getattr(self.context.provider_capture, 'local_runtime', None) is not None):
+            from runtime.local_ai.store_provider_host import get_bound_store_runtime
+            local_capture = get_bound_store_runtime(model=agent.model, provider=agent.provider,
+                base_url=agent.base_url, api_key=agent.api_key)
+            allow_subscription_fallback = False
+        endpoint = None if local_capture is not None else provider_endpoint(Path(self.context.profile_home), agent.provider)
         actual_endpoint = str(client.base_url).rstrip("/")
         expected_endpoint = str(endpoint or agent.base_url or client.base_url).rstrip("/")
         credential = getattr(client, "api_key", None) or getattr(client, "auth_token", None)
@@ -505,7 +512,13 @@ class NativeAutoBridge:
             raise PolicyDenied("native_auto_request_purpose_invalid")
         from .native_token_bounds import serialized_text_bound
         def request_metadata(request, path):
-            return {"input_tokens_upper_bound": serialized_text_bound(request, path),
+            bound = serialized_text_bound(request, path)
+            if local_capture is not None:
+                output = request.get('max_tokens', request.get('max_completion_tokens'))
+                if (type(output) is not int or not 1 <= output <= local_capture.max_output_tokens
+                        or bound + output > local_capture.context_tokens):
+                    raise PolicyDenied('native_local_context_budget_exceeded')
+            return {"input_tokens_upper_bound": bound,
                 "input_bound_source": "serialized_text_bytes", "request_purpose": purpose}
         def subscription_fallback(decision, claim):
             result = self.rpc.call("auto_subscription_fallback", {

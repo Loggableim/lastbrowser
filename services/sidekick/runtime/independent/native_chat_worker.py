@@ -15,7 +15,7 @@ from .native_chat_protocol import NativeChatContext, decode_turn, verify_native_
 from .worker_host import MAX_EVENTS, MAX_LINE_BYTES, WorkerError
 
 _RPC_METHODS = frozenset({"auto_validate", "auto_policy", "auto_claim", "auto_observe", "auto_usage", "auto_subscription_fallback",
-    "fixed_validate", "fixed_claim", "fixed_observe", "fixed_usage", "compute_acquire", "compute_release",
+    "fixed_validate", "fixed_claim", "fixed_observe", "fixed_usage", "fixed_local_runtime", "compute_acquire", "compute_release",
     "teamwork_plan", "teamwork_validate", "teamwork_claim", "teamwork_authorize",
     "teamwork_compute_acquire", "teamwork_compute_release", "teamwork_observe", "teamwork_usage"})
 _RPC_KEYS = frozenset({"decision", "claim", "claimId", "receiptRefs", "model", "provider", "headers", "status", "usage", "deliveredDelta", "outputTokens", "inputTokensUpperBound", "inputBoundSource", "requestPurpose", "acknowledged", "state", "requirements", "errorCode"})
@@ -66,7 +66,8 @@ class NativeRPC:
             self._pending[request_id] = response
         try:
             self.emit(self.context.envelope("rpc", requestId=request_id, method=method, payload=payload))
-            deadline = time.monotonic() + min(max(timeout, 0), 60 if method == "browser_execute" else 30)
+            local_load = method == 'compute_acquire' and getattr(getattr(self.context, 'provider_capture', None), 'local_runtime', None) is not None
+            deadline = time.monotonic() + min(max(timeout, 0), 60 if method == "browser_execute" or local_load else 30)
             while not self.stopped.is_set():
                 try:
                     message = response.get(timeout=min(.1, max(.001, deadline-time.monotonic())))
@@ -377,6 +378,16 @@ def main():
             if not stopped.is_set():
                 _failure_sink(exc)
         finally:
+            if context.selection_mode == 'fixed' and getattr(context.provider_capture, 'local_runtime', None) is not None:
+                from .native_sdk_broker import get_bound_native_sdk_bridge
+                local_bridge = get_bound_native_sdk_bridge()
+                if local_bridge is not None:
+                    try:
+                        local_bridge.close()
+                    except BaseException as exc:
+                        failure.append(type(exc).__name__)
+                        if not stopped.is_set():
+                            _failure_sink(exc)
             finished.set()
     token = _OWN_WRITERS.set((context.writer_lease_id,))
     try:

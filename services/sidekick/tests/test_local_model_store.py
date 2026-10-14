@@ -3,7 +3,6 @@ import json
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 from runtime.local_ai.model_store import ModelStore, Entitlements, _device_identity, _digest
 from runtime.local_ai.store_benchmark import CASES, evaluate
 
@@ -29,9 +28,7 @@ class ModelStoreContracts(unittest.TestCase):
         store.device=None
         entry={'totalParameters':None,'runtimeStatus':'unknown','installQualified':True,
             'recommendedRamBytes':None,'downloadBytes':1024}
-        with patch('runtime.local_ai.model_store.private_cpu_manifest',
-                   return_value=SimpleNamespace(files=[],package_relative_dir='')):
-            result=store.eligibility(entry)
+        result=store.eligibility(entry)
         self.assertEqual(result['state'],'unknown')
         self.assertFalse(result['allowed'])
         self.assertIn('hardware_scan_required',result['reasons'])

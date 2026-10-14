@@ -294,6 +294,8 @@ function selection(payload: Record<string, any>): Record<string, unknown> {
 
 /** Main-owned purposes. Hardware scans do not acquire model compute admission. */
 export class LocalAiController {
+  private readonly mediaInputs = new Map<string,{binding:Binding;cacheRoot:string;owner:WebContents}>();
+  private readonly mediaOwners = new WeakSet<WebContents>();
   private readonly scans = new Map<string, { scopeKey: string; profile: string; observedAt: number }>();
   private readonly reviewedPlans = new Map<string, PlanReceipt>();
   private readonly roleReviews = new Map<string, { profile:string; owner:WebContents; frame:WebContents['mainFrame']; navigation:number; issuedAt:number; draft:LocalRoleDraft }>();
@@ -302,6 +304,15 @@ export class LocalAiController {
   private readonly runtimeReviews = new Map<string, RuntimeReceipt>();
   private readonly runtimeEpochs = new Map<string, number>();
   constructor(private readonly options: Options) {}
+  async releaseStoreInputs(owner?:WebContents,keepScope?:string):Promise<void> {
+    const selected=[...this.mediaInputs.entries()].filter(([,value])=>(!owner||value.owner===owner)
+      &&(!keepScope||scopeKey(value.binding.scope)!==keepScope));
+    await Promise.allSettled(selected.map(async([assetId,value])=>{
+      this.mediaInputs.delete(assetId);
+      await this.options.apiRequest('localAi.store',value.binding.scope,
+        {request:{operation:'releaseMediaInput',assetId},cacheRoot:value.cacheRoot},value.binding.backendProfileName);
+    }));
+  }
   async hardwareInventory(payload: Record<string, any>, recheck: () => unknown): Promise<LocalAiHardwareInventory> {
     keys(payload, []);
     const timeoutMs = this.options.hardwareScanTimeoutMs ?? 15_000;
@@ -751,34 +762,90 @@ export class LocalAiController {
       const fields:Record<string,string[]>={view:['operation'],scan:['operation'],install:['operation','modelId','requestId','licenseDigest'],importModel:['operation','modelId','requestId','licenseDigest'],
         benchmark:['operation','modelId','requestId','mode'],cancel:['operation','jobId'],activate:['operation','modelId'],
         remove:['operation','modelId'],export:['operation','receiptId'],import:['operation','receipt'],
-        deleteHistory:['operation','receiptId'],chat:['operation','text'],stopChat:['operation']};
+        deleteHistory:['operation','receiptId'],chat:['operation','text'],stopChat:['operation'],
+        generate:['operation','modelId','requestId','prompt','width','height','steps','seed','frames','fps','referenceImageAssetId','audioAssetId'],readMedia:['operation','jobId','assetId'],
+        pickMediaInput:['operation','modelId','kind'],releaseMediaInput:['operation','assetId']};
       if(typeof operation!=='string'||!fields[operation])throw new BrowserHostError('operation_denied','Unsupported model store operation');
-      keys(request,fields[operation]);
+      keys(request,operation==='benchmark'?[...fields[operation],'backend','referenceImageAssetId','audioAssetId']:fields[operation]);
       if(JSON.stringify(request).length>4*1024*1024)throw new BrowserHostError('invalid_request','Model store import exceeds size limit');
-      for(const name of ['modelId','jobId','receiptId','requestId'])if(name in request&&(typeof request[name]!=='string'||!request[name]||request[name].length>256))
+      for(const name of ['modelId','jobId','assetId','receiptId','requestId','referenceImageAssetId','audioAssetId'])if(name in request&&(typeof request[name]!=='string'||!request[name]||request[name].length>256))
         throw new BrowserHostError('invalid_request','Invalid model store identity');
       if(['install','importModel'].includes(operation)&&!sha256(request.licenseDigest))throw new BrowserHostError('invalid_request','Publisher license consent is required');
       if(operation==='benchmark'&&!['quick','standard'].includes(request.mode))throw new BrowserHostError('invalid_request','Invalid benchmark mode');
+      if(operation==='benchmark'&&request.backend!==undefined&&!['cpu','vulkan'].includes(request.backend))throw new BrowserHostError('invalid_request','Invalid benchmark backend');
+      if(operation==='generate'){
+        if(typeof request.prompt!=='string'||request.prompt.length<1||request.prompt.length>4096)throw new BrowserHostError('invalid_request','Invalid media prompt');
+        for(const name of ['width','height','steps','seed','frames','fps'])if(name in request&&(!Number.isSafeInteger(request[name])||request[name]<0))
+          throw new BrowserHostError('invalid_request','Invalid media generation dimensions');
+      }
       if(operation==='chat'&&(typeof request.text!=='string'||request.text.length<1||request.text.length>8192))throw new BrowserHostError('invalid_request','Invalid local chat input');
       recheck();
       let scanId:string|undefined;
-      if(['install','importModel','benchmark','activate','chat','scan'].includes(operation)){
+      if(['install','importModel','benchmark','activate','chat','generate','scan'].includes(operation)){
         const scanned=await this.hardwareScan(binding,recheck);scanId=scanned.scan.hardware.scanId;
       }
-      // Only operations that access a concrete model file need the conservative
-      // legacy path reservation. Store views, scans and receipt operations stay
-      // usable under long Windows profile paths.
-      const needsModelPath = ['install','importModel','benchmark','activate','chat'].includes(operation);
-      const cacheRoot=await this.cacheDirectory(recheck,needsModelPath);recheck();
+      // The store validates the actual pinned component paths in its own scoped
+      // layout, rather than reserving space for a historical LFM-only filename.
+      const cacheRoot=await this.cacheDirectory(recheck,false);recheck();
       let privateRequest={...request};
+      const currentOwner=recheck() as WebContents|undefined;
+      if(currentOwner?.mainFrame){await this.releaseStoreInputs(currentOwner,scopeKey(binding.scope));recheck();}
+      if(operation==='pickMediaInput'){
+        if(!['reference_image','audio_wav'].includes(request.kind))throw new BrowserHostError('invalid_request','Unsupported media input');
+        const captured=this.owner(recheck);
+        const selected=await dialog.showOpenDialog({properties:['openFile'],filters:[request.kind==='reference_image'
+          ?{name:'Reference image',extensions:['png','jpg','jpeg']}:{name:'PCM WAV audio (up to 120 seconds)',extensions:['wav']}]});
+        recheck();const current=this.owner(recheck);
+        if(current.owner!==captured.owner||current.frame!==captured.frame||current.navigation!==captured.navigation)
+          throw new BrowserHostError('invalid_sender','Media input picker owner changed');
+        if(selected.canceled||selected.filePaths.length!==1)throw new BrowserHostError('media_input_selection_cancelled','Media input selection cancelled');
+        const picked=selected.filePaths[0],info=await lstat(picked);recheck();
+        const sizeLimit=request.kind==='reference_image'?16*1024*1024:24*1024*1024;
+        if(info.isSymbolicLink()||!info.isFile()||info.nlink!==1||info.size<1||info.size>sizeLimit)
+          throw new BrowserHostError('invalid_request','Media input size or file type is unsupported');
+        const sourcePath=await realpath(picked);recheck();
+        privateRequest={...request,assetId:randomUUID().replaceAll('-',''),sourcePath};
+        this.mediaInputs.set(privateRequest.assetId,{binding,cacheRoot,owner:captured.owner});
+        if(!this.mediaOwners.has(captured.owner)){
+          this.mediaOwners.add(captured.owner);
+          captured.owner.once('destroyed',()=>{void this.releaseStoreInputs(captured.owner);});
+          captured.owner.on('did-start-navigation',(_event,_url,_inPlace,mainFrame)=>{if(mainFrame)void this.releaseStoreInputs(captured.owner);});
+        }
+      }
+      if(operation==='releaseMediaInput'){
+        const owned=this.mediaInputs.get(request.assetId);
+        if(owned&&(scopeKey(owned.binding.scope)!==scopeKey(binding.scope)||owned.binding.backendProfileName!==binding.backendProfileName))
+          throw new BrowserHostError('operation_denied','Media input belongs to another Space');
+        this.mediaInputs.delete(request.assetId);
+      }
       if(operation==='importModel'){
         const selected=await dialog.showOpenDialog({title:'Kuratierte GGUF-Datei importieren',properties:['openFile'],filters:[{name:'GGUF',extensions:['gguf']}]});recheck();
         if(selected.canceled||selected.filePaths.length!==1)throw new BrowserHostError('operation_cancelled','Model import cancelled');
         privateRequest={...request,sourcePath:selected.filePaths[0]};
       }
-      const value=await this.options.apiRequest('localAi.store',binding.scope,{request:privateRequest,cacheRoot,...(scanId?{scanId}:{})},binding.backendProfileName);
-      recheck();const response=this.response(value,binding);
+      let value;
+      try{
+        value=await this.options.apiRequest('localAi.store',binding.scope,{request:privateRequest,cacheRoot,...(scanId?{scanId}:{})},binding.backendProfileName);
+        recheck();
+      }catch(error){
+        if(operation==='pickMediaInput'){
+          this.mediaInputs.delete(privateRequest.assetId);
+          await this.options.apiRequest('localAi.store',binding.scope,{request:{operation:'releaseMediaInput',assetId:privateRequest.assetId},cacheRoot},binding.backendProfileName).catch(()=>undefined);
+        }
+        throw error;
+      }
+      const response=this.response(value,binding);
       if(response.kind!=='model_store'||response.operation!==operation||!record(response.store))throw new BrowserHostError('invalid_response','Invalid model store response');
+      if(operation==='readMedia'){
+        const media=response.storeResult;
+        if(!record(media)||media.mimeType!=='image/png'||typeof media.dataBase64!=='string'||media.dataBase64.length>Math.ceil(16*1024*1024/3)*4
+          ||!/^[A-Za-z0-9+/]*={0,2}$/.test(media.dataBase64))throw new BrowserHostError('invalid_response','Invalid bounded media result');
+      }
+      if(operation==='pickMediaInput'){
+        const input=response.storeResult;
+        if(!record(input)||input.assetId!==privateRequest.assetId||typeof input.name!=='string'||input.name.length>200
+          ||!['image/png','audio/wav'].includes(input.mimeType))throw new BrowserHostError('invalid_response','Invalid scoped media input');
+      }
       return response;
     }
     if(payload.action==='roleProfile')return this.roleProfile(binding,payload,recheck);

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   isPreparedRuntimeCompatible,
+  runtimeDependencyDigest,
   posixPythonLauncherScript,
   pythonRuntimeExecutableName,
   replaceRuntimeTreeIfUnused,
@@ -75,6 +76,10 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain('runtimeSchema: isLinux ? 7 : 6');
     expect(prepareScript).toContain("'--no-index', '--find-links', wheelhouseDir");
     expect(prepareScript).toContain("import anthropic, requests, uvicorn, yaml");
+    expect(prepareScript).toContain('yaml, PIL, psutil');
+    const requirements = readFileSync(path.resolve(process.cwd(), 'scripts/requirements-runtime.txt'), 'utf8');
+    expect(requirements).toContain('Pillow==12.3.0');
+    expect(requirements).toContain('psutil==7.2.2');
     expect(prepareScript).toContain("--no-build-isolation");
     expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
@@ -112,12 +117,14 @@ describe('desktop runtime packaging', () => {
       sourcePythonHome: 'C:\\Python312',
       sourceVersion: '3.12.10',
       packageVersion: '0.1.40',
+      dependencyDigest: 'a'.repeat(64),
       runtimeSchema: 6
     };
     const desired = {
       sourcePythonHome: 'C:\\Python312',
       sourceVersion: '3.12.10',
       packageVersion: '0.1.41',
+      dependencyDigest: 'a'.repeat(64),
       runtimeSchema: 6
     };
 
@@ -125,6 +132,29 @@ describe('desktop runtime packaging', () => {
     expect(isPreparedRuntimeCompatible(marker, { ...desired, runtimeSchema: 7 }, true)).toBe(false);
     expect(isPreparedRuntimeCompatible(marker, desired, false)).toBe(false);
     expect(isPreparedRuntimeCompatible(marker, desired, true, false)).toBe(false);
+    expect(isPreparedRuntimeCompatible({ ...marker, dependencyDigest: undefined }, desired, true)).toBe(false);
+    expect(isPreparedRuntimeCompatible(marker, { ...desired, dependencyDigest: 'b'.repeat(64) }, true)).toBe(false);
+    expect(isPreparedRuntimeCompatible(marker, { ...desired, dependencyDigest: undefined }, true)).toBe(false);
+  });
+
+  it('changes the runtime dependency digest when requirements or package metadata changes', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-runtime-digest-'));
+    const requirements = path.join(directory, 'requirements.txt');
+    const metadata = path.join(directory, 'pyproject.toml');
+    try {
+      writeFileSync(requirements, 'Pillow==12.3.0\n');
+      writeFileSync(metadata, '[project]\n');
+      const initial = runtimeDependencyDigest([requirements, metadata]);
+      expect(initial).toMatch(/^[a-f0-9]{64}$/);
+      expect(runtimeDependencyDigest([requirements, metadata])).toBe(initial);
+      writeFileSync(requirements, 'Pillow==12.3.1\n');
+      expect(runtimeDependencyDigest([requirements, metadata])).not.toBe(initial);
+      writeFileSync(requirements, 'Pillow==12.3.0\n');
+      writeFileSync(metadata, '[project]\nname="changed"\n');
+      expect(runtimeDependencyDigest([requirements, metadata])).not.toBe(initial);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it('runs browser smoke against the local source Electron and requires an explicit opt-in for installed builds', () => {

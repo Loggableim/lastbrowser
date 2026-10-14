@@ -30,10 +30,16 @@ export function filterStoreModels(models: StoreModel[], filters: StoreFilters, h
   return models.filter((model) => (!filters.publisher || model.publisher === filters.publisher)
     && (!filters.category || storeModelCategory(model) === filters.category)
     && `${model.name} ${model.publisher} ${model.description} ${model.curation?.innovation || ''} ${model.curation?.useCases.join(' ') || ''}`.toLocaleLowerCase('de-DE').includes(query)
-    && (model.installed || filters.showLarge || assessStoreGpuEstimate(model, hardware) === 'within'
+    && (model.installed || filters.showLarge || storeHardwareRecommendation(model, hardware).fit === 'within'
       || !model.curation && filters.showUnknown && model.eligibility.state !== 'too_large'));
 }
 export function storeModelCategory(model: StoreModel): 'text' | 'image' | 'video' { return model.curation?.category || 'text'; }
+export function storeHardwareRecommendation(model: StoreModel, hardware: unknown): { fit: 'unknown' | 'within' | 'outside'; placement: 'cpu' | 'gpu' } {
+  if (model.execution?.backend === 'cpu' && model.execution.state !== 'browse_only' && model.eligibility.state === 'likely_suitable') {
+    return { fit: 'within', placement: 'cpu' };
+  }
+  return { fit: assessStoreGpuEstimate(model, hardware), placement: 'gpu' };
+}
 export function formatStoreGiBRange(value?: [number, number]): string {
   if (!value) return 'Noch nicht angegeben';
   const format = (number: number) => number.toLocaleString('de-DE', { maximumFractionDigits: 1 });
@@ -78,6 +84,10 @@ export function storeEmptyState(models: StoreModel[], filters: StoreFilters, har
 }
 export function storeModelStatus(model: StoreModel): string {
   if (model.active) return 'Im lokalen Chat aktiv';
+  if (model.execution?.state === 'chat_or_media_qualified') return model.execution.kind === 'text' ? 'Für lokalen Chat geprüft' : 'Für lokale Erstellung geprüft';
+  if (model.execution?.state === 'device_runtime_verified') return 'Ausführung auf diesem PC geprüft';
+  if (model.execution?.state === 'installed_verified') return 'Installiert · bereit für den Gerätetest';
+  if (model.execution?.state === 'download_qualified') return 'Download verfügbar · Gerätetest folgt';
   if (model.deviceConfirmed) return 'Auf diesem PC bestätigt';
   if (model.installed) return 'Installiert · noch nicht bestätigt';
   if (model.eligibility.state === 'likely_suitable') return 'Voraussichtlich geeignet';

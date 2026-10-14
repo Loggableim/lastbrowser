@@ -277,8 +277,8 @@ class LocalAiInstaller:
                     installed.append(artifact.artifact_id)
         return verified, installed
 
-    def _download(self, file, partial, cancel, transferred_chunk=None, verifying=None):
-        allowed_url(file.source_url)
+    def _download(self, file, partial, cancel, transferred_chunk=None, verifying=None, *, source_validator=allowed_url):
+        source_validator(file.source_url)
         with _open_file(partial, create=True) as stream:
             offset = stream.seek(0, 2)
             if offset > file.bytes:

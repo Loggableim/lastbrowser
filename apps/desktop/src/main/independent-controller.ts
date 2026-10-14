@@ -143,6 +143,19 @@ export class IndependentController {
     return this.persistQueue;
   }
   ownsWebContents(id: number): boolean { return this.host?.ownsWebContents(id) ?? false; }
+  async prepareLocalModelsForTurn(event: Pick<IpcMainInvokeEvent, 'sender' | 'senderFrame'>, scope: unknown): Promise<void> {
+    const recheck = captureTrustedShellSender(event, this.options.isShell);
+    await this.loadPromise; recheck();
+    const binding = this.binding(scope);
+    const status = object(await this.options.apiRequest('modelSelection', binding.scope,
+      { action: 'get', includeCatalog: false }, binding.backendProfileName));
+    recheck();
+    if (status.schemaVersion !== 1 || !sameBrowserScope(validateScope(status.scope), binding.scope))
+      throw new BrowserHostError('scope_mismatch', 'Invalid bound model status for another Space');
+    if (status.localStoreInstalled !== true) return;
+    await this.localAi.request(binding, { action: 'store', request: { operation: 'scan' } }, recheck);
+    recheck();
+  }
   browserTargets(): string[] { return this.host?.list().map(lease => lease.targetId) ?? []; }
   private clearCaptures(): void {
     if (this.captureExpiryTimer) clearTimeout(this.captureExpiryTimer);
@@ -367,12 +380,14 @@ export class IndependentController {
     this.clearCaptures();
     if (this.heartbeat) clearInterval(this.heartbeat); this.heartbeat = undefined;
     const host = this.host, gateway = this.gateway; this.host = undefined; this.gateway = undefined;
+    await this.localAi.releaseStoreInputs();
     const results = await Promise.allSettled([host?.closeAll(reason), gateway?.stop(), this.accounts.disconnect(reason)]);
     const failed = results.find(result => result.status === 'rejected');
     if (failed?.status === 'rejected') throw failed.reason;
   }
   async shutdown(): Promise<void> {
     this.closing = true;
+    await this.localAi.releaseStoreInputs();
     const host = this.host, generation = this.generation;
     let failure: unknown;
     try {
@@ -558,17 +573,20 @@ export class IndependentController {
         backendProfileName: String(knownSpaces.backendProfileName || profile), workspacePath: knownSpaces.workspacePath ?? null,
         spaceName: String(knownSpaces.spaceName || 'Space'), bindingRevision: knownSpaces.bindingRevision };
       this.bindings.set(scopeKey(s), binding); await this.persist(); recheck();
+      await this.localAi.releaseStoreInputs(event.sender, scopeKey(s));
+      recheck();
       return knownSpaces;
     }
     const binding = this.binding(request.scope);
     if (request.backendProfileName && request.backendProfileName !== binding.backendProfileName) throw new Error('Profile differs from the saved Space binding');
     if (request.operation === 'localAi') {
-      // Catalog browsing and a user-requested hardware scan do not enable
-      // bundled model installation, inference or bootstrap in this build.
-      const storeBrowseOnly = payload.action === 'store' && payload.request !== null
+      // Store actions reach the scoped pinned-registry/receipt gates. Legacy
+      // bootstrap and background role consumers retain their separate gates.
+      const storeAction = payload.action === 'store' && payload.request !== null
         && typeof payload.request === 'object' && !Array.isArray(payload.request)
-        && ['view', 'scan'].includes(String((payload.request as { operation?: unknown }).operation));
-      if (bundledLocalAiUnavailableActions.has(String(payload.action)) && !storeBrowseOnly)
+        && ['view','scan','install','importModel','benchmark','activate','remove','cancel','export','import',
+          'deleteHistory','chat','stopChat','generate','readMedia','pickMediaInput','releaseMediaInput'].includes(String((payload.request as { operation?: unknown }).operation));
+      if (bundledLocalAiUnavailableActions.has(String(payload.action)) && !storeAction)
         throw new BrowserHostError('local_ai_unavailable_in_test_build', 'Bundled local model setup and inference are unavailable in this test build');
       return this.localAi.request(binding, payload, recheck);
     }
@@ -714,6 +732,8 @@ export class IndependentController {
         || typeof payload.clientRequestId !== 'string' || !payload.clientRequestId || payload.clientRequestId.length > 128
         || [payload.model, payload.provider, payload.clientRequestId].some(value => /[\x00-\x1f]/.test(value))))
         throw new Error('Invalid scoped model selection');
+      if (action === 'get' && payload.includeCatalog !== false)
+        await this.prepareLocalModelsForTurn(event, binding.scope);
       // The bound API probes its live isolated catalog and validates connection
       // digest + CAS at the atomic write. A second Main discovery would race
       // that transaction and invalidate already committed idempotent retries.

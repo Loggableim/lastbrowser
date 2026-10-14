@@ -192,9 +192,15 @@ export type NativeModelAvailability = Readonly<{ schemaVersion: 1; supported: bo
 export type NativeModelResolution = Readonly<{ schemaVersion: 1; scope: IndependentScope; streamId: string;
   requested: Readonly<{ provider: string; model: string }>; effective: Readonly<{ provider: string; model: string }>;
   fallbackApplied: boolean; fallbackReasonCode: 'ollama_subscription_required' | null; fallbackAttempts: 0 | 1 }>;
+export type LocalStoreRuntimeCapability = Readonly<{state:'unavailable';reasonCode:string}> | Readonly<{
+  state:'ready';artifactId:string;artifactRevision:string;bundleDigest:string;backend:'cpu'|'vulkan';
+  runtimeBuild:string;runtimeDigest:string;evidenceRef:string;toolCallingQualified:boolean;
+  contextTokens:number;maxOutputTokens:number;parallelRequests:1}>;
 export type ScopedModelEntry = Readonly<{ id: string; label: string; supportsIndependent: boolean; reasoning_efforts?: readonly string[];
-  modelSource?: 'explicit_config'; nativeAvailability?: NativeModelAvailability }>;
-export type ScopedModelGroup = Readonly<{ provider: string; provider_id: string; deployment?: 'local' | 'cloud' | 'remote' | 'unknown'; configured: boolean; models: readonly ScopedModelEntry[]; extra_models?: readonly ScopedModelEntry[] }>;
+  modelSource?: 'explicit_config'|'local_catalog'; deploymentKind?:'local'|'cloud'|'remote'|'unknown';
+  contextLength?:number|null;contextLengthSource?:'local_catalog'|'unknown';localRuntime?:LocalStoreRuntimeCapability;
+  nativeAvailability?: NativeModelAvailability }>;
+export type ScopedModelGroup = Readonly<{ provider: string; provider_id: string; deployment?: 'local' | 'cloud' | 'remote' | 'unknown'; deploymentKind?:'local'|'cloud'|'remote'|'unknown'; configured: boolean; models: readonly ScopedModelEntry[]; extra_models?: readonly ScopedModelEntry[] }>;
 export type ScopedModelProvider = Readonly<{id:string;display_name:string;has_key:boolean;oauth_connected:boolean;auth_state:string;provider_available:boolean;models:readonly string[]}>;
 export type ProviderModelCatalog = Readonly<{ schemaVersion: 1; scope: IndependentScope; providers: readonly Readonly<{
   providerId: string; label: string; configured: boolean;

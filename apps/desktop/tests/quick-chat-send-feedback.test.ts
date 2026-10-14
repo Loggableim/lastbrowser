@@ -15,6 +15,7 @@ function harness() {
   let requests = 0;
   const ref = (current: any) => ({ current });
   const context: Record<string, any> = {
+    recordBrowserDiagnostic: () => null,
     quickChatBusyRef: ref(false), quickChatStopPendingRef: ref(false), quickChatResetPendingRef: ref(false),
     quickChatBindingScopeKeyRef: ref(null), quickChatTranscriptScopeKeyRef: ref(null),
     quickChatGenerationRef: ref(0), quickChatStopEpochRef: ref(0), quickChatIdRef: ref('q'),

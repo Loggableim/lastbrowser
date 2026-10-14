@@ -46,6 +46,13 @@ class AdapterSnapshot(Contract):
     process_usage_bytes: Measurement
     budget_owner_ref: Ref | None = None
     backends: tuple[BackendObservation, ...] = ()
+    adapter_luid: Annotated[str, Field(pattern=r'^[0-9a-f]{16}$')] | None = None
+    vulkan_device_uuid: Annotated[str, Field(pattern=r'^[0-9a-f]{32}$')] | None = None
+    # Raw OS Vulkan enumeration index; never an unverified ggml selector.
+    vulkan_physical_device_index: Annotated[int, Field(strict=True, ge=0, le=31)] | None = None
+    vulkan_pci_bus_id: Annotated[str, Field(pattern=r'^[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$')] | None = None
+    vulkan_device_node_mask: Annotated[int, Field(strict=True, ge=1, le=4294967295)] | None = None
+    software_adapter: bool | None = None
 
 
 class HardwareSnapshot(Contract):

@@ -154,11 +154,14 @@ def test_tool_probe_rejects_unrequested_followup_call():
 def prepared_store():
     store=ModelStore.__new__(ModelStore)
     store.scope=SimpleNamespace(key='scope');store.lock=threading.RLock();store._prepared_sessions=weakref.WeakKeyDictionary()
+    store._prepared_observations=weakref.WeakKeyDictionary()
     store.sessions={};store.jobs={};store.root=Path('.');store.repository=Path('.')
     store.provider_capability=Mock(return_value={'state':'ready','backend':'cpu','artifactId':'test','bundleDigest':'pinned'})
     store._entry=Mock(return_value={'id':'test'});store._guard=Mock();store._verify=Mock();store._engine=Mock(return_value={})
     store._memory_budget=Mock(return_value=SimpleNamespace(reserve_available=lambda:True))
-    session=Mock(spec=['binary','arguments','artifact_id','port','token','process','start','stop'])
+    store._refresh_runtime_observation=Mock(side_effect=lambda observation,*args,**kwargs:observation)
+    session=Mock(spec=['binary','arguments','artifact_id','port','token','process','start','stop','_runtime_observation'])
+    session._runtime_observation=object()
     session.binary=Path('engine.exe');session.arguments=('--no-context-shift','--jinja');session.artifact_id='test'
     session.port=38080;session.token='private-generated-test-value';session.process=None;session.stop.return_value=True
     store._session=Mock(return_value=(session,{}))
@@ -171,6 +174,14 @@ def test_prepare_does_not_spawn_or_acquire_compute():
         actual,cap=store.prepare_provider_session('test',cancel=cancel)
     assert actual is session and cap['state']=='ready'
     session.start.assert_not_called();acquire.assert_not_called()
+
+
+def test_unregistered_prepared_session_fails_closed_without_attribute_error():
+    store,session=prepared_store()
+    with pytest.raises(ValueError,match='prepared_provider_identity_mismatch'):
+        store.prepared_provider_capability(session,'test')
+    store.provider_capability.assert_not_called()
+    session.start.assert_not_called()
 
 
 def test_prepared_identity_cannot_be_changed_before_start():

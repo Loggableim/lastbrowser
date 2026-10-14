@@ -19,7 +19,7 @@ function isDesignatedFastCandidate(candidate: Candidate): boolean {
   const provider = candidate.provider.toLowerCase();
   const names = [candidate.model, candidate.label].map(normalizedName);
   if (['openai', 'openai-codex', 'codex'].includes(provider)) return names.includes('gpt6luna');
-  if (/(^|[-_:])mimo($|[-_:])/.test(provider)) return names.some(name =>
+  if (provider === 'xiaomi' || /(^|[-_:])mimo($|[-_:])/.test(provider)) return names.some(name =>
     ['mimov26flash', 'mimo26flash', 'xiaomimimov26flash', 'xiaomimimo26flash', 'v26flash', '26flash'].includes(name));
   if (!/(^|[-_:])ollama($|[-_:])/.test(provider)) return false;
   const actualCloudSuffix = /(?:[-:/]cloud)$/i.test(candidate.model);

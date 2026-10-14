@@ -7,6 +7,46 @@ import re
 from pathlib import Path
 
 
+def _local_quickchat_runtime(context, model, provider):
+    """Only the existing private native worker may expose its owned endpoint."""
+    from runtime.local_ai.store_provider_host import private_store_connection, get_bound_store_runtime
+    endpoint, credential = private_store_connection(context)
+    capture = get_bound_store_runtime(model=model, provider=provider, base_url=endpoint, api_key=credential)
+    selected = context.provider_capture
+    if (provider != 'local-store' or selected.provider.provider != provider or selected.provider.model != model
+            or capture is None or selected.local_runtime != capture or capture.artifact_id != model
+            or capture.context_tokens != selected.provider.context_length):
+        raise PermissionError('local_runtime_binding_changed')
+    return {'provider': provider, 'api_mode': 'chat_completions', 'base_url': endpoint,
+            'api_key': credential}, capture
+
+
+def _fit_local_quickchat(system, history, current, page, capture):
+    """Reduce optional reference context, never silently change the user prompt.
+
+    Reservation uses conservative UTF-8 JSON bytes, not an exact tokenizer.
+    The runtime/Parent still validate the actual request and its native owner.
+    """
+    from runtime.independent.native_token_bounds import serialized_text_bound
+    from runtime.independent.policy import PolicyDenied
+    history = list(history)
+    page = page or ''
+    def messages():
+        reference = '\n\n<untrusted_page_context>\n' + page + '\n</untrusted_page_context>' if page else ''
+        return [*history, {'role': 'user', 'content': current + reference}]
+    def fits():
+        return serialized_text_bound({'messages': [{'role': 'system', 'content': system}, *messages()]}) + capture.max_output_tokens <= capture.context_tokens
+    while history and not fits():
+        history.pop(0)
+    # Removing optional page reference is safer than altering the question or
+    # truncating a document mid-instruction. The user prompt remains verbatim.
+    if not fits():
+        page = ''
+    if not fits():
+        raise PolicyDenied('context_budget_exceeded')
+    return messages()
+
+
 def _quick_reasoning_effort(provider, model, api_mode, supported=None, requested=None):
     """Use exact catalog capabilities, never guess from a model name."""
     if api_mode not in {"codex_responses", "chat_completions"}:
@@ -53,6 +93,7 @@ class QuickAnswerBot:
         self.client = self.stream = None
         self.parts = []
         self.reasoning_effort = None
+        self.local_capture = None
         self.request_started = self.first_visible_token = None
         from runtime.think_scrubber import StreamingThinkScrubber
         self.scrubber = StreamingThinkScrubber()
@@ -140,10 +181,23 @@ class QuickAnswerBot:
                     self.delta(text)
                 response = stream.get_final_message()
         else:
-            from runtime.auxiliary_client import _build_call_kwargs
-            kwargs = _build_call_kwargs(self.provider, self.model,
-                [{"role": "system", "content": system}, *messages],
-                max_tokens=2048, timeout=60, base_url=self.base_url)
+            if self.provider == 'local-store':
+                from runtime.local_ai.store_provider_host import get_bound_store_runtime
+                from runtime.independent.native_token_bounds import serialized_text_bound
+                capture = get_bound_store_runtime(model=self.model, provider=self.provider,
+                    base_url=self.base_url, api_key=self.api_key)
+                if capture is None or capture != self.local_capture:
+                    raise PermissionError('local_runtime_binding_changed')
+                kwargs = {'model':self.model, 'messages':[{'role':'system','content':system}, *messages],
+                    'max_tokens':capture.max_output_tokens, 'temperature':0}
+                if serialized_text_bound(kwargs) + kwargs['max_tokens'] > capture.context_tokens:
+                    from runtime.independent.policy import PolicyDenied
+                    raise PolicyDenied('context_budget_exceeded')
+            else:
+                from runtime.auxiliary_client import _build_call_kwargs
+                kwargs = _build_call_kwargs(self.provider, self.model,
+                    [{"role": "system", "content": system}, *messages],
+                    max_tokens=2048, timeout=60, base_url=self.base_url)
             if self.provider == "openai" and "max_tokens" in kwargs:
                 kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
             kwargs.update(stream=True, stream_options={"include_usage": True})
@@ -183,8 +237,6 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
     entered = time.monotonic()
     from runtime.independent.native_chat_protocol import verify_native_context
     from runtime.independent.companion import read_quickchat_companion
-    from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
-    from cli.runtime_provider import resolve_runtime_provider
     if context is None or bridge is None or bridge.context != context:
         raise PermissionError("Quickchat requires its verified native profile and Space binding.")
     verify_native_context(context)
@@ -192,8 +244,14 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
         raise InterruptedError("Quickchat turn was superseded")
     if not provider or provider in {"auto", "main"} or not model:
         raise ValueError("Select a connected provider and model for Quickchat.")
-    runtime = resolve_runtime_provider_with_anthropic_env_lock(
-        resolve_runtime_provider, requested=provider, target_model=model)
+    local_capture = None
+    if provider == 'local-store':
+        runtime, local_capture = _local_quickchat_runtime(context, model, provider)
+    else:
+        from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
+        from cli.runtime_provider import resolve_runtime_provider
+        runtime = resolve_runtime_provider_with_anthropic_env_lock(
+            resolve_runtime_provider, requested=provider, target_model=model)
     if runtime.get("provider") != provider:
         raise PermissionError("The selected Quickchat provider changed; select it again.")
     headers = {}
@@ -240,14 +298,20 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
     current = str(text)
     if len(current) > 32000:
         raise ValueError("Quickchat input is too long. Use a standard chat for large requests.")
+    page = ''
     if grounding_context:
         # Only the explicitly supplied page snapshot is used; never fetch or
         # infer a page from active tabs or previous turns.
         page = str(grounding_context)[:(2000 if simple else 8000)].replace("<", "\\u003c").replace(">", "\\u003e")
-        current += "\n\n<untrusted_page_context>\n" + page + "\n</untrusted_page_context>"
-    messages.append({"role": "user", "content": current})
+        if local_capture is None:
+            current += "\n\n<untrusted_page_context>\n" + page + "\n</untrusted_page_context>"
+    if local_capture is not None:
+        messages = _fit_local_quickchat(system, messages, current, page, local_capture)
+    else:
+        messages.append({"role": "user", "content": current})
     bot = QuickAnswerBot(bridge, provider, model, runtime, cancel_event,
                          lambda delta: put("token", {"text": delta}))
+    bot.local_capture = local_capture
     bot.reasoning_effort = _quick_reasoning_effort(provider, model, bot.api_mode,
         supported_reasoning_efforts, requested_reasoning_effort)
     register(bot)

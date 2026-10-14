@@ -74,10 +74,11 @@ def inspect_png(path, width, height):
 
 class MediaProcess:
     """Only this owned process tree is stopped; compute stays held until exit."""
-    def __init__(self,binary,args,output_dir,memory_limit,production_budget=None):
+    def __init__(self,binary,args,output_dir,memory_limit,production_budget=None,gpu_budget=None):
         self.binary=binary;self.args=args;self.output_dir=output_dir;self.memory_limit=memory_limit
         self.process=None;self.job=None;self._lock=threading.RLock();self.peak_ram=None
         self.production_budget=production_budget
+        self.gpu_budget=gpu_budget
         self._stderr_lock=threading.Lock();self._stderr=bytearray();self._reader=None
 
     def _drain_stderr(self,stream):
@@ -96,6 +97,7 @@ class MediaProcess:
         if os.name!='nt':raise ValueError('runtime_platform_unsupported')
         if cancel.is_set():raise InstallCancelled()
         environment={key:value for key,value in os.environ.items() if key.upper() in ('SYSTEMROOT','WINDIR','TEMP','TMP')}
+        if self.gpu_budget is not None:environment.update(self.gpu_budget.environment())
         from .store_process import CREATE_SUSPENDED,resume_owned_suspended
         sampler=None;started=time.monotonic()
         try:
@@ -107,13 +109,18 @@ class MediaProcess:
                     shell=False,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.PIPE,
                     creationflags=subprocess.CREATE_NO_WINDOW|CREATE_SUSPENDED)
                 self.job.assign(self.process)
+                if self.gpu_budget is not None:self.gpu_budget.prepare_initializing(self.process)
                 self._reader=threading.Thread(target=self._drain_stderr,args=(self.process.stderr,),daemon=True);self._reader.start()
                 sampler=MemorySampler(self.process.pid)
                 resume_owned_suspended(self.process)
+                if self.gpu_budget is not None:
+                    if self.production_budget is None:raise ValueError('gpu_requires_production_ram_budget')
+                    self.gpu_budget.admit_initialized(self.process,cancel,self.production_budget.reserve_available)
             while self.process.poll() is None:
                 if cancel.wait(.05):raise InstallCancelled()
                 if self.production_budget is not None and not self.production_budget.reserve_available():
                     raise RuntimeError('system_ram_reserve_breached')
+                if self.gpu_budget is not None:self.gpu_budget.check()
                 if time.monotonic()-started>timeout:raise TimeoutError('media_generation_timeout')
             if self.process.returncode!=0:raise RuntimeError('media_runtime_failed')
         finally:
@@ -122,6 +129,7 @@ class MediaProcess:
 
     def stop(self,timeout=2):
         with self._lock:
+            if self.gpu_budget is not None:self.gpu_budget.close()
             if self.job:self.job.close();self.job=None
             if self.process is not None and self.process.poll() is None:self.process.kill()
             if self.process is not None:

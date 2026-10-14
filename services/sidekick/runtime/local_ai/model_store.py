@@ -52,7 +52,8 @@ def _device_identity(device):
     if not isinstance(device,dict):return None
     return _digest({'os':device.get('os'),'arch':device.get('arch'),'cpuName':device.get('cpuName'),
         'ramTotalBytes':device.get('ramTotalBytes',{}).get('value'),
-        'adapters':[(a.get('name'),a.get('vendor'),a.get('dedicatedBytes',{}).get('value')) for a in device.get('adapters',[])]})
+        'adapters':[(a.get('name'),a.get('vendor'),a.get('dedicatedBytes',{}).get('value'),
+            a.get('adapterLuid'),a.get('vulkanDeviceUuid'),a.get('softwareAdapter')) for a in device.get('adapters',[])]})
 
 def _read(path, default):
     if not path.exists(): return default
@@ -147,6 +148,7 @@ class ModelStore:
         self.lock=threading.RLock(); self.jobs={}; self.sessions={}
         self.inputs={}
         self._prepared_sessions=weakref.WeakKeyDictionary()
+        self._prepared_observations=weakref.WeakKeyDictionary()
         self.registry_revision,self.engines,self.artifacts=load_registry()
         self.entries={item['id']:item for item in catalog_entries()}
         self.state=_read(self.root/'state.json',{'installed':{},'active':None,'receipts':[]})
@@ -186,19 +188,31 @@ class ModelStore:
         if len(matches)!=1:raise ValueError('qualified_engine_backend_unavailable')
         return matches[0]
 
-    def _vram_budget(self):
-        # No implicit selection among multiple GPUs: a device-index/LUID mapping
-        # is required before such a configuration can execute Vulkan work.
-        if len((self.device or {}).get('adapters',[]))!=1:return 0
-        budgets=[]
-        for adapter in (self.device or {}).get('adapters',[]):
-            if adapter.get('sharedSystemMemory') is not False:continue
-            facts=[adapter.get(key,{}) for key in ('dedicatedBytes','processBudgetBytes','processUsageBytes')]
-            if any(fact.get('status')!='measured' or type(fact.get('value')) is not int for fact in facts):continue
-            if not any(item.get('name')=='vulkan' and item.get('status') in ('verified','detected') for item in adapter.get('backends',[])):continue
-            dedicated,budget,usage=[fact['value'] for fact in facts]
-            budgets.append(int(min(dedicated,max(0,budget-usage))*.75))
-        return max(budgets,default=0)
+    def _gpu_binding(self):
+        from .store_gpu import select_binding
+        return select_binding(self.device)
+
+    def _preliminary_gpu_capacity(self):
+        from .store_gpu import preliminary_capacity_bytes
+        return preliminary_capacity_bytes(self._gpu_binding())
+
+    def _gpu_runtime_budget(self,entry):
+        from .store_gpu import OwnedGpuBudget
+        return OwnedGpuBudget(self._gpu_binding(),entry['recommendedVramBytes'],self.scope.key)
+
+    def _gpu_proof_matches(self,proof):
+        config=proof.get('configuration',{})
+        if config.get('backend','cpu')!='vulkan':return True
+        try:binding=self._gpu_binding().public()
+        except ValueError:return False
+        admission=config.get('gpuProcessAdmission',{})
+        return (isinstance(admission,dict) and config.get('gpuBinding')==binding and admission.get('binding')==binding
+                and admission.get('source')=='owned_process_budget'
+                and type(admission.get('processId')) is int and admission['processId']>0
+                and bool(admission.get('processCreationTime')) and bool(admission.get('budgetOwnerRef'))
+                and admission.get('initialObservationUsageFullyCounted') is True
+                and type(admission.get('initializationBeforeBudgetMs')) in (int,float)
+                and 0<=admission['initializationBeforeBudgetMs']<=1000)
 
     def bind_hardware(self, hardware):
         # Authenticated Main supplied scan bound by existing scan broker.
@@ -227,8 +241,10 @@ class ModelStore:
                 elif not reasons: state='likely_suitable'
             if backend=='vulkan':
                 required=entry.get('recommendedVramBytes')
-                if not required or self._vram_budget()<required:
-                    state='too_large';reasons.append('insufficient_measured_free_dedicated_vram')
+                try:capacity=self._preliminary_gpu_capacity()
+                except ValueError as error:capacity=0;reasons.append(str(error))
+                if not required or capacity<required:
+                    state='too_large';reasons.append('insufficient_preliminary_dedicated_capacity')
                 if entry.get('artifactManifest',{}).get('category')=='text' and not entry['artifactManifest'].get('gpuLayers'):
                     reasons.append('model_gpu_layer_configuration_unknown')
             if entry['downloadBytes'] is None and entry['totalParameters'] and ram.get('status')=='measured':
@@ -236,7 +252,13 @@ class ModelStore:
         else: reasons.append('hardware_scan_required')
         try:self._license(entry)
         except ValueError as e: reasons.append(str(e))
-        return {'state':state,'reasons':reasons,'allowed':state=='likely_suitable' and not reasons}
+        result={'state':state,'reasons':reasons,'allowed':state=='likely_suitable' and not reasons}
+        if backend=='vulkan':
+            from .store_gpu import adapter_candidates,preliminary_capacity_bytes
+            result['requiresOwnedProcessAdmission']=True
+            result['adapterCapacityCandidates']=[{**binding.public(),'preliminaryCapacityBytes':preliminary_capacity_bytes(binding),
+                'processBudgetKnown':False} for binding in adapter_candidates(self.device)]
+        return result
 
     def _download_allowed(self,entry):
         if not entry.get('artifactManifest') or not entry.get('installQualified'):return False
@@ -264,7 +286,7 @@ class ModelStore:
         result.update(state='installed_verified',benchmarkAllowed=eligible['allowed'])
         proofs=[r for r in self.history if r.get('modelId')==entry['id'] and r.get('origin')=='local'
                 and r.get('bundleDigest')==artifact['bundleDigest'] and r.get('technicalPass')
-                and r.get('deviceFingerprint')==_device_identity(self.device)]
+                and r.get('deviceFingerprint')==_device_identity(self.device) and self._gpu_proof_matches(r)]
         proofs=[proof for proof in proofs if proof.get('runtimeDigest')==_digest(self._engine(entry,proof.get('configuration',{}).get('backend','cpu'))['manifestObject'].model_dump(mode='json',by_alias=True))
                 and proof.get('sha256')==_digest({key:value for key,value in proof.items() if key!='sha256'})]
         if not proofs:return result
@@ -275,7 +297,7 @@ class ModelStore:
             result.update(state='chat_or_media_qualified',activateAllowed=allowed and kind=='text',executeAllowed=allowed)
         return result
 
-    def provider_capability(self,model_id,*,agentic=False,backend=None,compute_owner=None):
+    def provider_capability(self,model_id,*,agentic=False,backend=None,compute_owner=None,_runtime_observation=None):
         """Public metadata only; model evidence never changes user permissions."""
         entry=self._entry(model_id);artifact=entry.get('artifactManifest')
         if not artifact or artifact['category']!='text':return {'state':'unavailable','reasonCode':'text_model_not_qualified'}
@@ -293,6 +315,7 @@ class ModelStore:
                     or proof.get('recommendation')!='chat_candidate' or proof.get('deviceFingerprint')!=_device_identity(self.device)):
                 continue
             if selected not in ('cpu','vulkan'):continue
+            if not self._gpu_proof_matches(proof):continue
             manifest=self._engine(entry,selected)['manifestObject']
             if (proof.get('runtimeDigest')!=_digest(manifest.model_dump(mode='json',by_alias=True))
                     or proof.get('sha256')!=_digest({key:value for key,value in proof.items() if key!='sha256'})):continue
@@ -321,18 +344,50 @@ class ModelStore:
                 admitted=ComputeAdmission.borrow_valid(compute_owner,token,self.scope)
                 ComputeAdmission.release_borrow(compute_owner,token,self.scope)
                 if getattr(self,'authorize',None):self.authorize()
-        if not admitted and not self.eligibility(entry,selected)['allowed']:return {'state':'unavailable','reasonCode':'fresh_hardware_admission_required'}
+        if _runtime_observation is not None:
+            self._refresh_runtime_observation(_runtime_observation,entry,selected,own_process_admitted=admitted)
+        elif not admitted and not self.eligibility(entry,selected)['allowed']:return {'state':'unavailable','reasonCode':'fresh_hardware_admission_required'}
         return {'state':'ready','artifactId':model_id,'artifactRevision':entry['revision'],'bundleDigest':artifact['bundleDigest'],
             'backend':selected,'runtimeBuild':proof['runtimeBuild'],'runtimeDigest':proof['runtimeDigest'],
             'evidenceRef':proof['id'],'toolCallingQualified':tools,'contextTokens':4096,'maxOutputTokens':768,'parallelRequests':1}
 
     @staticmethod
     def _prepared_identity(session):
-        return (str(session.binary),tuple(session.arguments),session.artifact_id,session.port,session.token)
+        gpu=getattr(session,'gpu_budget',None)
+        return (str(session.binary),tuple(session.arguments),session.artifact_id,session.port,session.token,
+                _digest(gpu.binding.public()) if gpu else None)
 
     def _memory_budget(self,entry):
-        from .store_budget import capture_memory_budget
-        return capture_memory_budget(self.device,entry['recommendedRamBytes'],self.scope.key)
+        from .store_budget import capture_runtime_memory_budget
+        return capture_runtime_memory_budget(entry['recommendedRamBytes'],self.scope.key)
+
+    def _capture_runtime_observation(self,entry,backend):
+        from .store_observation import capture_runtime_observation
+        if getattr(self,'authorize',None):self.authorize()
+        return capture_runtime_observation(hardware=self.device,scope_key=self.scope.key,
+            device_fingerprint=_device_identity(self.device),bundle_digest=entry['artifactManifest']['bundleDigest'],
+            runtime_digest=_digest(self._engine(entry,backend)['manifestObject'].model_dump(mode='json',by_alias=True)),
+            cache_root=self.root,required_ram=entry['recommendedRamBytes'],required_disk=entry['downloadBytes']*2)
+
+    def _refresh_runtime_observation(self,observation,entry,backend,own_process_admitted=False):
+        from .store_observation import ScopedRuntimeObservation
+        if type(observation) is not ScopedRuntimeObservation:raise ValueError('scoped_runtime_observation_required')
+        if getattr(self,'authorize',None):self.authorize()
+        return observation.refresh(scope_key=self.scope.key,device_fingerprint=_device_identity(self.device),
+            bundle_digest=entry['artifactManifest']['bundleDigest'],
+            runtime_digest=_digest(self._engine(entry,backend)['manifestObject'].model_dump(mode='json',by_alias=True)),
+            cache_root=self.root,required_ram=entry['recommendedRamBytes'],required_disk=entry['downloadBytes']*2,
+            own_process_admitted=own_process_admitted)
+
+    def prepared_provider_capability(self,prepared,model_id,*,agentic=True,backend=None,compute_owner=None):
+        with self.lock:
+            binding=self._prepared_sessions.get(prepared)
+            observation=self._prepared_observations.get(prepared)
+        if (not binding or binding[0]!=model_id or binding[1]!=agentic or binding[3]!=self.scope.key
+                or binding[5]!=self._prepared_identity(prepared) or binding[2].is_set() or observation is None):
+            raise ValueError('prepared_provider_identity_mismatch')
+        return self.provider_capability(model_id,agentic=agentic,backend=backend,compute_owner=compute_owner,
+                                        _runtime_observation=observation)
 
     def prepare_provider_session(self,model_id,*,cancel,agentic=True,backend=None):
         """Verify and choose private endpoint/key, without spawning or reserving compute."""
@@ -345,15 +400,19 @@ class ModelStore:
         with self.lock:
             self._prepared_sessions[session]=(model_id,agentic,cancel,self.scope.key,
                 _digest(capability),self._prepared_identity(session))
+            if not hasattr(self,'_prepared_observations'):self._prepared_observations=weakref.WeakKeyDictionary()
+            self._prepared_observations[session]=getattr(session,'_runtime_observation',None)
         return session,capability
 
     @contextmanager
     def provider_session(self,model_id,*,cancel,agentic=False,backend=None,compute_owner=None,prepared=None):
         """Internal scoped provider lease. Never expose the token to a renderer."""
-        capability=self.provider_capability(model_id,agentic=agentic,backend=backend)
+        capability=(self.prepared_provider_capability(prepared,model_id,agentic=agentic,backend=backend)
+            if prepared is not None else self.provider_capability(model_id,agentic=agentic,backend=backend))
         if capability['state']!='ready':raise ValueError(capability['reasonCode'])
         entry=self._entry(model_id);selected=capability['backend']
-        self._guard(entry,True,selected,execution=True)
+        observation=self._prepared_observations.get(prepared) if prepared is not None else None
+        self._guard(entry,True,selected,execution=True,_runtime_observation=observation)
         if prepared is not None:
             with self.lock:binding=self._prepared_sessions.get(prepared)
             expected=(model_id,agentic,cancel,self.scope.key,_digest(capability),self._prepared_identity(prepared))
@@ -363,6 +422,9 @@ class ModelStore:
             # retains this turn's endpoint/key through tool round trips.
             self._verify(entry,cancel)
             verify_engine(engine_directory(self.root,self.repository,self._engine(entry,selected)),self._engine(entry,selected))
+            observation=self._refresh_runtime_observation(observation,entry,selected)
+            with self.lock:self._prepared_observations[prepared]=observation
+            prepared._runtime_observation=observation
         if not _EXECUTION.acquire(False):raise ValueError('local_compute_busy')
         from runtime.independent.manager import ComputeAdmission
         owner=uuid.uuid4().hex;session=None;admitted=False;borrow=None;stopped=threading.Event();watcher=None
@@ -437,11 +499,13 @@ class ModelStore:
     def _job_view(job):
         return {k:v for k,v in job.items() if k not in ('cancel','thread','session','sourcePath','sampler','mediaRequest','assetNames')}
 
-    def _guard(self, entry, installed=False,backend='cpu',execution=False):
+    def _guard(self, entry, installed=False,backend='cpu',execution=False,_runtime_observation=None):
         authorize=getattr(self,'authorize',None)
         if authorize:authorize()
         self._license(entry)
-        if installed and not self.eligibility(entry,backend)['allowed']:raise ValueError('model_not_hardware_runtime_qualified')
+        if installed:
+            if _runtime_observation is not None:self._refresh_runtime_observation(_runtime_observation,entry,backend)
+            elif not self.eligibility(entry,backend)['allowed']:raise ValueError('model_not_hardware_runtime_qualified')
         if not installed and not self._download_allowed(entry):raise ValueError('model_download_not_safely_admitted')
         if installed and entry['id'] not in self.state['installed']: raise ValueError('model_not_installed')
         if installed and self.state['installed'][entry['id']].get('bundleDigest')!=entry['artifactManifest']['bundleDigest']:
@@ -623,9 +687,10 @@ class ModelStore:
         started=time.monotonic()
         with _cache_directory(self.root,('media',job['id'])) as directory:
             inputs=self._media_inputs(entry,request)
-            args=build_media_args(artifact,self.root/'models'/_model_key(entry),directory,request,job['backend'],self._vram_budget(),inputs)
+            gpu=self._gpu_runtime_budget(entry) if job['backend']=='vulkan' else None
+            args=build_media_args(artifact,self.root/'models'/_model_key(entry),directory,request,job['backend'],entry['recommendedVramBytes'] if gpu else 0,inputs)
             budget=self._memory_budget(entry)
-            session=MediaProcess(binary,args,directory,entry['recommendedRamBytes'],budget);job['session']=session
+            session=MediaProcess(binary,args,directory,entry['recommendedRamBytes'],budget,gpu);job['session']=session
             session.run(cancel,timeout=900 if artifact['category']=='video' else 300)
             if getattr(self,'authorize',None):self.authorize()
             self._license(entry)
@@ -638,15 +703,16 @@ class ModelStore:
                 'suite':'stable-diffusion-png-technical-v1','suiteSha256':_digest({'decoder':'Pillow','result':'png-frames-v1'}),
                 'validator':'png-decoder-dimensions-v1','mode':job['mode'],'origin':'local','createdAt':time.time(),
                 'deviceFingerprint':_device_identity(self.device),'configuration':{**{key:value for key,value in request.items() if key!='prompt'},
-                    'pipeline':config['pipeline'],'backend':job['backend'],'vramBudgetBytes':self._vram_budget() if job['backend']=='vulkan' else None},
+                    'pipeline':config['pipeline'],'backend':job['backend'],
+                    **({'gpuBinding':gpu.binding.public(),'gpuProcessAdmission':gpu.receipt()} if gpu else {})},
                 'coldStartMs':elapsed,'medianResponseMs':elapsed,'firstVisibleTokenMs':None,
-                'peakObservedRamBytes':session.peak_ram,'peakObservedVramBytes':None,'technicalPass':True,
+                'peakObservedRamBytes':session.peak_ram,'peakObservedVramBytes':gpu.peak_usage if gpu else None,'technicalPass':True,
                 'counts':{'content':0,'format':1,'tool':0,'security':0,'technical':1},'sampleCount':1,
                 'samples':[{'caseId':'media_preview','response':None,'elapsedMs':elapsed,
                     'evaluation':{'content':'not_evaluated','format':'pass','tool':'not_applicable','security':'not_evaluated','technical':'pass'}}],
                 'state':'complete','recommendation':'media_candidate','agentRecommendation':False,
                 'unsafeToolOrSecurityFailure':False,'measurementLimitations':['Image/frame decoding and dimensions verified; prompt fidelity not evaluated',
-                    'RSS sampled every 100ms; GPU peak memory not measured','Video output is a PNG frame sequence; no MP4 encoder']}
+                    'RSS/GPU usage are periodic observations; instantaneous allocation peaks may be missed','Video output is a PNG frame sequence; no MP4 encoder']}
             receipt['sha256']=_digest(receipt)
             with self.lock:
                 self.history.append(receipt)
@@ -675,11 +741,13 @@ class ModelStore:
         with socket.socket() as reservation:reservation.bind(('127.0.0.1',0));port=reservation.getsockname()[1]
         args=['--model',str(weights),'--alias',entry['id'],'--ctx-size','4096','--parallel','1','--host','127.0.0.1','--port',str(port),'--n-gpu-layers',str(entry['artifactManifest']['gpuLayers']) if backend=='vulkan' else '0','--threads',str(min(4,os.cpu_count() or 1))]
         args+=['--no-context-shift','--jinja']
-        if backend=='vulkan':args+=['--device','Vulkan0','--split-mode','none']
+        if backend=='vulkan':args+=['--device','Vulkan0','--split-mode','none','--fit','off','--no-warmup','--batch-size','128','--ubatch-size','64']
         session=LlamaCppSession(binary,args,entry['id'],port,uuid.uuid4().hex+uuid.uuid4().hex,timeout=45)
         session.suspended_admission=True
         session.memory_limit_bytes=entry['recommendedRamBytes']
         session.production_budget=self._memory_budget(entry)
+        if backend=='vulkan':session.gpu_budget=self._gpu_runtime_budget(entry)
+        session._runtime_observation=self._capture_runtime_observation(entry,backend)
         return session,manifest
 
     def _benchmark(self,job,entry):
@@ -727,14 +795,18 @@ class ModelStore:
             'runtimeBuild':manifest.build_ref,'runtimeDigest':_digest(manifest.model_dump(mode='json',by_alias=True)),
             'suite':SUITE_VERSION,'suiteSha256':SUITE_HASH,'validator':VALIDATOR_VERSION,'mode':job['mode'],
             'origin':'local','createdAt':time.time(),'deviceFingerprint':_device_identity(self.device),
-            'configuration':{'contextTokens':4096,'contextShift':False,'maxOutputTokens':768,'temperature':0,'requestedSeed':17,'seedSupport':'not_independently_verified','thinking':'disabled' if entry['artifactManifest'].get('chatTemplateKwargs') else 'runtime_default','backend':job['backend']},
+            'configuration':{'contextTokens':4096,'contextShift':False,'maxOutputTokens':768,'temperature':0,'requestedSeed':17,'seedSupport':'not_independently_verified','thinking':'disabled' if entry['artifactManifest'].get('chatTemplateKwargs') else 'runtime_default','backend':job['backend'],
+                'runtimeObservation':session._runtime_observation.receipt(),
+                **({'gpuBinding':session.gpu_budget.binding.public(),'gpuProcessAdmission':session.gpu_budget.receipt()} if getattr(session,'gpu_budget',None) else {})},
             'coldStartMs':load_ms,'medianResponseMs':statistics.median([s['elapsedMs'] for s in samples]) if samples else None,
             'firstVisibleTokenMs':statistics.median([s['firstVisibleTokenMs'] for s in samples if s.get('firstVisibleTokenMs') is not None]) if any(s.get('firstVisibleTokenMs') is not None for s in samples) else None,
-            'peakObservedRamBytes':sampler.peak,'peakObservedVramBytes':None,
+            'peakObservedRamBytes':sampler.peak,'peakObservedVramBytes':session.gpu_budget.peak_usage if getattr(session,'gpu_budget',None) else None,
             'technicalPass':technical,'counts':counts,'sampleCount':len(samples),'samples':samples,
             'state':'cancelled' if cancel.is_set() else 'complete',
             'recommendation':'chat_candidate' if technical and content_ratio>=.75 else 'no_recommendation',
-            'agentRecommendation':False,'unsafeToolOrSecurityFailure':unsafe,'measurementLimitations':['RSS sampled every 100ms; peaks may be missed','GPU memory unavailable','synthetic tools never executed']}
+            'agentRecommendation':False,'unsafeToolOrSecurityFailure':unsafe,'measurementLimitations':['RSS sampled every 100ms; peaks may be missed',
+                'Owned-process GPU usage sampled; between-sample peaks may be missed' if getattr(session,'gpu_budget',None) else 'GPU memory unavailable',
+                'synthetic tools never executed']}
         receipt['sha256']=_digest(receipt)
         with self.lock:self.history.append(receipt);self._persist()
         self._update(job,state='cancelled' if cancel.is_set() else 'complete',receiptId=receipt['id'])
@@ -806,7 +878,8 @@ class ModelStore:
             proof=next((r for r in reversed(self.history) if r['modelId']==identity and r['origin']=='local'
                 and r['artifactSha256']==entry['artifact']['sha256'] and r.get('bundleDigest')==entry['artifactManifest']['bundleDigest']
                 and r['technicalPass'] and r['recommendation']=='chat_candidate'
-                and r['deviceFingerprint']==_device_identity(self.device)),None)
+                and r['deviceFingerprint']==_device_identity(self.device) and self._gpu_proof_matches(r)
+                and r.get('sha256')==_digest({key:value for key,value in r.items() if key!='sha256'})),None)
             if not proof:raise ValueError('successful_device_benchmark_required')
             backend=proof.get('configuration',{}).get('backend','cpu')
             self._guard(entry,True,backend,execution=True)

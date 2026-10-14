@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.57-beta.4",
+  "version": "0.1.57-beta.5",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
@@ -24,9 +24,10 @@
     "smoke:linux:fresh-profile": "node scripts/smoke-linux-fresh-profile.mjs",
     "sync:sidekick": "node -e \"console.log('[sync:sidekick] Sidekick is integrated directly in-tree.')\"",
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
-    "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
-    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
-    "package:linux": "npm run prepare:python && npm run build && electron-builder --linux tar.gz AppImage && node scripts/write-linux-checksums.mjs"
+    "prepare:production-app": "node scripts/stage-production-app.mjs",
+    "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && npm run prepare:production-app && electron-builder --win nsis portable",
+    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && npm run prepare:production-app && electron-builder --win nsis portable --publish never",
+    "package:linux": "npm run prepare:python && npm run build && npm run prepare:production-app && electron-builder --linux tar.gz AppImage && node scripts/write-linux-checksums.mjs"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -63,7 +64,9 @@
       "mirror": "https://github.com/castlabs/electron-releases/releases/download/v"
     },
     "afterSign": "scripts/evs-sign.cjs",
+    "afterPack": "scripts/verify-packaged-dependencies.cjs",
     "directories": {
+      "app": "runtime/packaged-app",
       "output": "release"
     },
     "files": [

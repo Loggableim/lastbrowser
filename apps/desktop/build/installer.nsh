@@ -33,6 +33,10 @@ Var LastBrowserInstallButtonBack
 Var LastBrowserInstallBrandingText
 Var LastBrowserInstallHeaderText
 Var LastBrowserInstallHeaderSubText
+Var LastBrowserInstallHeaderImage
+Var LastBrowserInstallHeaderBackground
+Var LastBrowserInstallHeaderLine
+Var LastBrowserInstallBrandingBackground
 
 !macro LB_CREATE_CENTERED_LABEL ID TEXT FONT_VAR FONT_SIZE FONT_WEIGHT COLOR
   GetDlgItem $0 $LastBrowserInstallDialog ${ID}
@@ -94,9 +98,34 @@ Function LastBrowserInstallPageShow
   GetDlgItem $LastBrowserInstallBrandingText $HWNDPARENT 1256
   GetDlgItem $LastBrowserInstallHeaderText $HWNDPARENT 1037
   GetDlgItem $LastBrowserInstallHeaderSubText $HWNDPARENT 1038
+  GetDlgItem $LastBrowserInstallHeaderImage $HWNDPARENT 1039
+  GetDlgItem $LastBrowserInstallHeaderBackground $HWNDPARENT 1034
+  GetDlgItem $LastBrowserInstallHeaderLine $HWNDPARENT 1035
+  GetDlgItem $LastBrowserInstallBrandingBackground $HWNDPARENT 1028
+
+  ; Give the installation scene the whole body, rather than leaving an empty
+  ; native header above it. Keep the footer actions in their native dialog.
+  SetCtlColors $HWNDPARENT "152238" "F7F9FC"
+  SetCtlColors $LastBrowserInstallDialog "152238" "F7F9FC"
+  ShowWindow $LastBrowserInstallHeaderText ${SW_HIDE}
+  ShowWindow $LastBrowserInstallHeaderSubText ${SW_HIDE}
+  ShowWindow $LastBrowserInstallHeaderImage ${SW_HIDE}
+  ShowWindow $LastBrowserInstallHeaderBackground ${SW_HIDE}
+  ShowWindow $LastBrowserInstallHeaderLine ${SW_HIDE}
+  ShowWindow $LastBrowserInstallBrandingBackground ${SW_HIDE}
+  ShowWindow $LastBrowserInstallBrandingText ${SW_HIDE}
+  System::Alloc 16
+  Pop $0
+  System::Call 'user32::GetClientRect(p $HWNDPARENT, p r0)'
+  System::Call '*$0(i, i, i.r1, i.r2)'
+  System::Free $0
+  IntOp $2 $2 - 50
+  !insertmacro LB_MOVE $LastBrowserInstallDialog 0 0 $1 $2
 
   ; Read the actual page size and center the content within the native InstFiles dialog.
-  System::Call 'user32::GetClientRect(p $LastBrowserInstallDialog, @r0)'
+  System::Alloc 16
+  Pop $0
+  System::Call 'user32::GetClientRect(p $LastBrowserInstallDialog, p r0)'
   System::Call '*$0(i, i, i.r1, i.r2)'
   System::Free $0
   StrCpy $R8 $1
@@ -111,7 +140,7 @@ Function LastBrowserInstallPageShow
 
   GetDlgItem $R4 $LastBrowserInstallDialog ${LB_INSTALL_NOVA_ID}
   ${If} $R4 == 0
-    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "", i 0x5000020E, i 0, i 0, i 72, i 72, p $LastBrowserInstallDialog, p ${LB_INSTALL_NOVA_ID}, p 0, p 0) p .r4'
+    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "", i 0x5000020E, i 0, i 0, i 72, i 72, p $LastBrowserInstallDialog, p ${LB_INSTALL_NOVA_ID}, p 0, p 0) p .R4'
     ${NSD_SetBitmap} $R4 "$PLUGINSDIR\installerNova.bmp" $LastBrowserInstallNovaBitmap
   ${EndIf}
   IntOp $R7 $R0 - 36
@@ -142,8 +171,10 @@ Function LastBrowserInstallPageShow
     StrCpy $LastBrowserInstallPageStyled "1"
   ${EndIf}
   !insertmacro LB_MOVE $LastBrowserInstallProgressBar $R3 171 $R6 9
+  ; Windows visual styles ignore PBM_SETBARCOLOR; disable them only for this bar.
+  System::Call 'uxtheme::SetWindowTheme(p $LastBrowserInstallProgressBar, w "", w "")'
   SendMessage $LastBrowserInstallProgressBar ${PBM_SETBARCOLOR} 0 0x00FFD900
-  SendMessage $LastBrowserInstallProgressBar ${PBM_SETBKCOLOR} 0 0x00FF4E93
+  SendMessage $LastBrowserInstallProgressBar ${PBM_SETBKCOLOR} 0 0x00EAE2DD
   !insertmacro LB_MOVE $LastBrowserInstallShowLogButton $R3 202 $R6 18
   SendMessage $LastBrowserInstallShowLogButton ${WM_SETTEXT} 0 "STR:Details anzeigen"
   IntOp $R5 $R9 - 222
@@ -156,7 +187,9 @@ Function LastBrowserInstallPageShow
   SendMessage $LastBrowserInstallButtonCancel ${WM_SETTEXT} 0 "STR:Abbrechen"
   SendMessage $LastBrowserInstallButtonNext ${WM_SETTEXT} 0 "STR:Startklar"
   ShowWindow $LastBrowserInstallButtonBack ${SW_HIDE}
-  System::Call 'user32::GetClientRect(p $HWNDPARENT, @r0)'
+  System::Alloc 16
+  Pop $0
+  System::Call 'user32::GetClientRect(p $HWNDPARENT, p r0)'
   System::Call '*$0(i, i, i.r1, i.r2)'
   System::Free $0
   IntOp $R4 $1 - 180
@@ -164,11 +197,10 @@ Function LastBrowserInstallPageShow
   !insertmacro LB_MOVE $LastBrowserInstallButtonCancel $R4 $R5 78 23
   IntOp $R4 $R4 + 88
   !insertmacro LB_MOVE $LastBrowserInstallButtonNext $R4 $R5 88 23
-  SendMessage $LastBrowserInstallBrandingText ${WM_SETTEXT} 0 "STR:${VERSION} · Beta"
-  IntOp $R4 $R5 + 3
-  !insertmacro LB_MOVE $LastBrowserInstallBrandingText 20 $R4 150 18
-  ShowWindow $LastBrowserInstallHeaderText ${SW_HIDE}
-  ShowWindow $LastBrowserInstallHeaderSubText ${SW_HIDE}
+  ; The native branding background contains another copy of the version text.
+  ; Hide both instead of painting a second footer label over it.
+  ShowWindow $LastBrowserInstallBrandingText ${SW_HIDE}
+  ShowWindow $LastBrowserInstallBrandingBackground ${SW_HIDE}
 
   Pop $R9
   Pop $R8

@@ -1714,6 +1714,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
   await Promise.race([adblock.attach(session.defaultSession), new Promise<void>(resolve => setTimeout(resolve, 1500))]);
   appReady = true;
   createWindow();
+  openUrlLifecycle.flushPendingMainWindowReveal();
   startAutoUpdateChecks();
   void extensionManager.init();
   appTray = createAppTray({

@@ -18,11 +18,16 @@ Var LastBrowserInstallHeadlineFont
 Var LastBrowserInstallDescriptionFont
 Var LastBrowserInstallPrivacyFont
 Var LastBrowserInstallPageStyled
+Var LastBrowserInstallDialog
+Var LastBrowserInstallText
+Var LastBrowserInstallProgressBar
+Var LastBrowserInstallShowLogButton
+Var LastBrowserInstallLog
 
 !macro LB_CREATE_CENTERED_LABEL ID TEXT FONT_VAR FONT_SIZE FONT_WEIGHT COLOR
-  GetDlgItem $0 $mui.InstFilesPage ${ID}
+  GetDlgItem $0 $LastBrowserInstallDialog ${ID}
   ${If} $0 == 0
-    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "${TEXT}", i 0x50000001, i 0, i 0, i 10, i 10, p $mui.InstFilesPage, p ${ID}, p 0, p 0) p .r0'
+    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "${TEXT}", i 0x50000001, i 0, i 0, i 10, i 10, p $LastBrowserInstallDialog, p ${ID}, p 0, p 0) p .r0'
     SetCtlColors $0 "${COLOR}" "F7F9FC"
     CreateFont ${FONT_VAR} "$(^Font)" "${FONT_SIZE}" "${FONT_WEIGHT}"
     SendMessage $0 ${WM_SETFONT} ${FONT_VAR} 1
@@ -67,8 +72,15 @@ Function LastBrowserInstallPageShow
   Push $R8
   Push $R9
 
+  ; Resolve the native InstFiles dialog and controls through the IDs used by NSIS MUI2.
+  FindWindow $LastBrowserInstallDialog "#32770" "" $HWNDPARENT
+  GetDlgItem $LastBrowserInstallText $LastBrowserInstallDialog 1006
+  GetDlgItem $LastBrowserInstallProgressBar $LastBrowserInstallDialog 1004
+  GetDlgItem $LastBrowserInstallShowLogButton $LastBrowserInstallDialog 1027
+  GetDlgItem $LastBrowserInstallLog $LastBrowserInstallDialog 1016
+
   ; Read the actual page size and center the content within the native InstFiles dialog.
-  System::Call 'user32::GetClientRect(p $mui.InstFilesPage, @r0)'
+  System::Call 'user32::GetClientRect(p $LastBrowserInstallDialog, @r0)'
   System::Call '*$0(i, i, i.r1, i.r2)'
   System::Free $0
   StrCpy $R8 $1
@@ -81,9 +93,9 @@ Function LastBrowserInstallPageShow
   IntOp $R3 $R8 - $R6
   IntOp $R3 $R3 / 2
 
-  GetDlgItem $R4 $mui.InstFilesPage ${LB_INSTALL_NOVA_ID}
+  GetDlgItem $R4 $LastBrowserInstallDialog ${LB_INSTALL_NOVA_ID}
   ${If} $R4 == 0
-    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "", i 0x5000020E, i 0, i 0, i 72, i 72, p $mui.InstFilesPage, p ${LB_INSTALL_NOVA_ID}, p 0, p 0) p .r4'
+    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "", i 0x5000020E, i 0, i 0, i 72, i 72, p $LastBrowserInstallDialog, p ${LB_INSTALL_NOVA_ID}, p 0, p 0) p .r4'
     ${NSD_SetBitmap} $R4 "$PLUGINSDIR\installerNova.bmp" $LastBrowserInstallNovaBitmap
   ${EndIf}
   IntOp $R7 $R0 - 36
@@ -94,35 +106,35 @@ Function LastBrowserInstallPageShow
   !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_DESCRIPTION_ID} "Wir bereiten deinen Browser vor. Den Rest bestimmst du beim ersten Start." $LastBrowserInstallDescriptionFont 9 400 "53657C"
   !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_PRIVACY_ID} "Lokal auf deinem Rechner" $LastBrowserInstallPrivacyFont 9 400 "53657C"
 
-  GetDlgItem $0 $mui.InstFilesPage ${LB_INSTALL_EYEBROW_ID}
+  GetDlgItem $0 $LastBrowserInstallDialog ${LB_INSTALL_EYEBROW_ID}
   !insertmacro LB_MOVE $0 $R3 79 $R6 12
-  GetDlgItem $0 $mui.InstFilesPage ${LB_INSTALL_HEADLINE_ID}
+  GetDlgItem $0 $LastBrowserInstallDialog ${LB_INSTALL_HEADLINE_ID}
   !insertmacro LB_MOVE $0 $R3 95 $R6 24
-  GetDlgItem $0 $mui.InstFilesPage ${LB_INSTALL_DESCRIPTION_ID}
+  GetDlgItem $0 $LastBrowserInstallDialog ${LB_INSTALL_DESCRIPTION_ID}
   !insertmacro LB_MOVE $0 $R3 122 $R6 25
-  GetDlgItem $0 $mui.InstFilesPage ${LB_INSTALL_PRIVACY_ID}
+  GetDlgItem $0 $LastBrowserInstallDialog ${LB_INSTALL_PRIVACY_ID}
   !insertmacro LB_MOVE $0 $R3 184 $R6 16
 
   ; Keep the native per-file status, progress, expandable detail log, and cancel behavior.
-  !insertmacro LB_MOVE $mui.InstFilesPage.Text $R3 152 $R6 16
+  !insertmacro LB_MOVE $LastBrowserInstallText $R3 152 $R6 16
   ${If} $LastBrowserInstallPageStyled != "1"
-    System::Call 'user32::GetWindowLongW(p $mui.InstFilesPage.Text, i -16) i.r0'
+    System::Call 'user32::GetWindowLongW(p $LastBrowserInstallText, i -16) i.r0'
     IntOp $R0 $0 & 0xFFFFFFFC
     IntOp $R0 $R0 | 1
-    System::Call 'user32::SetWindowLongW(p $mui.InstFilesPage.Text, i -16, i $R0) i.r0'
-    SetCtlColors $mui.InstFilesPage.Text "182B43" "F7F9FC"
+    System::Call 'user32::SetWindowLongW(p $LastBrowserInstallText, i -16, i $R0) i.r0'
+    SetCtlColors $LastBrowserInstallText "182B43" "F7F9FC"
     StrCpy $LastBrowserInstallPageStyled "1"
   ${EndIf}
-  !insertmacro LB_MOVE $mui.InstFilesPage.ProgressBar $R3 171 $R6 9
-  SendMessage $mui.InstFilesPage.ProgressBar ${PBM_SETBARCOLOR} 0 0x00FFD900
-  SendMessage $mui.InstFilesPage.ProgressBar ${PBM_SETBKCOLOR} 0 0x00FF4E93
-  !insertmacro LB_MOVE $mui.InstFilesPage.ShowLogButton $R3 202 $R6 18
-  SendMessage $mui.InstFilesPage.ShowLogButton ${WM_SETTEXT} 0 "STR:Details anzeigen"
+  !insertmacro LB_MOVE $LastBrowserInstallProgressBar $R3 171 $R6 9
+  SendMessage $LastBrowserInstallProgressBar ${PBM_SETBARCOLOR} 0 0x00FFD900
+  SendMessage $LastBrowserInstallProgressBar ${PBM_SETBKCOLOR} 0 0x00FF4E93
+  !insertmacro LB_MOVE $LastBrowserInstallShowLogButton $R3 202 $R6 18
+  SendMessage $LastBrowserInstallShowLogButton ${WM_SETTEXT} 0 "STR:Details anzeigen"
   IntOp $R5 $R9 - 222
   ${If} $R5 < 18
     StrCpy $R5 18
   ${EndIf}
-  !insertmacro LB_MOVE $mui.InstFilesPage.Log $R3 222 $R6 $R5
+  !insertmacro LB_MOVE $LastBrowserInstallLog $R3 222 $R6 $R5
 
   ; Use the existing MUI footer buttons, with a concise localized action label.
   SendMessage $mui.Button.Cancel ${WM_SETTEXT} 0 "STR:Abbrechen"

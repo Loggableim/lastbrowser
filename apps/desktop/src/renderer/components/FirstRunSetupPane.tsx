@@ -67,7 +67,6 @@ import { providerVerification, isStableProvider } from '../provider-verification
 import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { ProviderBetaCatalogToggle } from './ProviderBetaCatalogToggle.js';
-import { LocalAiSetupPane } from './LocalAiSetupPane.js';
 import {
   OnboardingStatus,
   canSubmitCloudSetup,
@@ -211,6 +210,10 @@ export function FirstRunSetupPane({
   }, [liveProviderModels, provider, showUntestedBetas, browserProfileId, backendProfileName, modelCatalogKey, modelRequestKey]);
   const models = providerModelOptions;
   const [model, setModel] = useState('');
+  const [modelPage, setModelPage] = useState(0);
+  const modelPageSize = 12;
+  const modelPageCount = Math.max(1, Math.ceil(models.length / modelPageSize));
+  const visibleModels = models.slice(modelPage * modelPageSize, (modelPage + 1) * modelPageSize);
   const [oauthState, setOAuthState] = useState<CodexOAuthState>(idleCodexOAuth);
 
   // Identity & Personality state
@@ -324,6 +327,7 @@ export function FirstRunSetupPane({
   const selectProvider = useCallback((nextProvider: string) => {
     setProvider(nextProvider);
     setModel('');
+    setModelPage(0);
     setApiKey('');
     setOAuthState(idleCodexOAuth);
     if (['google-gemini-cli', 'openai-codex'].includes(nextProvider)) {
@@ -776,21 +780,30 @@ export function FirstRunSetupPane({
   const browserOnly = aiChoice === 'disabled';
 
   const de = locale.startsWith('de');
-  const pages = firstRunWizardPages(aiChoice, standaloneReport?.found === true);
+  const pages = firstRunWizardPages(aiChoice, standaloneReport?.found === true, showPasswordImport, personality === 'custom');
   const currentIndex = pages.indexOf(page);
   const titles: Record<WizardPage, string> = {
     search: de ? 'Deine Suchmaschine' : 'Your search engine',
     migration: de ? 'Sidekick mitnehmen' : 'Bring your Sidekick data',
     browser: de ? 'Browserdaten übernehmen' : 'Bring your browser data',
+    'browser-import': de ? 'Daten auswählen' : 'Choose data to import',
+    'browser-passwords': de ? 'Passwörter übernehmen' : 'Import passwords',
+    'browser-default': de ? 'Standardbrowser' : 'Default browser',
     apps: de ? 'Dein Slim Dock' : 'Your Slim Dock',
     ai: de ? 'Mit oder ohne KI?' : 'With or without AI?',
     provider: de ? 'KI verbinden' : 'Connect your AI',
+    'provider-setup': de ? 'Zugang einrichten' : 'Set up access',
+    'provider-model': de ? 'Modell auswählen' : 'Choose a model',
+    personality: de ? 'Nova auswählen' : 'Choose your Sidekick',
+    'personality-prompt': de ? 'Eigenen Prompt festlegen' : 'Set your custom prompt',
     space: de ? 'Dein erster Space' : 'Your first Space'
   };
   const busy = saving || choicePending || importRunning || migrationState === 'running';
   const mayAdvance = !busy && (page !== 'search' || detectionReady)
     && (page !== 'ai' || aiChoice !== null)
-    && (page !== 'provider' || canSubmitForm);
+    && (page !== 'provider' || Boolean(provider))
+    && (page !== 'provider-setup' || (canSubmit && oauthLoginReady && credentialsReady))
+    && (page !== 'provider-model' || (providerModelsReady && Boolean(model)));
   const movePage = (next: WizardPage) => { setFlowError(''); setPage(next); };
   useEffect(() => {
     pageContentRef.current?.scrollTo({ top: 0 });
@@ -922,16 +935,17 @@ export function FirstRunSetupPane({
         )}
 
 </>}
-            {page === 'browser' && <>          {/* ── SECTION 3: BROWSER DATA & BOOKMARK IMPORT ── */}
-          <div className="setup-section-block setup-browser-import-section">
-            <div className="setup-section-header">
+            {['browser', 'browser-import', 'browser-passwords', 'browser-default'].includes(page) && <>          {/* ── SECTION 3: BROWSER DATA & BOOKMARK IMPORT ── */}
+          {(page === 'browser' || page === 'browser-import') && <div className="setup-section-block setup-browser-import-section">
+            {(page === 'browser' || page === 'browser-import') && <div className="setup-section-header">
               <span className="setup-step-number">{browserOnly ? '1' : '3'}</span>
               <div>
-                <h2>{t('firstRun.section3Title')}</h2>
-                <p>{t('firstRun.section3Desc')}</p>
+                <h2>{page === 'browser' ? (de ? 'Quellbrowser auswählen' : 'Choose source browser') : (de ? 'Zu übernehmende Daten' : 'Choose data to import')}</h2>
+                <p>{page === 'browser' ? t('firstRun.section3Desc') : importCopy.capabilities}</p>
               </div>
-            </div>
+            </div>}
 
+            {page === 'browser' && <>
             <p>{importCopy.detected} <strong>{browserDiscovery?.defaultBrowser || importCopy.unknown}</strong></p>
             {browserDiscoveryError && <p role="alert">{browserDiscoveryError}</p>}
             <div className="setup-browser-grid" role="radiogroup" aria-label="Quell-Browser auswählen">
@@ -962,8 +976,9 @@ export function FirstRunSetupPane({
                 );
               })}
             </div>
+            </>}
 
-            <div className="import-options-panel">
+            {page === 'browser-import' && <div className="import-options-panel">
               <label>{importCopy.profile}
                 <select value={selectedProfile} onChange={e => setSelectedProfile(e.target.value)} disabled={importRunning}>
                   {!selectedProfile && <option value="">{importCopy.noProfile}</option>}
@@ -1047,10 +1062,10 @@ export function FirstRunSetupPane({
                 </div>
               )}
               {importWarnings.length > 0 && <div role="status"><strong>{importCopy.warnings}</strong><ul>{importWarnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul></div>}
-            </div>
-          </div>
+            </div>}
+          </div>}
 
-          {showPasswordImport && <div className="setup-section-block">
+          {page === 'browser-passwords' && showPasswordImport && <div className="setup-section-block">
             <h3>{locale.startsWith('de') ? 'Passwörter aus deinem Browser übernehmen' : 'Import passwords from your browser'}</h3>
             <p>{importCopy.passwordHelp(selectedImportProfile?.family || selectedImportBrowser?.family || (['firefox', 'zen', 'waterfox', 'librewolf', 'floorp'].includes(selectedBrowser) ? 'gecko' : 'chromium'))}</p>
             <p>{importCopy.passwordBoundary}</p>
@@ -1058,7 +1073,7 @@ export function FirstRunSetupPane({
           </div>}
 
           {/* ── SECTION 5: WINDOWS STANDARD-BROWSER ── */}
-          <div className="setup-section-block default-browser-section">
+          {page === 'browser-default' && <div className="setup-section-block default-browser-section">
             <div className="setup-section-header">
               <span className="setup-step-number">{browserOnly ? '3' : '5'}</span>
               <div>
@@ -1098,7 +1113,7 @@ export function FirstRunSetupPane({
                 )}
               </div>
             </div>
-          </div>
+          </div>}
 </>}
             {page === 'apps' && <>          {/* ── SECTION 4: PINNED APPS FAVORITEN-AUSWAHL ── */}
           <div className="setup-section-block">
@@ -1152,7 +1167,8 @@ export function FirstRunSetupPane({
               </div>
               {aiChoice === 'disabled' && <p role="status">{t('firstRun.noAiDescription')}</p>}
             </section>}
-            {page === 'provider' && <>          {/* ── SECTION 2: AI ENGINE & CONNECTION ── */}
+            {['provider', 'provider-setup', 'provider-model'].includes(page) && <>          {/* ── SECTION 2: AI ENGINE & CONNECTION ── */}
+          {page === 'provider' && <>
           <div className="setup-section-block">
             <div className="setup-section-header">
               <span className="setup-step-number">2</span>
@@ -1277,8 +1293,10 @@ export function FirstRunSetupPane({
               </div>
             </div>
           )}
+          </>}
 
           {/* ── INTERACTION & CONFIGURATION BOX FOR SELECTED ENGINE ── */}
+          {(page === 'provider-setup' || page === 'provider-model') && <>
           {!provider && <p role="status">{t('settings.panels.providers.betaCatalogEmpty')}</p>}
           {provider && <div className="active-engine-box">
             <div className="engine-box-header">
@@ -1294,7 +1312,7 @@ export function FirstRunSetupPane({
             </div>
 
             {/* If provider supports OAuth connect (Gemini CLI or ChatGPT) */}
-            {activeProviderOption?.oauthProvider ? (
+            {page === 'provider-setup' && (activeProviderOption?.oauthProvider ? (
               <div className={`oauth-connect-panel ${oauthState.status}`}>
                 <div className="oauth-status-info">
                   {oauthState.status === 'success' || oauthAlreadyReady ? (
@@ -1483,9 +1501,10 @@ export function FirstRunSetupPane({
                   </label>
                 )}
               </div>
-            )}
+            ))}
 
             {/* Model picker within chosen provider */}
+            {page === 'provider-model' && <>
             <div className="model-selection-area">
               <label className="input-label">{t('firstRun.preferredModelLabel')}</label>
               {modelProbeError && models.length > 0 && <p role="alert">{modelProbeError}</p>}
@@ -1495,7 +1514,7 @@ export function FirstRunSetupPane({
                   <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>Modelle neu laden</button>
                 </div>
               ) : <div className="models-pills-row">
-                {models.map((m) => {
+                {visibleModels.map((m) => {
                   const note = modelNote(m.id);
                   const isModelActive = m.id === model;
                   const isQualified = Boolean(browserProfileId && isProviderModelQualified(provider, m.id, browserProfileId, backendProfileName || 'default', window.localStorage));
@@ -1512,23 +1531,21 @@ export function FirstRunSetupPane({
                   );
                 })}
               </div>}
+              {modelPageCount > 1 && <div className="first-run-model-pager" aria-label={de ? 'Modellseiten' : 'Model pages'}>
+                <button type="button" disabled={modelPage === 0} onClick={() => setModelPage(current => Math.max(0, current - 1))}>{de ? 'Zurück' : 'Previous'}</button>
+                <span>{modelPage + 1} / {modelPageCount}</span>
+                <button type="button" disabled={modelPage >= modelPageCount - 1} onClick={() => setModelPage(current => Math.min(modelPageCount - 1, current + 1))}>{de ? 'Weiter' : 'Next'}</button>
+              </div>}
             </div>
+            </>}
           </div>}
 
 
-              {browserProfileId && <details className="first-run-local-models"><summary>{de ? 'Lokale Modelle entdecken' : 'Explore local models'}</summary>
-                <LocalAiSetupPane browserProfileId={browserProfileId} workspacePath={workspacePath} backendProfileName={backendProfileName} ready={status?.sidekick === 'ready' && Boolean(status.webuiUrl)} />
-              </details>}
-              {!canSubmitForm && <p className="first-run-provider-status" role="status">{!canSubmit ? t('firstRun.runtimePreparing') : !oauthLoginReady ? t('firstRun.loginFirst') : modelProbeLoading ? (de ? 'Modelle werden geladen …' : 'Loading models …') : !credentialsReady ? (de ? 'Zugangsdaten eingeben' : 'Enter credentials') : (de ? 'Modell auswählen' : 'Choose a model')}</p>}
+              {page === 'provider-model' && <p className="first-run-provider-status">{de ? 'Lokale Modelle und Installationen findest du nach der Einrichtung in Einstellungen → KI & lokale Modelle.' : 'Manage local models and installations after setup in Settings → AI & Local Models.'}</p>}
+              {page === 'provider-model' && !canSubmitForm && <p className="first-run-provider-status" role="status">{!canSubmit ? t('firstRun.runtimePreparing') : !oauthLoginReady ? t('firstRun.loginFirst') : modelProbeLoading ? (de ? 'Modelle werden geladen …' : 'Loading models …') : !credentialsReady ? (de ? 'Zugangsdaten eingeben' : 'Enter credentials') : (de ? 'Modell auswählen' : 'Choose a model')}</p>}
+          </>}
             </>}
-            {page === 'space' && <>
-              <section className="setup-section-block first-run-space-name">
-                <label htmlFor="first-run-space-name"><strong>{de ? 'Name deines Spaces' : 'Space name'}</strong></label>
-                <p>{de ? 'Hier bleiben deine Tabs, Chats und Apps zusammen.' : 'Keep your tabs, chats and apps together here.'}</p>
-                <input id="first-run-space-name" value={firstSpaceName} maxLength={80} required autoComplete="off" onChange={event => setFirstSpaceName(event.target.value)} />
-                {!firstSpaceName.trim() && <p role="status">{de ? 'Bitte gib deinem Space einen Namen.' : 'Please give your Space a name.'}</p>}
-              </section>
-              {aiChoice === 'enabled' && <>          {/* ── SECTION 1: IDENTITY & PERSONALITY ── */}
+            {page === 'personality' && <>          {/* ── SECTION 1: IDENTITY & PERSONALITY ── */}
           <div className="setup-section-block">
             <div className="setup-section-header">
               <span className="setup-step-number">1</span>
@@ -1626,11 +1643,21 @@ export function FirstRunSetupPane({
                 );
               })}
             </div>
-            {personality === 'custom' && <CustomCompanionPrompt value={customPrompt} onChange={setCustomPrompt} disabled={busy} />}
           </div>
 
 </>}
-            </>}
+            {page === 'personality-prompt' && personality === 'custom' && <section className="setup-section-block first-run-custom-prompt-page">
+              <h2>{de ? 'Dein persönlicher Quickchat-Prompt' : 'Your personal Quickchat prompt'}</h2>
+              <p>{de ? 'Nova Quickchat ist als schneller Standard bereits eingetragen. Passe ihn hier an deinen eigenen Sidekick an.' : 'The fast Nova Quickchat prompt is already set as a default. Customize it for your Sidekick here.'}</p>
+              <CustomCompanionPrompt value={customPrompt} onChange={setCustomPrompt} disabled={busy} />
+              {!isCustomCompanionPromptValid(customPrompt) && <p role="status">{de ? 'Der Prompt ist noch zu kurz oder ungültig.' : 'The prompt is too short or invalid.'}</p>}
+            </section>}
+            {page === 'space' && <section className="setup-section-block first-run-space-name">
+              <label htmlFor="first-run-space-name"><strong>{de ? 'Name deines Spaces' : 'Space name'}</strong></label>
+              <p>{de ? 'Hier bleiben deine Tabs, Chats und Apps zusammen.' : 'Keep your tabs, chats and apps together here.'}</p>
+              <input id="first-run-space-name" value={firstSpaceName} maxLength={80} required autoComplete="off" onChange={event => setFirstSpaceName(event.target.value)} />
+              {!firstSpaceName.trim() && <p role="status">{de ? 'Bitte gib deinem Space einen Namen.' : 'Please name your Space.'}</p>}
+            </section>}
             {(flowError || error) && <div role="alert" className="setup-error-banner">{flowError || error}</div>}
           </div>
           <footer className="setup-action-footer">

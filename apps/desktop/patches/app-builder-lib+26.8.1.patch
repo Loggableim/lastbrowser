@@ -1,0 +1,13 @@
+diff --git a/templates/nsis/installSection.nsh b/templates/nsis/installSection.nsh
+index 91d22a4..c8d1234 100644
+--- a/templates/nsis/installSection.nsh
++++ b/templates/nsis/installSection.nsh
+@@ -2,7 +2,7 @@
+ InitPluginsDir
+
+ ${IfNot} ${Silent}
+-  SetDetailsPrint none
++  SetDetailsPrint both
+ ${endif}
+
+ StrCpy $appExe "$INSTDIR\${APP_EXECUTABLE_FILENAME}"

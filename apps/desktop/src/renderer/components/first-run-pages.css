@@ -1,9 +1,11 @@
+.first-run-wizard.first-run-fullscreen-wrap { box-sizing: border-box; overflow: hidden; align-items: stretch; padding: 12px clamp(10px, 2vw, 24px); }
 .first-run-wizard .first-run-fullscreen {
   display: flex;
   flex-direction: column;
   width: min(1120px, 100%);
-  height: min(940px, 100dvh);
-  max-height: 100dvh;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   padding: clamp(14px, 3vw, 32px);
   overflow: hidden;
 }
@@ -16,11 +18,11 @@
 .first-run-progress button.is-current { color: #e2faff; background: #00d9ff12; border-color: #00d9ff60; }
 .first-run-progress button.is-complete { color: #74d9c4; cursor: pointer; }
 .first-run-wizard .setup-fullscreen-form { display: flex; flex-direction: column; gap: 0; flex: 1; min-height: 0; overflow: hidden; }
-.first-run-page-content { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 3px 8px 20px 3px; scrollbar-gutter: stable; }
-.first-run-page-heading { margin-bottom: 24px; }
+.first-run-page-content { flex: 1; min-height: 0; overflow: hidden; padding: 3px 8px 12px 3px; }
+.first-run-page-heading { margin-bottom: 16px; }
 .first-run-page-heading h1 { font-size: clamp(24px, 3vw, 34px); margin: 0 0 8px; outline: none; }
 .first-run-page-heading p { color: var(--text-muted, #9ba9bb); line-height: 1.5; margin: 0; }
-.first-run-wizard .setup-section-block { margin: 0 0 20px; }
+.first-run-wizard .setup-section-block { margin: 0 0 12px; }
 .first-run-wizard .setup-step-number { display: none; }
 .first-run-wizard .setup-action-footer { flex: 0 0 auto; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 0; padding: 18px 0 0; border-top: 1px solid #ffffff15; }
 .first-run-ai-page { max-width: 620px; margin: 16px auto; text-align: center; }
@@ -32,6 +34,38 @@
 .first-run-local-models { padding: 16px; border: 1px solid #ffffff18; border-radius: 12px; margin-bottom: 16px; }
 .first-run-local-models summary { cursor: pointer; padding: 4px 0; }
 .first-run-provider-status { color: #c1a875; }
+.first-run-wizard .setup-browser-grid { max-height: none; }
+.first-run-wizard .setup-browser-import-section { max-height: 100%; overflow: hidden; }
+.first-run-wizard .import-checkboxes-row { gap: 8px; }
+.first-run-wizard .import-check-label { padding: 8px 10px; }
+.first-run-wizard .personality-cards-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.first-run-wizard .personality-card { padding: 12px; }
+.first-run-wizard .personality-card .persona-desc,
+.first-run-wizard .personality-card .persona-footer { display: none; }
+.first-run-wizard .personality-card .persona-header { margin-top: 4px; }
+.first-run-wizard .first-run-page-content > .setup-section-block { max-height: 100%; overflow: hidden; }
+.first-run-wizard .provider-model-page .models-pills-row { max-height: none; overflow: hidden; }
+.first-run-wizard .first-run-progress button { padding: 7px 8px; }
+.first-run-model-pager { display: flex; align-items: center; justify-content: center; gap: 12px; padding-top: 10px; color: var(--text-muted, #9ba9bb); font-size: 12px; }
+.first-run-model-pager button { border: 1px solid #ffffff20; border-radius: 8px; padding: 7px 12px; color: inherit; background: #ffffff08; }
+.first-run-model-pager button:disabled { opacity: .45; cursor: default; }
+.first-run-wizard .setup-browser-grid { grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 8px; }
+.first-run-wizard .browser-import-card { padding: 8px 10px; min-height: 60px; }
+.first-run-wizard .setup-pinned-grid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.first-run-wizard .setup-pinned-card { padding: 7px 9px; }
+.first-run-wizard .first-run-page-content > .setup-section-block .import-checkboxes-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.first-run-wizard .first-run-custom-prompt-page { max-width: 780px; margin-inline: auto; }
+@media (max-height: 760px) {
+  .first-run-wizard .first-run-fullscreen { padding-block: 12px; }
+  .first-run-wizard .first-run-topbar { margin-bottom: 8px; }
+  .first-run-progress { padding-bottom: 8px; }
+  .first-run-page-heading { margin-bottom: 10px; }
+  .first-run-page-heading h1 { font-size: 24px; }
+  .first-run-wizard .setup-section-block { margin-bottom: 7px; }
+  .first-run-wizard .setup-action-footer { padding-top: 9px; }
+  .first-run-wizard .personality-card { padding: 8px; }
+  .first-run-wizard .personality-card .persona-icon { width: 42px !important; height: 42px !important; }
+}
 @media (max-width: 720px) {
   .first-run-progress button { justify-content: center; padding: 7px 3px; }
   .first-run-progress button small { display: none; }

@@ -1,4 +1,4 @@
-export type FirstRunWizardPage = 'search' | 'migration' | 'browser' | 'apps' | 'ai' | 'provider' | 'space';
-export function firstRunWizardPages(aiChoice: 'enabled' | 'disabled' | null, existingSidekick: boolean): FirstRunWizardPage[] {
-  return ['search', ...(existingSidekick ? ['migration' as const] : []), 'browser', 'apps', 'ai', ...(aiChoice === 'enabled' ? ['provider' as const] : []), 'space'];
+export type FirstRunWizardPage = 'search' | 'migration' | 'browser' | 'browser-import' | 'browser-passwords' | 'browser-default' | 'apps' | 'ai' | 'provider' | 'provider-setup' | 'provider-model' | 'personality' | 'personality-prompt' | 'space';
+export function firstRunWizardPages(aiChoice: 'enabled' | 'disabled' | null, existingSidekick: boolean, importPasswords = false, customPersonality = false): FirstRunWizardPage[] {
+  return ['search', ...(existingSidekick ? ['migration' as const] : []), 'browser', 'browser-import', ...(importPasswords ? ['browser-passwords' as const] : []), 'browser-default', 'apps', 'ai', ...(aiChoice === 'enabled' ? ['provider' as const, 'provider-setup' as const, 'provider-model' as const, 'personality' as const, ...(customPersonality ? ['personality-prompt' as const] : [])] : []), 'space'];
 }

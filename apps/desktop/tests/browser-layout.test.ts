@@ -181,6 +181,15 @@ describe('browser shell layout', () => {
     expect(source).toContain("view.addEventListener('did-navigate', onNavigate)");
     expect(source).toContain("view.addEventListener('did-navigate-in-page', onNavigate)");
     expect(source).toContain("view.addEventListener('page-title-updated', onTitle)");
+    expect(source).toContain("recordBrowserDiagnostic(event, {");
+    expect(source).toContain("logWebviewLifecycle('mount')");
+    expect(source).toContain("logWebviewLifecycle('did-start-loading')");
+    expect(source).toContain("logWebviewLifecycle('did-stop-loading')");
+    expect(source).toContain("logWebviewLifecycle('did-navigate')");
+    expect(source).toContain("logWebviewLifecycle('did-fail-load'");
+    expect(source).toContain("recordBrowserDiagnostic('unmount'");
+    expect(source).not.toContain('console.info');
+    expect(source).not.toContain('url: event.url');
     expect(source).toContain('onWebviewNavigate(activeTab.id, url)');
     expect(source).toContain('onWebviewTitle(activeTab.id, title)');
     expect(source).not.toContain('onDidNavigate={(event) =>');

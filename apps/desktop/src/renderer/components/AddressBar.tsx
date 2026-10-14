@@ -139,6 +139,18 @@ export function AddressBar({
     }
   }, [suggestions.length]);
 
+  const handleBlur = useCallback((event: React.FocusEvent<HTMLInputElement>) => {
+    // The embedded page can receive pointer input without a normal document
+    // pointerdown reaching this renderer. Close the popup when the address
+    // input actually loses focus, while preserving it for clicks in the list.
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && containerRef.current?.contains(nextTarget)) {
+      return;
+    }
+    setIsOpen(false);
+    setSelection(null);
+  }, []);
+
   return (
     <div className="addressbar-container" ref={containerRef}>
       <form className="addressbar" onSubmit={handleSubmit}>
@@ -152,6 +164,7 @@ export function AddressBar({
             setIsOpen(true);
           }}
           onFocus={handleFocus}
+          onBlur={handleBlur}
           onKeyDown={handleKeyDown}
           role="combobox"
           aria-autocomplete="list"

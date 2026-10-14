@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.57-beta.6",
+  "version": "0.1.57-beta.7",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
@@ -25,8 +25,8 @@
     "sync:sidekick": "node -e \"console.log('[sync:sidekick] Sidekick is integrated directly in-tree.')\"",
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
     "prepare:production-app": "node scripts/stage-production-app.mjs",
-    "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && npm run prepare:production-app && electron-builder --win nsis portable",
-    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && npm run prepare:production-app && electron-builder --win nsis portable --publish never",
+    "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && npm run prepare:production-app && node scripts/package-win.mjs --publish never",
+    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && npm run prepare:production-app && node scripts/package-win.mjs --publish never",
     "package:linux": "npm run prepare:python && npm run build && npm run prepare:production-app && electron-builder --linux tar.gz AppImage && node scripts/write-linux-checksums.mjs"
   },
   "dependencies": {

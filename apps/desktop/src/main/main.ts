@@ -223,6 +223,14 @@ import { registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 
+// Keep all browser, Sidekick, OAuth and provider state under one stable
+// per-user directory. Set this before the first getPath('userData') call so
+// an app display-name change cannot silently make an update look like a fresh
+// install. NSIS updates preserve this directory; only an explicit uninstall
+// can offer to remove it.
+app.setName('Lastbrowser');
+app.setPath('userData', path.join(app.getPath('appData'), 'Lastbrowser'));
+
 process.on('uncaughtException', (err, origin) => {
   console.error('[lastbrowser uncaughtException]', origin, err);
 });
@@ -1609,7 +1617,6 @@ if (isCdpEnabled() && !process.argv.some((a) => a.startsWith('--remote-debugging
 app.commandLine.appendSwitch('enable-features', 'WidevineCdm');
 appendWindowsFirstPaintSwitches(app.commandLine);
 
-app.setName('Lastbrowser');
 
 // Enforce single instance lock: prevent port collisions and handle incoming external URLs
 const gotSingleInstanceLock = typeof app?.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;

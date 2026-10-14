@@ -13,11 +13,16 @@ function readRendererFile(fileName: string): string {
 describe('space audio continuity', () => {
   it('handleSpaceSelect exempts pinned audio tabs from muting instead of blanket-muting all webviews', () => {
     const source = readRendererFile('App.tsx');
+    const spaceSwitch = source.slice(
+      source.indexOf('  const handleSpaceSelect = useCallback('),
+      source.indexOf('  const handleDetachTab = useCallback(')
+    );
 
     // The old blanket mute must be gone from the space-switch path.
-    expect(source).not.toContain("document.querySelectorAll('webview')");
+    expect(spaceSwitch).not.toContain("document.querySelectorAll('webview')");
     // Per-tab exemption logic must exist.
-    expect(source).toContain('tab.pinned && tab.isPlayingAudio');
+    expect(spaceSwitch).toContain('tab.pinned && tab.isPlayingAudio');
+    expect(spaceSwitch).toContain('if (exemptTabIds.has(tabId)) return;');
   });
 
   it('vertical tab items expose a pin button wired to onPinTab', () => {

@@ -27,6 +27,15 @@ describe('actual child run streams', () => {
     expect(reduceChildRunEvent(state, { ...event('a', 2, 'bad'), parentTurnId: 'other' })).toBe(state);
     expect(reduceChildRunEvent(state, { ...event('a', 2, 'bad'), childSessionId: 'other' })).toBe(state);
   });
+  it('clears stale resync banners when a terminal status arrives after a gap', () => {
+    let state = recoverChildRun(createChildRunState(binding), snapshot('a'));
+    state = reduceChildRunEvent(state, event('a', 3, 'gap'));
+    expect(state.children.a.requiresResync).toBe(true);
+    state = reduceChildRunEvent(state, { ...event('a', 4, ''), payload: { status: 'completed' } });
+    expect(state.children.a.requiresResync).toBe(false);
+    expect(state.children.a.snapshot.status).toBe('completed');
+  });
+
   it('marks gaps without applying tails and recovers from actual watermark', () => {
     let state = recoverChildRun(createChildRunState(binding), snapshot('a'));
     state = reduceChildRunEvent(state, event('a', 3, 'lost-prefix'));

@@ -59,6 +59,17 @@ import {
 import { hideWebviewScrollbars } from './browser-view.js';
 import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.js';
 import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
+import {
+  clearBrowserDiagnostics,
+  exportBrowserDiagnostics,
+  flushBrowserDiagnostics,
+  isBrowserDiagnosticsEnabled,
+  readBrowserDiagnostics,
+  queryBrowserDiagnostics,
+  summarizeBrowserDiagnostics,
+  recordBrowserDiagnostic,
+  setBrowserDiagnosticsEnabled
+} from './browser-diagnostics.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from './access-auth-gate.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
@@ -840,10 +851,26 @@ type RendererChatTraceEntry = Record<string, string | number | boolean | null>;
 /** Opt-in renderer diagnostics for isolated smoke profiles. Never record prompt, answer, or identifiers. */
 function traceRendererChat(phase: string, fields: RendererChatTraceEntry = {}): void {
   try {
-    if (window.localStorage.getItem('__lastbrowser_chat_stream_debug') !== '1') return;
+    if (!isBrowserDiagnosticsEnabled() && window.localStorage.getItem('__lastbrowser_chat_stream_debug') !== '1') return;
+    const safeFields: RendererChatTraceEntry = {};
+    const booleanFields = new Set(['ownsContext', 'streamMatches', 'hasStreamId', 'streamActive', 'snapshotPresent', 'pending', 'streaming', 'sawStreamEnd', 'streamFailed', 'completed', 'cancelled', 'failed']);
+    const numberFields = new Set(['messageCount', 'deltaLength', 'contentLength']);
+    const enumFields: Record<string, readonly string[]> = {
+      errorKind: ['authentication', 'capacity', 'timeout', 'cancelled', 'provider'],
+      source: ['delta'],
+      stage: ['stream', 'fallback'],
+      path: ['stream-event', 'stream-status', 'fallback-status'],
+      eventType: ['token', 'delta', 'reasoning', 'companion', 'stream_end', 'done', 'cancel', 'error', 'apperror']
+    };
+    for (const [key, value] of Object.entries(fields)) {
+      if (booleanFields.has(key) && typeof value === 'boolean') safeFields[key] = value;
+      else if (numberFields.has(key) && typeof value === 'number' && Number.isFinite(value)) safeFields[key] = value;
+      else if (enumFields[key]?.includes(String(value))) safeFields[key] = value as string;
+    }
+    recordBrowserDiagnostic(`chat-${phase}`, safeFields);
     const target = window as Window & { __lastbrowserChatStreamDebug?: RendererChatTraceEntry[] };
     const entries = target.__lastbrowserChatStreamDebug ?? (target.__lastbrowserChatStreamDebug = []);
-    entries.push({ phase, at: performance.now(), ...fields });
+    entries.push({ phase, at: performance.now(), ...safeFields });
     if (entries.length > 256) entries.splice(0, entries.length - 256);
   } catch {
     // Diagnostics must never affect chat behavior (for example, when storage is unavailable).
@@ -1148,9 +1175,21 @@ function AppContent(): JSX.Element {
   const quickChatBufferedEventsRef = useRef<import('../main/quick-chat-controller.js').QuickChatStreamEvent[]>([]);
   const quickChatScopeKeyRef = useRef<string | null>(null);
   const [quickChatMode, setQuickChatMode] = useState(false);
-  const handleQuickChatToolbarToggle = (): void => toggleQuickChatFromToolbar({
-    copilotOpen, quickChatMode, setQuickChatMode, toggleCopilot
-  });
+  const quickChatToggleAtRef = useRef<number | null>(null);
+  const handleQuickChatToolbarToggle = (): void => {
+    quickChatToggleAtRef.current = performance.now();
+    recordBrowserDiagnostic('quickchat-toggle', { open: copilotOpen && quickChatMode });
+    toggleQuickChatFromToolbar({ copilotOpen, quickChatMode, setQuickChatMode, toggleCopilot });
+  };
+  useEffect(() => {
+    const startedAt = quickChatToggleAtRef.current;
+    if (startedAt === null) return;
+    const frame = requestAnimationFrame(() => {
+      recordBrowserDiagnostic('quickchat-visible', { open: copilotOpen && quickChatMode, elapsedMs: performance.now() - startedAt });
+      quickChatToggleAtRef.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [copilotOpen, quickChatMode]);
   const [lastChatTurnUsage, setLastChatTurnUsage] = useState<{ sessionId: string; usage: NativeChatTurnUsage } | null>(null);
   const [nativeModelResolutionNotice, setNativeModelResolutionNotice] = useState<{ sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null; resolution: NativeModelResolution } | null>(null);
   const [inactiveModelFallbackNotice, setInactiveModelFallbackNotice] = useState<{ sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null } | null>(null);
@@ -1287,6 +1326,77 @@ function AppContent(): JSX.Element {
   ]);
   const activeTab = useMemo(() => tabs.find((tab) => tab.id === activeTabId) || tabs[0], [activeTabId, tabs]);
   const activeProfile = useMemo(() => profileById(profiles, activeProfileId), [profiles, activeProfileId]);
+  const diagnosticStateRef = useRef({ panel: activePanel, tabId: activeTab.id, quickchatOpen: copilotOpen && quickChatMode, quickchatBusy: quickChatBusy, chatRunState });
+  diagnosticStateRef.current = { panel: activePanel, tabId: activeTab.id, quickchatOpen: copilotOpen && quickChatMode, quickchatBusy: quickChatBusy, chatRunState };
+  useEffect(() => {
+    const diagnosticsApi = {
+      schemaVersion: 1,
+      enable: () => setBrowserDiagnosticsEnabled(true),
+      disable: () => setBrowserDiagnosticsEnabled(false),
+      status: () => ({ enabled: isBrowserDiagnosticsEnabled(), eventCount: readBrowserDiagnostics().length }),
+      read: () => readBrowserDiagnostics(),
+      query: (options?: Parameters<typeof queryBrowserDiagnostics>[0]) => queryBrowserDiagnostics(options),
+      summary: () => summarizeBrowserDiagnostics(),
+      snapshot: () => {
+        if (!isBrowserDiagnosticsEnabled()) return { schemaVersion: 1, enabled: false };
+        return {
+          schemaVersion: 1, enabled: true, at: Date.now(), ...diagnosticStateRef.current,
+          viewport: { width: window.innerWidth, height: window.innerHeight, devicePixelRatio: window.devicePixelRatio },
+          visibility: document.visibilityState, focused: document.hasFocus(),
+          webviews: Array.from(document.querySelectorAll('webview')).map(node => {
+            const rect = node.getBoundingClientRect();
+            let guestWebContentsId: number | null = null;
+            try { guestWebContentsId = (node as Electron.WebviewTag).getWebContentsId(); } catch {}
+            return { guestWebContentsId, connected: node.isConnected, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height } };
+          })
+        };
+      },
+      export: () => exportBrowserDiagnostics(),
+      clear: () => clearBrowserDiagnostics()
+    };
+    Object.defineProperty(window, '__lastbrowserDiagnostics', {
+      configurable: true,
+      enumerable: false,
+      value: diagnosticsApi
+    });
+    const flush = () => flushBrowserDiagnostics();
+    window.addEventListener('pagehide', flush);
+    return () => {
+      window.removeEventListener('pagehide', flush);
+      flush();
+      try { delete (window as Window & { __lastbrowserDiagnostics?: typeof diagnosticsApi }).__lastbrowserDiagnostics; } catch {}
+    };
+  }, []);
+
+  useEffect(() => {
+    recordBrowserDiagnostic('shell-context', {
+      panel: activePanel,
+      tabId: activeTab.id,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio,
+      visibility: document.visibilityState
+    });
+  }, [activePanel, activeTab.id]);
+  useEffect(() => {
+    const onError = (event: ErrorEvent) => {
+      recordBrowserDiagnostic('renderer-error', {
+        errorName: event.error instanceof Error ? event.error.name : 'ErrorEvent',
+        source: 'window'
+      });
+    };
+    const onUnhandledRejection = (event: PromiseRejectionEvent) => {
+      recordBrowserDiagnostic('renderer-unhandled-rejection', {
+        errorName: event.reason instanceof Error ? event.reason.name : typeof event.reason
+      });
+    };
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+    return () => {
+      window.removeEventListener('error', onError);
+      window.removeEventListener('unhandledrejection', onUnhandledRejection);
+    };
+  }, []);
   const handleSetSnapRatio = useCallback((axis: 'x' | 'y', index: number, ratio: number) => {
     setSnapRatios((current) => {
       const next = { x: [...current.x], y: [...current.y] };
@@ -1379,6 +1489,7 @@ function AppContent(): JSX.Element {
       || event.streamId !== binding.streamId || event.scope.spaceId !== binding.scope.spaceId
       || event.scope.backendProfileId !== binding.scope.backendProfileId
       || event.scope.browserProfileId !== binding.scope.browserProfileId) return;
+    recordBrowserDiagnostic('quickchat-event', { eventType: event.event });
     if (event.event === 'companion') {
       const snapshot = normalizeCompanionSnapshot(event.data);
       if (snapshot && quickChatBindingScopeKeyRef.current) updateQuickChatMessagesForScope(quickChatBindingScopeKeyRef.current, current => attachCompanionSnapshot(current, snapshot));
@@ -3506,7 +3617,7 @@ function AppContent(): JSX.Element {
         ? nativeGoalHumanAuthorizationErrorCopy(locale,event.data)??readNativeChatStreamError(event.data)
         : null;
       traceRendererChat('event', {
-        event: event.event ?? 'unknown',
+        eventType: event.event ?? 'unknown',
         streamMatches,
         ownsContext,
         ...(eventError ? { errorKind: classifyRendererChatError(eventError) } : {})
@@ -4688,6 +4799,8 @@ function AppContent(): JSX.Element {
       || quickChatBindingScopeKeyRef.current !== null && quickChatBindingScopeKeyRef.current !== activeScopeKey
       || quickChatTranscriptScopeKeyRef.current !== null && quickChatTranscriptScopeKeyRef.current !== activeScopeKey
       || !prompt.trim()) return false;
+    const diagnosticStartedAt = performance.now();
+    recordBrowserDiagnostic('quickchat-send');
     const generation = quickChatGenerationRef.current;
     const stopEpoch = quickChatStopEpochRef.current;
     quickChatStopPendingRef.current = true;
@@ -4704,6 +4817,7 @@ function AppContent(): JSX.Element {
     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
     updateQuickChatMessagesForScope(capturedScopeKey, current => [...current, visibleUserMessage]);
     const rejectPreflight = (): false => {
+      recordBrowserDiagnostic('quickchat-rejected', { elapsedMs: performance.now() - diagnosticStartedAt });
       setQuickChatBusy(false);
       if (quickChatBusyScopeKeyRef.current === capturedScopeKey) quickChatBusyScopeKeyRef.current = null;
       updateQuickChatMessagesForScope(capturedScopeKey, current => current.filter(item => item !== visibleUserMessage));
@@ -4754,6 +4868,7 @@ function AppContent(): JSX.Element {
     }
     const selection = virtualChoice ? preferredSelection
       : { model: activeChoice.choice!.id, provider: activeChoice.choice!.providerId };
+    recordBrowserDiagnostic('quickchat-preflight-complete', { elapsedMs: performance.now() - diagnosticStartedAt });
     if (!virtualChoice && (activeChoice.changed || preferredSelection.migratedFromMultiAgent)) setQuickChatStatusForScope(capturedScopeKey,
       t('settings.panels.providers.activeModelFallback'));
     quickChatBusyRef.current = true;
@@ -4780,6 +4895,7 @@ function AppContent(): JSX.Element {
       pendingStart = { quickChatId: chatId, scopeKey: capturedScopeKey, promise: startPromise };
       quickChatStartPromiseRef.current = pendingStart;
       const started = await startPromise;
+      recordBrowserDiagnostic('quickchat-accepted', { elapsedMs: performance.now() - diagnosticStartedAt });
       if (quickChatStartPromiseRef.current === pendingStart) quickChatStartPromiseRef.current = null;
       if (quickChatResetPendingRef.current) {
         if (preserveUnknownOutcome) throw new Error('Quickchat start superseded after acceptance');
@@ -6621,6 +6737,8 @@ function BrowserMain({
   const webviewNavigationCleanupRefs = useRef<Record<string, () => void>>({});
   const webviewReadinessCleanupRefs = useRef<Record<string, () => void>>({});
   const webviewRefCallbacks = useRef(new Map<string, React.RefCallback<Electron.WebviewTag>>());
+  const webviewDiagnosticIds = useRef(new WeakMap<Electron.WebviewTag, number>());
+  const nextWebviewDiagnosticId = useRef(0);
   const smartInvertActive = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.smartInvertWebview);
   const transferredTabBootstrapIds = useRef(new Set<string>());
   const webviewMediaCleanupRefs = useRef<Record<string, () => void>>({});
@@ -6651,6 +6769,22 @@ function BrowserMain({
         webviewMediaCleanupRefs.current[tabId]?.();
       }
       allWebviewRefs.current[tabId] = element;
+      const diagnosticId = ++nextWebviewDiagnosticId.current;
+      webviewDiagnosticIds.current.set(element, diagnosticId);
+      const guestWebContentsId = (() => {
+        try { return element.getWebContentsId(); } catch { return null; }
+      })();
+      const logWebviewLifecycle = (event: string, detail: Record<string, string | number | boolean | null> = {}): void => {
+        // This opt-in local ring buffer never records page URLs, titles, or DOM data.
+        recordBrowserDiagnostic(event, {
+          tabId,
+          webviewId: diagnosticId,
+          guestWebContentsId,
+          active: tabId === webviewEventHandlersRef.current.activeTabId,
+          ...detail
+        });
+      };
+      logWebviewLifecycle('mount');
       const isCurrentElement = () => allWebviewRefs.current[tabId] === element;
       webviewReadinessCleanupRefs.current[tabId] = bindWebviewReadiness(
         element,
@@ -6658,11 +6792,13 @@ function BrowserMain({
         () => setWebviewReadinessRevision((current) => current + 1)
       );
       const onDidStartLoading = () => {
+        if (isCurrentElement()) logWebviewLifecycle('did-start-loading');
         if (isCurrentElement() && tabId === webviewEventHandlersRef.current.activeTabId) {
           webviewEventHandlersRef.current.onClearBrowserError();
         }
       };
       const onDomReady = () => {
+        if (isCurrentElement()) logWebviewLifecycle('dom-ready');
         if (!isCurrentElement() || !isWebviewReady(element)) return;
         void hideWebviewScrollbars(element);
         const config = usePanelStore.getState().visionImpaired;
@@ -6675,6 +6811,48 @@ function BrowserMain({
           }
         }
       };
+      const onDidStopLoading = () => {
+        if (isCurrentElement()) logWebviewLifecycle('did-stop-loading');
+      };
+      const onDidNavigate = (rawEvent: Event) => {
+        if (!isCurrentElement()) return;
+        const event = rawEvent as Event & { isMainFrame?: boolean };
+        if (event.isMainFrame !== false) logWebviewLifecycle('did-navigate');
+      };
+      const onDidNavigateInPage = (rawEvent: Event) => {
+        if (!isCurrentElement()) return;
+        const event = rawEvent as Event & { isMainFrame?: boolean };
+        if (event.isMainFrame !== false) logWebviewLifecycle('did-navigate-in-page');
+      };
+      const onDidStartNavigation = (rawEvent: Event) => {
+        if (!isCurrentElement()) return;
+        const event = rawEvent as Event & { isMainFrame?: boolean; isInPlace?: boolean };
+        if (event.isMainFrame !== false) {
+          logWebviewLifecycle('did-start-navigation', {
+            isMainFrame: event.isMainFrame ?? null,
+            isInPlace: event.isInPlace ?? null
+          });
+        }
+      };
+      const onConsoleMessage = (rawEvent: Event) => {
+        if (!isCurrentElement()) return;
+        const event = rawEvent as Event & { level?: number };
+        logWebviewLifecycle('console-message', { level: event.level ?? null });
+      };
+      const onPageTitleUpdated = () => {
+        if (isCurrentElement()) logWebviewLifecycle('page-title-updated');
+      };
+      const onRenderProcessGone = (rawEvent: Event) => {
+        if (!isCurrentElement()) return;
+        const event = rawEvent as Event & { reason?: string; exitCode?: number };
+        const reason = ['clean-exit', 'abnormal-exit', 'killed', 'crashed', 'oom', 'launch-failed', 'integrity-failure'].includes(event.reason || '')
+          ? event.reason!
+          : 'other';
+        logWebviewLifecycle('render-process-gone', {
+          reason,
+          exitCode: Number.isInteger(event.exitCode) ? event.exitCode! : null
+        });
+      };
       const onDidFailLoad = (rawEvent: Event) => {
         if (!isCurrentElement()) return;
         const event = rawEvent as Event & {
@@ -6683,6 +6861,9 @@ function BrowserMain({
           errorDescription?: string;
         };
         if (!event.isMainFrame || event.errorCode === -3) return;
+        logWebviewLifecycle('did-fail-load', {
+          errorCode: event.errorCode ?? null
+        });
         if (tabId !== webviewEventHandlersRef.current.activeTabId) return;
         if ((event.errorCode ?? 0) < -100) {
           webviewEventHandlersRef.current.onSetBrowserError(`Connection failed (${event.errorDescription || 'unknown error'}). Returning to start page.`);
@@ -6697,10 +6878,24 @@ function BrowserMain({
       };
       element.addEventListener('did-start-loading', onDidStartLoading);
       element.addEventListener('dom-ready', onDomReady);
+      element.addEventListener('did-stop-loading', onDidStopLoading);
+      element.addEventListener('did-navigate', onDidNavigate);
+      element.addEventListener('did-navigate-in-page', onDidNavigateInPage);
+      element.addEventListener('did-start-navigation', onDidStartNavigation);
+      element.addEventListener('console-message', onConsoleMessage);
+      element.addEventListener('page-title-updated', onPageTitleUpdated);
+      element.addEventListener('render-process-gone', onRenderProcessGone);
       element.addEventListener('did-fail-load', onDidFailLoad);
       webviewNavigationCleanupRefs.current[tabId] = () => {
         element.removeEventListener('did-start-loading', onDidStartLoading);
         element.removeEventListener('dom-ready', onDomReady);
+        element.removeEventListener('did-stop-loading', onDidStopLoading);
+        element.removeEventListener('did-navigate', onDidNavigate);
+        element.removeEventListener('did-navigate-in-page', onDidNavigateInPage);
+        element.removeEventListener('did-start-navigation', onDidStartNavigation);
+        element.removeEventListener('console-message', onConsoleMessage);
+        element.removeEventListener('page-title-updated', onPageTitleUpdated);
+        element.removeEventListener('render-process-gone', onRenderProcessGone);
         element.removeEventListener('did-fail-load', onDidFailLoad);
       };
       webviewMediaCleanupRefs.current[tabId]?.();
@@ -6717,6 +6912,15 @@ function BrowserMain({
 
     const removed = previous ?? existing;
     if (!removed || existing !== removed) return;
+    const diagnosticId = webviewDiagnosticIds.current.get(removed);
+    recordBrowserDiagnostic('unmount', {
+      tabId,
+      webviewId: diagnosticId ?? null,
+        guestWebContentsId: (() => {
+          try { return removed.getWebContentsId(); } catch { return null; }
+        })(),
+      active: tabId === webviewEventHandlersRef.current.activeTabId
+    });
     webviewReadinessCleanupRefs.current[tabId]?.();
     webviewNavigationCleanupRefs.current[tabId]?.();
     webviewMediaCleanupRefs.current[tabId]?.();

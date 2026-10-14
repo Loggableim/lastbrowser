@@ -6,6 +6,10 @@
 !define MUI_INSTFILESPAGE_COLORS "152238 F7F9FC"
 !define MUI_INSTFILESPAGE_PROGRESSBAR "colored"
 
+; electron-builder compiles its uninstaller first. The installation-only
+; controls and callback must not become unused install functions in that pass.
+!ifndef BUILD_UNINSTALLER
+
 !define LB_INSTALL_NOVA_ID 5741
 !define LB_INSTALL_EYEBROW_ID 5742
 !define LB_INSTALL_HEADLINE_ID 5743
@@ -205,6 +209,8 @@ FunctionEnd
   !define MUI_FINISHPAGE_BUTTON "Startklar"
   !insertmacro MUI_PAGE_FINISH
 !macroend
+
+!endif
 
 !macro customUnInstall
   ; During an AUTO-UPDATE or SILENT UNINSTALL (/S) we must never display a MessageBox.

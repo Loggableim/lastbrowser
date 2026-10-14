@@ -1,21 +1,30 @@
 {
-  "generatedAt": "2026-10-13T05:27:09.614Z",
+  "generatedAt": "2026-10-14T05:11:53.626Z",
   "sources": {
-    "npm": "package-lock.json packages.*.license",
+    "npm": "package-lock.json packages, including nested node_modules, license field",
     "python": "apps/desktop/scripts/requirements-runtime.txt plus PyPI JSON license / license_expression"
   },
   "npm": {
-    "count": 406,
+    "count": 486,
+    "nestedCount": 79,
+    "uniqueNames": 407,
     "missingLicense": 0,
+    "skipped": [
+      {
+        "lockPath": "node_modules/@lastbrowser/desktop",
+        "reason": "workspace-link",
+        "resolved": "apps/desktop"
+      }
+    ],
     "counts": {
-      "MIT": 332,
+      "MIT": 391,
+      "ISC": 47,
       "BSD-2-Clause": 7,
       "MPL-2.0": 12,
-      "ISC": 28,
       "Apache-2.0": 9,
       "Python-2.0": 1,
       "CC-BY-4.0": 1,
-      "BlueOak-1.0.0": 6,
+      "BlueOak-1.0.0": 8,
       "BSD-3-Clause": 6,
       "WTFPL OR ISC": 1,
       "WTFPL": 1,
@@ -25,2436 +34,3888 @@
     "packages": [
       {
         "name": "@babel/code-frame",
+        "lockPath": "node_modules/@babel/code-frame",
+        "nested": false,
         "version": "7.29.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.29.0.tgz"
       },
       {
         "name": "@babel/compat-data",
+        "lockPath": "node_modules/@babel/compat-data",
+        "nested": false,
         "version": "7.29.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.29.3.tgz"
       },
       {
         "name": "@babel/core",
+        "lockPath": "node_modules/@babel/core",
+        "nested": false,
         "version": "7.29.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/core/-/core-7.29.0.tgz"
       },
       {
         "name": "@babel/generator",
+        "lockPath": "node_modules/@babel/generator",
+        "nested": false,
         "version": "7.29.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/generator/-/generator-7.29.1.tgz"
       },
       {
         "name": "@babel/helper-compilation-targets",
+        "lockPath": "node_modules/@babel/helper-compilation-targets",
+        "nested": false,
         "version": "7.28.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helper-compilation-targets/-/helper-compilation-targets-7.28.6.tgz"
       },
       {
         "name": "@babel/helper-globals",
+        "lockPath": "node_modules/@babel/helper-globals",
+        "nested": false,
         "version": "7.28.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helper-globals/-/helper-globals-7.28.0.tgz"
       },
       {
         "name": "@babel/helper-module-imports",
+        "lockPath": "node_modules/@babel/helper-module-imports",
+        "nested": false,
         "version": "7.28.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helper-module-imports/-/helper-module-imports-7.28.6.tgz"
       },
       {
         "name": "@babel/helper-module-transforms",
+        "lockPath": "node_modules/@babel/helper-module-transforms",
+        "nested": false,
         "version": "7.28.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helper-module-transforms/-/helper-module-transforms-7.28.6.tgz"
       },
       {
         "name": "@babel/helper-plugin-utils",
+        "lockPath": "node_modules/@babel/helper-plugin-utils",
+        "nested": false,
         "version": "7.28.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helper-plugin-utils/-/helper-plugin-utils-7.28.6.tgz"
       },
       {
         "name": "@babel/helper-string-parser",
+        "lockPath": "node_modules/@babel/helper-string-parser",
+        "nested": false,
         "version": "7.27.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.27.1.tgz"
       },
       {
         "name": "@babel/helper-validator-identifier",
+        "lockPath": "node_modules/@babel/helper-validator-identifier",
+        "nested": false,
         "version": "7.28.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.28.5.tgz"
       },
       {
         "name": "@babel/helper-validator-option",
+        "lockPath": "node_modules/@babel/helper-validator-option",
+        "nested": false,
         "version": "7.27.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helper-validator-option/-/helper-validator-option-7.27.1.tgz"
       },
       {
         "name": "@babel/helpers",
+        "lockPath": "node_modules/@babel/helpers",
+        "nested": false,
         "version": "7.29.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/helpers/-/helpers-7.29.2.tgz"
       },
       {
         "name": "@babel/parser",
+        "lockPath": "node_modules/@babel/parser",
+        "nested": false,
         "version": "7.29.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.3.tgz"
       },
       {
         "name": "@babel/plugin-transform-react-jsx-self",
+        "lockPath": "node_modules/@babel/plugin-transform-react-jsx-self",
+        "nested": false,
         "version": "7.27.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/plugin-transform-react-jsx-self/-/plugin-transform-react-jsx-self-7.27.1.tgz"
       },
       {
         "name": "@babel/plugin-transform-react-jsx-source",
+        "lockPath": "node_modules/@babel/plugin-transform-react-jsx-source",
+        "nested": false,
         "version": "7.27.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/plugin-transform-react-jsx-source/-/plugin-transform-react-jsx-source-7.27.1.tgz"
       },
       {
         "name": "@babel/template",
+        "lockPath": "node_modules/@babel/template",
+        "nested": false,
         "version": "7.28.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/template/-/template-7.28.6.tgz"
       },
       {
         "name": "@babel/traverse",
+        "lockPath": "node_modules/@babel/traverse",
+        "nested": false,
         "version": "7.29.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/traverse/-/traverse-7.29.0.tgz"
       },
       {
         "name": "@babel/types",
+        "lockPath": "node_modules/@babel/types",
+        "nested": false,
         "version": "7.29.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@babel/types/-/types-7.29.0.tgz"
       },
       {
         "name": "@develar/schema-utils",
+        "lockPath": "node_modules/@develar/schema-utils",
+        "nested": false,
         "version": "2.6.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@develar/schema-utils/-/schema-utils-2.6.5.tgz"
       },
       {
         "name": "@electron/asar",
+        "lockPath": "node_modules/@electron/asar",
+        "nested": false,
         "version": "3.4.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@electron/asar/-/asar-3.4.1.tgz"
       },
       {
+        "name": "balanced-match",
+        "lockPath": "node_modules/@electron/asar/node_modules/balanced-match",
+        "nested": true,
+        "version": "1.0.2",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz"
+      },
+      {
+        "name": "brace-expansion",
+        "lockPath": "node_modules/@electron/asar/node_modules/brace-expansion",
+        "nested": true,
+        "version": "1.1.14",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.14.tgz"
+      },
+      {
+        "name": "minimatch",
+        "lockPath": "node_modules/@electron/asar/node_modules/minimatch",
+        "nested": true,
+        "version": "3.1.5",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-3.1.5.tgz"
+      },
+      {
         "name": "@electron/fuses",
+        "lockPath": "node_modules/@electron/fuses",
+        "nested": false,
         "version": "1.8.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@electron/fuses/-/fuses-1.8.0.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/@electron/fuses/node_modules/fs-extra",
+        "nested": true,
+        "version": "9.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-9.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/@electron/fuses/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/@electron/fuses/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "@electron/get",
+        "lockPath": "node_modules/@electron/get",
+        "nested": false,
         "version": "2.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@electron/get/-/get-2.0.3.tgz"
       },
       {
         "name": "@electron/notarize",
+        "lockPath": "node_modules/@electron/notarize",
+        "nested": false,
         "version": "2.5.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@electron/notarize/-/notarize-2.5.0.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/@electron/notarize/node_modules/fs-extra",
+        "nested": true,
+        "version": "9.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-9.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/@electron/notarize/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/@electron/notarize/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "@electron/osx-sign",
+        "lockPath": "node_modules/@electron/osx-sign",
+        "nested": false,
         "version": "1.3.3",
         "license": "BSD-2-Clause",
         "resolved": "https://registry.npmjs.org/@electron/osx-sign/-/osx-sign-1.3.3.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/@electron/osx-sign/node_modules/fs-extra",
+        "nested": true,
+        "version": "10.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz"
+      },
+      {
+        "name": "isbinaryfile",
+        "lockPath": "node_modules/@electron/osx-sign/node_modules/isbinaryfile",
+        "nested": true,
+        "version": "4.0.10",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/isbinaryfile/-/isbinaryfile-4.0.10.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/@electron/osx-sign/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/@electron/osx-sign/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "@electron/rebuild",
+        "lockPath": "node_modules/@electron/rebuild",
+        "nested": false,
         "version": "4.0.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@electron/rebuild/-/rebuild-4.0.4.tgz"
       },
       {
         "name": "@electron/universal",
+        "lockPath": "node_modules/@electron/universal",
+        "nested": false,
         "version": "2.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@electron/universal/-/universal-2.0.3.tgz"
       },
       {
+        "name": "balanced-match",
+        "lockPath": "node_modules/@electron/universal/node_modules/balanced-match",
+        "nested": true,
+        "version": "1.0.2",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz"
+      },
+      {
+        "name": "brace-expansion",
+        "lockPath": "node_modules/@electron/universal/node_modules/brace-expansion",
+        "nested": true,
+        "version": "2.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.1.0.tgz"
+      },
+      {
+        "name": "fs-extra",
+        "lockPath": "node_modules/@electron/universal/node_modules/fs-extra",
+        "nested": true,
+        "version": "11.3.5",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-11.3.5.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/@electron/universal/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "minimatch",
+        "lockPath": "node_modules/@electron/universal/node_modules/minimatch",
+        "nested": true,
+        "version": "9.0.9",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-9.0.9.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/@electron/universal/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "@electron/windows-sign",
+        "lockPath": "node_modules/@electron/windows-sign",
+        "nested": false,
         "version": "1.2.2",
         "license": "BSD-2-Clause",
         "resolved": "https://registry.npmjs.org/@electron/windows-sign/-/windows-sign-1.2.2.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/@electron/windows-sign/node_modules/fs-extra",
+        "nested": true,
+        "version": "11.3.5",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-11.3.5.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/@electron/windows-sign/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/@electron/windows-sign/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "@esbuild/aix-ppc64",
+        "lockPath": "node_modules/@esbuild/aix-ppc64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/android-arm",
+        "lockPath": "node_modules/@esbuild/android-arm",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/android-arm/-/android-arm-0.27.7.tgz"
       },
       {
         "name": "@esbuild/android-arm64",
+        "lockPath": "node_modules/@esbuild/android-arm64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/android-arm64/-/android-arm64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/android-x64",
+        "lockPath": "node_modules/@esbuild/android-x64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/android-x64/-/android-x64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/darwin-arm64",
+        "lockPath": "node_modules/@esbuild/darwin-arm64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/darwin-arm64/-/darwin-arm64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/darwin-x64",
+        "lockPath": "node_modules/@esbuild/darwin-x64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/darwin-x64/-/darwin-x64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/freebsd-arm64",
+        "lockPath": "node_modules/@esbuild/freebsd-arm64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/freebsd-arm64/-/freebsd-arm64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/freebsd-x64",
+        "lockPath": "node_modules/@esbuild/freebsd-x64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/freebsd-x64/-/freebsd-x64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-arm",
+        "lockPath": "node_modules/@esbuild/linux-arm",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-arm/-/linux-arm-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-arm64",
+        "lockPath": "node_modules/@esbuild/linux-arm64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-arm64/-/linux-arm64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-ia32",
+        "lockPath": "node_modules/@esbuild/linux-ia32",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-ia32/-/linux-ia32-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-loong64",
+        "lockPath": "node_modules/@esbuild/linux-loong64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-loong64/-/linux-loong64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-mips64el",
+        "lockPath": "node_modules/@esbuild/linux-mips64el",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-mips64el/-/linux-mips64el-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-ppc64",
+        "lockPath": "node_modules/@esbuild/linux-ppc64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-ppc64/-/linux-ppc64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-riscv64",
+        "lockPath": "node_modules/@esbuild/linux-riscv64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-riscv64/-/linux-riscv64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-s390x",
+        "lockPath": "node_modules/@esbuild/linux-s390x",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-s390x/-/linux-s390x-0.27.7.tgz"
       },
       {
         "name": "@esbuild/linux-x64",
+        "lockPath": "node_modules/@esbuild/linux-x64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/linux-x64/-/linux-x64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/netbsd-arm64",
+        "lockPath": "node_modules/@esbuild/netbsd-arm64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/netbsd-arm64/-/netbsd-arm64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/netbsd-x64",
+        "lockPath": "node_modules/@esbuild/netbsd-x64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/netbsd-x64/-/netbsd-x64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/openbsd-arm64",
+        "lockPath": "node_modules/@esbuild/openbsd-arm64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/openbsd-arm64/-/openbsd-arm64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/openbsd-x64",
+        "lockPath": "node_modules/@esbuild/openbsd-x64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/openbsd-x64/-/openbsd-x64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/openharmony-arm64",
+        "lockPath": "node_modules/@esbuild/openharmony-arm64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/openharmony-arm64/-/openharmony-arm64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/sunos-x64",
+        "lockPath": "node_modules/@esbuild/sunos-x64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/sunos-x64/-/sunos-x64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/win32-arm64",
+        "lockPath": "node_modules/@esbuild/win32-arm64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/win32-arm64/-/win32-arm64-0.27.7.tgz"
       },
       {
         "name": "@esbuild/win32-ia32",
+        "lockPath": "node_modules/@esbuild/win32-ia32",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/win32-ia32/-/win32-ia32-0.27.7.tgz"
       },
       {
         "name": "@esbuild/win32-x64",
+        "lockPath": "node_modules/@esbuild/win32-x64",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@esbuild/win32-x64/-/win32-x64-0.27.7.tgz"
       },
       {
         "name": "@ghostery/adblocker",
+        "lockPath": "node_modules/@ghostery/adblocker",
+        "nested": false,
         "version": "2.18.2",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@ghostery/adblocker/-/adblocker-2.18.2.tgz"
       },
       {
         "name": "@ghostery/adblocker-content",
+        "lockPath": "node_modules/@ghostery/adblocker-content",
+        "nested": false,
         "version": "2.18.2",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@ghostery/adblocker-content/-/adblocker-content-2.18.2.tgz"
       },
       {
         "name": "@ghostery/adblocker-electron",
+        "lockPath": "node_modules/@ghostery/adblocker-electron",
+        "nested": false,
         "version": "2.18.2",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@ghostery/adblocker-electron/-/adblocker-electron-2.18.2.tgz"
       },
       {
         "name": "@ghostery/adblocker-electron-preload",
+        "lockPath": "node_modules/@ghostery/adblocker-electron-preload",
+        "nested": false,
         "version": "2.18.2",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@ghostery/adblocker-electron-preload/-/adblocker-electron-preload-2.18.2.tgz"
       },
       {
         "name": "@ghostery/adblocker-extended-selectors",
+        "lockPath": "node_modules/@ghostery/adblocker-extended-selectors",
+        "nested": false,
         "version": "2.18.2",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@ghostery/adblocker-extended-selectors/-/adblocker-extended-selectors-2.18.2.tgz"
       },
       {
         "name": "@ghostery/url-parser",
+        "lockPath": "node_modules/@ghostery/url-parser",
+        "nested": false,
         "version": "1.3.1",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@ghostery/url-parser/-/url-parser-1.3.1.tgz"
       },
       {
         "name": "@isaacs/fs-minipass",
+        "lockPath": "node_modules/@isaacs/fs-minipass",
+        "nested": false,
         "version": "4.0.1",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/@isaacs/fs-minipass/-/fs-minipass-4.0.1.tgz"
       },
       {
         "name": "@jridgewell/gen-mapping",
+        "lockPath": "node_modules/@jridgewell/gen-mapping",
+        "nested": false,
         "version": "0.3.13",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz"
       },
       {
         "name": "@jridgewell/remapping",
+        "lockPath": "node_modules/@jridgewell/remapping",
+        "nested": false,
         "version": "2.3.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@jridgewell/remapping/-/remapping-2.3.5.tgz"
       },
       {
         "name": "@jridgewell/resolve-uri",
+        "lockPath": "node_modules/@jridgewell/resolve-uri",
+        "nested": false,
         "version": "3.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz"
       },
       {
         "name": "@jridgewell/sourcemap-codec",
+        "lockPath": "node_modules/@jridgewell/sourcemap-codec",
+        "nested": false,
         "version": "1.5.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz"
       },
       {
         "name": "@jridgewell/trace-mapping",
+        "lockPath": "node_modules/@jridgewell/trace-mapping",
+        "nested": false,
         "version": "0.3.31",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz"
       },
       {
         "name": "@malept/cross-spawn-promise",
+        "lockPath": "node_modules/@malept/cross-spawn-promise",
+        "nested": false,
         "version": "2.0.0",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/@malept/cross-spawn-promise/-/cross-spawn-promise-2.0.0.tgz"
       },
       {
         "name": "@malept/flatpak-bundler",
+        "lockPath": "node_modules/@malept/flatpak-bundler",
+        "nested": false,
         "version": "0.4.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@malept/flatpak-bundler/-/flatpak-bundler-0.4.0.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/@malept/flatpak-bundler/node_modules/fs-extra",
+        "nested": true,
+        "version": "9.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-9.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/@malept/flatpak-bundler/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/@malept/flatpak-bundler/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "@remusao/guess-url-type",
+        "lockPath": "node_modules/@remusao/guess-url-type",
+        "nested": false,
         "version": "2.1.0",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@remusao/guess-url-type/-/guess-url-type-2.1.0.tgz"
       },
       {
         "name": "@remusao/small",
+        "lockPath": "node_modules/@remusao/small",
+        "nested": false,
         "version": "2.1.0",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@remusao/small/-/small-2.1.0.tgz"
       },
       {
         "name": "@remusao/smaz",
+        "lockPath": "node_modules/@remusao/smaz",
+        "nested": false,
         "version": "2.2.0",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@remusao/smaz/-/smaz-2.2.0.tgz"
       },
       {
         "name": "@remusao/smaz-compress",
+        "lockPath": "node_modules/@remusao/smaz-compress",
+        "nested": false,
         "version": "2.2.0",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@remusao/smaz-compress/-/smaz-compress-2.2.0.tgz"
       },
       {
         "name": "@remusao/smaz-decompress",
+        "lockPath": "node_modules/@remusao/smaz-decompress",
+        "nested": false,
         "version": "2.2.0",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@remusao/smaz-decompress/-/smaz-decompress-2.2.0.tgz"
       },
       {
         "name": "@remusao/trie",
+        "lockPath": "node_modules/@remusao/trie",
+        "nested": false,
         "version": "2.1.0",
         "license": "MPL-2.0",
         "resolved": "https://registry.npmjs.org/@remusao/trie/-/trie-2.1.0.tgz"
       },
       {
         "name": "@rolldown/pluginutils",
+        "lockPath": "node_modules/@rolldown/pluginutils",
+        "nested": false,
         "version": "1.0.0-rc.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rolldown/pluginutils/-/pluginutils-1.0.0-rc.3.tgz"
       },
       {
         "name": "@rollup/rollup-android-arm-eabi",
+        "lockPath": "node_modules/@rollup/rollup-android-arm-eabi",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-android-arm-eabi/-/rollup-android-arm-eabi-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-android-arm64",
+        "lockPath": "node_modules/@rollup/rollup-android-arm64",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-android-arm64/-/rollup-android-arm64-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-darwin-arm64",
+        "lockPath": "node_modules/@rollup/rollup-darwin-arm64",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-darwin-arm64/-/rollup-darwin-arm64-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-darwin-x64",
+        "lockPath": "node_modules/@rollup/rollup-darwin-x64",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-darwin-x64/-/rollup-darwin-x64-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-freebsd-arm64",
+        "lockPath": "node_modules/@rollup/rollup-freebsd-arm64",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-freebsd-arm64/-/rollup-freebsd-arm64-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-freebsd-x64",
+        "lockPath": "node_modules/@rollup/rollup-freebsd-x64",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-freebsd-x64/-/rollup-freebsd-x64-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-arm-gnueabihf",
+        "lockPath": "node_modules/@rollup/rollup-linux-arm-gnueabihf",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm-gnueabihf/-/rollup-linux-arm-gnueabihf-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-arm-musleabihf",
+        "lockPath": "node_modules/@rollup/rollup-linux-arm-musleabihf",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm-musleabihf/-/rollup-linux-arm-musleabihf-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-arm64-gnu",
+        "lockPath": "node_modules/@rollup/rollup-linux-arm64-gnu",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm64-gnu/-/rollup-linux-arm64-gnu-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-arm64-musl",
+        "lockPath": "node_modules/@rollup/rollup-linux-arm64-musl",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-arm64-musl/-/rollup-linux-arm64-musl-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-loong64-gnu",
+        "lockPath": "node_modules/@rollup/rollup-linux-loong64-gnu",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-loong64-gnu/-/rollup-linux-loong64-gnu-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-loong64-musl",
+        "lockPath": "node_modules/@rollup/rollup-linux-loong64-musl",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-loong64-musl/-/rollup-linux-loong64-musl-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-ppc64-gnu",
+        "lockPath": "node_modules/@rollup/rollup-linux-ppc64-gnu",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-ppc64-gnu/-/rollup-linux-ppc64-gnu-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-ppc64-musl",
+        "lockPath": "node_modules/@rollup/rollup-linux-ppc64-musl",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-ppc64-musl/-/rollup-linux-ppc64-musl-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-riscv64-gnu",
+        "lockPath": "node_modules/@rollup/rollup-linux-riscv64-gnu",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-riscv64-gnu/-/rollup-linux-riscv64-gnu-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-riscv64-musl",
+        "lockPath": "node_modules/@rollup/rollup-linux-riscv64-musl",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-riscv64-musl/-/rollup-linux-riscv64-musl-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-s390x-gnu",
+        "lockPath": "node_modules/@rollup/rollup-linux-s390x-gnu",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-s390x-gnu/-/rollup-linux-s390x-gnu-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-x64-gnu",
+        "lockPath": "node_modules/@rollup/rollup-linux-x64-gnu",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-x64-gnu/-/rollup-linux-x64-gnu-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-linux-x64-musl",
+        "lockPath": "node_modules/@rollup/rollup-linux-x64-musl",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-linux-x64-musl/-/rollup-linux-x64-musl-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-openbsd-x64",
+        "lockPath": "node_modules/@rollup/rollup-openbsd-x64",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-openbsd-x64/-/rollup-openbsd-x64-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-openharmony-arm64",
+        "lockPath": "node_modules/@rollup/rollup-openharmony-arm64",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-openharmony-arm64/-/rollup-openharmony-arm64-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-win32-arm64-msvc",
+        "lockPath": "node_modules/@rollup/rollup-win32-arm64-msvc",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-arm64-msvc/-/rollup-win32-arm64-msvc-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-win32-ia32-msvc",
+        "lockPath": "node_modules/@rollup/rollup-win32-ia32-msvc",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-ia32-msvc/-/rollup-win32-ia32-msvc-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-win32-x64-gnu",
+        "lockPath": "node_modules/@rollup/rollup-win32-x64-gnu",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-gnu/-/rollup-win32-x64-gnu-4.60.4.tgz"
       },
       {
         "name": "@rollup/rollup-win32-x64-msvc",
+        "lockPath": "node_modules/@rollup/rollup-win32-x64-msvc",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@rollup/rollup-win32-x64-msvc/-/rollup-win32-x64-msvc-4.60.4.tgz"
       },
       {
         "name": "@sindresorhus/is",
+        "lockPath": "node_modules/@sindresorhus/is",
+        "nested": false,
         "version": "4.6.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@sindresorhus/is/-/is-4.6.0.tgz"
       },
       {
         "name": "@szmarczak/http-timer",
+        "lockPath": "node_modules/@szmarczak/http-timer",
+        "nested": false,
         "version": "4.0.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@szmarczak/http-timer/-/http-timer-4.0.6.tgz"
       },
       {
         "name": "@types/babel__core",
+        "lockPath": "node_modules/@types/babel__core",
+        "nested": false,
         "version": "7.20.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/babel__core/-/babel__core-7.20.5.tgz"
       },
       {
         "name": "@types/babel__generator",
+        "lockPath": "node_modules/@types/babel__generator",
+        "nested": false,
         "version": "7.27.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/babel__generator/-/babel__generator-7.27.0.tgz"
       },
       {
         "name": "@types/babel__template",
+        "lockPath": "node_modules/@types/babel__template",
+        "nested": false,
         "version": "7.4.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/babel__template/-/babel__template-7.4.4.tgz"
       },
       {
         "name": "@types/babel__traverse",
+        "lockPath": "node_modules/@types/babel__traverse",
+        "nested": false,
         "version": "7.28.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/babel__traverse/-/babel__traverse-7.28.0.tgz"
       },
       {
         "name": "@types/cacheable-request",
+        "lockPath": "node_modules/@types/cacheable-request",
+        "nested": false,
         "version": "6.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/cacheable-request/-/cacheable-request-6.0.3.tgz"
       },
       {
         "name": "@types/chai",
+        "lockPath": "node_modules/@types/chai",
+        "nested": false,
         "version": "5.2.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/chai/-/chai-5.2.3.tgz"
       },
       {
         "name": "@types/debug",
+        "lockPath": "node_modules/@types/debug",
+        "nested": false,
         "version": "4.1.13",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/debug/-/debug-4.1.13.tgz"
       },
       {
         "name": "@types/deep-eql",
+        "lockPath": "node_modules/@types/deep-eql",
+        "nested": false,
         "version": "4.0.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/deep-eql/-/deep-eql-4.0.2.tgz"
       },
       {
         "name": "@types/estree",
+        "lockPath": "node_modules/@types/estree",
+        "nested": false,
         "version": "1.0.8",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/estree/-/estree-1.0.8.tgz"
       },
       {
         "name": "@types/fs-extra",
+        "lockPath": "node_modules/@types/fs-extra",
+        "nested": false,
         "version": "9.0.13",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/fs-extra/-/fs-extra-9.0.13.tgz"
       },
       {
         "name": "@types/http-cache-semantics",
+        "lockPath": "node_modules/@types/http-cache-semantics",
+        "nested": false,
         "version": "4.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/http-cache-semantics/-/http-cache-semantics-4.2.0.tgz"
       },
       {
         "name": "@types/keyv",
+        "lockPath": "node_modules/@types/keyv",
+        "nested": false,
         "version": "3.1.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/keyv/-/keyv-3.1.4.tgz"
       },
       {
         "name": "@types/ms",
+        "lockPath": "node_modules/@types/ms",
+        "nested": false,
         "version": "2.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/ms/-/ms-2.1.0.tgz"
       },
       {
         "name": "@types/node",
+        "lockPath": "node_modules/@types/node",
+        "nested": false,
         "version": "22.19.19",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/node/-/node-22.19.19.tgz"
       },
       {
         "name": "@types/plist",
+        "lockPath": "node_modules/@types/plist",
+        "nested": false,
         "version": "3.0.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/plist/-/plist-3.0.5.tgz"
       },
       {
         "name": "@types/react",
+        "lockPath": "node_modules/@types/react",
+        "nested": false,
         "version": "19.2.15",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/react/-/react-19.2.15.tgz"
       },
       {
         "name": "@types/react-dom",
+        "lockPath": "node_modules/@types/react-dom",
+        "nested": false,
         "version": "19.2.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/react-dom/-/react-dom-19.2.3.tgz"
       },
       {
         "name": "@types/responselike",
+        "lockPath": "node_modules/@types/responselike",
+        "nested": false,
         "version": "1.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/responselike/-/responselike-1.0.3.tgz"
       },
       {
         "name": "@types/verror",
+        "lockPath": "node_modules/@types/verror",
+        "nested": false,
         "version": "1.10.11",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/verror/-/verror-1.10.11.tgz"
       },
       {
         "name": "@types/yauzl",
+        "lockPath": "node_modules/@types/yauzl",
+        "nested": false,
         "version": "2.10.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@types/yauzl/-/yauzl-2.10.3.tgz"
       },
       {
         "name": "@vitejs/plugin-react",
+        "lockPath": "node_modules/@vitejs/plugin-react",
+        "nested": false,
         "version": "5.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@vitejs/plugin-react/-/plugin-react-5.2.0.tgz"
       },
       {
         "name": "@vitest/expect",
+        "lockPath": "node_modules/@vitest/expect",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@vitest/expect/-/expect-3.2.4.tgz"
       },
       {
         "name": "@vitest/mocker",
+        "lockPath": "node_modules/@vitest/mocker",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@vitest/mocker/-/mocker-3.2.4.tgz"
       },
       {
         "name": "@vitest/pretty-format",
+        "lockPath": "node_modules/@vitest/pretty-format",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@vitest/pretty-format/-/pretty-format-3.2.4.tgz"
       },
       {
         "name": "@vitest/runner",
+        "lockPath": "node_modules/@vitest/runner",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@vitest/runner/-/runner-3.2.4.tgz"
       },
       {
         "name": "@vitest/snapshot",
+        "lockPath": "node_modules/@vitest/snapshot",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@vitest/snapshot/-/snapshot-3.2.4.tgz"
       },
       {
         "name": "@vitest/spy",
+        "lockPath": "node_modules/@vitest/spy",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@vitest/spy/-/spy-3.2.4.tgz"
       },
       {
         "name": "@vitest/utils",
+        "lockPath": "node_modules/@vitest/utils",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@vitest/utils/-/utils-3.2.4.tgz"
       },
       {
         "name": "@xmldom/xmldom",
+        "lockPath": "node_modules/@xmldom/xmldom",
+        "nested": false,
         "version": "0.8.13",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/@xmldom/xmldom/-/xmldom-0.8.13.tgz"
       },
       {
         "name": "7zip-bin",
+        "lockPath": "node_modules/7zip-bin",
+        "nested": false,
         "version": "5.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/7zip-bin/-/7zip-bin-5.2.0.tgz"
       },
       {
         "name": "abbrev",
+        "lockPath": "node_modules/abbrev",
+        "nested": false,
         "version": "4.0.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-4.0.0.tgz"
       },
       {
         "name": "agent-base",
+        "lockPath": "node_modules/agent-base",
+        "nested": false,
         "version": "7.1.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/agent-base/-/agent-base-7.1.4.tgz"
       },
       {
         "name": "ajv",
+        "lockPath": "node_modules/ajv",
+        "nested": false,
         "version": "6.15.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/ajv/-/ajv-6.15.0.tgz"
       },
       {
         "name": "ajv-keywords",
+        "lockPath": "node_modules/ajv-keywords",
+        "nested": false,
         "version": "3.5.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/ajv-keywords/-/ajv-keywords-3.5.2.tgz"
       },
       {
         "name": "ansi-regex",
+        "lockPath": "node_modules/ansi-regex",
+        "nested": false,
         "version": "5.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz"
       },
       {
         "name": "ansi-styles",
+        "lockPath": "node_modules/ansi-styles",
+        "nested": false,
         "version": "4.3.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/ansi-styles/-/ansi-styles-4.3.0.tgz"
       },
       {
         "name": "app-builder-bin",
+        "lockPath": "node_modules/app-builder-bin",
+        "nested": false,
         "version": "5.0.0-alpha.12",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/app-builder-bin/-/app-builder-bin-5.0.0-alpha.12.tgz"
       },
       {
         "name": "app-builder-lib",
+        "lockPath": "node_modules/app-builder-lib",
+        "nested": false,
         "version": "26.8.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/app-builder-lib/-/app-builder-lib-26.8.1.tgz"
       },
       {
+        "name": "@electron/get",
+        "lockPath": "node_modules/app-builder-lib/node_modules/@electron/get",
+        "nested": true,
+        "version": "3.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/@electron/get/-/get-3.1.0.tgz"
+      },
+      {
+        "name": "fs-extra",
+        "lockPath": "node_modules/app-builder-lib/node_modules/@electron/get/node_modules/fs-extra",
+        "nested": true,
+        "version": "8.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-8.1.0.tgz"
+      },
+      {
+        "name": "semver",
+        "lockPath": "node_modules/app-builder-lib/node_modules/@electron/get/node_modules/semver",
+        "nested": true,
+        "version": "6.3.1",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz"
+      },
+      {
+        "name": "ci-info",
+        "lockPath": "node_modules/app-builder-lib/node_modules/ci-info",
+        "nested": true,
+        "version": "4.3.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/ci-info/-/ci-info-4.3.1.tgz"
+      },
+      {
+        "name": "fs-extra",
+        "lockPath": "node_modules/app-builder-lib/node_modules/fs-extra",
+        "nested": true,
+        "version": "10.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/app-builder-lib/node_modules/fs-extra/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/app-builder-lib/node_modules/fs-extra/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
+        "name": "semver",
+        "lockPath": "node_modules/app-builder-lib/node_modules/semver",
+        "nested": true,
+        "version": "7.7.4",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.4.tgz"
+      },
+      {
         "name": "argparse",
+        "lockPath": "node_modules/argparse",
+        "nested": false,
         "version": "2.0.1",
         "license": "Python-2.0",
         "resolved": "https://registry.npmjs.org/argparse/-/argparse-2.0.1.tgz"
       },
       {
         "name": "assert-plus",
+        "lockPath": "node_modules/assert-plus",
+        "nested": false,
         "version": "1.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/assert-plus/-/assert-plus-1.0.0.tgz"
       },
       {
         "name": "assertion-error",
+        "lockPath": "node_modules/assertion-error",
+        "nested": false,
         "version": "2.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/assertion-error/-/assertion-error-2.0.1.tgz"
       },
       {
         "name": "astral-regex",
+        "lockPath": "node_modules/astral-regex",
+        "nested": false,
         "version": "2.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/astral-regex/-/astral-regex-2.0.0.tgz"
       },
       {
         "name": "async",
+        "lockPath": "node_modules/async",
+        "nested": false,
         "version": "3.2.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/async/-/async-3.2.6.tgz"
       },
       {
         "name": "async-exit-hook",
+        "lockPath": "node_modules/async-exit-hook",
+        "nested": false,
         "version": "2.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/async-exit-hook/-/async-exit-hook-2.0.1.tgz"
       },
       {
         "name": "asynckit",
+        "lockPath": "node_modules/asynckit",
+        "nested": false,
         "version": "0.4.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/asynckit/-/asynckit-0.4.0.tgz"
       },
       {
         "name": "at-least-node",
+        "lockPath": "node_modules/at-least-node",
+        "nested": false,
         "version": "1.0.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/at-least-node/-/at-least-node-1.0.0.tgz"
       },
       {
         "name": "balanced-match",
+        "lockPath": "node_modules/balanced-match",
+        "nested": false,
         "version": "4.0.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-4.0.4.tgz"
       },
       {
         "name": "base64-js",
+        "lockPath": "node_modules/base64-js",
+        "nested": false,
         "version": "1.5.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/base64-js/-/base64-js-1.5.1.tgz"
       },
       {
         "name": "baseline-browser-mapping",
+        "lockPath": "node_modules/baseline-browser-mapping",
+        "nested": false,
         "version": "2.10.32",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.10.32.tgz"
       },
       {
         "name": "boolean",
+        "lockPath": "node_modules/boolean",
+        "nested": false,
         "version": "3.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/boolean/-/boolean-3.2.0.tgz"
       },
       {
         "name": "brace-expansion",
+        "lockPath": "node_modules/brace-expansion",
+        "nested": false,
         "version": "5.0.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.6.tgz"
       },
       {
         "name": "browserslist",
+        "lockPath": "node_modules/browserslist",
+        "nested": false,
         "version": "4.28.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/browserslist/-/browserslist-4.28.2.tgz"
       },
       {
         "name": "buffer",
+        "lockPath": "node_modules/buffer",
+        "nested": false,
         "version": "5.7.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/buffer/-/buffer-5.7.1.tgz"
       },
       {
         "name": "buffer-crc32",
+        "lockPath": "node_modules/buffer-crc32",
+        "nested": false,
         "version": "0.2.13",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/buffer-crc32/-/buffer-crc32-0.2.13.tgz"
       },
       {
         "name": "buffer-from",
+        "lockPath": "node_modules/buffer-from",
+        "nested": false,
         "version": "1.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/buffer-from/-/buffer-from-1.1.2.tgz"
       },
       {
         "name": "builder-util",
+        "lockPath": "node_modules/builder-util",
+        "nested": false,
         "version": "26.8.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/builder-util/-/builder-util-26.8.1.tgz"
       },
       {
         "name": "builder-util-runtime",
+        "lockPath": "node_modules/builder-util-runtime",
+        "nested": false,
         "version": "9.5.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/builder-util-runtime/-/builder-util-runtime-9.5.1.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/builder-util/node_modules/fs-extra",
+        "nested": true,
+        "version": "10.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/builder-util/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/builder-util/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "cac",
+        "lockPath": "node_modules/cac",
+        "nested": false,
         "version": "6.7.14",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/cac/-/cac-6.7.14.tgz"
       },
       {
         "name": "cacheable-lookup",
+        "lockPath": "node_modules/cacheable-lookup",
+        "nested": false,
         "version": "5.0.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/cacheable-lookup/-/cacheable-lookup-5.0.4.tgz"
       },
       {
         "name": "cacheable-request",
+        "lockPath": "node_modules/cacheable-request",
+        "nested": false,
         "version": "7.0.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/cacheable-request/-/cacheable-request-7.0.4.tgz"
       },
       {
         "name": "call-bind-apply-helpers",
+        "lockPath": "node_modules/call-bind-apply-helpers",
+        "nested": false,
         "version": "1.0.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz"
       },
       {
         "name": "caniuse-lite",
+        "lockPath": "node_modules/caniuse-lite",
+        "nested": false,
         "version": "1.0.30001793",
         "license": "CC-BY-4.0",
         "resolved": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001793.tgz"
       },
       {
         "name": "chai",
+        "lockPath": "node_modules/chai",
+        "nested": false,
         "version": "5.3.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/chai/-/chai-5.3.3.tgz"
       },
       {
         "name": "chalk",
+        "lockPath": "node_modules/chalk",
+        "nested": false,
         "version": "4.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/chalk/-/chalk-4.1.2.tgz"
       },
       {
         "name": "check-error",
+        "lockPath": "node_modules/check-error",
+        "nested": false,
         "version": "2.1.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/check-error/-/check-error-2.1.3.tgz"
       },
       {
         "name": "chownr",
+        "lockPath": "node_modules/chownr",
+        "nested": false,
         "version": "3.0.0",
         "license": "BlueOak-1.0.0",
         "resolved": "https://registry.npmjs.org/chownr/-/chownr-3.0.0.tgz"
       },
       {
         "name": "chromium-pickle-js",
+        "lockPath": "node_modules/chromium-pickle-js",
+        "nested": false,
         "version": "0.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/chromium-pickle-js/-/chromium-pickle-js-0.2.0.tgz"
       },
       {
         "name": "ci-info",
+        "lockPath": "node_modules/ci-info",
+        "nested": false,
         "version": "4.4.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/ci-info/-/ci-info-4.4.0.tgz"
       },
       {
         "name": "cli-truncate",
+        "lockPath": "node_modules/cli-truncate",
+        "nested": false,
         "version": "2.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/cli-truncate/-/cli-truncate-2.1.0.tgz"
       },
       {
         "name": "cliui",
+        "lockPath": "node_modules/cliui",
+        "nested": false,
         "version": "8.0.1",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/cliui/-/cliui-8.0.1.tgz"
       },
       {
         "name": "clone-response",
+        "lockPath": "node_modules/clone-response",
+        "nested": false,
         "version": "1.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/clone-response/-/clone-response-1.0.3.tgz"
       },
       {
         "name": "color-convert",
+        "lockPath": "node_modules/color-convert",
+        "nested": false,
         "version": "2.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/color-convert/-/color-convert-2.0.1.tgz"
       },
       {
         "name": "color-name",
+        "lockPath": "node_modules/color-name",
+        "nested": false,
         "version": "1.1.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/color-name/-/color-name-1.1.4.tgz"
       },
       {
         "name": "combined-stream",
+        "lockPath": "node_modules/combined-stream",
+        "nested": false,
         "version": "1.0.8",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/combined-stream/-/combined-stream-1.0.8.tgz"
       },
       {
         "name": "commander",
+        "lockPath": "node_modules/commander",
+        "nested": false,
         "version": "5.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/commander/-/commander-5.1.0.tgz"
       },
       {
         "name": "compare-version",
+        "lockPath": "node_modules/compare-version",
+        "nested": false,
         "version": "0.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/compare-version/-/compare-version-0.1.2.tgz"
       },
       {
         "name": "concat-map",
+        "lockPath": "node_modules/concat-map",
+        "nested": false,
         "version": "0.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/concat-map/-/concat-map-0.0.1.tgz"
       },
       {
         "name": "convert-source-map",
+        "lockPath": "node_modules/convert-source-map",
+        "nested": false,
         "version": "2.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz"
       },
       {
         "name": "core-util-is",
+        "lockPath": "node_modules/core-util-is",
+        "nested": false,
         "version": "1.0.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/core-util-is/-/core-util-is-1.0.2.tgz"
       },
       {
         "name": "crc",
+        "lockPath": "node_modules/crc",
+        "nested": false,
         "version": "3.8.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/crc/-/crc-3.8.0.tgz"
       },
       {
         "name": "cross-dirname",
+        "lockPath": "node_modules/cross-dirname",
+        "nested": false,
         "version": "0.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/cross-dirname/-/cross-dirname-0.1.0.tgz"
       },
       {
         "name": "cross-spawn",
+        "lockPath": "node_modules/cross-spawn",
+        "nested": false,
         "version": "7.0.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/cross-spawn/-/cross-spawn-7.0.6.tgz"
       },
       {
+        "name": "isexe",
+        "lockPath": "node_modules/cross-spawn/node_modules/isexe",
+        "nested": true,
+        "version": "2.0.0",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/isexe/-/isexe-2.0.0.tgz"
+      },
+      {
+        "name": "which",
+        "lockPath": "node_modules/cross-spawn/node_modules/which",
+        "nested": true,
+        "version": "2.0.2",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/which/-/which-2.0.2.tgz"
+      },
+      {
         "name": "csstype",
+        "lockPath": "node_modules/csstype",
+        "nested": false,
         "version": "3.2.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz"
       },
       {
         "name": "debug",
+        "lockPath": "node_modules/debug",
+        "nested": false,
         "version": "4.4.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz"
       },
       {
         "name": "decompress-response",
+        "lockPath": "node_modules/decompress-response",
+        "nested": false,
         "version": "6.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/decompress-response/-/decompress-response-6.0.0.tgz"
       },
       {
+        "name": "mimic-response",
+        "lockPath": "node_modules/decompress-response/node_modules/mimic-response",
+        "nested": true,
+        "version": "3.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/mimic-response/-/mimic-response-3.1.0.tgz"
+      },
+      {
         "name": "deep-eql",
+        "lockPath": "node_modules/deep-eql",
+        "nested": false,
         "version": "5.0.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/deep-eql/-/deep-eql-5.0.2.tgz"
       },
       {
         "name": "defer-to-connect",
+        "lockPath": "node_modules/defer-to-connect",
+        "nested": false,
         "version": "2.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/defer-to-connect/-/defer-to-connect-2.0.1.tgz"
       },
       {
         "name": "define-data-property",
+        "lockPath": "node_modules/define-data-property",
+        "nested": false,
         "version": "1.1.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz"
       },
       {
         "name": "define-properties",
+        "lockPath": "node_modules/define-properties",
+        "nested": false,
         "version": "1.2.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/define-properties/-/define-properties-1.2.1.tgz"
       },
       {
         "name": "delayed-stream",
+        "lockPath": "node_modules/delayed-stream",
+        "nested": false,
         "version": "1.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/delayed-stream/-/delayed-stream-1.0.0.tgz"
       },
       {
         "name": "detect-node",
+        "lockPath": "node_modules/detect-node",
+        "nested": false,
         "version": "2.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/detect-node/-/detect-node-2.1.0.tgz"
       },
       {
         "name": "dir-compare",
+        "lockPath": "node_modules/dir-compare",
+        "nested": false,
         "version": "4.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/dir-compare/-/dir-compare-4.2.0.tgz"
       },
       {
+        "name": "balanced-match",
+        "lockPath": "node_modules/dir-compare/node_modules/balanced-match",
+        "nested": true,
+        "version": "1.0.2",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz"
+      },
+      {
+        "name": "brace-expansion",
+        "lockPath": "node_modules/dir-compare/node_modules/brace-expansion",
+        "nested": true,
+        "version": "1.1.14",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.14.tgz"
+      },
+      {
+        "name": "minimatch",
+        "lockPath": "node_modules/dir-compare/node_modules/minimatch",
+        "nested": true,
+        "version": "3.1.5",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-3.1.5.tgz"
+      },
+      {
         "name": "dmg-builder",
+        "lockPath": "node_modules/dmg-builder",
+        "nested": false,
         "version": "26.8.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/dmg-builder/-/dmg-builder-26.8.1.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/dmg-builder/node_modules/fs-extra",
+        "nested": true,
+        "version": "10.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/dmg-builder/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/dmg-builder/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "dmg-license",
+        "lockPath": "node_modules/dmg-license",
+        "nested": false,
         "version": "1.0.11",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/dmg-license/-/dmg-license-1.0.11.tgz"
       },
       {
         "name": "dotenv",
+        "lockPath": "node_modules/dotenv",
+        "nested": false,
         "version": "16.6.1",
         "license": "BSD-2-Clause",
         "resolved": "https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz"
       },
       {
         "name": "dotenv-expand",
+        "lockPath": "node_modules/dotenv-expand",
+        "nested": false,
         "version": "11.0.7",
         "license": "BSD-2-Clause",
         "resolved": "https://registry.npmjs.org/dotenv-expand/-/dotenv-expand-11.0.7.tgz"
       },
       {
         "name": "dunder-proto",
+        "lockPath": "node_modules/dunder-proto",
+        "nested": false,
         "version": "1.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz"
       },
       {
         "name": "ejs",
+        "lockPath": "node_modules/ejs",
+        "nested": false,
         "version": "3.1.10",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/ejs/-/ejs-3.1.10.tgz"
       },
       {
+        "name": "electron",
+        "lockPath": "node_modules/electron",
+        "nested": false,
+        "version": "37.10.3+wvcus",
+        "license": "MIT",
+        "resolved": "git+ssh://git@github.com/castlabs/electron-releases.git#e428e34f0a72dcff7aed9da06846b8872ed388db"
+      },
+      {
         "name": "electron-builder",
+        "lockPath": "node_modules/electron-builder",
+        "nested": false,
         "version": "26.8.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/electron-builder/-/electron-builder-26.8.1.tgz"
       },
       {
         "name": "electron-builder-squirrel-windows",
+        "lockPath": "node_modules/electron-builder-squirrel-windows",
+        "nested": false,
         "version": "26.8.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/electron-builder-squirrel-windows/-/electron-builder-squirrel-windows-26.8.1.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/electron-builder/node_modules/fs-extra",
+        "nested": true,
+        "version": "10.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/electron-builder/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/electron-builder/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "electron-is-dev",
+        "lockPath": "node_modules/electron-is-dev",
+        "nested": false,
         "version": "3.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/electron-is-dev/-/electron-is-dev-3.0.1.tgz"
       },
       {
         "name": "electron-publish",
+        "lockPath": "node_modules/electron-publish",
+        "nested": false,
         "version": "26.8.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/electron-publish/-/electron-publish-26.8.1.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/electron-publish/node_modules/fs-extra",
+        "nested": true,
+        "version": "10.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/electron-publish/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/electron-publish/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "electron-to-chromium",
+        "lockPath": "node_modules/electron-to-chromium",
+        "nested": false,
         "version": "1.5.361",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.361.tgz"
       },
       {
         "name": "electron-updater",
+        "lockPath": "node_modules/electron-updater",
+        "nested": false,
         "version": "6.8.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/electron-updater/-/electron-updater-6.8.3.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/electron-updater/node_modules/fs-extra",
+        "nested": true,
+        "version": "10.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/electron-updater/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "semver",
+        "lockPath": "node_modules/electron-updater/node_modules/semver",
+        "nested": true,
+        "version": "7.7.4",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-7.7.4.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/electron-updater/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "electron-winstaller",
+        "lockPath": "node_modules/electron-winstaller",
+        "nested": false,
         "version": "5.4.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/electron-winstaller/-/electron-winstaller-5.4.0.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/electron-winstaller/node_modules/fs-extra",
+        "nested": true,
+        "version": "7.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-7.0.1.tgz"
+      },
+      {
         "name": "emoji-regex",
+        "lockPath": "node_modules/emoji-regex",
+        "nested": false,
         "version": "8.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/emoji-regex/-/emoji-regex-8.0.0.tgz"
       },
       {
         "name": "end-of-stream",
+        "lockPath": "node_modules/end-of-stream",
+        "nested": false,
         "version": "1.4.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/end-of-stream/-/end-of-stream-1.4.5.tgz"
       },
       {
         "name": "env-paths",
+        "lockPath": "node_modules/env-paths",
+        "nested": false,
         "version": "2.2.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/env-paths/-/env-paths-2.2.1.tgz"
       },
       {
         "name": "err-code",
+        "lockPath": "node_modules/err-code",
+        "nested": false,
         "version": "2.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/err-code/-/err-code-2.0.3.tgz"
       },
       {
         "name": "es-define-property",
+        "lockPath": "node_modules/es-define-property",
+        "nested": false,
         "version": "1.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz"
       },
       {
         "name": "es-errors",
+        "lockPath": "node_modules/es-errors",
+        "nested": false,
         "version": "1.3.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz"
       },
       {
         "name": "es-module-lexer",
+        "lockPath": "node_modules/es-module-lexer",
+        "nested": false,
         "version": "1.7.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/es-module-lexer/-/es-module-lexer-1.7.0.tgz"
       },
       {
         "name": "es-object-atoms",
+        "lockPath": "node_modules/es-object-atoms",
+        "nested": false,
         "version": "1.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.2.tgz"
       },
       {
         "name": "es-set-tostringtag",
+        "lockPath": "node_modules/es-set-tostringtag",
+        "nested": false,
         "version": "2.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/es-set-tostringtag/-/es-set-tostringtag-2.1.0.tgz"
       },
       {
         "name": "es6-error",
+        "lockPath": "node_modules/es6-error",
+        "nested": false,
         "version": "4.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/es6-error/-/es6-error-4.1.1.tgz"
       },
       {
         "name": "esbuild",
+        "lockPath": "node_modules/esbuild",
+        "nested": false,
         "version": "0.27.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/esbuild/-/esbuild-0.27.7.tgz"
       },
       {
         "name": "escalade",
+        "lockPath": "node_modules/escalade",
+        "nested": false,
         "version": "3.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz"
       },
       {
         "name": "escape-string-regexp",
+        "lockPath": "node_modules/escape-string-regexp",
+        "nested": false,
         "version": "4.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/escape-string-regexp/-/escape-string-regexp-4.0.0.tgz"
       },
       {
         "name": "estree-walker",
+        "lockPath": "node_modules/estree-walker",
+        "nested": false,
         "version": "3.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/estree-walker/-/estree-walker-3.0.3.tgz"
       },
       {
         "name": "expect-type",
+        "lockPath": "node_modules/expect-type",
+        "nested": false,
         "version": "1.3.0",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/expect-type/-/expect-type-1.3.0.tgz"
       },
       {
         "name": "exponential-backoff",
+        "lockPath": "node_modules/exponential-backoff",
+        "nested": false,
         "version": "3.1.3",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/exponential-backoff/-/exponential-backoff-3.1.3.tgz"
       },
       {
         "name": "extract-zip",
+        "lockPath": "node_modules/extract-zip",
+        "nested": false,
         "version": "2.0.1",
         "license": "BSD-2-Clause",
         "resolved": "https://registry.npmjs.org/extract-zip/-/extract-zip-2.0.1.tgz"
       },
       {
         "name": "extsprintf",
+        "lockPath": "node_modules/extsprintf",
+        "nested": false,
         "version": "1.4.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/extsprintf/-/extsprintf-1.4.1.tgz"
       },
       {
         "name": "fast-deep-equal",
+        "lockPath": "node_modules/fast-deep-equal",
+        "nested": false,
         "version": "3.1.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz"
       },
       {
         "name": "fast-json-stable-stringify",
+        "lockPath": "node_modules/fast-json-stable-stringify",
+        "nested": false,
         "version": "2.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/fast-json-stable-stringify/-/fast-json-stable-stringify-2.1.0.tgz"
       },
       {
         "name": "fd-slicer",
+        "lockPath": "node_modules/fd-slicer",
+        "nested": false,
         "version": "1.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/fd-slicer/-/fd-slicer-1.1.0.tgz"
       },
       {
         "name": "fdir",
+        "lockPath": "node_modules/fdir",
+        "nested": false,
         "version": "6.5.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/fdir/-/fdir-6.5.0.tgz"
       },
       {
         "name": "filelist",
+        "lockPath": "node_modules/filelist",
+        "nested": false,
         "version": "1.0.6",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/filelist/-/filelist-1.0.6.tgz"
       },
       {
+        "name": "balanced-match",
+        "lockPath": "node_modules/filelist/node_modules/balanced-match",
+        "nested": true,
+        "version": "1.0.2",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz"
+      },
+      {
+        "name": "brace-expansion",
+        "lockPath": "node_modules/filelist/node_modules/brace-expansion",
+        "nested": true,
+        "version": "2.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.1.0.tgz"
+      },
+      {
+        "name": "minimatch",
+        "lockPath": "node_modules/filelist/node_modules/minimatch",
+        "nested": true,
+        "version": "5.1.9",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-5.1.9.tgz"
+      },
+      {
         "name": "form-data",
+        "lockPath": "node_modules/form-data",
+        "nested": false,
         "version": "4.0.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/form-data/-/form-data-4.0.5.tgz"
       },
       {
         "name": "fs-extra",
+        "lockPath": "node_modules/fs-extra",
+        "nested": false,
         "version": "8.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-8.1.0.tgz"
       },
       {
         "name": "fs.realpath",
+        "lockPath": "node_modules/fs.realpath",
+        "nested": false,
         "version": "1.0.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/fs.realpath/-/fs.realpath-1.0.0.tgz"
       },
       {
         "name": "fsevents",
+        "lockPath": "node_modules/fsevents",
+        "nested": false,
         "version": "2.3.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.3.tgz"
       },
       {
         "name": "function-bind",
+        "lockPath": "node_modules/function-bind",
+        "nested": false,
         "version": "1.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz"
       },
       {
         "name": "gensync",
+        "lockPath": "node_modules/gensync",
+        "nested": false,
         "version": "1.0.0-beta.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz"
       },
       {
         "name": "get-caller-file",
+        "lockPath": "node_modules/get-caller-file",
+        "nested": false,
         "version": "2.0.5",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/get-caller-file/-/get-caller-file-2.0.5.tgz"
       },
       {
         "name": "get-intrinsic",
+        "lockPath": "node_modules/get-intrinsic",
+        "nested": false,
         "version": "1.3.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz"
       },
       {
         "name": "get-proto",
+        "lockPath": "node_modules/get-proto",
+        "nested": false,
         "version": "1.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz"
       },
       {
         "name": "get-stream",
+        "lockPath": "node_modules/get-stream",
+        "nested": false,
         "version": "5.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/get-stream/-/get-stream-5.2.0.tgz"
       },
       {
         "name": "glob",
+        "lockPath": "node_modules/glob",
+        "nested": false,
         "version": "7.2.3",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/glob/-/glob-7.2.3.tgz"
       },
       {
+        "name": "balanced-match",
+        "lockPath": "node_modules/glob/node_modules/balanced-match",
+        "nested": true,
+        "version": "1.0.2",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/balanced-match/-/balanced-match-1.0.2.tgz"
+      },
+      {
+        "name": "brace-expansion",
+        "lockPath": "node_modules/glob/node_modules/brace-expansion",
+        "nested": true,
+        "version": "1.1.14",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.14.tgz"
+      },
+      {
+        "name": "minimatch",
+        "lockPath": "node_modules/glob/node_modules/minimatch",
+        "nested": true,
+        "version": "3.1.5",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-3.1.5.tgz"
+      },
+      {
         "name": "global-agent",
+        "lockPath": "node_modules/global-agent",
+        "nested": false,
         "version": "3.0.0",
         "license": "BSD-3-Clause",
         "resolved": "https://registry.npmjs.org/global-agent/-/global-agent-3.0.0.tgz"
       },
       {
+        "name": "semver",
+        "lockPath": "node_modules/global-agent/node_modules/semver",
+        "nested": true,
+        "version": "7.8.1",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-7.8.1.tgz"
+      },
+      {
         "name": "globalthis",
+        "lockPath": "node_modules/globalthis",
+        "nested": false,
         "version": "1.0.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/globalthis/-/globalthis-1.0.4.tgz"
       },
       {
         "name": "gopd",
+        "lockPath": "node_modules/gopd",
+        "nested": false,
         "version": "1.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz"
       },
       {
         "name": "got",
+        "lockPath": "node_modules/got",
+        "nested": false,
         "version": "11.8.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/got/-/got-11.8.6.tgz"
       },
       {
         "name": "graceful-fs",
+        "lockPath": "node_modules/graceful-fs",
+        "nested": false,
         "version": "4.2.11",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/graceful-fs/-/graceful-fs-4.2.11.tgz"
       },
       {
         "name": "has-flag",
+        "lockPath": "node_modules/has-flag",
+        "nested": false,
         "version": "4.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/has-flag/-/has-flag-4.0.0.tgz"
       },
       {
         "name": "has-property-descriptors",
+        "lockPath": "node_modules/has-property-descriptors",
+        "nested": false,
         "version": "1.0.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz"
       },
       {
         "name": "has-symbols",
+        "lockPath": "node_modules/has-symbols",
+        "nested": false,
         "version": "1.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz"
       },
       {
         "name": "has-tostringtag",
+        "lockPath": "node_modules/has-tostringtag",
+        "nested": false,
         "version": "1.0.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz"
       },
       {
         "name": "hasown",
+        "lockPath": "node_modules/hasown",
+        "nested": false,
         "version": "2.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/hasown/-/hasown-2.0.3.tgz"
       },
       {
         "name": "hosted-git-info",
+        "lockPath": "node_modules/hosted-git-info",
+        "nested": false,
         "version": "4.1.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/hosted-git-info/-/hosted-git-info-4.1.0.tgz"
       },
       {
+        "name": "lru-cache",
+        "lockPath": "node_modules/hosted-git-info/node_modules/lru-cache",
+        "nested": true,
+        "version": "6.0.0",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-6.0.0.tgz"
+      },
+      {
+        "name": "yallist",
+        "lockPath": "node_modules/hosted-git-info/node_modules/yallist",
+        "nested": true,
+        "version": "4.0.0",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/yallist/-/yallist-4.0.0.tgz"
+      },
+      {
         "name": "http-cache-semantics",
+        "lockPath": "node_modules/http-cache-semantics",
+        "nested": false,
         "version": "4.2.0",
         "license": "BSD-2-Clause",
         "resolved": "https://registry.npmjs.org/http-cache-semantics/-/http-cache-semantics-4.2.0.tgz"
       },
       {
         "name": "http-proxy-agent",
+        "lockPath": "node_modules/http-proxy-agent",
+        "nested": false,
         "version": "7.0.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/http-proxy-agent/-/http-proxy-agent-7.0.2.tgz"
       },
       {
         "name": "http2-wrapper",
+        "lockPath": "node_modules/http2-wrapper",
+        "nested": false,
         "version": "1.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/http2-wrapper/-/http2-wrapper-1.0.3.tgz"
       },
       {
         "name": "https-proxy-agent",
+        "lockPath": "node_modules/https-proxy-agent",
+        "nested": false,
         "version": "7.0.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-7.0.6.tgz"
       },
       {
         "name": "iconv-corefoundation",
+        "lockPath": "node_modules/iconv-corefoundation",
+        "nested": false,
         "version": "1.1.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/iconv-corefoundation/-/iconv-corefoundation-1.1.7.tgz"
       },
       {
         "name": "iconv-lite",
+        "lockPath": "node_modules/iconv-lite",
+        "nested": false,
         "version": "0.6.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/iconv-lite/-/iconv-lite-0.6.3.tgz"
       },
       {
         "name": "ieee754",
+        "lockPath": "node_modules/ieee754",
+        "nested": false,
         "version": "1.2.1",
         "license": "BSD-3-Clause",
         "resolved": "https://registry.npmjs.org/ieee754/-/ieee754-1.2.1.tgz"
       },
       {
         "name": "inflight",
+        "lockPath": "node_modules/inflight",
+        "nested": false,
         "version": "1.0.6",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/inflight/-/inflight-1.0.6.tgz"
       },
       {
         "name": "inherits",
+        "lockPath": "node_modules/inherits",
+        "nested": false,
         "version": "2.0.4",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz"
       },
       {
         "name": "is-fullwidth-code-point",
+        "lockPath": "node_modules/is-fullwidth-code-point",
+        "nested": false,
         "version": "3.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/is-fullwidth-code-point/-/is-fullwidth-code-point-3.0.0.tgz"
       },
       {
         "name": "isbinaryfile",
+        "lockPath": "node_modules/isbinaryfile",
+        "nested": false,
         "version": "5.0.7",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/isbinaryfile/-/isbinaryfile-5.0.7.tgz"
       },
       {
         "name": "isexe",
+        "lockPath": "node_modules/isexe",
+        "nested": false,
         "version": "3.1.5",
         "license": "BlueOak-1.0.0",
         "resolved": "https://registry.npmjs.org/isexe/-/isexe-3.1.5.tgz"
       },
       {
         "name": "jake",
+        "lockPath": "node_modules/jake",
+        "nested": false,
         "version": "10.9.4",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/jake/-/jake-10.9.4.tgz"
       },
       {
         "name": "jiti",
+        "lockPath": "node_modules/jiti",
+        "nested": false,
         "version": "2.7.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/jiti/-/jiti-2.7.0.tgz"
       },
       {
         "name": "js-tokens",
+        "lockPath": "node_modules/js-tokens",
+        "nested": false,
         "version": "4.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz"
       },
       {
         "name": "js-yaml",
+        "lockPath": "node_modules/js-yaml",
+        "nested": false,
         "version": "4.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.1.1.tgz"
       },
       {
         "name": "jsesc",
+        "lockPath": "node_modules/jsesc",
+        "nested": false,
         "version": "3.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz"
       },
       {
         "name": "json-buffer",
+        "lockPath": "node_modules/json-buffer",
+        "nested": false,
         "version": "3.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/json-buffer/-/json-buffer-3.0.1.tgz"
       },
       {
         "name": "json-schema-traverse",
+        "lockPath": "node_modules/json-schema-traverse",
+        "nested": false,
         "version": "0.4.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-0.4.1.tgz"
       },
       {
         "name": "json-stringify-safe",
+        "lockPath": "node_modules/json-stringify-safe",
+        "nested": false,
         "version": "5.0.1",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/json-stringify-safe/-/json-stringify-safe-5.0.1.tgz"
       },
       {
         "name": "json5",
+        "lockPath": "node_modules/json5",
+        "nested": false,
         "version": "2.2.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz"
       },
       {
         "name": "jsonfile",
+        "lockPath": "node_modules/jsonfile",
+        "nested": false,
         "version": "4.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-4.0.0.tgz"
       },
       {
         "name": "keyv",
+        "lockPath": "node_modules/keyv",
+        "nested": false,
         "version": "4.5.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/keyv/-/keyv-4.5.4.tgz"
       },
       {
         "name": "lazy-val",
+        "lockPath": "node_modules/lazy-val",
+        "nested": false,
         "version": "1.0.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/lazy-val/-/lazy-val-1.0.5.tgz"
       },
       {
         "name": "lodash",
+        "lockPath": "node_modules/lodash",
+        "nested": false,
         "version": "4.18.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/lodash/-/lodash-4.18.1.tgz"
       },
       {
         "name": "lodash.escaperegexp",
+        "lockPath": "node_modules/lodash.escaperegexp",
+        "nested": false,
         "version": "4.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/lodash.escaperegexp/-/lodash.escaperegexp-4.1.2.tgz"
       },
       {
         "name": "lodash.isequal",
+        "lockPath": "node_modules/lodash.isequal",
+        "nested": false,
         "version": "4.5.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/lodash.isequal/-/lodash.isequal-4.5.0.tgz"
       },
       {
         "name": "loupe",
+        "lockPath": "node_modules/loupe",
+        "nested": false,
         "version": "3.2.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/loupe/-/loupe-3.2.1.tgz"
       },
       {
         "name": "lowercase-keys",
+        "lockPath": "node_modules/lowercase-keys",
+        "nested": false,
         "version": "2.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/lowercase-keys/-/lowercase-keys-2.0.0.tgz"
       },
       {
         "name": "lru-cache",
+        "lockPath": "node_modules/lru-cache",
+        "nested": false,
         "version": "5.1.1",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz"
       },
       {
         "name": "lucide-react",
+        "lockPath": "node_modules/lucide-react",
+        "nested": false,
         "version": "0.468.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/lucide-react/-/lucide-react-0.468.0.tgz"
       },
       {
         "name": "magic-string",
+        "lockPath": "node_modules/magic-string",
+        "nested": false,
         "version": "0.30.21",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/magic-string/-/magic-string-0.30.21.tgz"
       },
       {
         "name": "marked",
+        "lockPath": "node_modules/marked",
+        "nested": false,
         "version": "15.0.12",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/marked/-/marked-15.0.12.tgz"
       },
       {
         "name": "matcher",
+        "lockPath": "node_modules/matcher",
+        "nested": false,
         "version": "3.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/matcher/-/matcher-3.0.0.tgz"
       },
       {
         "name": "math-intrinsics",
+        "lockPath": "node_modules/math-intrinsics",
+        "nested": false,
         "version": "1.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz"
       },
       {
         "name": "mime",
+        "lockPath": "node_modules/mime",
+        "nested": false,
         "version": "2.6.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/mime/-/mime-2.6.0.tgz"
       },
       {
         "name": "mime-db",
+        "lockPath": "node_modules/mime-db",
+        "nested": false,
         "version": "1.52.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/mime-db/-/mime-db-1.52.0.tgz"
       },
       {
         "name": "mime-types",
+        "lockPath": "node_modules/mime-types",
+        "nested": false,
         "version": "2.1.35",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/mime-types/-/mime-types-2.1.35.tgz"
       },
       {
         "name": "mimic-response",
+        "lockPath": "node_modules/mimic-response",
+        "nested": false,
         "version": "1.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/mimic-response/-/mimic-response-1.0.1.tgz"
       },
       {
         "name": "minimatch",
+        "lockPath": "node_modules/minimatch",
+        "nested": false,
         "version": "10.2.5",
         "license": "BlueOak-1.0.0",
         "resolved": "https://registry.npmjs.org/minimatch/-/minimatch-10.2.5.tgz"
       },
       {
         "name": "minimist",
+        "lockPath": "node_modules/minimist",
+        "nested": false,
         "version": "1.2.8",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz"
       },
       {
         "name": "minipass",
+        "lockPath": "node_modules/minipass",
+        "nested": false,
         "version": "7.1.3",
         "license": "BlueOak-1.0.0",
         "resolved": "https://registry.npmjs.org/minipass/-/minipass-7.1.3.tgz"
       },
       {
         "name": "minizlib",
+        "lockPath": "node_modules/minizlib",
+        "nested": false,
         "version": "3.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/minizlib/-/minizlib-3.1.0.tgz"
       },
       {
         "name": "mkdirp",
+        "lockPath": "node_modules/mkdirp",
+        "nested": false,
         "version": "0.5.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.6.tgz"
       },
       {
         "name": "ms",
+        "lockPath": "node_modules/ms",
+        "nested": false,
         "version": "2.1.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz"
       },
       {
         "name": "nanoid",
+        "lockPath": "node_modules/nanoid",
+        "nested": false,
         "version": "3.3.12",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.12.tgz"
       },
       {
         "name": "node-abi",
+        "lockPath": "node_modules/node-abi",
+        "nested": false,
         "version": "4.31.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/node-abi/-/node-abi-4.31.0.tgz"
       },
       {
+        "name": "semver",
+        "lockPath": "node_modules/node-abi/node_modules/semver",
+        "nested": true,
+        "version": "7.8.1",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-7.8.1.tgz"
+      },
+      {
         "name": "node-addon-api",
+        "lockPath": "node_modules/node-addon-api",
+        "nested": false,
         "version": "1.7.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-1.7.2.tgz"
       },
       {
         "name": "node-api-version",
+        "lockPath": "node_modules/node-api-version",
+        "nested": false,
         "version": "0.2.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/node-api-version/-/node-api-version-0.2.1.tgz"
       },
       {
+        "name": "semver",
+        "lockPath": "node_modules/node-api-version/node_modules/semver",
+        "nested": true,
+        "version": "7.8.1",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-7.8.1.tgz"
+      },
+      {
         "name": "node-gyp",
+        "lockPath": "node_modules/node-gyp",
+        "nested": false,
         "version": "12.3.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/node-gyp/-/node-gyp-12.3.0.tgz"
       },
       {
+        "name": "isexe",
+        "lockPath": "node_modules/node-gyp/node_modules/isexe",
+        "nested": true,
+        "version": "4.0.0",
+        "license": "BlueOak-1.0.0",
+        "resolved": "https://registry.npmjs.org/isexe/-/isexe-4.0.0.tgz"
+      },
+      {
+        "name": "semver",
+        "lockPath": "node_modules/node-gyp/node_modules/semver",
+        "nested": true,
+        "version": "7.8.1",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-7.8.1.tgz"
+      },
+      {
+        "name": "which",
+        "lockPath": "node_modules/node-gyp/node_modules/which",
+        "nested": true,
+        "version": "6.0.1",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/which/-/which-6.0.1.tgz"
+      },
+      {
         "name": "node-pty",
+        "lockPath": "node_modules/node-pty",
+        "nested": false,
         "version": "1.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/node-pty/-/node-pty-1.1.0.tgz"
       },
       {
+        "name": "node-addon-api",
+        "lockPath": "node_modules/node-pty/node_modules/node-addon-api",
+        "nested": true,
+        "version": "7.1.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/node-addon-api/-/node-addon-api-7.1.1.tgz"
+      },
+      {
         "name": "node-releases",
+        "lockPath": "node_modules/node-releases",
+        "nested": false,
         "version": "2.0.46",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.46.tgz"
       },
       {
         "name": "nopt",
+        "lockPath": "node_modules/nopt",
+        "nested": false,
         "version": "9.0.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/nopt/-/nopt-9.0.0.tgz"
       },
       {
         "name": "normalize-url",
+        "lockPath": "node_modules/normalize-url",
+        "nested": false,
         "version": "6.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/normalize-url/-/normalize-url-6.1.0.tgz"
       },
       {
         "name": "object-keys",
+        "lockPath": "node_modules/object-keys",
+        "nested": false,
         "version": "1.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/object-keys/-/object-keys-1.1.1.tgz"
       },
       {
         "name": "once",
+        "lockPath": "node_modules/once",
+        "nested": false,
         "version": "1.4.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz"
       },
       {
         "name": "p-cancelable",
+        "lockPath": "node_modules/p-cancelable",
+        "nested": false,
         "version": "2.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/p-cancelable/-/p-cancelable-2.1.1.tgz"
       },
       {
         "name": "p-limit",
+        "lockPath": "node_modules/p-limit",
+        "nested": false,
         "version": "3.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/p-limit/-/p-limit-3.1.0.tgz"
       },
       {
         "name": "path-is-absolute",
+        "lockPath": "node_modules/path-is-absolute",
+        "nested": false,
         "version": "1.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/path-is-absolute/-/path-is-absolute-1.0.1.tgz"
       },
       {
         "name": "path-key",
+        "lockPath": "node_modules/path-key",
+        "nested": false,
         "version": "3.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/path-key/-/path-key-3.1.1.tgz"
       },
       {
         "name": "pathe",
+        "lockPath": "node_modules/pathe",
+        "nested": false,
         "version": "2.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/pathe/-/pathe-2.0.3.tgz"
       },
       {
         "name": "pathval",
+        "lockPath": "node_modules/pathval",
+        "nested": false,
         "version": "2.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/pathval/-/pathval-2.0.1.tgz"
       },
       {
         "name": "pe-library",
+        "lockPath": "node_modules/pe-library",
+        "nested": false,
         "version": "0.4.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/pe-library/-/pe-library-0.4.1.tgz"
       },
       {
         "name": "pend",
+        "lockPath": "node_modules/pend",
+        "nested": false,
         "version": "1.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/pend/-/pend-1.2.0.tgz"
       },
       {
         "name": "picocolors",
+        "lockPath": "node_modules/picocolors",
+        "nested": false,
         "version": "1.1.1",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz"
       },
       {
         "name": "picomatch",
+        "lockPath": "node_modules/picomatch",
+        "nested": false,
         "version": "4.0.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz"
       },
       {
         "name": "plist",
+        "lockPath": "node_modules/plist",
+        "nested": false,
         "version": "3.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/plist/-/plist-3.1.0.tgz"
       },
       {
         "name": "postcss",
+        "lockPath": "node_modules/postcss",
+        "nested": false,
         "version": "8.5.15",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.15.tgz"
       },
       {
         "name": "postject",
+        "lockPath": "node_modules/postject",
+        "nested": false,
         "version": "1.0.0-alpha.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/postject/-/postject-1.0.0-alpha.6.tgz"
       },
       {
+        "name": "commander",
+        "lockPath": "node_modules/postject/node_modules/commander",
+        "nested": true,
+        "version": "9.5.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/commander/-/commander-9.5.0.tgz"
+      },
+      {
         "name": "proc-log",
+        "lockPath": "node_modules/proc-log",
+        "nested": false,
         "version": "6.1.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/proc-log/-/proc-log-6.1.0.tgz"
       },
       {
         "name": "progress",
+        "lockPath": "node_modules/progress",
+        "nested": false,
         "version": "2.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/progress/-/progress-2.0.3.tgz"
       },
       {
         "name": "promise-retry",
+        "lockPath": "node_modules/promise-retry",
+        "nested": false,
         "version": "2.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/promise-retry/-/promise-retry-2.0.1.tgz"
       },
       {
         "name": "proper-lockfile",
+        "lockPath": "node_modules/proper-lockfile",
+        "nested": false,
         "version": "4.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/proper-lockfile/-/proper-lockfile-4.1.2.tgz"
       },
       {
         "name": "pump",
+        "lockPath": "node_modules/pump",
+        "nested": false,
         "version": "3.0.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/pump/-/pump-3.0.4.tgz"
       },
       {
         "name": "punycode",
+        "lockPath": "node_modules/punycode",
+        "nested": false,
         "version": "2.3.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz"
       },
       {
         "name": "quick-lru",
+        "lockPath": "node_modules/quick-lru",
+        "nested": false,
         "version": "5.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/quick-lru/-/quick-lru-5.1.1.tgz"
       },
       {
         "name": "react",
+        "lockPath": "node_modules/react",
+        "nested": false,
         "version": "19.2.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/react/-/react-19.2.6.tgz"
       },
       {
         "name": "react-dom",
+        "lockPath": "node_modules/react-dom",
+        "nested": false,
         "version": "19.2.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.6.tgz"
       },
       {
         "name": "react-refresh",
+        "lockPath": "node_modules/react-refresh",
+        "nested": false,
         "version": "0.18.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/react-refresh/-/react-refresh-0.18.0.tgz"
       },
       {
         "name": "read-binary-file-arch",
+        "lockPath": "node_modules/read-binary-file-arch",
+        "nested": false,
         "version": "1.0.6",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/read-binary-file-arch/-/read-binary-file-arch-1.0.6.tgz"
       },
       {
         "name": "require-directory",
+        "lockPath": "node_modules/require-directory",
+        "nested": false,
         "version": "2.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/require-directory/-/require-directory-2.1.1.tgz"
       },
       {
         "name": "resedit",
+        "lockPath": "node_modules/resedit",
+        "nested": false,
         "version": "1.7.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/resedit/-/resedit-1.7.2.tgz"
       },
       {
         "name": "resolve-alpn",
+        "lockPath": "node_modules/resolve-alpn",
+        "nested": false,
         "version": "1.2.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/resolve-alpn/-/resolve-alpn-1.2.1.tgz"
       },
       {
         "name": "responselike",
+        "lockPath": "node_modules/responselike",
+        "nested": false,
         "version": "2.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/responselike/-/responselike-2.0.1.tgz"
       },
       {
         "name": "retry",
+        "lockPath": "node_modules/retry",
+        "nested": false,
         "version": "0.12.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/retry/-/retry-0.12.0.tgz"
       },
       {
         "name": "rimraf",
+        "lockPath": "node_modules/rimraf",
+        "nested": false,
         "version": "2.6.3",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/rimraf/-/rimraf-2.6.3.tgz"
       },
       {
         "name": "roarr",
+        "lockPath": "node_modules/roarr",
+        "nested": false,
         "version": "2.15.4",
         "license": "BSD-3-Clause",
         "resolved": "https://registry.npmjs.org/roarr/-/roarr-2.15.4.tgz"
       },
       {
         "name": "rollup",
+        "lockPath": "node_modules/rollup",
+        "nested": false,
         "version": "4.60.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/rollup/-/rollup-4.60.4.tgz"
       },
       {
         "name": "safer-buffer",
+        "lockPath": "node_modules/safer-buffer",
+        "nested": false,
         "version": "2.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/safer-buffer/-/safer-buffer-2.1.2.tgz"
       },
       {
         "name": "sanitize-filename",
+        "lockPath": "node_modules/sanitize-filename",
+        "nested": false,
         "version": "1.6.4",
         "license": "WTFPL OR ISC",
         "resolved": "https://registry.npmjs.org/sanitize-filename/-/sanitize-filename-1.6.4.tgz"
       },
       {
         "name": "sax",
+        "lockPath": "node_modules/sax",
+        "nested": false,
         "version": "1.6.0",
         "license": "BlueOak-1.0.0",
         "resolved": "https://registry.npmjs.org/sax/-/sax-1.6.0.tgz"
       },
       {
         "name": "scheduler",
+        "lockPath": "node_modules/scheduler",
+        "nested": false,
         "version": "0.27.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz"
       },
       {
         "name": "semver",
+        "lockPath": "node_modules/semver",
+        "nested": false,
         "version": "6.3.1",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz"
       },
       {
         "name": "semver-compare",
+        "lockPath": "node_modules/semver-compare",
+        "nested": false,
         "version": "1.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/semver-compare/-/semver-compare-1.0.0.tgz"
       },
       {
         "name": "serialize-error",
+        "lockPath": "node_modules/serialize-error",
+        "nested": false,
         "version": "7.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/serialize-error/-/serialize-error-7.0.1.tgz"
       },
       {
         "name": "shebang-command",
+        "lockPath": "node_modules/shebang-command",
+        "nested": false,
         "version": "2.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/shebang-command/-/shebang-command-2.0.0.tgz"
       },
       {
         "name": "shebang-regex",
+        "lockPath": "node_modules/shebang-regex",
+        "nested": false,
         "version": "3.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/shebang-regex/-/shebang-regex-3.0.0.tgz"
       },
       {
         "name": "siginfo",
+        "lockPath": "node_modules/siginfo",
+        "nested": false,
         "version": "2.0.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/siginfo/-/siginfo-2.0.0.tgz"
       },
       {
         "name": "signal-exit",
+        "lockPath": "node_modules/signal-exit",
+        "nested": false,
         "version": "3.0.7",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/signal-exit/-/signal-exit-3.0.7.tgz"
       },
       {
         "name": "simple-update-notifier",
+        "lockPath": "node_modules/simple-update-notifier",
+        "nested": false,
         "version": "2.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/simple-update-notifier/-/simple-update-notifier-2.0.0.tgz"
       },
       {
+        "name": "semver",
+        "lockPath": "node_modules/simple-update-notifier/node_modules/semver",
+        "nested": true,
+        "version": "7.8.1",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-7.8.1.tgz"
+      },
+      {
         "name": "slice-ansi",
+        "lockPath": "node_modules/slice-ansi",
+        "nested": false,
         "version": "3.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/slice-ansi/-/slice-ansi-3.0.0.tgz"
       },
       {
         "name": "smart-buffer",
+        "lockPath": "node_modules/smart-buffer",
+        "nested": false,
         "version": "4.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/smart-buffer/-/smart-buffer-4.2.0.tgz"
       },
       {
         "name": "source-map",
+        "lockPath": "node_modules/source-map",
+        "nested": false,
         "version": "0.6.1",
         "license": "BSD-3-Clause",
         "resolved": "https://registry.npmjs.org/source-map/-/source-map-0.6.1.tgz"
       },
       {
         "name": "source-map-js",
+        "lockPath": "node_modules/source-map-js",
+        "nested": false,
         "version": "1.2.1",
         "license": "BSD-3-Clause",
         "resolved": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.1.tgz"
       },
       {
         "name": "source-map-support",
+        "lockPath": "node_modules/source-map-support",
+        "nested": false,
         "version": "0.5.21",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/source-map-support/-/source-map-support-0.5.21.tgz"
       },
       {
         "name": "sprintf-js",
+        "lockPath": "node_modules/sprintf-js",
+        "nested": false,
         "version": "1.1.3",
         "license": "BSD-3-Clause",
         "resolved": "https://registry.npmjs.org/sprintf-js/-/sprintf-js-1.1.3.tgz"
       },
       {
         "name": "stackback",
+        "lockPath": "node_modules/stackback",
+        "nested": false,
         "version": "0.0.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/stackback/-/stackback-0.0.2.tgz"
       },
       {
         "name": "stat-mode",
+        "lockPath": "node_modules/stat-mode",
+        "nested": false,
         "version": "1.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/stat-mode/-/stat-mode-1.0.0.tgz"
       },
       {
         "name": "std-env",
+        "lockPath": "node_modules/std-env",
+        "nested": false,
         "version": "3.10.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/std-env/-/std-env-3.10.0.tgz"
       },
       {
         "name": "string-width",
+        "lockPath": "node_modules/string-width",
+        "nested": false,
         "version": "4.2.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz"
       },
       {
         "name": "strip-ansi",
+        "lockPath": "node_modules/strip-ansi",
+        "nested": false,
         "version": "6.0.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/strip-ansi/-/strip-ansi-6.0.1.tgz"
       },
       {
         "name": "strip-literal",
+        "lockPath": "node_modules/strip-literal",
+        "nested": false,
         "version": "3.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/strip-literal/-/strip-literal-3.1.0.tgz"
       },
       {
+        "name": "js-tokens",
+        "lockPath": "node_modules/strip-literal/node_modules/js-tokens",
+        "nested": true,
+        "version": "9.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/js-tokens/-/js-tokens-9.0.1.tgz"
+      },
+      {
         "name": "sumchecker",
+        "lockPath": "node_modules/sumchecker",
+        "nested": false,
         "version": "3.0.1",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/sumchecker/-/sumchecker-3.0.1.tgz"
       },
       {
         "name": "supports-color",
+        "lockPath": "node_modules/supports-color",
+        "nested": false,
         "version": "7.2.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/supports-color/-/supports-color-7.2.0.tgz"
       },
       {
         "name": "tar",
+        "lockPath": "node_modules/tar",
+        "nested": false,
         "version": "7.5.15",
         "license": "BlueOak-1.0.0",
         "resolved": "https://registry.npmjs.org/tar/-/tar-7.5.15.tgz"
       },
       {
+        "name": "yallist",
+        "lockPath": "node_modules/tar/node_modules/yallist",
+        "nested": true,
+        "version": "5.0.0",
+        "license": "BlueOak-1.0.0",
+        "resolved": "https://registry.npmjs.org/yallist/-/yallist-5.0.0.tgz"
+      },
+      {
         "name": "temp",
+        "lockPath": "node_modules/temp",
+        "nested": false,
         "version": "0.9.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/temp/-/temp-0.9.4.tgz"
       },
       {
         "name": "temp-file",
+        "lockPath": "node_modules/temp-file",
+        "nested": false,
         "version": "3.4.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/temp-file/-/temp-file-3.4.0.tgz"
       },
       {
+        "name": "fs-extra",
+        "lockPath": "node_modules/temp-file/node_modules/fs-extra",
+        "nested": true,
+        "version": "10.1.0",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/fs-extra/-/fs-extra-10.1.0.tgz"
+      },
+      {
+        "name": "jsonfile",
+        "lockPath": "node_modules/temp-file/node_modules/jsonfile",
+        "nested": true,
+        "version": "6.2.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/jsonfile/-/jsonfile-6.2.1.tgz"
+      },
+      {
+        "name": "universalify",
+        "lockPath": "node_modules/temp-file/node_modules/universalify",
+        "nested": true,
+        "version": "2.0.1",
+        "license": "MIT",
+        "resolved": "https://registry.npmjs.org/universalify/-/universalify-2.0.1.tgz"
+      },
+      {
         "name": "tiny-async-pool",
+        "lockPath": "node_modules/tiny-async-pool",
+        "nested": false,
         "version": "1.3.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tiny-async-pool/-/tiny-async-pool-1.3.0.tgz"
       },
       {
+        "name": "semver",
+        "lockPath": "node_modules/tiny-async-pool/node_modules/semver",
+        "nested": true,
+        "version": "5.7.2",
+        "license": "ISC",
+        "resolved": "https://registry.npmjs.org/semver/-/semver-5.7.2.tgz"
+      },
+      {
         "name": "tiny-typed-emitter",
+        "lockPath": "node_modules/tiny-typed-emitter",
+        "nested": false,
         "version": "2.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tiny-typed-emitter/-/tiny-typed-emitter-2.1.0.tgz"
       },
       {
         "name": "tinybench",
+        "lockPath": "node_modules/tinybench",
+        "nested": false,
         "version": "2.9.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tinybench/-/tinybench-2.9.0.tgz"
       },
       {
         "name": "tinyexec",
+        "lockPath": "node_modules/tinyexec",
+        "nested": false,
         "version": "0.3.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tinyexec/-/tinyexec-0.3.2.tgz"
       },
       {
         "name": "tinyglobby",
+        "lockPath": "node_modules/tinyglobby",
+        "nested": false,
         "version": "0.2.16",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tinyglobby/-/tinyglobby-0.2.16.tgz"
       },
       {
         "name": "tinypool",
+        "lockPath": "node_modules/tinypool",
+        "nested": false,
         "version": "1.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tinypool/-/tinypool-1.1.1.tgz"
       },
       {
         "name": "tinyrainbow",
+        "lockPath": "node_modules/tinyrainbow",
+        "nested": false,
         "version": "2.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tinyrainbow/-/tinyrainbow-2.0.0.tgz"
       },
       {
         "name": "tinyspy",
+        "lockPath": "node_modules/tinyspy",
+        "nested": false,
         "version": "4.0.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tinyspy/-/tinyspy-4.0.4.tgz"
       },
       {
         "name": "tldts-core",
+        "lockPath": "node_modules/tldts-core",
+        "nested": false,
         "version": "7.4.13",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tldts-core/-/tldts-core-7.4.13.tgz"
       },
       {
         "name": "tldts-experimental",
+        "lockPath": "node_modules/tldts-experimental",
+        "nested": false,
         "version": "7.4.13",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tldts-experimental/-/tldts-experimental-7.4.13.tgz"
       },
       {
         "name": "tmp",
+        "lockPath": "node_modules/tmp",
+        "nested": false,
         "version": "0.2.5",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tmp/-/tmp-0.2.5.tgz"
       },
       {
         "name": "tmp-promise",
+        "lockPath": "node_modules/tmp-promise",
+        "nested": false,
         "version": "3.0.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/tmp-promise/-/tmp-promise-3.0.3.tgz"
       },
       {
         "name": "truncate-utf8-bytes",
+        "lockPath": "node_modules/truncate-utf8-bytes",
+        "nested": false,
         "version": "1.0.2",
         "license": "WTFPL",
         "resolved": "https://registry.npmjs.org/truncate-utf8-bytes/-/truncate-utf8-bytes-1.0.2.tgz"
       },
       {
         "name": "type-fest",
+        "lockPath": "node_modules/type-fest",
+        "nested": false,
         "version": "0.13.1",
         "license": "(MIT OR CC0-1.0)",
         "resolved": "https://registry.npmjs.org/type-fest/-/type-fest-0.13.1.tgz"
       },
       {
         "name": "typescript",
+        "lockPath": "node_modules/typescript",
+        "nested": false,
         "version": "5.9.3",
         "license": "Apache-2.0",
         "resolved": "https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz"
       },
       {
         "name": "undici",
+        "lockPath": "node_modules/undici",
+        "nested": false,
         "version": "6.25.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/undici/-/undici-6.25.0.tgz"
       },
       {
         "name": "undici-types",
+        "lockPath": "node_modules/undici-types",
+        "nested": false,
         "version": "6.21.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/undici-types/-/undici-types-6.21.0.tgz"
       },
       {
         "name": "universalify",
+        "lockPath": "node_modules/universalify",
+        "nested": false,
         "version": "0.1.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/universalify/-/universalify-0.1.2.tgz"
       },
       {
         "name": "update-browserslist-db",
+        "lockPath": "node_modules/update-browserslist-db",
+        "nested": false,
         "version": "1.2.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.2.3.tgz"
       },
       {
         "name": "uri-js",
+        "lockPath": "node_modules/uri-js",
+        "nested": false,
         "version": "4.4.1",
         "license": "BSD-2-Clause",
         "resolved": "https://registry.npmjs.org/uri-js/-/uri-js-4.4.1.tgz"
       },
       {
         "name": "utf8-byte-length",
+        "lockPath": "node_modules/utf8-byte-length",
+        "nested": false,
         "version": "1.0.5",
         "license": "(WTFPL OR MIT)",
         "resolved": "https://registry.npmjs.org/utf8-byte-length/-/utf8-byte-length-1.0.5.tgz"
       },
       {
         "name": "verror",
+        "lockPath": "node_modules/verror",
+        "nested": false,
         "version": "1.10.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/verror/-/verror-1.10.1.tgz"
       },
       {
         "name": "vite",
+        "lockPath": "node_modules/vite",
+        "nested": false,
         "version": "7.3.3",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/vite/-/vite-7.3.3.tgz"
       },
       {
         "name": "vite-node",
+        "lockPath": "node_modules/vite-node",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/vite-node/-/vite-node-3.2.4.tgz"
       },
       {
         "name": "vitest",
+        "lockPath": "node_modules/vitest",
+        "nested": false,
         "version": "3.2.4",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/vitest/-/vitest-3.2.4.tgz"
       },
       {
         "name": "which",
+        "lockPath": "node_modules/which",
+        "nested": false,
         "version": "5.0.0",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/which/-/which-5.0.0.tgz"
       },
       {
         "name": "why-is-node-running",
+        "lockPath": "node_modules/why-is-node-running",
+        "nested": false,
         "version": "2.3.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/why-is-node-running/-/why-is-node-running-2.3.0.tgz"
       },
       {
         "name": "wrap-ansi",
+        "lockPath": "node_modules/wrap-ansi",
+        "nested": false,
         "version": "7.0.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/wrap-ansi/-/wrap-ansi-7.0.0.tgz"
       },
       {
         "name": "wrappy",
+        "lockPath": "node_modules/wrappy",
+        "nested": false,
         "version": "1.0.2",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz"
       },
       {
         "name": "xmlbuilder",
+        "lockPath": "node_modules/xmlbuilder",
+        "nested": false,
         "version": "15.1.1",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/xmlbuilder/-/xmlbuilder-15.1.1.tgz"
       },
       {
         "name": "y18n",
+        "lockPath": "node_modules/y18n",
+        "nested": false,
         "version": "5.0.8",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/y18n/-/y18n-5.0.8.tgz"
       },
       {
         "name": "yallist",
+        "lockPath": "node_modules/yallist",
+        "nested": false,
         "version": "3.1.1",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz"
       },
       {
         "name": "yargs",
+        "lockPath": "node_modules/yargs",
+        "nested": false,
         "version": "17.7.2",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/yargs/-/yargs-17.7.2.tgz"
       },
       {
         "name": "yargs-parser",
+        "lockPath": "node_modules/yargs-parser",
+        "nested": false,
         "version": "21.1.1",
         "license": "ISC",
         "resolved": "https://registry.npmjs.org/yargs-parser/-/yargs-parser-21.1.1.tgz"
       },
       {
         "name": "yauzl",
+        "lockPath": "node_modules/yauzl",
+        "nested": false,
         "version": "2.10.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/yauzl/-/yauzl-2.10.0.tgz"
       },
       {
         "name": "yocto-queue",
+        "lockPath": "node_modules/yocto-queue",
+        "nested": false,
         "version": "0.1.0",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/yocto-queue/-/yocto-queue-0.1.0.tgz"
       },
       {
         "name": "zustand",
+        "lockPath": "node_modules/zustand",
+        "nested": false,
         "version": "5.0.15",
         "license": "MIT",
         "resolved": "https://registry.npmjs.org/zustand/-/zustand-5.0.15.tgz"

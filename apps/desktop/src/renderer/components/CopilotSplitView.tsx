@@ -57,6 +57,7 @@ import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 import { ChatDraftSubmissionGate } from '../chat-draft-submission.js';
+import { submitQuickChatDraft } from '../quick-chat-draft.js';
 import { providerDeployment, providerHostingLabel } from '../provider-presentation.js';
 
 export interface AvailableModelItem {
@@ -194,15 +195,14 @@ export function CopilotSplitView({
   const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
-  const sendPendingRef = useRef(false);
-  const [submissionPending, setSubmissionPending] = useState(false);
-  const submissionEpoch = useRef(0);
+  const inputTextRef = useRef('');
   const draftRevisionRef = useRef(0);
-  const draftGateRef = useRef(new ChatDraftSubmissionGate());
   const draftScope = JSON.stringify([browserProfileId, workspacePath, backendProfileName]);
   const draftScopeRef = useRef(draftScope); draftScopeRef.current = draftScope;
   useEffect(() => {
-    submissionEpoch.current++; sendPendingRef.current = false; setSubmissionPending(false); draftGateRef.current = new ChatDraftSubmissionGate();
+    draftRevisionRef.current += 1;
+    inputTextRef.current = '';
+    setInputText('');
   }, [draftScope]);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
@@ -707,24 +707,20 @@ export function CopilotSplitView({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const trimmed = inputText.trim();
-    if (!trimmed || sendPendingRef.current || (!busy && modelGateReason !== null)) return;
-    const gate = draftGateRef.current;
-    const submission = gate.begin(inputText, draftRevisionRef.current, draftScope);
-    if (!submission) return;
-    const epoch = submissionEpoch.current;
-    sendPendingRef.current = true;
-    setSubmissionPending(true);
-    try {
-      // The callback resolves on start/steer acceptance, independently of the answer stream.
-      const accepted = await onSendMessage(trimmed, effectiveReasoningEffort || undefined);
-      if (accepted !== false && epoch === submissionEpoch.current && submission.revision === draftRevisionRef.current && submission.contextKey === draftScopeRef.current) setInputText('');
-    } catch {
-      // Keep the draft available for correction when the caller reports a failure.
-    } finally {
-      gate.finish(submission);
-      if (epoch === submissionEpoch.current) { sendPendingRef.current = false; setSubmissionPending(false); }
-    }
+    const draft = inputTextRef.current;
+    const trimmed = draft.trim();
+    if (!trimmed || (!busy && modelGateReason !== null)) return;
+    // Clear synchronously before IPC and reserve this exact draft revision.
+    // A fresh draft can be sent as a steer even while start is awaiting ACK.
+    // The root serializes the stop/start handshakes; this gate only protects
+    // restoration of this draft and never locks subsequent submissions.
+    draftRevisionRef.current += 1;
+    await submitQuickChatDraft({
+      gate: new ChatDraftSubmissionGate(), draft, revision: draftRevisionRef.current, scope: draftScope,
+      current: () => ({ revision: draftRevisionRef.current, scope: draftScopeRef.current }),
+      setDraft: value => { inputTextRef.current = value; setInputText(value); },
+      send: () => onSendMessage(trimmed, effectiveReasoningEffort || undefined),
+    });
   }
 
   function handleCopy(code: string, id: string) {
@@ -1265,7 +1261,7 @@ export function CopilotSplitView({
             type="text"
             className="copilot-input-field"
             value={inputText}
-            onChange={(e) => { draftRevisionRef.current += 1; setInputText(e.target.value); }}
+            onChange={(e) => { draftRevisionRef.current += 1; inputTextRef.current = e.target.value; setInputText(e.target.value); }}
             placeholder={busy ? (locale === 'de' ? 'Änderung oder Ergänzung eingeben …' : 'Add a correction or change …') : t('chat.composerPlaceholder')}
           />
           {busy && onStopChat && (
@@ -1283,7 +1279,7 @@ export function CopilotSplitView({
               className={`copilot-send-btn ${inputText.trim() ? 'active' : ''}`}
               title={busy ? (locale === 'de' ? 'Antwort steuern' : 'Steer response') : t('chat.send')}
               aria-label={busy ? (locale === 'de' ? 'Antwort steuern' : 'Steer response') : t('chat.send')}
-              disabled={submissionPending || !inputText.trim() || (!busy && modelGateReason !== null)}
+              disabled={!inputText.trim() || (!busy && modelGateReason !== null)}
             >
               <span>{busy ? (locale === 'de' ? 'Steuern' : 'Steer') : t('chat.send')}</span>
               <Send size={13} />

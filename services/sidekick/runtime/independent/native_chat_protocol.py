@@ -116,7 +116,8 @@ def verify_native_context(context: NativeChatContext, *, check_selection_policy=
         store.close()
 
 
-def capture_native_chat_context(session, stream_id: str, native_writer, *, profile_hub=None, teamwork=False) -> NativeChatContext:
+def capture_native_chat_context(session, stream_id: str, native_writer, *, profile_hub=None, teamwork=False,
+                                defer_provider_capture=False) -> NativeChatContext:
     """Only the Parent's accepted session and actual reserved writer can mint this."""
     saved = getattr(session, "space_scope", None)
     if not saved or native_writer is None:
@@ -135,7 +136,7 @@ def capture_native_chat_context(session, stream_id: str, native_writer, *, profi
     policy = SelectionPolicyRepository(store, session_validator=lambda selected, sid:
         validate_native_session(resolved, sid, actor=actor)).get(scope, session.session_id)
     provider_capture = None
-    if policy.mode == "fixed" and not teamwork:
+    if policy.mode == "fixed" and not teamwork and not defer_provider_capture:
         from .native_sdk_broker import capture_fixed_provider
         provider_capture = capture_fixed_provider(session, profile_hub=profile_hub)
     context = NativeChatContext(scope=scope, profile_name=resolved.profile.name,

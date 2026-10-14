@@ -167,7 +167,7 @@ def _is_streaming_bridge_path(path: str) -> bool:
 def _is_chat_start_path(method: str, path: str) -> bool:
     """True for the latency-sensitive interactive chat-start request."""
     clean = str(path or "").split("?", 1)[0].rstrip("/")
-    return method.upper() == "POST" and clean == "/api/chat/start"
+    return method.upper() == "POST" and clean in {"/api/chat/start", "/api/quickchat/start"}
 
 
 def _get_bridge_pool() -> "concurrent.futures.ThreadPoolExecutor":
@@ -434,6 +434,9 @@ class _RouteHandler:
         self.status_code: int | None = None
         self.response_headers: list[tuple[str, str]] = []
         self.headers_ready = threading.Event()
+        # The accepted stream worker waits for this request's ACK before it
+        # probes providers. A bridge timeout must not leave an invisible run.
+        self.response_abandoned = threading.Event()
         self.chat_start_diagnostics: _ChatStartBridgeDiagnostics | None = None
 
     def send_response(self, status: int, _message: str | None = None) -> None:
@@ -561,7 +564,9 @@ class _RouteExecution:
             cookie_profile = get_profile_cookie(self.handler)
             if cookie_profile:
                 profile_token = set_request_profile(cookie_profile)
-            if not pure_swarm_get:
+            if not pure_swarm_get and parsed.path not in {
+                "/api/quickchat/start", "/api/quickchat/stop", "/api/quickchat/cancel",
+            }:
                 # Preserve normal route cleanup even if setup raises midway.
                 workspace_context_attempted = True
                 if diagnostics is not None:
@@ -658,6 +663,7 @@ async def dispatch_route(request: Request) -> Response:
         execution.handler.headers_ready.wait, _HEADER_WAIT_SECONDS
     )
     if not headers_ready:
+        execution.handler.response_abandoned.set()
         if execution.chat_start_diagnostics is not None:
             execution.chat_start_diagnostics.finish()
         execution.handler.wfile.close()

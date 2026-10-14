@@ -121,11 +121,9 @@ def make_sidebar() -> Image.Image:
 
 def make_installer_nova() -> Image.Image:
     icon = load_rgba(NOVA_PATH)
-    size = (72, 72)
-    canvas = Image.new("RGBA", size, (247, 250, 255, 255))
-    draw = ImageDraw.Draw(canvas)
-    draw.ellipse((3, 3, 69, 69), fill=(231, 247, 255, 255), outline=(203, 226, 244, 255), width=1)
-    nova = fit_contain(icon, (62, 62))
+    size = (100, 100)
+    canvas = Image.new("RGBA", size, (250, 252, 255, 255))
+    nova = fit_contain(icon, (100, 100))
     canvas.alpha_composite(nova, ((size[0] - nova.width) // 2, (size[1] - nova.height) // 2))
     return canvas.convert("RGB")
 

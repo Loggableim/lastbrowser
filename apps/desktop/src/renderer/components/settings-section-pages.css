@@ -20,9 +20,9 @@
   padding-bottom: 8px; border-bottom: 1px solid var(--border-subtle);
 }
 .settings-subsection-navigation label { min-width: 0; flex: 1; }
-.settings-subsection-navigation select { width: 100%; min-width: 0; }
-.settings-subsection-navigation button { flex: 0 0 auto; min-width: 30px; }
-.settings-subsection-tabs { display: flex; flex: 1; min-width: 0; flex-wrap: nowrap; gap: 4px; }
+.settings-subsection-navigation select { width: 100%; min-width: 0; min-height: 36px; padding: 7px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; color: var(--lb-text, #edf4ff); background: var(--bg-surface, #111923); font: inherit; }
+.settings-subsection-navigation button { flex: 0 0 auto; min-width: 32px; min-height: 36px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-surface, #111923); color: var(--lb-text, #edf4ff); }
+.settings-subsection-tabs { display: flex; flex: 0 0 auto; width: max-content; min-width: 0; flex-wrap: nowrap; gap: 4px; }
 .settings-subsection-tabs button { white-space: nowrap; padding-inline: 8px; }
 .settings-subsection-tabs button[aria-selected="true"] { color: var(--accent-primary); border-color: currentColor; }
 .settings-subsection-tabs.measuring { position: absolute; width: max-content; visibility: hidden; pointer-events: none; }
@@ -38,6 +38,14 @@
 .settings-paged-editor .settings-page-unit .settings-card-body { min-width: 0; }
 .settings-paged-editor .settings-page-unit .settings-modern-layout-config { min-width: 0; }
 .settings-paged-editor .settings-page-unit .settings-field-row { flex-wrap: wrap; }
+.settings-paged-editor :is(select, textarea, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) {
+  min-width: 0; box-sizing: border-box; font: inherit; color: var(--lb-text, #edf4ff);
+  background: var(--lb-bg-alt, #0b1424); border: 1px solid var(--border-subtle, #26374f);
+  border-radius: 8px; padding: 8px 10px;
+}
+.settings-paged-editor :is(select, input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"])) { min-height: 36px; }
+.settings-paged-editor :is(input, select, textarea, button):focus-visible { outline: 2px solid var(--accent-primary, #22d3ee); outline-offset: 2px; }
+.settings-subsection-navigation { min-height: 44px; }
 .settings-paged-editor .settings-page-unit .settings-theme-grid,
 .settings-paged-editor .settings-page-unit .settings-skin-grid,
 .settings-paged-editor .settings-page-unit .settings-size-grid {

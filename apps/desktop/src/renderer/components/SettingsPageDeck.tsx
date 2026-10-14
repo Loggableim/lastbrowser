@@ -3,7 +3,7 @@ import { Children, useId, useLayoutEffect, useRef, useState, type ReactNode } fr
 type Slice = { unit: number; leaves: HTMLElement[]; branches: Map<HTMLElement, HTMLElement[]> };
 type Page = Slice[];
 const KEEP = 'header, legend, summary, thead, .settings-card-header';
-const ATOMIC = 'button, input, select, textarea, label, tr, .settings-field, .settings-toggle, [role="dialog"], details:not([open])';
+const ATOMIC = 'button, input, select, textarea, label, tr, .settings-field, .settings-toggle, .local-model-card, [role="dialog"], details:not([open])';
 const CONTAINERS = '.settings-card, .settings-card-body, .settings-field-grid, .settings-modern-layout-config, fieldset, .settings-theme-grid, .settings-skin-grid, .settings-size-grid';
 
 /** Pagination changes visibility only: React retains controls and their drafts. */
@@ -31,16 +31,31 @@ export function SettingsPageDeck({ children, resetKey, label = 'Seiten', subsect
     const nav = subsectionNav.current; const strip = tabStrip.current;
     if (!nav || !strip) return;
     const measure = () => {
-      const fits = strip.scrollWidth + 150 <= nav.clientWidth;
-      if (!fits && strip.contains(document.activeElement)) restoreSubsectionFocus.current = true;
-      setShowTabs(fits);
+      // Measure the intrinsic tab width in both modes. A flex-growing strip
+      // measured its available width when visible, but its content width when
+      // hidden, which continuously flipped the navigation mode.
+      const occupied = Array.from(nav.children).filter(node => node !== strip && node.tagName !== 'LABEL')
+        .reduce((width, node) => width + node.getBoundingClientRect().width, 0);
+      const gap = Number.parseFloat(getComputedStyle(nav).columnGap) || 0;
+      const available = nav.clientWidth - occupied - gap * 3;
+      const required = strip.scrollWidth;
+      setShowTabs(previous => {
+        const fits = required <= available - (previous ? 0 : 8);
+        if (!fits && strip.contains(document.activeElement)) restoreSubsectionFocus.current = true;
+        if (fits && nav.querySelector('select') === document.activeElement) restoreSubsectionFocus.current = true;
+        return previous === fits ? previous : fits;
+      });
     };
     const observer = new ResizeObserver(measure); observer.observe(nav); observer.observe(strip); measure();
     return () => observer.disconnect();
   }, [titles, subsectionLabel]);
   useLayoutEffect(() => {
-    if (!showTabs && restoreSubsectionFocus.current) { subsectionNav.current?.querySelector('select')?.focus(); restoreSubsectionFocus.current = false; }
-  }, [showTabs]);
+    if (restoreSubsectionFocus.current) {
+      if (showTabs) tabRefs.current[subsection]?.focus();
+      else subsectionNav.current?.querySelector('select')?.focus();
+      restoreSubsectionFocus.current = false;
+    }
+  }, [showTabs, subsection]);
 
   useLayoutEffect(() => { setPage(0); setSubsection(0); currentPage.current = 0; }, [resetKey]);
   useLayoutEffect(() => {

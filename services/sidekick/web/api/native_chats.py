@@ -58,10 +58,52 @@ def register_native_chat(context: NativeChatContext):
         return entry
 
 
+def _same_prelaunch_owner(left, right) -> bool:
+    if left == right:
+        return True
+    if not isinstance(left, NativeChatContext) or not isinstance(right, NativeChatContext):
+        return False
+    # Stop may have captured the basic accepted context just as the worker
+    # attached its provider receipt. Only that one upgrade may differ; scope,
+    # policy, binding revision and writer identity must remain byte-identical.
+    if (left.provider_capture is None) == (right.provider_capture is None):
+        return False
+    return left.model_dump(exclude={"provider_capture"}) == right.model_dump(exclude={"provider_capture"})
+
+
 def native_chat_exit_confirmed(context: NativeChatContext) -> bool:
     with _lock:
         entry = _active.get(context.stream_id)
-        return entry.settled if entry is not None and entry.context == context else _settled.get(context.stream_id) == context
+        return (entry.settled if entry is not None and _same_prelaunch_owner(entry.context, context)
+                else _same_prelaunch_owner(_settled.get(context.stream_id), context))
+
+
+def require_prelaunch_available(context: NativeChatContext) -> None:
+    """Interrupt only this owner's wait; shared catalog discovery may continue."""
+    with _lock:
+        entry = _active.get(context.stream_id)
+        if (entry is None or entry.context != context or entry.handle is not None
+                or entry.settled or entry.cancelled.is_set() or entry.stop_command):
+            raise ScopeError("Native chat was cancelled before provider admission")
+
+
+def bind_prelaunch_provider_capture(context: NativeChatContext, capture) -> NativeChatContext:
+    """Upgrade only the registered, uncancelled owner before any SDK execution.
+
+    Catalog discovery can run after the HTTP ACK, but it cannot grant a call
+    until its exact policy/scope capture has been attached to this same entry.
+    Keep the entry itself, including queued controls and its cancellation flag.
+    """
+    updated = NativeChatContext.model_validate({**context.model_dump(), "provider_capture": capture})
+    from runtime.independent.native_chat_protocol import verify_native_context
+    verify_native_context(updated)
+    with _lock:
+        entry = _active.get(context.stream_id)
+        if (entry is None or entry.context != context or entry.handle is not None
+                or entry.settled or entry.cancelled.is_set() or entry.stop_command):
+            raise ScopeError("Native chat was cancelled before provider admission")
+        entry.context = updated
+    return updated
 
 
 def abandon_unstarted_native_chat(context: NativeChatContext) -> bool:
@@ -478,7 +520,9 @@ def control_native_chat(session_id: str, stream_id: str, *, actor: str, scope,
         raise ValueError("Unknown native chat control")
     with _lock:
         entry = _active.get(stream_id)
-        if entry is None or entry.settled or entry.context != context:
+        if entry is None or entry.settled or (
+                entry.context != context and not (
+                    command in {"cancel", "pause"} and _same_prelaunch_owner(entry.context, context))):
             return False
         handle = entry.handle
         if command in {"cancel", "pause"} and entry.completion_committed:

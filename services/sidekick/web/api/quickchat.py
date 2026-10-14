@@ -93,6 +93,11 @@ def _session_for_quickchat(body: dict[str, Any], actor: str, scope, workspace: s
 
 
 def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
+    diag = getattr(handler, "chat_start_diagnostics", None)
+    def stage(name):
+        if diag is not None:
+            diag.stage(name)
+    stage("quickchat_validation")
     if not isinstance(body, dict) or set(body) - {
         "quick_chat_id", "space_scope", "profile", "workspace", "prompt", "context", "model", "model_provider", "reasoning_effort"
     }:
@@ -133,6 +138,7 @@ def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     if not scope.browser_profile_id or not scope.backend_profile_id or not scope.space_id:
         raise QuickChatError("A saved browser Space binding is required", 409, "quickchat_scope_invalid")
     try:
+        stage("quickchat_scope_capture")
         require_native_scope_header(handler, body.get("space_scope"))
         _, resolver = hub().by_scope(scope, actor)
         resolved = resolver.resolve(scope, authenticated_profile_name=actor)
@@ -159,8 +165,11 @@ def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     model_input = str(requested_model or routes.get_effective_default_model()).strip()
     if model_input.lower() == "teamwork" or model_input.lower().startswith("smart-track"):
         raise QuickChatError("Quickchat does not support autonomous orchestration", 400, "quickchat_orchestration_disabled")
+    stage("quickchat_model_selection")
     model, provider, normalized_model = routes._resolve_compatible_session_model_state(model_input, requested_provider)
-    provider_context = routes.resolve_active_provider_context()
+    # Saved configuration only: runtime credential refresh belongs to the
+    # direct worker after the stream ACK, never to this request handler.
+    provider_context = routes.resolve_active_provider_context(include_runtime=False)
     if not provider and provider_context.get("provider"):
         provider = provider_context.get("provider")
     if not model and provider_context.get("model"):
@@ -180,6 +189,7 @@ def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     if game_mode_payload:
         raise QuickChatError("This model is unavailable under the current local execution policy", 409, "quickchat_model_blocked")
 
+    stage("quickchat_session_reservation")
     session = _session_for_quickchat(body, actor, scope, workspace, model, provider)
     try:
         captured = capture_chat_profile(session=session, raw_scope=body.get("space_scope"), actor=actor, workspace=workspace)
@@ -190,7 +200,9 @@ def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     response = routes._start_chat_stream_for_session(session, msg=message, attachments=[], workspace=workspace,
         model=model, model_provider=provider, normalized_model=normalized_model, goal_related=False, mode="",
         sandbox_disabled=False, grounding_context=grounding_context, confirmed_chat_profile=captured,
-        reasoning_effort=reasoning_effort, supported_reasoning_efforts=supported_reasoning_efforts)
+        reasoning_effort=reasoning_effort, supported_reasoning_efforts=supported_reasoning_efforts,
+        diag=diag, response_ready=getattr(handler, "headers_ready", None),
+        response_abandoned=getattr(handler, "response_abandoned", None))
     status = int(response.pop("_status", 200) or 200)
     if status >= 400 or not response.get("stream_id"):
         return {"ok": False, "error": response.get("error", "Quickchat could not start"),

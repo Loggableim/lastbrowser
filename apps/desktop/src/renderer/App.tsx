@@ -1150,7 +1150,8 @@ function AppContent(): JSX.Element {
   const quickChatTranscriptScopeKeyRef = useRef<string | null>(null);
   const quickChatStartPromiseRef = useRef<{ quickChatId: string; scopeKey: string; promise: Promise<QuickChatBinding> } | null>(null);
   const quickChatStopPromiseRef = useRef<Promise<unknown> | null>(null);
-  const quickChatSubmissionRef = useRef(false);
+  const quickChatSubmissionQueueRef = useRef<Promise<void> | null>(null);
+  const quickChatQueuedStopEpochRef = useRef(0);
   const quickChatPreparationEpochRef = useRef(0);
   const quickChatPreparedRef = useRef<{ key: string; epoch: number; updatedAt: number; selection: ScopedModelSelection } | null>(null);
   const [quickChatPrepared, setQuickChatPrepared] = useState<typeof quickChatPreparedRef.current>(null);
@@ -2411,6 +2412,12 @@ function AppContent(): JSX.Element {
       // Session fetches can resolve after the user has selected another chat.
       // Never let a stale response replace the currently visible transcript.
       if (activeSessionIdRef.current !== sessionId || !isSessionScopeCurrent()) return session;
+      // The local user echo exists before model discovery and before an owner
+      // or stream ID can be registered. An older polling snapshot must not
+      // erase that visible submission during this preflight window.
+      if (chatUiOwnershipRef.current.activeTurnId === null && activeStreamIdRef.current === null
+        && activeNativeSubmissionRef.current?.contextKey === JSON.stringify([sessionId,
+        sessionScope.profile, sessionScope.workspacePath, sessionScope.backendProfileName])) return session;
       if (isIndependentOwnedSession(session)) {
         setActiveSession(session); setChatMessages(normalizeChatMessages(session.messages));
         updateActiveStreamId(null); setChatRunState('idle'); setChatError(readIndependentSessionRun(session) ? '' : t('spaceAssistant.stale'));
@@ -4928,36 +4935,58 @@ function AppContent(): JSX.Element {
   }
 
   async function sendQuickChat(prompt: string, context?: { pageUrl?: string; pageTitle?: string; selectedText?: string; pageText?: string }, preserveUnknownOutcome = false, reasoningEffort?: string): Promise<boolean> {
-    if (!prompt.trim() || quickChatSubmissionRef.current || quickChatResetPendingRef.current) return false;
+    if (!prompt.trim() || quickChatResetPendingRef.current) return false;
     const scopeKey = `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`;
     if (!activeBackendProfileNameRef.current) {
       setQuickChatErrorForScope(scopeKey, locale === 'de' ? 'Das KI-Profil wird noch vorbereitet. Bitte kurz warten.' : 'The AI profile is still being prepared. Please wait a moment.');
       return false;
     }
     const generation = quickChatGenerationRef.current;
-    quickChatSubmissionRef.current = true;
-    try {
+    const stopIntent = quickChatQueuedStopEpochRef.current;
+    // Echo every submitted draft synchronously, including a steer while the
+    // preceding start acknowledgement is still pending. Serialize only the
+    // backend stop/start handshake, never the composer or visible transcript.
+    const visibleUserMessage: DesktopChatMessage = { role: 'user', content: prompt };
+    quickChatTranscriptScopeKeyRef.current = scopeKey;
+    updateQuickChatMessagesForScope(scopeKey, current => [...current, visibleUserMessage]);
+    setQuickChatErrorForScope(scopeKey, '');
+    const discardUnsentEcho = (stopped = false): false => {
+      updateQuickChatMessagesForScope(scopeKey, current => current.filter(item => item !== visibleUserMessage));
+      if (stopped && preserveUnknownOutcome) throw new Error('Quickchat stopped before start');
+      return false;
+    };
+    const run = async (): Promise<boolean> => {
+      if (generation !== quickChatGenerationRef.current || stopIntent !== quickChatQueuedStopEpochRef.current
+        || scopeKey !== currentQuickChatScopeKey() || quickChatResetPendingRef.current) return discardUnsentEcho(true);
       // A steer keeps the conversation and its scope, but cancels the old
       // response before admitting the new turn. Never reset the transcript.
       if (quickChatBusyRef.current || quickChatAwaitingStartRef.current) {
         await stopQuickChat();
-        if (quickChatBindingRef.current?.streamId || quickChatStopPendingRef.current) return false;
+        if (quickChatBindingRef.current?.streamId || quickChatStopPendingRef.current) return discardUnsentEcho();
       }
       if (generation !== quickChatGenerationRef.current
-        || scopeKey !== `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`) return false;
-      return await startQuickChatTurn(prompt, context, preserveUnknownOutcome, reasoningEffort);
-    } finally {
-      quickChatSubmissionRef.current = false;
-    }
+        || stopIntent !== quickChatQueuedStopEpochRef.current || scopeKey !== currentQuickChatScopeKey()) return discardUnsentEcho(true);
+      return startQuickChatTurn(prompt, context, preserveUnknownOutcome, reasoningEffort, visibleUserMessage);
+    };
+    const prior = quickChatSubmissionQueueRef.current;
+    const result = prior ? prior.then(run) : run();
+    const settled = result.then(() => undefined, () => undefined);
+    quickChatSubmissionQueueRef.current = settled;
+    void settled.then(() => { if (quickChatSubmissionQueueRef.current === settled) quickChatSubmissionQueueRef.current = null; });
+    return result;
   }
 
-  async function startQuickChatTurn(prompt: string, context?: { pageUrl?: string; pageTitle?: string; selectedText?: string; pageText?: string }, preserveUnknownOutcome = false, reasoningEffort?: string): Promise<boolean> {
+  async function startQuickChatTurn(prompt: string, context?: { pageUrl?: string; pageTitle?: string; selectedText?: string; pageText?: string }, preserveUnknownOutcome = false, reasoningEffort?: string, optimisticUserMessage?: DesktopChatMessage): Promise<boolean> {
     const submittedAt = performance.now();
     const activeScopeKey = `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`;
     if (quickChatBusyRef.current || quickChatStopPendingRef.current || quickChatResetPendingRef.current
       || quickChatBindingScopeKeyRef.current !== null && quickChatBindingScopeKeyRef.current !== activeScopeKey
       || quickChatTranscriptScopeKeyRef.current !== null && quickChatTranscriptScopeKeyRef.current !== activeScopeKey
-      || !prompt.trim()) return false;
+      || !prompt.trim()) {
+      if (optimisticUserMessage) updateQuickChatMessagesForScope(activeScopeKey,
+        current => current.filter(item => item !== optimisticUserMessage));
+      return false;
+    }
     const generation = quickChatGenerationRef.current;
     const stopEpoch = quickChatStopEpochRef.current;
     quickChatStopPendingRef.current = true;
@@ -4969,17 +4998,13 @@ function AppContent(): JSX.Element {
     const capturedScopeKey = `${browserProfileId}::${workspacePath || ''}::${backendProfileName || ''}`;
     quickChatBusyScopeKeyRef.current = capturedScopeKey;
     // Echo before scope/catalog IPC so discovery cannot delay send feedback.
-    const visibleUserMessage: DesktopChatMessage = { role: 'user', content: prompt };
-    const previousTranscriptScopeKey = quickChatTranscriptScopeKeyRef.current;
+    const visibleUserMessage: DesktopChatMessage = optimisticUserMessage ?? { role: 'user', content: prompt };
     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
-    updateQuickChatMessagesForScope(capturedScopeKey, current => [...current, visibleUserMessage]);
+    if (!optimisticUserMessage) updateQuickChatMessagesForScope(capturedScopeKey, current => [...current, visibleUserMessage]);
     const rejectPreflight = (): false => {
       setQuickChatBusy(false);
       if (quickChatBusyScopeKeyRef.current === capturedScopeKey) quickChatBusyScopeKeyRef.current = null;
       updateQuickChatMessagesForScope(capturedScopeKey, current => current.filter(item => item !== visibleUserMessage));
-      if (quickChatTranscriptScopeKeyRef.current === capturedScopeKey) {
-        quickChatTranscriptScopeKeyRef.current = previousTranscriptScopeKey;
-      }
       return false;
     };
     let scopedSelection: Awaited<ReturnType<typeof readCapturedSpaceModelSelection>>;
@@ -5028,9 +5053,13 @@ function AppContent(): JSX.Element {
     quickChatErrorScopeKeyRef.current = capturedScopeKey;
     setQuickChatBusy(true);
     setQuickChatErrorForScope(capturedScopeKey, '');
-    updateQuickChatMessagesForScope(capturedScopeKey, current => [...current,
-      { id: crypto.randomUUID(), role: 'assistant', content: 'Working on it...', pending: true, streaming: true }
-    ]);
+    updateQuickChatMessagesForScope(capturedScopeKey, current => {
+      const index = current.indexOf(visibleUserMessage);
+      const assistant = { id: crypto.randomUUID(), role: 'assistant', content: 'Working on it...', pending: true, streaming: true };
+      // Later queued steers may already be visible. Keep the answer adjacent
+      // to its own user turn rather than below those future messages.
+      return index < 0 ? current : [...current.slice(0, index + 1), assistant, ...current.slice(index + 1)];
+    });
     quickChatBufferedEventsRef.current = [];
     quickChatStoppedStreamIdRef.current = null;
     quickChatAwaitingStartRef.current = true;
@@ -6194,7 +6223,7 @@ function AppContent(): JSX.Element {
                   createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), '')}
                 allowWorkflows={false}
                 onSendMessage={(text, effort) => sendQuickChat(text, undefined, true, effort)}
-                onStopChat={() => void stopQuickChat()}
+                onStopChat={() => { quickChatQueuedStopEpochRef.current += 1; void stopQuickChat(); }}
                 activeUrl={activeTab.url}
                 activeTitle={activeTab.title}
                 quickActions={quickActions}

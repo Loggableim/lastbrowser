@@ -26,6 +26,9 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   const [viewState,setViewState]=useState<{key:string;value:StoreView}|null>(null),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const [showLarge,setShowLarge]=useState(false),[showUnknown,setShowUnknown]=useState(false),[query,setQuery]=useState(''),[publisher,setPublisher]=useState('');
   const [category,setCategory]=useState<'text'|'image'|'video'>('text');
+  const [libraryTab,setLibraryTab]=useState<'store'|'installed'|'hardware'|'activity'|'chat'>('store');
+  const [detailTab,setDetailTab]=useState<'overview'|'hardware'|'install'|'license'>('overview');
+  const [catalogPage,setCatalogPage]=useState(0),[pageSize,setPageSize]=useState(3);
   const [detail,setDetail]=useState<string|null>(null),[consent,setConsent]=useState(''),[mode,setMode]=useState<'quick'|'standard'>('quick');
   const [benchmarkBackend,setBenchmarkBackend]=useState<'cpu'|'vulkan'>('cpu');
   const [chatText,setChatText]=useState(''),[chatResult,setChatResult]=useState(''),[chatBusy,setChatBusy]=useState(false),[receipt,setReceipt]=useState<unknown>(null);
@@ -55,7 +58,9 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
       if(!mounted.current||requestGeneration!==generation.current||currentScopeKey.current!==scopeKey)return;
       if(!response.ok){if(!quiet)setError(operationErrors[response.error.code]??`Lokale KI: ${response.error.code}`);return;}
       if(!('kind'in response.value)||response.value.kind!=='model_store'){if(!quiet)setError('Ungültige Store-Antwort');return;}
-      setViewState({key:scopeKey,value:response.value.store});return response.value.storeResult;
+      setViewState({key:scopeKey,value:response.value.store});
+      if(data.operation==='install'||data.operation==='importModel'||data.operation==='benchmark') {setLibraryTab('activity');setDetail(null);}
+      return response.value.storeResult;
     }catch{if(mounted.current&&requestGeneration===generation.current&&currentScopeKey.current===scopeKey&&!quiet)setError('Lokale KI nicht erreichbar. Es wurde kein Cloud-Ersatz verwendet.');}
     finally{if(mounted.current&&requestGeneration===generation.current&&currentScopeKey.current===scopeKey&&!quiet){setBusy(false);setPendingOperation(null);}}
   }
@@ -80,7 +85,8 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   const benchmarkBackends: Array<'cpu'|'vulkan'> = selected?.execution?.availableBackends ?? ['cpu'];
   const effectiveBenchmarkBackend = benchmarkBackends.includes(benchmarkBackend) ? benchmarkBackend : benchmarkBackends[0] ?? 'cpu';
   const filters = { query, publisher, showLarge, showUnknown, category };
-  const visible = filterStoreModels(models, filters,view?.hardware)
+  const libraryModels = libraryTab==='installed'?models.filter(model=>model.installed):models;
+  const visible = filterStoreModels(libraryModels, libraryTab==='installed'?{...filters,showLarge:true,showUnknown:true}:filters,view?.hardware)
     .sort((a,b) => Number(!!b.installed)-Number(!!a.installed) || Number(!!b.curation?.priority)-Number(!!a.curation?.priority) || a.name.localeCompare(b.name,'de'));
   const hardware = summarizeStoreHardware(view?.hardware);
   const emptyState = storeEmptyState(models, filters, view?.hardware);
@@ -88,6 +94,20 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   const trialCount = models.filter(model => storeHardwareRecommendation(model,view?.hardware).fit==='trial').length;
   const scanPending = pendingOperation === 'scan';
   const hardwareStale = models.some(model => model.eligibility.reasons.includes('hardware_scan_stale'));
+  const catalogPages=Math.max(1,Math.ceil(visible.length/pageSize));
+  const currentCatalogPage=Math.min(catalogPage,catalogPages-1);
+  const pageModels=visible.slice(currentCatalogPage*pageSize,(currentCatalogPage+1)*pageSize);
+  useEffect(()=>{setCatalogPage(0);},[scopeKey,category,libraryTab,query,publisher,showLarge,showUnknown]);
+  useEffect(()=>{setDetailTab('overview');},[detail,scopeKey]);
+  useLayoutEffect(()=>{
+    const element=storeRef.current;if(!element)return;
+    const measure=()=>{
+      const columns=Math.max(1,Math.min(4,Math.floor((element.clientWidth-32)/260)));
+      setPageSize(columns*(window.innerHeight>=1100?2:1));
+    };
+    const observer=new ResizeObserver(measure);observer.observe(element);window.addEventListener('resize',measure);measure();
+    return()=>{observer.disconnect();window.removeEventListener('resize',measure);};
+  },[]);
   useLayoutEffect(() => {
     if (detail) { detailRef.current?.focus({preventScroll:true}); detailRef.current?.scrollIntoView({block:'start'}); }
     else if (restoreFocus.current) {
@@ -126,6 +146,10 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     return <article className="local-model-card" key={model.id} data-model-id={model.id}>
       <button className="local-model-card-open" type="button" data-open-model={model.id}
         aria-label={`${model.name}: Details ansehen`} onClick={()=>{openerRef.current=model.id;setDetail(model.id);setConsent('');}}>
+        <span className={`local-model-cover local-model-cover--${storeModelCategory(model)}`} aria-hidden="true">
+          {storeModelCategory(model)==='text'?<MessageSquare size={25}/>:storeModelCategory(model)==='image'?<ImageIcon size={25}/>:<Film size={25}/>}
+          <span>{storeModelCategory(model)==='text'?'Text & Assistenz':storeModelCategory(model)==='image'?'Bildgenerierung':'Videogenerierung'}</span>
+        </span>
         <span className="local-model-card-heading"><span className="local-model-monogram" aria-hidden="true">{model.publisher.slice(0,2).toUpperCase()}</span>
           <span><span className="local-model-publisher">{model.publisher}</span><strong>{model.name}</strong></span><ArrowRight size={16} aria-hidden="true"/></span>
         <span className="local-model-card-description">{curated?.useCases.slice(0,2).join(' · ') || model.description}</span>
@@ -159,14 +183,22 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     {!selected&&<>
     <header className="local-model-store-header"><div className="local-model-store-intro">
       <span className="local-model-eyebrow"><ShieldCheck size={14} aria-hidden="true"/> Lokale KI · auf deinem PC</span>
-      <h3 id={titleId}>Lokale Modelle entdecken</h3><p>Eine kuratierte Auswahl für Text, Bilder und Video. Details zeigen, was ein Modell kann und was dein PC dafür braucht.</p>
+      <h3 id={titleId}>Local Model Store <span className="local-model-library-count">{models.length} Modelle</span></h3><p>Deine kuratierte Bibliothek für Text, Bilder und Video. Einmal installieren, lokal nutzen.</p>
     </div><div className="local-model-scan-action"><button className="local-model-primary" type="button" disabled={!ready||busy}
       onClick={()=>void request({operation:'scan'})}>{scanPending?<Loader2 size={17} className="local-model-spin" aria-hidden="true"/>:<Cpu size={17} aria-hidden="true"/>}
       {scanPending?'Hardware wird geprüft…':hardware.scanned?'Hardware erneut prüfen':'Hardware scannen'}</button>
       <span role="status" aria-live="polite">{!ready?'Lokaler Dienst noch nicht bereit':scanPending?'Liest CPU und verfügbare Speicherwerte':hardwareStale?'Hardware-Scan veraltet · bitte erneut prüfen':hardware.scanned?'Hardware-Snapshot vorhanden':'Noch kein Hardware-Scan'}</span>
     </div></header>
+    <nav className="local-model-library-nav" aria-label="Modellbibliothek">
+      {([['store','Store',models.length],['installed','Installiert',models.filter(model=>model.installed).length],['hardware','Mein PC',null],['activity','Downloads & Ergebnisse',view?.jobs.filter(job=>active(job.state)).length??0],['chat','Lokaler Chat',null]] as const).map(([id,label,count])=>
+        <button key={id} type="button" aria-pressed={libraryTab===id} onClick={()=>setLibraryTab(id)}>{label}{count!==null&&<span>{count}</span>}</button>)}
+    </nav>
     {!!error&&<p className="local-model-notice local-model-error" role="alert">{error}</p>}
-    <section className="local-model-hardware" aria-label="Dein PC">
+    {(libraryTab==='store'||libraryTab==='installed')&&<div className="local-model-hardware-summary" aria-label="Dein PC kompakt">
+      <span><Monitor size={14}/>{hardware.gpu} · {hardware.gpuMemory} VRAM</span><span><Database size={14}/>{hardware.ramAvailable} RAM frei</span><span><HardDrive size={14}/>{hardware.diskFree} Speicher frei</span>
+      <button type="button" onClick={()=>setLibraryTab('hardware')}>Hardware-Details</button>
+    </div>}
+    {libraryTab==='hardware'&&<section className="local-model-hardware" aria-label="Dein PC">
       <div className="local-model-section-heading"><h4>Dein PC</h4><span>{hardware.observedAt?`Snapshot vom ${new Date(hardware.observedAt).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'})}`:'Werte erscheinen nach deinem Scan'}</span></div>
       <div className="local-model-hardware-grid">
         <div><Cpu size={18} aria-hidden="true"/><dl><dt>Prozessor</dt><dd>{hardware.cpu}</dd></dl><small>{hardware.cores}</small></div>
@@ -176,8 +208,8 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
       </div>
       {hardware.scanned&&<details className="local-model-advanced"><summary>Technische Hardware-Details <ChevronDown size={14} aria-hidden="true"/></summary>
         <p>Gemessene Werte beschreiben den Scanzeitpunkt. CPU-Ausführung wird separat bewertet; erkannte GPUs bestätigen keine Runtime-Unterstützung.</p><pre>{JSON.stringify(view?.hardware,null,2)}</pre></details>}
-    </section>
-    <section className="local-model-catalog" aria-label="Modellkatalog">
+    </section>}
+    {(libraryTab==='store'||libraryTab==='installed')&&<section className="local-model-catalog" aria-label="Modellkatalog">
       <div className="local-model-section-heading"><div><h4>{hardware.scanned?'Kuratierte Auswahl':'Kuratierte Auswahl · Hardware noch nicht geprüft'}</h4><p>{models.length} im Katalog{ suitableCount>0?` · ${suitableCount} passen zur Speicherschätzung`:''}{trialCount>0?` · ${trialCount} experimentell ausprobierbar`:''}</p></div>
         {(query||publisher||showUnknown||showLarge)&&<button className="local-model-text-button" type="button" onClick={()=>{setQuery('');setPublisher('');setShowUnknown(false);setShowLarge(false);}}>Filter zurücksetzen</button>}</div>
       <div className="local-model-search"><Search size={18} aria-hidden="true"/><label className="local-model-sr-only" htmlFor={searchId}>Modelle suchen</label>
@@ -191,23 +223,25 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
               event.preventDefault();const next=event.key==='Home'?0:event.key==='End'?2:(tabs.indexOf(id)+(event.key==='ArrowRight'?1:2))%3;
               setCategory(tabs[next]);document.getElementById(`${titleId}-${tabs[next]}`)?.focus();
             }
-          }}><Icon size={15} aria-hidden="true"/>{label}<span>{models.filter(model=>storeModelCategory(model)===id).length}</span></button>)}
+          }}><Icon size={15} aria-hidden="true"/>{label}<span>{libraryModels.filter(model=>storeModelCategory(model)===id).length}</span></button>)}
       </nav>
-      {category==='image'&&<BonsaiImageTrial/>}
+      {category==='image'&&libraryTab==='store'&&<BonsaiImageTrial/>}
       <details className="local-model-filter-details"><summary><SlidersHorizontal size={15} aria-hidden="true"/> Filter und weitere Modelle <ChevronDown size={14} aria-hidden="true"/></summary>
         <div className="local-model-filters"><label>Herausgeber <select value={publisher} onChange={e=>setPublisher(e.target.value)}><option value="">Alle Herausgeber</option>{[...new Set(models.map(m=>m.publisher))].map(p=><option key={p}>{p}</option>)}</select></label>
           <label><input type="checkbox" checked={showLarge} onChange={e=>setShowLarge(e.target.checked)}/> Auch nicht empfohlene und ungeprüfte Modelle anzeigen</label></div>
       </details>
-      <p className="local-model-result-count" role="status" aria-live="polite">{busy&&pendingOperation==='view'?'Katalog wird geladen…':`${visible.length} ${visible.length===1?'Modell':'Modelle'} angezeigt`}</p>
+      <p className="local-model-result-count" role="status" aria-live="polite">{busy&&pendingOperation==='view'?'Katalog wird geladen…':`${visible.length} ${visible.length===1?'Modell':'Modelle'}${libraryTab==='installed'?' installiert':' in dieser Auswahl'} · ${visible.length?currentCatalogPage*pageSize+1:0}–${Math.min(visible.length,(currentCatalogPage+1)*pageSize)} angezeigt`}</p>
       {!visible.length&&!busy&&<div className="local-model-empty" data-empty-state={emptyState}>
         <div className="local-model-empty-icon" aria-hidden="true">{emptyState==='scan_missing'?<Cpu size={26}/>:<Search size={26}/>}</div>
-        <h5>{emptyState==='scan_missing'?'Dein PC ist noch nicht geprüft':emptyState==='filtered'?'Kein Modell passt zu diesen Filtern':emptyState==='compatibility_unknown'?'Kompatibilität noch ungeklärt':'Der Katalog ist noch nicht verfügbar'}</h5>
-        <p>{emptyState==='scan_missing'?'Scanne deine Hardware für eine Einschätzung. Du kannst vorher schon den Katalog ansehen.':emptyState==='filtered'?'Ändere die Suche oder zeige auch Modelle mit ungeklärter Kompatibilität an.':emptyState==='compatibility_unknown'?'Die Hardware-, Lizenz- oder Runtime-Prüfung ist noch offen. Die Voraussetzungen findest du bei jedem Modell.':'Prüfe, ob der lokale Dienst bereit ist, und lade die Ansicht erneut.'}</p>
-        {models.length>0?<button type="button" className="local-model-secondary" onClick={showAllModels}>Alle Modelle ansehen <ArrowRight size={15} aria-hidden="true"/></button>:<button type="button" disabled={!ready||busy} onClick={()=>void request({operation:'view'})}>Ansicht neu laden</button>}
+        <h5>{libraryTab==='installed'&&!libraryModels.length?'Deine Bibliothek ist noch leer':emptyState==='scan_missing'?'Dein PC ist noch nicht geprüft':emptyState==='filtered'?'Kein Modell passt zu diesen Filtern':emptyState==='compatibility_unknown'?'Kompatibilität noch ungeklärt':'Der Katalog ist noch nicht verfügbar'}</h5>
+        <p>{libraryTab==='installed'&&!libraryModels.length?'Deine installierten Modelle erscheinen hier nach einem abgeschlossenen Download.':emptyState==='scan_missing'?'Scanne deine Hardware für eine Einschätzung. Du kannst vorher schon den Katalog ansehen.':emptyState==='filtered'?'Ändere die Suche oder zeige auch Modelle mit ungeklärter Kompatibilität an.':emptyState==='compatibility_unknown'?'Die Hardware-, Lizenz- oder Runtime-Prüfung ist noch offen. Die Voraussetzungen findest du bei jedem Modell.':'Prüfe, ob der lokale Dienst bereit ist, und lade die Ansicht erneut.'}</p>
+        {libraryTab==='installed'&&!libraryModels.length?<button type="button" className="local-model-secondary" onClick={()=>setLibraryTab('store')}>Modelle entdecken <ArrowRight size={15}/></button>:models.length>0?<button type="button" className="local-model-secondary" onClick={showAllModels}>Alle Modelle ansehen <ArrowRight size={15} aria-hidden="true"/></button>:<button type="button" disabled={!ready||busy} onClick={()=>void request({operation:'view'})}>Ansicht neu laden</button>}
       </div>}
-      <p className="local-model-catalog-note">Karten zeigen eine Speicherschätzung, keine bestätigte Ausführung. „Ausprobierbar“ nutzt die untere Schätzung mit derselben GPU-Reserve; Quantisierung, Kontext und Runtime müssen separat passen. „Nur entdecken“ ist noch nicht direkt installierbar. Details per Klick.</p>
-      <div id={`${titleId}-catalog`} role="tabpanel" aria-labelledby={`${titleId}-${category}`} className="local-model-grid">{visible.map(card)}</div>
-    </section>
+      <div id={`${titleId}-catalog`} role="tabpanel" aria-labelledby={`${titleId}-${category}`} className="local-model-grid">{pageModels.map(card)}</div>
+      <nav className="local-model-pagination" aria-label="Katalogseiten"><button type="button" disabled={currentCatalogPage===0} onClick={()=>setCatalogPage(currentCatalogPage-1)}><ArrowLeft size={14}/>Zurück</button>
+        <span>Seite {currentCatalogPage+1} / {catalogPages}</span><button type="button" disabled={currentCatalogPage+1>=catalogPages} onClick={()=>setCatalogPage(currentCatalogPage+1)}>Weiter<ArrowRight size={14}/></button></nav>
+      <p className="local-model-catalog-note">Speicherbedarf ist eine Schätzung. Installation, lokale Ausführung und Gerätetest haben getrennte Voraussetzungen. Details per Klick.</p>
+    </section>}
     </>}
     {selected&&<section ref={detailRef} id={`${detailTitleId}-panel`} tabIndex={-1}
       onKeyDown={event=>{if(event.key==='Escape'){event.stopPropagation();closeDetails();}}}
@@ -219,18 +253,22 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
       {!!error&&<p className="local-model-notice local-model-error" role="alert">{error}</p>}
       <div className="local-model-detail-status"><span className="local-model-status">{storeExecutionLabel(selected)}</span>
         {selected.curation?.priority&&<span className="local-model-editorial">Redaktionell hervorgehoben</span>}</div>
+      <nav className="local-model-library-nav" aria-label="Modelldetails">
+        {([['overview','Überblick'],['hardware','Ressourcen & Engine'],['install',selected.installed?'Installation & Nutzung':'Installation'],['license','Quellen & Lizenz']] as const).map(([id,label])=>
+          <button key={id} type="button" aria-pressed={detailTab===id} onClick={()=>setDetailTab(id)}>{label}</button>)}
+      </nav>
 
-      <div className="local-model-detail-layout">
-        <div className="local-model-detail-main">
-          {selected.curation?.innovation&&<section className="local-model-detail-section"><h4>Was dieses Modell besonders macht</h4><p>{selected.curation.innovation}</p></section>}
-          <section className="local-model-detail-section"><h4>Gut geeignet für</h4>
+      <div className={`local-model-detail-layout local-model-detail-layout--${detailTab}`}>
+        <div className="local-model-detail-main" hidden={detailTab==='install'}>
+          {selected.curation?.innovation&&<section hidden={detailTab!=='overview'} className="local-model-detail-section"><h4>Was dieses Modell besonders macht</h4><p>{selected.curation.innovation}</p></section>}
+          <section hidden={detailTab!=='overview'} className="local-model-detail-section"><h4>Gut geeignet für</h4>
             {(selected.curation?.useCases.length || selected.tasks.length)>0?<ul>{(selected.curation?.useCases.length?selected.curation.useCases:selected.tasks).map(item=><li key={item}>{item}</li>)}</ul>:<p>Noch keine Spezialisierung angegeben.</p>}
           </section>
-          {!!selected.curation?.strengths.length&&<section className="local-model-detail-section"><h4>Stärken</h4><ul>{selected.curation.strengths.map(item=><li key={item}>{item}</li>)}</ul></section>}
-          <section className="local-model-detail-section"><h4>Grenzen</h4>
+          {!!selected.curation?.strengths.length&&<section hidden={detailTab!=='overview'} className="local-model-detail-section"><h4>Stärken</h4><ul>{selected.curation.strengths.map(item=><li key={item}>{item}</li>)}</ul></section>}
+          <section hidden={detailTab!=='overview'} className="local-model-detail-section"><h4>Grenzen</h4>
             {selected.curation?.limitations.length?<ul>{selected.curation.limitations.map(item=><li key={item}>{item}</li>)}</ul>:<p>Für dieses Modell sind noch keine ergänzenden Einschränkungen dokumentiert.</p>}
           </section>
-          <section className="local-model-detail-section"><h4>Lokale Ausführung</h4>
+          <section hidden={detailTab!=='hardware'} className="local-model-detail-section"><h4>Lokale Ausführung</h4>
             <dl className="local-model-detail-facts"><div><dt>Benötigte Software</dt><dd>{selected.curation?.engine || 'Noch nicht angegeben'}</dd></div>
               <div><dt>Ausführung in LastBrowser</dt><dd>{selected.runtimeReason || 'Noch nicht bestätigt'}</dd></div>
               <div><dt>Gewichtsvariante</dt><dd>{selected.quantization || selected.curation?.quantization || 'Noch nicht angegeben'}</dd></div>
@@ -242,21 +280,21 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
             <p className="local-model-catalog-note">Die GPU-Klasse ist ein Komfortziel für die obere Schätzung. Kompakte Gewichte und kurzer Kontext können darunter passen; lange Kontexte vergrößern den KV-Cache. CPU- und GPU-Ausführung werden getrennt geprüft. Der Gerätetest verwendet seine festgelegte Konfiguration.</p>
           </section>
           {selected.id==='prism-ml/bonsai-image-ternary-4B-gemlite-2bit'&&<BonsaiImageTrial/>}
-          <section className="local-model-detail-section"><h4>Quellen & Lizenz</h4>
+          <section hidden={detailTab!=='license'} className="local-model-detail-section"><h4>Quellen & Lizenz</h4>
             <p><strong>{selected.licenseLabel}</strong>{selected.curation?.license && ` · ${selected.curation.license==='mit'?'MIT':'Apache 2.0'}`}</p>
             <div className="local-model-source-links">{[...new Set([storeSourceUrl(selected.curation?.sourceUrl),storeSourceUrl(selected.sourceUrl)].filter((url):url is string=>!!url))].map((url,index)=><a key={url} href={url} target="_blank" rel="noopener noreferrer">{index===0?'Modellkarte & Herausgeber':'Katalog-/Artefaktquelle'}<ArrowRight size={13} aria-hidden="true"/></a>)}</div>
             <p className="local-model-catalog-note">Herausgeberangaben und redaktionelle Einschätzungen sind keine Messung auf deinem PC.</p>
             {selected.licenseText&&<details className="local-model-advanced"><summary>Vollständige Herausgeber-Lizenz<ChevronDown size={14} aria-hidden="true"/></summary><pre>{selected.licenseText}</pre></details>}
           </section>
-          <details className="local-model-advanced"><summary>Technische Voraussetzungen<ChevronDown size={14} aria-hidden="true"/></summary>
+          <details hidden={detailTab!=='hardware'} className="local-model-advanced"><summary>Technische Voraussetzungen<ChevronDown size={14} aria-hidden="true"/></summary>
             <p>{selected.memoryPolicy}</p><p>Revision: {selected.revision || 'Noch nicht festgelegt'}</p>
             <ul>{selected.eligibility.reasons.map(reason=><li key={reason}>{reasons[reason] || reason}</li>)}</ul>
             {selected.historicalEvidence&&<p>Historischer Vergleich: {selected.historicalEvidence.contentPassed}/{selected.historicalEvidence.tasks} Inhalt, {selected.historicalEvidence.strictPassed}/{selected.historicalEvidence.tasks} strikt. {selected.historicalEvidence.device}, {selected.historicalEvidence.configuration}. Kein Nachweis für dieses Downloadartefakt oder diesen PC.</p>}
           </details>
         </div>
 
-        <aside className="local-model-detail-aside" aria-label="Speicherbedarf und Installation">
-          <section className="local-model-detail-section local-model-estimates"><h4>Passt es auf meinen PC?</h4>
+        <aside hidden={detailTab==='overview'||detailTab==='license'} className="local-model-detail-aside" aria-label="Speicherbedarf und Installation">
+          <section hidden={detailTab!=='hardware'} className="local-model-detail-section local-model-estimates"><h4>Passt es auf meinen PC?</h4>
             <span className="local-model-estimate-label">Schätzung · keine Messung</span>
             <dl className="local-model-detail-facts">
               <div><dt>Grafikkartenklasse</dt><dd>{selected.curation?`${selected.curation.recommendedGpuGiB} GiB`:'Noch nicht angegeben'}</dd></div>
@@ -269,7 +307,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
             <p className="local-model-fit">{storeHardwareRecommendation(selected,view?.hardware).placement==='cpu'?'Prozessor und freier Speicher wurden für diese Ausführung geprüft':!hardware.scanned?'Hardware noch nicht geprüft':assessStoreGpuEstimate(selected,view?.hardware)==='outside'?'Außerhalb der erfassten Speicherklasse':assessStoreGpuEstimate(selected,view?.hardware)==='within'?'Speicherklasse passt zur Schätzung · Ausführung noch separat prüfen':assessStoreGpuEstimate(selected,view?.hardware)==='trial'?'Experimentell ausprobierbar: untere Speicherschätzung passt; kompakte Konfiguration noch ungeprüft':'Keine ausreichenden Messwerte für eine Zuordnung'}</p>
           </section>
 
-          <section className="local-model-detail-section local-model-install-panel"><h4>{selected.installed?'Deine Installation':'Auf diesem PC nutzen'}</h4>
+          <section hidden={detailTab!=='install'} className="local-model-detail-section local-model-install-panel"><h4>{selected.installed?'Deine Installation':'Auf diesem PC nutzen'}</h4>
             {!selected.installed&&!selectedActions?.download&&<p className="local-model-notice">Zum Entdecken verfügbar. Für die Installation müssen Download, Lizenz und verfügbare Ausführung bestätigt sein.</p>}
             {!!selectedActions?.reasons.length&&<details className="local-model-advanced"><summary>Was noch fehlt<ChevronDown size={14} aria-hidden="true"/></summary><ul>{selectedActions.reasons.map(reason=><li key={reason}>{reasons[reason] || reason}</li>)}</ul></details>}
             {selectedActions?.download&&selected.licenseDigest&&<>
@@ -294,12 +332,12 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
         </aside>
       </div>
     </section>}
-    {!!view?.jobs.length&&<section className="local-model-jobs"><h4>Aufträge</h4>{view.jobs.map(j=><article className="local-model-job" key={j.id}><p>{models.find(model=>model.id===j.modelId)?.name??j.modelId}: {storeJobLabel(j.state)} · {j.operation==='install'?bytes(j.downloadedBytes):`${j.progress}/${j.total}`} {j.error??''}</p>
+    {!selected&&libraryTab==='activity'&&!!view?.jobs.length&&<section className="local-model-jobs"><h4>Aufträge</h4>{view.jobs.map(j=><article className="local-model-job" key={j.id}><p>{models.find(model=>model.id===j.modelId)?.name??j.modelId}: {storeJobLabel(j.state)} · {j.operation==='install'?bytes(j.downloadedBytes):`${j.progress}/${j.total}`} {j.error??''}</p>
       {active(j.state)&&<progress aria-label={`Fortschritt ${j.modelId}`} value={j.operation==='install'?(models.find(model=>model.id===j.modelId)?.downloadBytes?j.downloadedBytes:undefined):(j.total>0?j.progress:undefined)} max={j.operation==='install'?(models.find(model=>model.id===j.modelId)?.downloadBytes??undefined):(j.total>0?j.total:undefined)}/>}
 
       {active(j.state)&&<button type="button" onClick={()=>void request({operation:'cancel',jobId:j.id})}>Stoppen</button>}
       {!!j.result?.assets.length&&<LocalModelMediaResult key={`${scopeKey}:${j.id}`} job={j} request={request}/>}</article>)}</section>}
-    {!view?.readOnly&&<details className="local-model-results" open={Boolean(view?.history.length)}><summary>Ergebnisse und Vergleich <span>{view?.history.length??0} Läufe</span><ChevronDown size={15} aria-hidden="true"/></summary><div className="local-model-results-body"><p>Benchmarks verwenden synthetische Aufgaben und führen keine Tools aus.</p><button type="button" onClick={()=>importInput.current?.click()}>Ergebnisse importieren</button>
+    {!selected&&libraryTab==='activity'&&!view?.readOnly&&<details className="local-model-results" open><summary>Ergebnisse und Vergleich <span>{view?.history.length??0} Läufe</span><ChevronDown size={15} aria-hidden="true"/></summary><div className="local-model-results-body"><p>Benchmarks verwenden synthetische Aufgaben und führen keine Tools aus.</p><button type="button" onClick={()=>importInput.current?.click()}>Ergebnisse importieren</button>
       <input ref={importInput} hidden type="file" accept="application/json,.json" onChange={e=>{const file=e.target.files?.[0];if(file)void importFile(file);e.target.value='';}}/>
       <div className="local-model-comparison"><table><thead><tr><th>Modell / Lauf</th><th>Inhalt</th><th>Format</th><th>Technik</th><th>Median</th><th>Empfehlung</th><th>Aktionen</th></tr></thead>
         <tbody>{view?.history.map(r=><tr key={r.id}><td>{r.modelId}<br/>{r.mode} · {r.origin} · {new Date(r.createdAt*1000).toLocaleString()}</td>
@@ -310,10 +348,11 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
       {receipt!==null&&<details open><summary>Unveränderte Antworten und Bewertung</summary><pre>{JSON.stringify(receipt,null,2)}</pre><button type="button" onClick={()=>setReceipt(null)}>Schließen</button></details>}
       <p>Importe bestätigen diesen PC nicht. Keine automatische Agentenfreigabe. Tokens/s, erster sichtbarer Token und Speicherpeak bleiben ohne entsprechende Messung unbekannt.</p>
     </div></details>}
-    {chosen&&chosenActions?.kind==='text'&&<section className="local-model-chat"><h4>Lokaler Chat · {chosen.name}</h4><p>Deine Nachricht bleibt auf diesem PC. Es werden keine Cloud-Modelle oder Werkzeuge verwendet.</p>
+    {!selected&&libraryTab==='chat'&&(!chosen||chosenActions?.kind!=='text')&&<div className="local-model-empty"><MessageSquare size={28}/><h4>Noch kein lokales Chatmodell aktiv</h4><p>Installiere ein Textmodell, prüfe es auf diesem PC und aktiviere es in seinen Modelldetails.</p><button type="button" onClick={()=>{setCategory('text');setLibraryTab('installed');}}>Installierte Modelle</button></div>}
+    {!selected&&libraryTab==='chat'&&chosen&&chosenActions?.kind==='text'&&<section className="local-model-chat"><h4>Lokaler Chat · {chosen.name}</h4><p>Deine Nachricht bleibt auf diesem PC. Es werden keine Cloud-Modelle oder Werkzeuge verwendet.</p>
       <textarea maxLength={8192} value={chatText} onChange={e=>setChatText(e.target.value)} aria-label="Lokale Nachricht"/>
       <button type="button" disabled={!ready||chatBusy||!chosenActions.execute||!chatText.trim()} onClick={()=>void sendLocalChat()}>Senden</button>
       {chatBusy&&<button type="button" onClick={()=>void request({operation:'stopChat'})}>Stoppen</button>}<pre>{chatResult}</pre></section>}
-    <details className="local-model-policy"><summary>Lizenz, Messgrenzen und lokale Ausführung <ChevronDown size={14} aria-hidden="true"/></summary><p>LastBrowser erhebt keine Lizenzgebühr nach Modellgröße. Installation und Ausführung hängen weiterhin von Herausgeberlizenz, Hardwareeignung und qualifizierter Runtime ab.</p><p>Größenbedarf gilt für konkrete Gewichte und 4K Kontext. Unbekannter GPU-Support ist keine VRAM-Empfehlung.</p></details>
+    {!selected&&libraryTab==='hardware'&&<details className="local-model-policy"><summary>Lizenz, Messgrenzen und lokale Ausführung <ChevronDown size={14} aria-hidden="true"/></summary><p>LastBrowser erhebt keine Lizenzgebühr nach Modellgröße. Installation und Ausführung hängen weiterhin von Herausgeberlizenz, Hardwareeignung und qualifizierter Runtime ab.</p><p>Größenbedarf gilt für konkrete Gewichte und 4K Kontext. Unbekannter GPU-Support ist keine VRAM-Empfehlung.</p></details>}
   </section>;
 }

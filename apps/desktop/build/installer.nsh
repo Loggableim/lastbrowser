@@ -1,9 +1,9 @@
 !include "WinMessages.nsh"
 !include "nsDialogs.nsh"
 
-!define MUI_BGCOLOR "F7F9FC"
+!define MUI_BGCOLOR "FAFCFF"
 !define MUI_TEXTCOLOR "152238"
-!define MUI_INSTFILESPAGE_COLORS "152238 F7F9FC"
+!define MUI_INSTFILESPAGE_COLORS "152238 FAFCFF"
 !define MUI_INSTFILESPAGE_PROGRESSBAR "colored"
 
 ; electron-builder compiles its uninstaller first. The installation-only
@@ -21,7 +21,6 @@ Var LastBrowserInstallEyebrowFont
 Var LastBrowserInstallHeadlineFont
 Var LastBrowserInstallDescriptionFont
 Var LastBrowserInstallPrivacyFont
-Var LastBrowserInstallPageStyled
 Var LastBrowserInstallDialog
 Var LastBrowserInstallText
 Var LastBrowserInstallProgressBar
@@ -37,15 +36,38 @@ Var LastBrowserInstallHeaderImage
 Var LastBrowserInstallHeaderBackground
 Var LastBrowserInstallHeaderLine
 Var LastBrowserInstallBrandingBackground
+Var LastBrowserInstallDpi
+Var LastBrowserInstallMoveX
+Var LastBrowserInstallMoveY
+Var LastBrowserInstallMoveWidth
+Var LastBrowserInstallMoveHeight
+Var LastBrowserInstallFooterFont
 
 !macro LB_CREATE_CENTERED_LABEL ID TEXT FONT_VAR FONT_SIZE FONT_WEIGHT COLOR
   GetDlgItem $0 $LastBrowserInstallDialog ${ID}
   ${If} $0 == 0
     System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "${TEXT}", i 0x50000001, i 0, i 0, i 10, i 10, p $LastBrowserInstallDialog, p ${ID}, p 0, p 0) p .r0'
-    SetCtlColors $0 "${COLOR}" "F7F9FC"
-    CreateFont ${FONT_VAR} "$(^Font)" "${FONT_SIZE}" "${FONT_WEIGHT}"
+    SetCtlColors $0 "${COLOR}" "FAFCFF"
+    CreateFont ${FONT_VAR} "Segoe UI" "${FONT_SIZE}" "${FONT_WEIGHT}"
     SendMessage $0 ${WM_SETFONT} ${FONT_VAR} 1
   ${EndIf}
+!macroend
+
+; Design coordinates match the 690px Sidekick mockup and scale with window DPI.
+!macro LB_MOVE_DESIGN CONTROL X Y WIDTH HEIGHT
+  System::Call 'kernel32::MulDiv(i ${X}, i $LastBrowserInstallDpi, i 96) i.s'
+  Pop $LastBrowserInstallMoveX
+  System::Call 'kernel32::MulDiv(i ${Y}, i $LastBrowserInstallDpi, i 96) i.s'
+  Pop $LastBrowserInstallMoveY
+  System::Call 'kernel32::MulDiv(i ${WIDTH}, i $LastBrowserInstallDpi, i 96) i.s'
+  Pop $LastBrowserInstallMoveWidth
+  System::Call 'kernel32::MulDiv(i ${HEIGHT}, i $LastBrowserInstallDpi, i 96) i.s'
+  Pop $LastBrowserInstallMoveHeight
+  !insertmacro LB_MOVE ${CONTROL} $LastBrowserInstallMoveX $LastBrowserInstallMoveY $LastBrowserInstallMoveWidth $LastBrowserInstallMoveHeight
+!macroend
+
+!macro customHeader
+  ShowInstDetails hide
 !macroend
 
 !macro LB_MOVE CONTROL X Y WIDTH HEIGHT
@@ -105,8 +127,8 @@ Function LastBrowserInstallPageShow
 
   ; Give the installation scene the whole body, rather than leaving an empty
   ; native header above it. Keep the footer actions in their native dialog.
-  SetCtlColors $HWNDPARENT "152238" "F7F9FC"
-  SetCtlColors $LastBrowserInstallDialog "152238" "F7F9FC"
+  SetCtlColors $HWNDPARENT "152238" "FAFCFF"
+  SetCtlColors $LastBrowserInstallDialog "152238" "FAFCFF"
   ShowWindow $LastBrowserInstallHeaderText ${SW_HIDE}
   ShowWindow $LastBrowserInstallHeaderSubText ${SW_HIDE}
   ShowWindow $LastBrowserInstallHeaderImage ${SW_HIDE}
@@ -114,94 +136,101 @@ Function LastBrowserInstallPageShow
   ShowWindow $LastBrowserInstallHeaderLine ${SW_HIDE}
   ShowWindow $LastBrowserInstallBrandingBackground ${SW_HIDE}
   ShowWindow $LastBrowserInstallBrandingText ${SW_HIDE}
-  System::Alloc 16
-  Pop $0
-  System::Call 'user32::GetClientRect(p $HWNDPARENT, p r0)'
-  System::Call '*$0(i, i, i.r1, i.r2)'
-  System::Free $0
-  IntOp $2 $2 - 50
-  !insertmacro LB_MOVE $LastBrowserInstallDialog 0 0 $1 $2
-
-  ; Read the actual page size and center the content within the native InstFiles dialog.
-  System::Alloc 16
-  Pop $0
-  System::Call 'user32::GetClientRect(p $LastBrowserInstallDialog, p r0)'
-  System::Call '*$0(i, i, i.r1, i.r2)'
-  System::Free $0
-  StrCpy $R8 $1
-  StrCpy $R9 $2
-  IntOp $R0 $R8 / 2
-  IntOp $R6 $R8 - 48
-  ${If} $R6 > 380
-    StrCpy $R6 380
+  System::Call 'user32::GetDpiForWindow(p $HWNDPARENT) i.s'
+  Pop $LastBrowserInstallDpi
+  ${If} $LastBrowserInstallDpi <= 0
+    StrCpy $LastBrowserInstallDpi 96
   ${EndIf}
-  IntOp $R3 $R8 - $R6
+  ; Preserve the window center and account for the native caption/frame.
+  System::Alloc 16
+  Pop $0
+  System::Call 'user32::GetWindowRect(p $HWNDPARENT, p r0)'
+  System::Call '*$0(i.r1, i.r2, i.r3, i.r4)'
+  IntOp $R8 $3 - $1
+  IntOp $R9 $4 - $2
+  System::Call 'user32::GetClientRect(p $HWNDPARENT, p r0)'
+  System::Call '*$0(i, i, i.R1, i.R2)'
+  System::Free $0
+  IntOp $R6 $R8 - $R1
+  IntOp $R7 $R9 - $R2
+  System::Call 'kernel32::MulDiv(i 690, i $LastBrowserInstallDpi, i 96) i.R1'
+  System::Call 'kernel32::MulDiv(i 530, i $LastBrowserInstallDpi, i 96) i.R2'
+  IntOp $R1 $R1 + $R6
+  IntOp $R2 $R2 + $R7
+  IntOp $R3 $R8 - $R1
   IntOp $R3 $R3 / 2
+  IntOp $R3 $1 + $R3
+  IntOp $R4 $R9 - $R2
+  IntOp $R4 $R4 / 2
+  IntOp $R4 $2 + $R4
+  ${If} $R3 < 0
+    StrCpy $R3 0
+  ${EndIf}
+  ${If} $R4 < 0
+    StrCpy $R4 0
+  ${EndIf}
+  !insertmacro LB_MOVE $HWNDPARENT $R3 $R4 $R1 $R2
+  !insertmacro LB_MOVE_DESIGN $LastBrowserInstallDialog 0 0 690 464
+  StrCpy $R3 140
+  StrCpy $R6 410
 
   GetDlgItem $R4 $LastBrowserInstallDialog ${LB_INSTALL_NOVA_ID}
   ${If} $R4 == 0
-    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "", i 0x5000020E, i 0, i 0, i 72, i 72, p $LastBrowserInstallDialog, p ${LB_INSTALL_NOVA_ID}, p 0, p 0) p .R4'
-    ${NSD_SetBitmap} $R4 "$PLUGINSDIR\installerNova.bmp" $LastBrowserInstallNovaBitmap
+    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "", i 0x5000020E, i 0, i 0, i 100, i 100, p $LastBrowserInstallDialog, p ${LB_INSTALL_NOVA_ID}, p 0, p 0) p .R4'
   ${EndIf}
-  IntOp $R7 $R0 - 36
-  !insertmacro LB_MOVE $R4 $R7 2 72 72
+  !insertmacro LB_MOVE_DESIGN $R4 295 26 100 100
+  ${NSD_SetStretchedImage} $R4 "$PLUGINSDIR\installerNova.bmp" $LastBrowserInstallNovaBitmap
 
   !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_EYEBROW_ID} "WILLKOMMEN BEI LASTBROWSER" $LastBrowserInstallEyebrowFont 8 600 "53657C"
-  !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_HEADLINE_ID} "Dein neuer Arbeitsplatz ist gleich da." $LastBrowserInstallHeadlineFont 14 700 "182B43"
-  !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_DESCRIPTION_ID} "Wir bereiten deinen Browser vor. Den Rest bestimmst du beim ersten Start." $LastBrowserInstallDescriptionFont 9 400 "53657C"
-  !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_PRIVACY_ID} "Lokal auf deinem Rechner" $LastBrowserInstallPrivacyFont 9 400 "53657C"
+  !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_HEADLINE_ID} "Dein neuer Arbeitsplatz$\r$\nist gleich da." $LastBrowserInstallHeadlineFont 21 600 "182B43"
+  !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_DESCRIPTION_ID} "Wir bereiten deinen Browser vor.$\r$\nDen Rest bestimmst du beim ersten Start." $LastBrowserInstallDescriptionFont 10 400 "53657C"
+  !insertmacro LB_CREATE_CENTERED_LABEL ${LB_INSTALL_PRIVACY_ID} "Lokal auf deinem Rechner" $LastBrowserInstallPrivacyFont 8 400 "53657C"
 
   GetDlgItem $0 $LastBrowserInstallDialog ${LB_INSTALL_EYEBROW_ID}
-  !insertmacro LB_MOVE $0 $R3 79 $R6 12
+  !insertmacro LB_MOVE_DESIGN $0 $R3 146 $R6 18
   GetDlgItem $0 $LastBrowserInstallDialog ${LB_INSTALL_HEADLINE_ID}
-  !insertmacro LB_MOVE $0 $R3 95 $R6 24
+  !insertmacro LB_MOVE_DESIGN $0 $R3 175 $R6 70
   GetDlgItem $0 $LastBrowserInstallDialog ${LB_INSTALL_DESCRIPTION_ID}
-  !insertmacro LB_MOVE $0 $R3 122 $R6 25
+  !insertmacro LB_MOVE_DESIGN $0 125 258 440 44
   GetDlgItem $0 $LastBrowserInstallDialog ${LB_INSTALL_PRIVACY_ID}
-  !insertmacro LB_MOVE $0 $R3 184 $R6 16
+  !insertmacro LB_MOVE_DESIGN $0 $R3 377 $R6 18
 
-  ; Keep the native per-file status, progress, expandable detail log, and cancel behavior.
-  !insertmacro LB_MOVE $LastBrowserInstallText $R3 152 $R6 16
-  ${If} $LastBrowserInstallPageStyled != "1"
-    System::Call 'user32::GetWindowLongW(p $LastBrowserInstallText, i -16) i.r0'
-    IntOp $R0 $0 & 0xFFFFFFFC
-    IntOp $R0 $R0 | 1
-    System::Call 'user32::SetWindowLongW(p $LastBrowserInstallText, i -16, i $R0) i.r0'
-    SetCtlColors $LastBrowserInstallText "182B43" "F7F9FC"
-    StrCpy $LastBrowserInstallPageStyled "1"
-  ${EndIf}
-  !insertmacro LB_MOVE $LastBrowserInstallProgressBar $R3 171 $R6 9
-  ; Windows visual styles ignore PBM_SETBARCOLOR; disable them only for this bar.
+  ; Native engine progress stays authoritative. No simulated percentages.
+  !insertmacro LB_MOVE_DESIGN $LastBrowserInstallText 150 325 390 18
+  SendMessage $LastBrowserInstallText ${WM_SETTEXT} 0 "STR:Lastbrowser installieren"
+  SendMessage $LastBrowserInstallText ${WM_SETFONT} $LastBrowserInstallDescriptionFont 1
+  SetCtlColors $LastBrowserInstallText "182B43" "FAFCFF"
+  !insertmacro LB_MOVE_DESIGN $LastBrowserInstallProgressBar 150 352 390 7
   System::Call 'uxtheme::SetWindowTheme(p $LastBrowserInstallProgressBar, w "", w "")'
-  SendMessage $LastBrowserInstallProgressBar ${PBM_SETBARCOLOR} 0 0x00FFD900
-  SendMessage $LastBrowserInstallProgressBar ${PBM_SETBKCOLOR} 0 0x00EAE2DD
-  !insertmacro LB_MOVE $LastBrowserInstallShowLogButton $R3 202 $R6 18
+  SendMessage $LastBrowserInstallProgressBar ${PBM_SETBARCOLOR} 0 0x00DBBD00
+  SendMessage $LastBrowserInstallProgressBar ${PBM_SETBKCOLOR} 0 0x00F8EFE9
+  !insertmacro LB_MOVE_DESIGN $LastBrowserInstallShowLogButton 270 406 150 28
   SendMessage $LastBrowserInstallShowLogButton ${WM_SETTEXT} 0 "STR:Details anzeigen"
-  IntOp $R5 $R9 - 222
-  ${If} $R5 < 18
-    StrCpy $R5 18
-  ${EndIf}
-  !insertmacro LB_MOVE $LastBrowserInstallLog $R3 222 $R6 $R5
+  SendMessage $LastBrowserInstallShowLogButton ${WM_SETFONT} $LastBrowserInstallDescriptionFont 1
+  ShowWindow $LastBrowserInstallShowLogButton ${SW_SHOW}
+  !insertmacro LB_MOVE_DESIGN $LastBrowserInstallLog 125 322 440 123
+  System::Call 'user32::SetWindowPos(p $LastBrowserInstallLog, p 0, i 0, i 0, i 0, i 0, i 0x13)'
 
-  ; Use the existing MUI footer buttons, with a concise localized action label.
+  ; A dedicated footer avoids the old empty back button and duplicated branding.
   SendMessage $LastBrowserInstallButtonCancel ${WM_SETTEXT} 0 "STR:Abbrechen"
-  SendMessage $LastBrowserInstallButtonNext ${WM_SETTEXT} 0 "STR:Startklar"
-  ShowWindow $LastBrowserInstallButtonBack ${SW_HIDE}
-  System::Alloc 16
-  Pop $0
-  System::Call 'user32::GetClientRect(p $HWNDPARENT, p r0)'
-  System::Call '*$0(i, i, i.r1, i.r2)'
-  System::Free $0
-  IntOp $R4 $1 - 180
-  IntOp $R5 $2 - 34
-  !insertmacro LB_MOVE $LastBrowserInstallButtonCancel $R4 $R5 78 23
-  IntOp $R4 $R4 + 88
-  !insertmacro LB_MOVE $LastBrowserInstallButtonNext $R4 $R5 88 23
-  ; The native branding background contains another copy of the version text.
-  ; Hide both instead of painting a second footer label over it.
-  ShowWindow $LastBrowserInstallBrandingText ${SW_HIDE}
-  ShowWindow $LastBrowserInstallBrandingBackground ${SW_HIDE}
-
+  SendMessage $LastBrowserInstallButtonNext ${WM_SETTEXT} 0 "STR:Fertigstellen"
+  !insertmacro LB_MOVE $LastBrowserInstallButtonBack -300 -300 1 1
+  !insertmacro LB_MOVE_DESIGN $LastBrowserInstallButtonCancel 440 482 104 34
+  !insertmacro LB_MOVE_DESIGN $LastBrowserInstallButtonNext 554 482 116 34
+  GetDlgItem $R4 $HWNDPARENT 5751
+  ${If} $R4 == 0
+    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "${VERSION}", i 0x50000000, i 0, i 0, i 10, i 10, p $HWNDPARENT, p 5751, p 0, p 0) p .R4'
+    CreateFont $LastBrowserInstallFooterFont "Segoe UI" 8 400
+    SendMessage $R4 ${WM_SETFONT} $LastBrowserInstallFooterFont 1
+    SetCtlColors $R4 "53657C" "FAFCFF"
+  ${EndIf}
+  !insertmacro LB_MOVE_DESIGN $R4 20 490 190 18
+  GetDlgItem $R4 $HWNDPARENT 5752
+  ${If} $R4 == 0
+    System::Call 'user32::CreateWindowExW(i 0, w "STATIC", w "", i 0x50000000, i 0, i 0, i 10, i 1, p $HWNDPARENT, p 5752, p 0, p 0) p .R4'
+    SetCtlColors $R4 "DBE4EE" "DBE4EE"
+  ${EndIf}
+  !insertmacro LB_MOVE_DESIGN $R4 0 464 690 1
   Pop $R9
   Pop $R8
   Pop $R7

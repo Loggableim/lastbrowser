@@ -9,7 +9,7 @@ import copy
 import hashlib
 import threading
 import time
-from concurrent.futures import Future
+from concurrent.futures import Future, ThreadPoolExecutor, TimeoutError
 from typing import Any
 
 from .contracts import PermissionScope, ProviderSelection, Scope, canonical_json
@@ -28,8 +28,15 @@ NATIVE_AVAILABILITY_REASONS = frozenset({
     "independent_unsupported", "context_missing", "cloud_denied", "binding_mismatch",
 })
 
-_CATALOG_REUSE_SECONDS = 5.0
+# Reuse a recent, exact profile/Space discovery receipt across composing and
+# sending a message. Five seconds forced another all-provider subprocess for
+# nearly every human turn. Every reuse still revalidates binding revision,
+# provider configuration, credential bytes, evidence and Space configuration;
+# call-time policy/connection admission remains separate and mandatory.
+_CATALOG_REUSE_SECONDS = 120.0
 _CATALOG_SETUP_LOCK = threading.Lock()
+_CATALOG_PROBE_SLOTS = threading.BoundedSemaphore(16)
+_CATALOG_PROBE_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="native-catalog")
 
 
 def _catalog_cache_state(manager):
@@ -234,9 +241,11 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
     return {"groups": groups, "providers": providers}
 
 
-def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=True) -> dict:
+def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=True, cancel_check=None) -> dict:
     """Reuse only a recent receipt for this exact binding and credential state."""
     from .capabilities import evidence_digest
+    if cancel_check is not None:
+        cancel_check()
     resolved = resolved or manager.resolver.resolve(scope)
     selection, digest = provider_selection(resolved)
     space_state = _catalog_space_state(resolved)
@@ -259,34 +268,67 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
         _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
         from runtime.local_ai.store_provider_host import with_store_catalog
         return with_store_catalog(cached, scope, resolved.profile.name)
-    if not owner:
-        result = copy.deepcopy(pending.result())
-        _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
-        from runtime.local_ai.store_provider_host import with_store_catalog
-        return with_store_catalog(result, scope, resolved.profile.name)
+    def discover():
+        # This discovery belongs to the exact shared receipt, not to one
+        # waiting chat. Stopping that chat must not kill another caller's
+        # catalog request, or permit unbounded background probe threads.
+        provider = selection or ProviderSelection(provider_config_ref=digest, model="__catalog__", provider="")
+        try:
+            context = manager.make_context(scope, provider, permissions=PermissionScope(allowed_effects=()), allow_virtual_for_catalog=True, interactive=True)
+            result = manager.run_interactive(context, {"mode": "model_catalog", "includeCapabilities": include_capabilities,
+                                                       "providerConfigurationDigest": digest})
+            _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
+            if not isinstance(result, dict) or result.get("providerConfigurationDigest") != digest or not isinstance(result.get("groups"), list):
+                raise PolicyDenied("invalid_model_catalog")
+            with lock:
+                cache[key] = (time.monotonic(), copy.deepcopy(result))
+                if len(cache) > 16:
+                    del cache[min(cache, key=lambda item: cache[item][0])]
+                inflight.pop(key, None)
+            pending.set_result(copy.deepcopy(result))
+        except BaseException as exc:
+            with lock:
+                inflight.pop(key, None)
+            pending.set_exception(exc)
 
-    provider = selection or ProviderSelection(provider_config_ref=digest, model="__catalog__", provider="")
-    try:
-        context = manager.make_context(scope, provider, permissions=PermissionScope(allowed_effects=()), allow_virtual_for_catalog=True, interactive=True)
-        result = manager.run_interactive(context, {"mode": "model_catalog", "includeCapabilities": include_capabilities,
-                                                   "providerConfigurationDigest": digest})
-        _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
-        if not isinstance(result, dict) or result.get("providerConfigurationDigest") != digest or not isinstance(result.get("groups"), list):
-            raise PolicyDenied("invalid_model_catalog")
-        with lock:
-            cache[key] = (time.monotonic(), copy.deepcopy(result))
-            if len(cache) > 16:
-                del cache[min(cache, key=lambda item: cache[item][0])]
-            inflight.pop(key, None)
-        from runtime.local_ai.store_provider_host import with_store_catalog
-        combined = with_store_catalog(result, scope, resolved.profile.name)
-        pending.set_result(copy.deepcopy(result))
-        return combined
-    except BaseException as exc:
-        with lock:
-            inflight.pop(key, None)
-        pending.set_exception(exc)
-        raise
+    if owner:
+        if cancel_check is None:
+            discover()
+        elif not _CATALOG_PROBE_SLOTS.acquire(blocking=False):
+            with lock:
+                inflight.pop(key, None)
+            pending.set_exception(PolicyDenied("native_catalog_capacity_reached"))
+        else:
+            def bounded_discover():
+                try:
+                    discover()
+                finally:
+                    _CATALOG_PROBE_SLOTS.release()
+            try:
+                _CATALOG_PROBE_POOL.submit(bounded_discover)
+            except RuntimeError as exc:
+                _CATALOG_PROBE_SLOTS.release()
+                with lock:
+                    inflight.pop(key, None)
+                pending.set_exception(exc)
+    if cancel_check is None:
+        result = pending.result()
+    else:
+        while True:
+            cancel_check()
+            try:
+                result = pending.result(timeout=0.1)
+                break
+            except TimeoutError:
+                if pending.done():
+                    # Completion can race the wait timeout. Read the actual
+                    # result; propagate only a discovery's own exception.
+                    result = pending.result()
+                    break
+        cancel_check()
+    _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
+    from runtime.local_ai.store_provider_host import with_store_catalog
+    return with_store_catalog(copy.deepcopy(result), scope, resolved.profile.name)
 
 
 def _choice(resolved, config):

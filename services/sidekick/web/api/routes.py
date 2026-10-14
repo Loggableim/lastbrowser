@@ -1760,6 +1760,18 @@ def _resolve_compatible_session_model_state(
         default_model = str(get_effective_default_model() or "").strip()
         return default_model, requested_provider, bool(default_model)
 
+    # A picker selection already names its provider. Never discover every
+    # connected provider (or silently replace this choice with the active
+    # default) on the acknowledgement path. The native worker still validates
+    # the exact scoped catalog, credentials, policy and connection digest
+    # before issuing any SDK request. Legacy unqualified choices retain the
+    # compatibility/catalog recovery below.
+    _bare_selected, selected_provider = _split_provider_qualified_model(model)
+    if requested_provider or selected_provider:
+        if requested_provider and selected_provider and requested_provider != selected_provider:
+            raise ValueError("Selected model belongs to a different provider")
+        return model, requested_provider or selected_provider, False
+
     try:
         provider_context = resolve_active_provider_context(include_runtime=False) or {}
     except Exception:
@@ -12192,7 +12204,8 @@ def _prepare_chat_start_session_for_stream(
 
 
 def _run_agent_streaming_with_native_writer(*args, native_chat_writer=None, native_chat_context=None,
-                                          native_chat_session=None, **kwargs):
+                                          native_chat_session=None, response_ready=None,
+                                          response_abandoned=None, **kwargs):
     """Retain the saved chat owner until all streaming cleanup has finished."""
     if native_chat_context is not None:
         native_start = time.monotonic()
@@ -12200,6 +12213,22 @@ def _run_agent_streaming_with_native_writer(*args, native_chat_writer=None, nati
         broker = None
         entered_worker = False
         try:
+            # No catalog subprocess, credential refresh or provider call may
+            # precede the accepted stream ACK. On bridge timeout, clean up the
+            # reserved native owner instead of producing an orphaned reply.
+            if response_ready is not None and not response_ready.wait(20.0):
+                raise RuntimeError("Chat acknowledgement was not delivered")
+            if response_abandoned is not None and response_abandoned.is_set():
+                raise RuntimeError("Chat acknowledgement was abandoned")
+            if (native_chat_context.selection_mode == "fixed" and not native_chat_context.teamwork
+                    and native_chat_context.provider_capture is None):
+                from runtime.independent.native_sdk_broker import capture_fixed_provider
+                from web.api.native_chats import bind_prelaunch_provider_capture, require_prelaunch_available
+                capture = capture_fixed_provider(native_chat_session,
+                    cancel_check=lambda: require_prelaunch_available(native_chat_context))
+                if response_abandoned is not None and response_abandoned.is_set():
+                    raise RuntimeError("Chat acknowledgement was abandoned")
+                native_chat_context = bind_prelaunch_provider_capture(native_chat_context, capture)
             local_short_chat = None
             if str(args[2] if len(args) > 2 else "").strip().lower() == "teamwork" or str(kwargs.get("mode") or "").strip().lower() == "teamwork":
                 from runtime.independent.native_teamwork import NativeTeamworkSessionBroker
@@ -12348,6 +12377,8 @@ def _start_chat_stream_for_session(
     reasoning_effort: str | None = None,
     supported_reasoning_efforts: list[str] | None = None,
     confirmed_chat_profile=None,
+    response_ready=None,
+    response_abandoned=None,
 ):
     """Persist pending state, register an SSE channel, and start an agent turn."""
     if getattr(s, "agent_slug", None) not in {None, "", "default"}:
@@ -12551,8 +12582,11 @@ def _start_chat_stream_for_session(
             from web.api.native_chats import register_native_chat
             native_context = capture_native_chat_context(s, stream_id, native_writer,
                 teamwork=(str(model or "").strip().lower() == "teamwork"
-                    or str(mode or "").strip().lower() == "teamwork"))
+                    or str(mode or "").strip().lower() == "teamwork"),
+                defer_provider_capture=True)
             register_native_chat(native_context)
+        if response_abandoned is not None and response_abandoned.is_set():
+            raise RuntimeError("Chat acknowledgement was abandoned")
         diag.stage("worker_thread_start") if diag else None
         thr = threading.Thread(
             target=_run_agent_streaming_with_native_writer,
@@ -12574,6 +12608,8 @@ def _start_chat_stream_for_session(
                 "native_chat_writer": native_writer,
                 "native_chat_context": native_context,
                 "native_chat_session": s if native_context is not None else None,
+                "response_ready": response_ready,
+                "response_abandoned": response_abandoned,
             },
             daemon=True,
         )
@@ -13511,7 +13547,7 @@ def _handle_chat_start(handler, body, diag=None):
                 requested_model,
                 requested_provider,
             )
-        provider_context = resolve_active_provider_context()
+        provider_context = resolve_active_provider_context(include_runtime=not bool(model_provider))
         if not model_provider and provider_context.get("provider"):
             model_provider = provider_context.get("provider")
         if not model and provider_context.get("model"):
@@ -13629,6 +13665,8 @@ def _handle_chat_start(handler, body, diag=None):
             grounding_context=grounding_context,
             reasoning_effort=reasoning_effort,
             supported_reasoning_efforts=supported_reasoning_efforts,
+            response_ready=getattr(handler, "headers_ready", None),
+            response_abandoned=getattr(handler, "response_abandoned", None),
         )
         status = int(response.pop("_status", 200) or 200)
         diag.stage("response_write") if diag else None

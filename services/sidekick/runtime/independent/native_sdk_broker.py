@@ -102,7 +102,8 @@ def resolve_explicit_account_id(profile_home, *, account_id: str | None = None,
     return matches[0]
 
 
-def capture_fixed_provider(session, *, profile_hub=None, service=None, account_id: str | None = None) -> NativeProviderCapture:
+def capture_fixed_provider(session, *, profile_hub=None, service=None, account_id: str | None = None,
+                           cancel_check=None) -> NativeProviderCapture:
     """Private Parent capture only, from the saved own chat and scoped catalog."""
     from web.api.model_policy import service_for_native_chat
     from .scoped_models import probe_catalog, _entry
@@ -136,7 +137,8 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
     if not model or not provider or (not native_sdk_supported(provider)
             and not (provider == "antigravity" and antigravity_binding is not None)):
         raise PolicyDenied("native_fixed_sdk_adapter_unavailable")
-    catalog = probe_catalog(service.manager, scope, resolved=resolved, include_capabilities=True)
+    catalog = probe_catalog(service.manager, scope, resolved=resolved, include_capabilities=True,
+                            cancel_check=cancel_check)
     group, entry = _entry(catalog, model, provider)
     if not group or group.get("configured") is not True or not entry or entry.get("supportsIndependent") is not True:
         raise PolicyDenied("native_fixed_model_not_in_bound_catalog")

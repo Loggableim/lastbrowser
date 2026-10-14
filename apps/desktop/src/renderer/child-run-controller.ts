@@ -43,7 +43,19 @@ export function reduceChildRunEvent(state: ChildRunState, event: ChildRunEvent):
     const { scope, parentSessionId, parentTurnId, subagentId, parentSubagentId, childSessionId, depth, model } = event;
     return { ...state, missing: { ...state.missing, [subagentId]: { scope, parentSessionId, parentTurnId, subagentId, parentSubagentId, childSessionId, depth, model } } };
   }
-  if (old.requiresResync || event.sequence !== old.snapshot.watermark + 1) return { ...state, children: { ...state.children, [event.subagentId]: { ...old, requiresResync: true } } };
+  if (old.requiresResync || event.sequence !== old.snapshot.watermark + 1) {
+    const nextStatus = typeof event.payload.status === 'string' ? event.payload.status as ChildRunStatus : undefined;
+    if (nextStatus && isTerminalChildRun(nextStatus)) {
+      const snapshot = {
+        ...old.snapshot,
+        status: nextStatus,
+        watermark: Math.max(old.snapshot.watermark, event.sequence),
+        observedAt: event.at
+      };
+      return { ...state, children: { ...state.children, [event.subagentId]: { ...limit(snapshot), requiresResync: false, truncated: old.truncated } } };
+    }
+    return { ...state, children: { ...state.children, [event.subagentId]: { ...old, requiresResync: true } } };
+  }
   if (isTerminalChildRun(old.snapshot.status)) return state;
   let snapshot = { ...old.snapshot, watermark: event.sequence, observedAt: event.at };
   let incomingTruncated = false;

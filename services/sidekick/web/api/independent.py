@@ -453,9 +453,64 @@ def local_ai_core_release_ready(manager,run_id):
     return host is None or stop_before_core_release(host,manager,run_id)
 
 
+def _model_store_operation(scope, actor, payload):
+    """Explicit scoped store actions never initialize the autonomous agent manager."""
+    global _local_ai_broker
+    from runtime.local_ai.model_store import get_store
+    from web.api.local_ai import LocalAiBroker
+    if set(payload)-{'request','cacheRoot','scanId'} or not isinstance(payload.get('request'),dict):
+        raise ValueError('model_store_envelope_invalid')
+    _,resolver=hub().by_scope(scope,actor)
+    resolver.resolve(scope,authenticated_profile_name=actor)
+    data=payload['request'];kind=data.get('operation')
+    fields={'view':{'operation'},'scan':{'operation'},'install':{'operation','modelId','requestId','licenseDigest'},
+        'importModel':{'operation','modelId','requestId','licenseDigest','sourcePath'},
+        'benchmark':{'operation','modelId','requestId','mode'},'cancel':{'operation','jobId'},
+        'activate':{'operation','modelId'},'remove':{'operation','modelId'},
+        'export':{'operation','receiptId'},'import':{'operation','receipt'},
+        'deleteHistory':{'operation','receiptId'},'chat':{'operation','text'},'stopChat':{'operation'},
+        'generate':{'operation','modelId','requestId','prompt','width','height','steps','seed'},
+        'readMedia':{'operation','jobId','assetId'},
+        'pickMediaInput':{'operation','modelId','kind','sourcePath','assetId'},'releaseMediaInput':{'operation','assetId'}}
+    optional={'benchmark':{'backend','referenceImageAssetId','audioAssetId'},'generate':{'frames','fps','referenceImageAssetId','audioAssetId'}}
+    if kind not in fields or not fields[kind]<=set(data) or set(data)-fields[kind]-optional.get(kind,set()):
+        raise ValueError('model_store_request_invalid')
+    for name in ('modelId','jobId','assetId','receiptId','requestId'):
+        if name in data and (not isinstance(data[name],str) or not 1<=len(data[name])<=256):raise ValueError('model_store_identity_invalid')
+    cache_root=_bind_main_local_ai_cache(payload.get('cacheRoot'))
+    with _LOCK:
+        if _local_ai_broker is None:_local_ai_broker=LocalAiBroker(Path(__file__).resolve().parents[4])
+        broker=_local_ai_broker
+    model_store=get_store(cache_root,scope,broker.repository_root)
+    model_store.authorize=lambda: hub().by_scope(scope,actor)[1].resolve(scope,authenticated_profile_name=actor)
+    if payload.get('scanId'):
+        model_store.bind_hardware(broker.scans.read(scope,payload['scanId']).hardware)
+    result=None
+    if kind in ('install','importModel','benchmark','generate'):result=model_store.start(data)
+    elif kind=='cancel':result=model_store.cancel(data['jobId'])
+    elif kind=='activate':model_store.activate(data['modelId'])
+    elif kind=='remove':model_store.remove(data['modelId'])
+    elif kind=='export':result=model_store.export(data['receiptId'])
+    elif kind=='import':result=model_store.import_receipt(data['receipt'])
+    elif kind=='deleteHistory':model_store.delete_receipt(data['receiptId'])
+    elif kind=='chat':result=model_store.chat(data['text'])
+    elif kind=='stopChat':model_store.stop_chat()
+    elif kind=='readMedia':result=model_store.read_media(data['jobId'],data['assetId'])
+    elif kind=='pickMediaInput':result=model_store.pick_input(data['modelId'],data['kind'],data['sourcePath'],data['assetId'])
+    elif kind=='releaseMediaInput':model_store.release_input(data['assetId'])
+    return {'schemaVersion':1,'scope':scope.model_dump(mode='json',by_alias=True),'kind':'model_store',
+            'operation':kind,'store':model_store.view(),'storeResult':result}
+
+
 def dispatch_operation(operation: str, request: OperationRequest, actor: str):
     global _local_ai_broker, _local_ai_bootstrap_manager
     payload = request.payload
+    if operation=='localAi.store':
+        scope=_scope(request)
+        hub().by_scope(scope,actor)
+        from runtime.local_ai.store_registry import load_registry
+        _,_,artifacts=load_registry()
+        if artifacts:return _model_store_operation(scope,actor,payload)
     if (operation == 'localAi.store' and isinstance(payload.get('request'), dict)
             and payload['request'].get('operation') in {'view', 'scan'}):
         # Catalog browsing needs no bundled engine, cache binding, stored runtime
@@ -478,10 +533,9 @@ def dispatch_operation(operation: str, request: OperationRequest, actor: str):
         return {'schemaVersion': 1, 'scope': scope.model_dump(mode='json', by_alias=True),
                 'kind': 'model_store', 'operation': payload['request']['operation'],
                 'store': readonly_catalog_view(hardware), 'storeResult': None}
-    # This release candidate deliberately excludes the bundled local model
-    # store and llama.cpp runtime until redistribution and package evidence are
-    # closed. Reject every execution/mutation operation before constructing managers,
-    # binding caches, reading runtime receipts, or reaching provider routes.
+    # Legacy bootstrap/background role paths retain their independent runtime
+    # evidence gates. The explicit user Store is handled above by the pinned
+    # registry, scoped consent, measured resources and device receipts.
     if operation in {
         'localAi.bootstrap', 'localAi.roleProfile', 'localAi.store',
         'localAi.setup', 'localAi.runtime', 'localAi.catalog', 'localAi.recommend',

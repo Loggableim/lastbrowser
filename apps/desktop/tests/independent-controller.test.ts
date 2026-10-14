@@ -45,6 +45,51 @@ afterEach(async () => { await controller.shutdown();
 const resolve = (extra: any = {}) => controller.request(event, { schemaVersion: 1, operation: 'resolveScope',
   payload: { workspacePath: workspace, browserProfileId: 'default', ...extra } });
 
+it('releases the current window media inputs outside the newly resolved Space immediately', async () => {
+  const release = vi.spyOn((controller as any).localAi, 'releaseStoreInputs');
+  await resolve();
+  expect(release).toHaveBeenCalledWith(event.sender, JSON.stringify([
+    scope.backendProfileId, scope.spaceId, scope.browserProfileId,
+  ]));
+});
+
+it('refreshes trusted local hardware before a native turn when Store text models are installed', async () => {
+  await resolve();
+  const scan = vi.spyOn((controller as any).localAi, 'request').mockResolvedValue({});
+  api.mockResolvedValue({ schemaVersion: 1, scope, localStoreInstalled: true });
+  await controller.prepareLocalModelsForTurn(event, scope);
+  expect(api).toHaveBeenCalledWith('modelSelection', scope, { action: 'get', includeCatalog: false }, 'default');
+  expect(scan).toHaveBeenCalledWith(expect.objectContaining({ scope, backendProfileName: 'default' }),
+    { action: 'store', request: { operation: 'scan' } }, expect.any(Function));
+});
+
+it('does not scan hardware for a native turn without installed Store models', async () => {
+  await resolve();
+  const scan = vi.spyOn((controller as any).localAi, 'request');
+  api.mockResolvedValue({ schemaVersion: 1, scope, localStoreInstalled: false });
+  await controller.prepareLocalModelsForTurn(event, scope);
+  expect(scan).not.toHaveBeenCalled();
+});
+
+it('rejects foreign local-model status before scanning any hardware', async () => {
+  await resolve();
+  const scan = vi.spyOn((controller as any).localAi, 'request');
+  api.mockResolvedValue({ schemaVersion: 1, scope: { ...scope, spaceId: 'foreign' }, localStoreInstalled: true });
+  await expect(controller.prepareLocalModelsForTurn(event, scope)).rejects.toThrow(/another Space/);
+  expect(scan).not.toHaveBeenCalled();
+});
+
+it('rechecks the trusted shell after local-model status before scanning', async () => {
+  await resolve();
+  const scan = vi.spyOn((controller as any).localAi, 'request');
+  api.mockImplementation(async () => {
+    event.senderFrame.url = 'https://foreign.invalid';
+    return { schemaVersion: 1, scope, localStoreInstalled: true };
+  });
+  await expect(controller.prepareLocalModelsForTurn(event, scope)).rejects.toThrow();
+  expect(scan).not.toHaveBeenCalled();
+});
+
 async function localAiFixture(hook?: (input: any) => Promise<void>) {
   await controller.shutdown();
   const scan = { schemaVersion: 1, scope, hardware: { schemaVersion: 1, scanId: 'actual-main-scan', observedAt: new Date().toISOString(),

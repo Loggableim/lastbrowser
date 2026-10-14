@@ -12,6 +12,7 @@
     "start:dev": "node electron-dev.mjs",
     "prepare:python": "node scripts/prepare-python-runtime.mjs",
     "prepare:python:online": "node scripts/prepare-python-runtime.mjs --online",
+    "prepare:local-model-engines": "node scripts/prepare-local-model-engines.mjs",
     "build:installer-assets": "python scripts/generate-installer-assets.py",
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json && node scripts/build-preload.mjs",
@@ -77,6 +78,11 @@
       "node_modules/node-pty/**/*"
     ],
     "extraResources": [
+      {
+        "from": "runtime/local-ai",
+        "to": "apps/desktop/runtime/local-ai",
+        "filter": ["**/*", "!**/*.partial"]
+      },
       {
         "from": "../../services",
         "to": "services",

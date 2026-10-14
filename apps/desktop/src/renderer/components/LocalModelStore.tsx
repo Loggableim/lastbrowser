@@ -1,10 +1,12 @@
 import React,{useEffect,useId,useLayoutEffect,useRef,useState} from 'react';
 import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, Cpu, Database, Film, HardDrive, Image as ImageIcon, Loader2, MessageSquare, Monitor, Search, ShieldCheck, SlidersHorizontal } from 'lucide-react';
-import { assessStoreGpuEstimate, filterStoreModels, formatStoreBytes, formatStoreGiBRange, storeEmptyState, storeModelCategory, storeModelStatus, storeSourceUrl, summarizeStoreHardware } from './model-store-presentation.js';
+import { assessStoreGpuEstimate, filterStoreModels, formatStoreBytes, formatStoreGiBRange, storeEmptyState, storeHardwareRecommendation, storeModelCategory, storeModelStatus, storeSourceUrl, summarizeStoreHardware } from './model-store-presentation.js';
 import type {IndependentAssistantClient} from '../independent-assistant-client.js';
 import {newIndependentRequestId,type IndependentScope} from '../independent-contracts.js';
 import type {ModelStoreRequest,StoreView,StoreModel} from '../model-store-contracts.js';
 import './local-model-store.css';
+import { storeConsentKey, storeExecutionLabel, storeJobLabel, storeModelActions } from './model-store-actions.js';
+import { LocalModelMediaForm, LocalModelMediaResult } from './LocalModelMedia.js';
 
 const bytes = formatStoreBytes;
 const active=(s:string)=>['pending','running','downloading','verifying','stopping'].includes(s);
@@ -24,6 +26,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   const [showLarge,setShowLarge]=useState(false),[showUnknown,setShowUnknown]=useState(false),[query,setQuery]=useState(''),[publisher,setPublisher]=useState('');
   const [category,setCategory]=useState<'text'|'image'|'video'>('text');
   const [detail,setDetail]=useState<string|null>(null),[consent,setConsent]=useState(''),[mode,setMode]=useState<'quick'|'standard'>('quick');
+  const [benchmarkBackend,setBenchmarkBackend]=useState<'cpu'|'vulkan'>('cpu');
   const [chatText,setChatText]=useState(''),[chatResult,setChatResult]=useState(''),[chatBusy,setChatBusy]=useState(false),[receipt,setReceipt]=useState<unknown>(null);
   const mounted=useRef(true),generation=useRef(0),inFlight=useRef(false),importInput=useRef<HTMLInputElement>(null);
   const scopeKey=JSON.stringify(scope);
@@ -62,12 +65,16 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     return()=>window.clearInterval(timer);
   },[running,scopeKey]);
   const models=view?.models??[],selected=models.find(m=>m.id===detail),chosen=models.find(m=>m.active);
+  const selectedActions = selected ? storeModelActions(selected, !!view?.readOnly) : null;
+  const chosenActions = chosen ? storeModelActions(chosen, !!view?.readOnly) : null;
+  const benchmarkBackends: Array<'cpu'|'vulkan'> = selected?.execution?.availableBackends ?? ['cpu'];
+  const effectiveBenchmarkBackend = benchmarkBackends.includes(benchmarkBackend) ? benchmarkBackend : benchmarkBackends[0] ?? 'cpu';
   const filters = { query, publisher, showLarge, showUnknown, category };
   const visible = filterStoreModels(models, filters,view?.hardware)
     .sort((a,b) => Number(!!b.installed)-Number(!!a.installed) || Number(!!b.curation?.priority)-Number(!!a.curation?.priority) || a.name.localeCompare(b.name,'de'));
   const hardware = summarizeStoreHardware(view?.hardware);
   const emptyState = storeEmptyState(models, filters, view?.hardware);
-  const suitableCount = models.filter(model => assessStoreGpuEstimate(model,view?.hardware)==='within').length;
+  const suitableCount = models.filter(model => storeHardwareRecommendation(model,view?.hardware).fit==='within').length;
   const scanPending = pendingOperation === 'scan';
   const hardwareStale = models.some(model => model.eligibility.reasons.includes('hardware_scan_stale'));
   useLayoutEffect(() => {
@@ -79,6 +86,18 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     }
   }, [detail]);
   function closeDetails() { restoreFocus.current=true;setDetail(null);setConsent(''); }
+  useEffect(() => { setBenchmarkBackend('cpu'); }, [detail, scopeKey]);
+  async function sendLocalChat() {
+    if (chatBusy || !chosenActions?.execute || chosenActions.kind !== 'text' || !chatText.trim()) return;
+    const epoch=generation.current, captured=scopeKey, text=chatText;
+    setChatBusy(true);
+    try {
+      const result=await request({operation:'chat',text});
+      if(mounted.current&&epoch===generation.current&&currentScopeKey.current===captured&&result&&typeof result==='object'&&'text'in result) {
+        setChatResult(String(result.text)); setChatText(current => current===text?'':current);
+      }
+    } finally { if(mounted.current&&epoch===generation.current&&currentScopeKey.current===captured)setChatBusy(false); }
+  }
   function showAllModels() { setQuery('');setPublisher('');setShowUnknown(true);setShowLarge(true); }
   async function downloadExport(id:string){
     const result=await request({operation:'export',receiptId:id});if(!result)return;
@@ -91,7 +110,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   }
   function card(model:StoreModel){
     const curated=model.curation;
-    const fit=assessStoreGpuEstimate(model,view?.hardware);
+    const recommendation=storeHardwareRecommendation(model,view?.hardware),fit=recommendation.fit;
     return <article className="local-model-card" key={model.id} data-model-id={model.id}>
       <button className="local-model-card-open" type="button" data-open-model={model.id}
         aria-label={`${model.name}: Details ansehen`} onClick={()=>{openerRef.current=model.id;setDetail(model.id);setConsent('');}}>
@@ -104,9 +123,9 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
         <span className="local-model-card-states">
           <span className={`local-model-status status-${model.active || model.deviceConfirmed?'confirmed':model.eligibility.state}`}>
             {(model.active || model.deviceConfirmed) && <CheckCircle2 size={12} aria-hidden="true"/>}
-            {model.curated&&!model.installed&&!model.eligibility.allowed?'Nur entdecken':storeModelStatus(model)}</span>
+            {model.execution ? storeExecutionLabel(model) : model.curated&&!model.installed&&!model.eligibility.allowed?'Nur entdecken':storeModelStatus(model)}</span>
           {fit==='outside'&&<span className="local-model-fit">Über deiner Speicherklasse</span>}
-          {fit==='within'&&<span className="local-model-fit">Speicherklasse passt · Schätzung</span>}
+          {fit==='within'&&<span className="local-model-fit">{recommendation.placement==='cpu'?'Für Prozessor und freien Speicher geprüft':'Speicherklasse passt · Schätzung'}</span>}
         </span>
       </button>
     </article>;
@@ -173,7 +192,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
         <div><span className="local-model-eyebrow">{selected.publisher} · {storeModelCategory(selected)==='text'?'Text':storeModelCategory(selected)==='image'?'Bilder':'Video'}</span>
           <h3 id={detailTitleId}>{selected.name}</h3><p>{selected.description}</p></div></header>
       {!!error&&<p className="local-model-notice local-model-error" role="alert">{error}</p>}
-      <div className="local-model-detail-status"><span className="local-model-status">{storeModelStatus(selected)}</span>
+      <div className="local-model-detail-status"><span className="local-model-status">{storeExecutionLabel(selected)}</span>
         {selected.curation?.priority&&<span className="local-model-editorial">Redaktionell hervorgehoben</span>}</div>
 
       <div className="local-model-detail-layout">
@@ -220,34 +239,39 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
               {selected.downloadBytes!==null&&<div><dt>Konkreter Download</dt><dd>{bytes(selected.downloadBytes)}</dd></div>}
             </dl>
             <p className="local-model-catalog-note">{selected.curation?'Die RAM-Spanne enthält bereits System und Browser. ':''}{storeModelCategory(selected)==='text'?'VRAM-Schätzung: Text, 4K Kontext, eine Anfrage.':'Die Medien-Schätzung gilt für die in den Grenzen beschriebene Konfiguration.'} Für die Grafikkarte bleiben mindestens 25 % Reserve eingeplant.</p>
-            <p className="local-model-fit">{!hardware.scanned?'Hardware noch nicht geprüft':assessStoreGpuEstimate(selected,view?.hardware)==='outside'?'Außerhalb der erfassten Speicherklasse':assessStoreGpuEstimate(selected,view?.hardware)==='within'?'Speicherklasse passt zur Schätzung · Ausführung noch separat prüfen':'Keine ausreichenden Messwerte für eine Zuordnung'}</p>
+            <p className="local-model-fit">{storeHardwareRecommendation(selected,view?.hardware).placement==='cpu'?'Prozessor und freier Speicher wurden für diese Ausführung geprüft':!hardware.scanned?'Hardware noch nicht geprüft':assessStoreGpuEstimate(selected,view?.hardware)==='outside'?'Außerhalb der erfassten Speicherklasse':assessStoreGpuEstimate(selected,view?.hardware)==='within'?'Speicherklasse passt zur Schätzung · Ausführung noch separat prüfen':'Keine ausreichenden Messwerte für eine Zuordnung'}</p>
           </section>
 
           <section className="local-model-detail-section local-model-install-panel"><h4>{selected.installed?'Deine Installation':'Auf diesem PC nutzen'}</h4>
-            {!selected.installed&&(!selected.installQualified||!selected.licenseDigest)&&<p className="local-model-notice">Zum Entdecken verfügbar. Ein geprüfter Download und die passende LastBrowser-Ausführung sind noch nicht freigegeben.</p>}
-            {selected.eligibility.reasons.length>0&&<details className="local-model-advanced"><summary>Was noch fehlt<ChevronDown size={14} aria-hidden="true"/></summary><ul>{selected.eligibility.reasons.map(reason=><li key={reason}>{reasons[reason] || reason}</li>)}</ul></details>}
-            {!view?.readOnly&&!selected.installed&&selected.installQualified&&selected.licenseDigest&&<>
-              <label><input type="checkbox" checked={consent===selected.id} onChange={event=>setConsent(event.target.checked?selected.id:'')}/>Herausgeber-Lizenz akzeptieren</label>
-              <button className="local-model-primary" type="button" disabled={!ready||busy||running||!selected.eligibility.allowed||consent!==selected.id}
+            {!selected.installed&&!selectedActions?.download&&<p className="local-model-notice">Zum Entdecken verfügbar. Für die Installation müssen Download, Lizenz und verfügbare Ausführung bestätigt sein.</p>}
+            {!!selectedActions?.reasons.length&&<details className="local-model-advanced"><summary>Was noch fehlt<ChevronDown size={14} aria-hidden="true"/></summary><ul>{selectedActions.reasons.map(reason=><li key={reason}>{reasons[reason] || reason}</li>)}</ul></details>}
+            {selectedActions?.download&&selected.licenseDigest&&<>
+              <label><input type="checkbox" checked={consent===storeConsentKey(selected)} onChange={event=>setConsent(event.target.checked?storeConsentKey(selected):'')}/>Herausgeber-Lizenz akzeptieren</label>
+              <button className="local-model-primary" type="button" disabled={!ready||busy||running||consent!==storeConsentKey(selected)}
                 onClick={()=>void request({operation:'install',modelId:selected.id,licenseDigest:selected.licenseDigest!,requestId:newIndependentRequestId()})}>Installieren · {bytes(selected.downloadBytes)}</button>
-              <button type="button" disabled={!ready||busy||running||!selected.eligibility.allowed||consent!==selected.id}
+              <button type="button" disabled={!ready||busy||running||consent!==storeConsentKey(selected)}
                 onClick={()=>void request({operation:'importModel',modelId:selected.id,licenseDigest:selected.licenseDigest!,requestId:newIndependentRequestId()})}>Vorhandene gepinnte GGUF importieren</button>
             </>}
             {selected.installed&&<>
-              <label>Benchmark<select value={mode} onChange={event=>setMode(event.target.value as 'quick'|'standard')}><option value="quick">Kurztest: 6 Aufgaben</option><option value="standard">Standard: 16 Aufgaben × 3</option></select></label>
-              <p className="local-model-catalog-note">{mode==='standard'?'Bis zu 144 Minuten Anfragebudget, zusätzlich Laden/Aufwärmen.':'Bis zu 4,5 Minuten Anfragebudget, zusätzlich Laden.'} 4K Kontext, 768 Ausgabetokens, seriell.</p>
-              <button type="button" disabled={!ready||busy||running||!selected.eligibility.allowed} onClick={()=>void request({operation:'benchmark',modelId:selected.id,mode,requestId:newIndependentRequestId()})}>Benchmark starten</button>
-              <button type="button" disabled={!ready||busy||running||!selected.deviceConfirmed||!selected.eligibility.allowed} onClick={()=>void request({operation:'activate',modelId:selected.id})}>Für lokalen Settings-Chat aktivieren</button>
+              <label>Gerätetest<select value={mode} onChange={event=>setMode(event.target.value as 'quick'|'standard')}><option value="quick">Kurztest</option><option value="standard">Ausführlicher Test</option></select></label>
+              {!!selected.execution?.availableBackends?.includes('vulkan')&&<label>Ausführen mit<select value={effectiveBenchmarkBackend} onChange={event=>setBenchmarkBackend(event.target.value as 'cpu'|'vulkan')}>{benchmarkBackends.map(backend=><option key={backend} value={backend}>{backend==='cpu'?'Prozessor':'Grafikkarte'}</option>)}</select></label>}
+              <p className="local-model-catalog-note">Der Test prüft dieses Modell auf deinem PC. {selectedActions?.kind==='text'?'4K Kontext, eine Anfrage gleichzeitig.':'Nur die für dieses Modell freigegebene Bild- oder Videokonfiguration.'}</p>
+              {selected.execution?.media?.requiredInputs?.length ? <p>Wähle unten die benötigten Dateien aus und starte damit den Gerätetest.</p> : <button type="button" disabled={!ready||busy||running||!selectedActions?.benchmark} onClick={()=>void request({operation:'benchmark',modelId:selected.id,mode,backend:effectiveBenchmarkBackend,requestId:newIndependentRequestId()})}>Auf diesem PC testen</button>}
+              {selectedActions?.kind==='text'&&<button type="button" disabled={!ready||busy||running||!selectedActions.activate} onClick={()=>void request({operation:'activate',modelId:selected.id})}>Für lokalen Chat aktivieren</button>}
               <button type="button" disabled={!ready||busy||running} onClick={()=>void request({operation:'remove',modelId:selected.id})}>Eigene Installation entfernen</button>
             </>}
+            {selected.installed&&selectedActions?.kind!=='text'&&(selectedActions?.execute||selectedActions?.benchmark)&&<LocalModelMediaForm key={JSON.stringify([scopeKey,selected.id,selected.revision,selected.execution?.engineId,selected.execution?.media])}
+              model={selected} request={request} disabled={!ready||busy||running} canGenerate={selectedActions.execute}
+              canBenchmark={!!selected.execution?.media?.requiredInputs?.length&&selectedActions.benchmark} benchmarkMode={mode} backend={effectiveBenchmarkBackend}/>}
           </section>
         </aside>
       </div>
     </section>}
-    {!!view?.jobs.length&&<section className="local-model-jobs"><h4>Aufträge</h4>{view.jobs.map(j=><article className="local-model-job" key={j.id}><p>{models.find(model=>model.id===j.modelId)?.name??j.modelId}: {j.state} · {j.operation==='install'?bytes(j.downloadedBytes):`${j.progress}/${j.total}`} {j.error??''}</p>
+    {!!view?.jobs.length&&<section className="local-model-jobs"><h4>Aufträge</h4>{view.jobs.map(j=><article className="local-model-job" key={j.id}><p>{models.find(model=>model.id===j.modelId)?.name??j.modelId}: {storeJobLabel(j.state)} · {j.operation==='install'?bytes(j.downloadedBytes):`${j.progress}/${j.total}`} {j.error??''}</p>
       {active(j.state)&&<progress aria-label={`Fortschritt ${j.modelId}`} value={j.operation==='install'?(models.find(model=>model.id===j.modelId)?.downloadBytes?j.downloadedBytes:undefined):(j.total>0?j.progress:undefined)} max={j.operation==='install'?(models.find(model=>model.id===j.modelId)?.downloadBytes??undefined):(j.total>0?j.total:undefined)}/>}
 
-      {active(j.state)&&<button type="button" onClick={()=>void request({operation:'cancel',jobId:j.id})}>Stoppen</button>}</article>)}</section>}
+      {active(j.state)&&<button type="button" onClick={()=>void request({operation:'cancel',jobId:j.id})}>Stoppen</button>}
+      {!!j.result?.assets.length&&<LocalModelMediaResult key={`${scopeKey}:${j.id}`} job={j} request={request}/>}</article>)}</section>}
     {!view?.readOnly&&<details className="local-model-results" open={Boolean(view?.history.length)}><summary>Ergebnisse und Vergleich <span>{view?.history.length??0} Läufe</span><ChevronDown size={15} aria-hidden="true"/></summary><div className="local-model-results-body"><p>Benchmarks verwenden synthetische Aufgaben und führen keine Tools aus.</p><button type="button" onClick={()=>importInput.current?.click()}>Ergebnisse importieren</button>
       <input ref={importInput} hidden type="file" accept="application/json,.json" onChange={e=>{const file=e.target.files?.[0];if(file)void importFile(file);e.target.value='';}}/>
       <div className="local-model-comparison"><table><thead><tr><th>Modell / Lauf</th><th>Inhalt</th><th>Format</th><th>Technik</th><th>Median</th><th>Empfehlung</th><th>Aktionen</th></tr></thead>
@@ -259,9 +283,9 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
       {receipt!==null&&<details open><summary>Unveränderte Antworten und Bewertung</summary><pre>{JSON.stringify(receipt,null,2)}</pre><button type="button" onClick={()=>setReceipt(null)}>Schließen</button></details>}
       <p>Importe bestätigen diesen PC nicht. Keine automatische Agentenfreigabe. Tokens/s, erster sichtbarer Token und Speicherpeak bleiben ohne entsprechende Messung unbekannt.</p>
     </div></details>}
-    {chosen&&<section className="local-model-chat"><h4>Lokaler Settings-Chat · {chosen.name}</h4><p>Bewusst aktiviertes Modell, nur Text. Kein Cloud-Fallback und keine Tools. Die produktive AUTO-/Agentenrolle benötigt eigene Qualifikation.</p>
+    {chosen&&chosenActions?.kind==='text'&&<section className="local-model-chat"><h4>Lokaler Chat · {chosen.name}</h4><p>Deine Nachricht bleibt auf diesem PC. Es werden keine Cloud-Modelle oder Werkzeuge verwendet.</p>
       <textarea maxLength={8192} value={chatText} onChange={e=>setChatText(e.target.value)} aria-label="Lokale Nachricht"/>
-      <button type="button" disabled={chatBusy||!chatText.trim()} onClick={()=>{setChatBusy(true);void request({operation:'chat',text:chatText}).then(result=>{if(mounted.current&&result&&typeof result==='object'&&'text'in result)setChatResult(String(result.text));}).finally(()=>{if(mounted.current)setChatBusy(false);});}}>Senden</button>
+      <button type="button" disabled={!ready||chatBusy||!chosenActions.execute||!chatText.trim()} onClick={()=>void sendLocalChat()}>Senden</button>
       {chatBusy&&<button type="button" onClick={()=>void request({operation:'stopChat'})}>Stoppen</button>}<pre>{chatResult}</pre></section>}
     <details className="local-model-policy"><summary>Lizenz, Messgrenzen und lokale Ausführung <ChevronDown size={14} aria-hidden="true"/></summary><p>LastBrowser erhebt keine Lizenzgebühr nach Modellgröße. Installation und Ausführung hängen weiterhin von Herausgeberlizenz, Hardwareeignung und qualifizierter Runtime ab.</p><p>Größenbedarf gilt für konkrete Gewichte und 4K Kontext. Unbekannter GPU-Support ist keine VRAM-Empfehlung.</p></details>
   </section>;

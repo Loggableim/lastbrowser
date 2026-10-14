@@ -125,8 +125,11 @@ def test_native_memory_notes_are_scoped_untrusted_and_off_means_no_context(tmp_p
     assert memory.recall_native_memory(context, space, "Alpha") == ("", {"schema_version": 1, "sources": []})
 
 
-def test_catalog_dispatch_bypasses_managers_but_never_grants_mutations(monkeypatch):
+def test_empty_executable_registry_editorial_catalog_bypasses_managers_and_denies_mutations(monkeypatch):
     from web.api import independent
+    from runtime.local_ai import store_registry
+    # This is the editorial-only fallback, not the installed executable Store.
+    monkeypatch.setattr(store_registry, "load_registry", lambda: ("empty-test-registry", {}, {}))
     scope = Scope(backend_profile_id=str(uuid.uuid4()), space_id=str(uuid.uuid4()), browser_profile_id="browser-a")
     authorized = []
     monkeypatch.setattr(independent, "hub", lambda: SimpleNamespace(by_scope=lambda selected, actor: authorized.append((selected, actor))))
@@ -138,10 +141,11 @@ def test_catalog_dispatch_bypasses_managers_but_never_grants_mutations(monkeypat
         request = independent.OperationRequest(scope=scope, payload={"request": {"operation": action}, "cacheRoot": "ignored-main-cache"})
         response = independent.dispatch_operation("localAi.store", request, "default")
         assert response["store"]["readOnly"] is True and len(response["store"]["models"]) == 40
-    assert len(authorized) == 2
+    assert authorized == [(scope, "default")] * 4
     request = independent.OperationRequest(scope=scope, payload={"request": {"operation": "install", "modelId": "any-model"}})
     with pytest.raises(ValueError, match="local_ai_unavailable_in_test_build"):
         independent.dispatch_operation("localAi.store", request, "default")
+    assert authorized == [(scope, "default")] * 6
 
 
 def test_catalog_dispatch_rejects_foreign_profile_before_metadata_read(monkeypatch):

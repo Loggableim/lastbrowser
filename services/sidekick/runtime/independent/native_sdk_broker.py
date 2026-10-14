@@ -15,6 +15,16 @@ from .runner import provider_configuration_digest
 from .scope import same_path
 
 
+def _local_store_capture(store, model, backend=None, compute_owner=None):
+    if store is None:
+        raise PolicyDenied('native_local_store_unavailable')
+    value = store.provider_capability(model, agentic=True, backend=backend, compute_owner=compute_owner)
+    if value.get('state') != 'ready' or value.get('toolCallingQualified') is not True:
+        raise PolicyDenied('native_local_tool_quality_required')
+    from runtime.local_ai.store_provider_host import capture_from_capability
+    return capture_from_capability(value)
+
+
 def _resolve_authoritative_account_id(session, resolved, explicit_account_id: str | None = None) -> str | None:
     """Return only a caller-supplied account ID with trusted selection provenance.
 
@@ -125,7 +135,13 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
     if not group or group.get("configured") is not True or not entry or entry.get("supportsIndependent") is not True:
         raise PolicyDenied("native_fixed_model_not_in_bound_catalog")
     length = entry.get("contextLength")
-    if type(length) is not int or length < MINIMUM_CONTEXT_LENGTH:
+    local_runtime = None
+    if provider == 'local-store':
+        from runtime.local_ai.store_provider_host import scoped_store
+        local_runtime = _local_store_capture(scoped_store(scope, actor), model)
+        if length != local_runtime.context_tokens:
+            raise PolicyDenied('native_local_context_changed')
+    elif type(length) is not int or length < MINIMUM_CONTEXT_LENGTH:
         raise PolicyDenied("context_metadata_required")
     selected = ProviderSelection(provider=provider, model=model, provider_config_ref=catalog["providerConfigurationDigest"], context_length=length)
     capabilities = service.manager.capabilities
@@ -137,7 +153,7 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
         raise PolicyDenied("provider_connection_changed")
     current = service.store.get_permission_state(scope)
     return NativeProviderCapture(scope=scope, session_id=session.session_id, provider=selected,
-        antigravity_binding=antigravity_binding,
+        antigravity_binding=antigravity_binding, local_runtime=local_runtime,
         connection_bindings=refs, permission_revision=current["revision"], control_epoch=current["controlEpoch"],
         policy_revision=policy.revision, budget=policy.budget)
 
@@ -168,6 +184,9 @@ class NativeSdkSessionBroker(NativeAutoSessionBroker):
     required_selection_mode = "fixed"
 
     def __init__(self, context, session, *, profile_hub=None, call_authorizer=None, service=None, execution_policy=None):
+        self._local_store = self._local_prepared = None
+        self._local_leases = {}
+        self._local_cancel = threading.Event()
         capture = getattr(context, "provider_capture", None)
         if not isinstance(capture, NativeProviderCapture) or capture.scope != context.scope or capture.session_id != context.session_id:
             raise PolicyDenied("native_fixed_provider_capture_required")
@@ -204,6 +223,12 @@ class NativeSdkSessionBroker(NativeAutoSessionBroker):
         if getattr(self.service.manager, "_native_admissions_closed", False):
             raise PolicyDenied("native_chat_host_shutdown")
         verify_native_context(self.context)
+        if self.capture.local_runtime is not None:
+            from runtime.local_ai.store_provider_host import scoped_store
+            store = self._local_store or scoped_store(self.context.scope, self.context.profile_name)
+            owner = 'auto-provider:' + next(iter(self._local_leases)) if self._local_leases else None
+            if _local_store_capture(store, self.capture.provider.model, self.capture.local_runtime.backend, owner) != self.capture.local_runtime:
+                raise PolicyDenied('native_local_runtime_changed')
         if getattr(self.context, "provider_capture", None) != self.capture:
             raise PolicyDenied("native_fixed_capture_changed")
         if self.capture.provider.provider == "antigravity":
@@ -232,6 +257,39 @@ class NativeSdkSessionBroker(NativeAutoSessionBroker):
         self._validate()
 
     def __call__(self, context, method, payload):
+        if method == 'fixed_local_runtime':
+            with self._lock:
+                if context != self.context or payload != {} or self.capture.local_runtime is None:
+                    raise PolicyDenied('native_local_private_rpc_invalid')
+                self._validate()
+                if self._local_prepared is None:
+                    from runtime.local_ai.store_provider_host import scoped_store
+                    self._local_store = scoped_store(context.scope, context.profile_name)
+                    prepared, _ = self._local_store.prepare_provider_session(self.capture.provider.model,
+                        cancel=self._local_cancel, agentic=True, backend=self.capture.local_runtime.backend)
+                    self._local_prepared = prepared
+                return {'endpoint': f'http://127.0.0.1:{self._local_prepared.port}/v1',
+                        'credential': self._local_prepared.token}
+        if method == 'compute_acquire' and self.capture.local_runtime is not None:
+            with self._lock:
+                if context != self.context or set(payload) != {'claimId'} or self._local_prepared is None:
+                    raise PolicyDenied('native_local_prepared_session_required')
+                self._validate()
+                result = super().__call__(context, method, payload)
+                if result.get('acquired') is not True:
+                    return result
+                claim_id = payload['claimId']
+                try:
+                    lease = self._local_store.provider_session(self.capture.provider.model,
+                        cancel=self._local_cancel, agentic=True, backend=self.capture.local_runtime.backend,
+                        compute_owner='auto-provider:' + claim_id, prepared=self._local_prepared)
+                    lease.__enter__()
+                    self._local_leases[claim_id] = lease
+                    self._validate()
+                except BaseException:
+                    self._release(claim_id)
+                    raise
+                return result
         allowed = {"fixed_validate": "auto_validate", "fixed_claim": "auto_claim",
             "fixed_observe": "auto_observe", "fixed_usage": "auto_usage",
             "compute_acquire": "compute_acquire", "compute_release": "compute_release", "file_execute": "file_execute", "browser_execute": "browser_execute"}
@@ -248,11 +306,44 @@ class NativeSdkSessionBroker(NativeAutoSessionBroker):
                     "policy": policy.model_dump(mode="json", by_alias=True)}
         return super().__call__(context, allowed[method], payload)
 
+    def _release(self, claim_id):
+        lease = self._local_leases.get(claim_id)
+        if lease is not None:
+            # Throw a sentinel through the generator to skip post-turn work;
+            # its finally must confirm own-session exit before borrowed admission ends.
+            error = RuntimeError('native_local_request_finished')
+            lease.__exit__(RuntimeError, error, None)
+            self._local_leases.pop(claim_id, None)
+        super()._release(claim_id)
+
+    def request_stop(self, reason='cancel'):
+        self._local_cancel.set()
+        result = super().request_stop(reason)
+        if self._local_prepared is not None:
+            self._local_prepared.stop()
+        return result
+
 
 class NativeFixedSdkBridge(NativeAutoBridge):
     """The shared proven SDK wrapper; fixed native calls never select a model."""
     def _rpc_operation(self, operation):
         return "fixed_" + operation
+
+    def _compute_acquire(self, claim):
+        if self.context.provider_capture.local_runtime is None:
+            return super()._compute_acquire(claim)
+        result = self.rpc.call('compute_acquire', {'claimId': claim.claim_id}, timeout=60)
+        return isinstance(result, dict) and result.get('acquired') is True and result.get('authorized') is True
+
+    def close(self):
+        try:
+            super().close()
+        finally:
+            token = getattr(self, '_local_runtime_token', None)
+            if token is not None:
+                from runtime.local_ai.store_provider_host import reset_store_runtime
+                reset_store_runtime(token)
+                self._local_runtime_token = None
 
     def _require_private(self):
         if (os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") != "1" or os.getenv("LASTBROWSER_INDEPENDENT_WORKER") != "1"
@@ -279,6 +370,12 @@ class NativeFixedSdkBridge(NativeAutoBridge):
                 raise PolicyDenied("native_fixed_capture_changed")
             self.decision, self.policy = decision, SelectionPolicy.model_validate(result["policy"])
         self.validate_selection(values[2], options["model_provider"])
+        if capture.local_runtime is not None and getattr(self, '_local_runtime_token', None) is None:
+            from runtime.local_ai.store_provider_host import bind_store_runtime
+            connection = self.rpc.call('fixed_local_runtime', {})
+            if not isinstance(connection, dict) or set(connection) != {'endpoint', 'credential'}:
+                raise PolicyDenied('native_local_private_connection_invalid')
+            self._local_runtime_token = bind_store_runtime(self.context, connection['endpoint'], connection['credential'])
         return values, options
 
 

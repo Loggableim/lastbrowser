@@ -3602,21 +3602,34 @@ def _run_agent_streaming(
                 _session_db = SessionDB()
             except Exception as _db_err:
                 print(f"[webui] WARNING: SessionDB init failed — session_search will be unavailable: {_db_err}", flush=True)
-            resolved_model, resolved_provider, resolved_base_url = resolve_model_provider(
-                model_with_provider_context(model, provider_context)
-            )
+            if provider_context == 'local-store':
+                from runtime.local_ai.store_provider_host import private_store_connection
+                local_bridge = _bound_native_sdk_bridge()
+                local_capture = getattr(getattr(local_bridge, 'context', None), 'provider_capture', None)
+                if (local_capture is None or local_capture.local_runtime is None
+                        or local_capture.provider.model != model):
+                    raise PermissionError('native_local_provider_capture_required')
+                resolved_model, resolved_provider = model, 'local-store'
+                resolved_base_url, resolved_api_key = private_store_connection(local_bridge.context)
+            else:
+                resolved_model, resolved_provider, resolved_base_url = resolve_model_provider(
+                    model_with_provider_context(model, provider_context)
+                )
+                resolved_api_key = None
 
             # Resolve API key via Sidekick runtime provider (matches gateway behaviour).
             # Pass the resolved provider so non-default providers get their own credentials.
-            resolved_api_key = None
             try:
-                from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
-                from cli.runtime_provider import resolve_runtime_provider
-                _rt = resolve_runtime_provider_with_anthropic_env_lock(
-                    resolve_runtime_provider,
-                    requested=resolved_provider,
-                    target_model=resolved_model,
-                )
+                if resolved_provider == 'local-store':
+                    _rt = {'provider': resolved_provider, 'base_url': resolved_base_url, 'api_key': resolved_api_key}
+                else:
+                    from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
+                    from cli.runtime_provider import resolve_runtime_provider
+                    _rt = resolve_runtime_provider_with_anthropic_env_lock(
+                        resolve_runtime_provider,
+                        requested=resolved_provider,
+                        target_model=resolved_model,
+                    )
                 resolved_api_key = _rt.get("api_key")
                 _rt_provider = _rt.get("provider")
                 _rt_base_url = _rt.get("base_url")

@@ -7,6 +7,8 @@ def provider_deployment(provider_id, configuration=None, *, active_provider=None
     pid = str(provider_id or "").strip().lower().replace("_", "-").replace(" ", "-")
     if pid == "ollama-cloud":
         return "cloud"
+    if pid == 'local-store':
+        return 'local'  # Only the Parent-owned loopback engine implements this provider.
     config = configuration if isinstance(configuration, dict) else {}
     model = config.get("model") if isinstance(config.get("model"), dict) else {}
     active = str(active_provider or model.get("provider") or config.get("provider") or "").lower().replace("_", "-")

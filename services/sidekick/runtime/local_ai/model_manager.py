@@ -112,18 +112,31 @@ class LlamaCppSession:
         environment['LLAMA_API_KEY'] = self.token
         with self._process_lock:
             if cancel.is_set(): raise RuntimeError('model_start_cancelled')
-            self.job = _WindowsProbeJob(memory_limit_bytes=getattr(self, 'memory_limit_bytes', None)) if os.name == 'nt' else None
-            self.process = subprocess.Popen([str(self.binary), *self.arguments], cwd=self.binary.parent, env=environment,
-                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=self.stderr_target, shell=False,
-                creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0,
-                start_new_session=os.name != 'nt')
-            if self.stderr_target == subprocess.PIPE and self.process.stderr is not None:
-                self._stderr_reader = threading.Thread(target=self._drain_stderr, args=(self.process.stderr,),
-                    name='local-model-stderr-' + uuid.uuid4().hex[:8], daemon=True)
-                self._stderr_reader.start()
-            if self.job: self.job.assign(self.process)
-            callback = getattr(self, 'on_spawn', None)
-            if callback: callback(self.process.pid)
+            try:
+                job_options={'memory_limit_bytes':getattr(self,'memory_limit_bytes',None)}
+                if getattr(self,'production_budget',None) is not None:job_options['production_budget']=self.production_budget
+                self.job = _WindowsProbeJob(**job_options) if os.name == 'nt' else None
+                suspended = os.name == 'nt' and getattr(self, 'suspended_admission', False)
+                flags = subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0
+                if suspended:
+                    from .store_process import CREATE_SUSPENDED
+                    flags |= CREATE_SUSPENDED
+                self.process = subprocess.Popen([str(self.binary), *self.arguments], cwd=self.binary.parent, env=environment,
+                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=self.stderr_target, shell=False,
+                    creationflags=flags,start_new_session=os.name != 'nt')
+                if self.stderr_target == subprocess.PIPE and self.process.stderr is not None:
+                    self._stderr_reader = threading.Thread(target=self._drain_stderr, args=(self.process.stderr,),
+                        name='local-model-stderr-' + uuid.uuid4().hex[:8], daemon=True)
+                    self._stderr_reader.start()
+                if self.job: self.job.assign(self.process)
+                if suspended:
+                    from .store_process import resume_owned_suspended
+                    resume_owned_suspended(self.process)
+                callback = getattr(self, 'on_spawn', None)
+                if callback: callback(self.process.pid)
+            except BaseException:
+                self._stop_locked(2)
+                raise
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline and not cancel.is_set():
             exit_code = self.process.poll()

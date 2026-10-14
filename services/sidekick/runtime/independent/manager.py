@@ -39,12 +39,14 @@ class ComputeAdmission:
     _owners: dict[str, str] = {}
     _scope_claims: dict[str, frozenset[str]] = {}
     _native_child_families: dict[str, tuple[str, str, str, str]] = {}
+    _borrows: dict[str, dict[str,str]] = {}
+    _pending_release: set[str] = set()
 
     @classmethod
     def acquire(cls, run_id: str, scope: Scope, legacy_active_count: int = 0) -> bool:
         with cls._lock:
             if run_id in cls._owners:
-                return True
+                return cls._owners[run_id]==scope.key and run_id not in cls._pending_release
             if len(cls._owners) + legacy_active_count >= 2 or any(scope.key in keys for keys in cls._scope_claims.values()):
                 return False
             cls._owners[run_id] = scope.key
@@ -54,9 +56,43 @@ class ComputeAdmission:
     @classmethod
     def release(cls, run_id: str):
         with cls._lock:
-            cls._owners.pop(run_id, None)
-            cls._scope_claims.pop(run_id, None)
-            cls._native_child_families.pop(run_id, None)
+            if cls._borrows.get(run_id):
+                cls._pending_release.add(run_id)
+                return
+            cls._release_locked(run_id)
+
+    @classmethod
+    def _release_locked(cls,run_id):
+        cls._owners.pop(run_id,None);cls._scope_claims.pop(run_id,None)
+        cls._native_child_families.pop(run_id,None);cls._borrows.pop(run_id,None)
+        cls._pending_release.discard(run_id)
+
+    @classmethod
+    def borrow(cls,owner_key: str,scope: Scope) -> str:
+        """Internal captured owner only; not exposed as renderer authority."""
+        with cls._lock:
+            if (owner_key in cls._pending_release or cls._owners.get(owner_key)!=scope.key
+                    or cls._scope_claims.get(owner_key)!=frozenset((scope.key,))):
+                raise ResourceBusy('captured_compute_owner_invalid')
+            token=uuid.uuid4().hex
+            cls._borrows.setdefault(owner_key,{})[token]=scope.key
+            return token
+
+    @classmethod
+    def borrow_valid(cls,owner_key: str,token: str,scope: Scope) -> bool:
+        with cls._lock:
+            return (owner_key not in cls._pending_release and cls._owners.get(owner_key)==scope.key
+                    and cls._borrows.get(owner_key,{}).get(token)==scope.key)
+
+    @classmethod
+    def release_borrow(cls,owner_key: str,token: str,scope: Scope) -> bool:
+        with cls._lock:
+            if cls._borrows.get(owner_key,{}).get(token)!=scope.key:return False
+            cls._borrows[owner_key].pop(token)
+            if not cls._borrows[owner_key]:
+                cls._borrows.pop(owner_key,None)
+                if owner_key in cls._pending_release:cls._release_locked(owner_key)
+            return True
 
     @classmethod
     def acquire_native_child(cls, owner_key: str, *, scope_key: str,
@@ -73,7 +109,7 @@ class ComputeAdmission:
             return False
         with cls._lock:
             if owner_key in cls._owners:
-                return (cls._owners[owner_key] == scope_key
+                return (owner_key not in cls._pending_release and cls._owners[owner_key] == scope_key
                     and cls._native_child_families.get(owner_key) == family)
             if len(cls._owners) >= 2:
                 return False
@@ -94,7 +130,7 @@ class ComputeAdmission:
         """
         with cls._lock:
             if owner_key in cls._owners:
-                return True
+                return owner_key not in cls._pending_release
             requested = frozenset(scope_keys) | (frozenset((scope_key,)) if scope_key else frozenset())
             if len(cls._owners) >= 2 or any(requested & keys for keys in cls._scope_claims.values()):
                 return False

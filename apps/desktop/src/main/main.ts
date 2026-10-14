@@ -883,6 +883,7 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:saveDraft', async (event, request) => saveSessionDraft(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath') as { sessionId: string }));
   ipcMain.handle('lastbrowser:sidekick:startChat', async (event, request) => {
     const scoped = await boundChatRequest(event, request, 'workspace', true);
+    if (scoped.spaceScope) await independentController?.prepareLocalModelsForTurn(event, scoped.spaceScope);
     const captured = nativeChatStreams.beginCapture(event, scoped);
     const result = await startSidekickChat(requireWebuiUrl(), scoped as { message: string });
     await nativeChatStreams.captureStart(captured, result);
@@ -1125,7 +1126,11 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:sidekick:untimeoutDiscordMember', (_event, request) => untimeoutDiscordMember(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:unbanDiscordMember', (_event, request) => unbanDiscordMember(requireWebuiUrl(), request));
   ipcMain.handle('lastbrowser:sidekick:configureDiscord', (_event, request) => configureDiscord(requireWebuiUrl(), request));
-  ipcMain.handle('lastbrowser:sidekick:sendMessage', async (event, request) => sendSidekickMessage(requireWebuiUrl(), await boundChatRequest(event, request, 'workspace', true) as { message: string }));
+  ipcMain.handle('lastbrowser:sidekick:sendMessage', async (event, request) => {
+    const scoped = await boundChatRequest(event, request, 'workspace', true);
+    if (scoped.spaceScope) await independentController?.prepareLocalModelsForTurn(event, scoped.spaceScope);
+    return sendSidekickMessage(requireWebuiUrl(), scoped as { message: string });
+  });
   ipcMain.handle('lastbrowser:terminal:start', (_event, request) => {
     const webContents = _event.sender;
     const reqObj = typeof request === 'string' ? { cwd: request } : (request || {});

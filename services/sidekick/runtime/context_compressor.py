@@ -383,6 +383,13 @@ class ContextCompressor(ContextEngine):
         api_mode: str = "",
     ) -> None:
         """Update model info after a model switch or fallback activation."""
+        local_capture = getattr(self, '_native_local_runtime', None)
+        if local_capture is not None:
+            from runtime.local_ai.store_provider_host import get_bound_store_runtime
+            current = get_bound_store_runtime(model=model, provider=provider,
+                base_url=base_url, api_key=api_key)
+            if current != local_capture or context_length != local_capture.context_tokens:
+                raise PermissionError('local_runtime_context_changed')
         self.model = model
         self.base_url = base_url
         self.api_key = api_key
@@ -391,7 +398,7 @@ class ContextCompressor(ContextEngine):
         self.context_length = context_length
         self.threshold_tokens = max(
             int(context_length * self.threshold_percent),
-            MINIMUM_CONTEXT_LENGTH,
+            1 if local_capture is not None else MINIMUM_CONTEXT_LENGTH,
         )
         # Recalculate token budgets for the new context length so the
         # compressor stays calibrated after a model switch (e.g. 200K → 32K).
@@ -415,6 +422,7 @@ class ContextCompressor(ContextEngine):
         config_context_length: int | None = None,
         provider: str = "",
         api_mode: str = "",
+        native_local_runtime=None,
     ):
         self.model = model
         self.base_url = base_url
@@ -427,7 +435,16 @@ class ContextCompressor(ContextEngine):
         self.summary_target_ratio = max(0.10, min(summary_target_ratio, 0.80))
         self.quiet_mode = quiet_mode
 
-        self.context_length = get_model_context_length(
+        self._native_local_runtime = None
+        if native_local_runtime is not None:
+            from runtime.independent.native_provider_capture import NativeLocalRuntimeCapture
+            from runtime.local_ai.store_provider_host import get_bound_store_runtime
+            current = get_bound_store_runtime(model=model, provider=provider,
+                base_url=base_url, api_key=api_key)
+            if type(native_local_runtime) is not NativeLocalRuntimeCapture or current != native_local_runtime:
+                raise PermissionError('local_runtime_binding_required')
+            self._native_local_runtime = native_local_runtime
+        self.context_length = native_local_runtime.context_tokens if native_local_runtime is not None else get_model_context_length(
             model, base_url=base_url, api_key=api_key,
             config_context_length=config_context_length,
             provider=provider,
@@ -438,7 +455,7 @@ class ContextCompressor(ContextEngine):
         # for models right at the minimum.
         self.threshold_tokens = max(
             int(self.context_length * threshold_percent),
-            MINIMUM_CONTEXT_LENGTH,
+            1 if native_local_runtime is not None else MINIMUM_CONTEXT_LENGTH,
         )
         self.compression_count = 0
 

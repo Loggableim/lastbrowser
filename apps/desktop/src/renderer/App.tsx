@@ -1467,6 +1467,7 @@ function AppContent(): JSX.Element {
   const assistantSelectionRequestScopeRef = useRef<SessionListScope | null>(assistantSelectionRequestScope);
   const activeSessionListScopeRef = useRef<SessionListScope>({ profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName });
   const appliedSessionListScopeRef = useRef<SessionListScope | null>(null);
+  const removedSessionIdsRef = useRef(new Set<string>());
   const restoredGoalContinuationClaimsRef = useRef(new Set<string>());
   const restoredChatStreamClaimsRef = useRef(new Set<string>());
   activeProfileIdRef.current = activeProfileId;
@@ -2421,8 +2422,16 @@ function AppContent(): JSX.Element {
         requestedScope,
         sessionsRef.current,
         nextSessions,
-        activeSessionIdRef.current
+        activeSessionIdRef.current,
+        removedSessionIdsRef.current
       );
+      if (removedSessionIdsRef.current.size) {
+        const backendIds = new Set(nextSessions.map((entry) => entry.session_id));
+        for (const sessionId of removedSessionIdsRef.current) {
+          if (!backendIds.has(sessionId)) continue;
+          removedSessionIdsRef.current.delete(sessionId);
+        }
+      }
       appliedSessionListScopeRef.current = requestedScope;
       setSessions(snapshot.sessions);
       setSessionError('');
@@ -4869,6 +4878,7 @@ function AppContent(): JSX.Element {
         backendProfileName: activeBackendProfileNameRef.current
       })) return;
       if (!sessionDeletionSucceeded(result)) throw new Error(locale === 'de' ? 'Chat konnte nicht gelöscht werden.' : 'Chat could not be deleted.');
+      removedSessionIdsRef.current.add(session.session_id);
       const remaining = sessionsRef.current.filter((item) => item.session_id !== session.session_id);
       setSessions((current) => current.filter((item) => item.session_id !== session.session_id));
       if (activeSessionIdRef.current === session.session_id) {
@@ -4904,6 +4914,7 @@ function AppContent(): JSX.Element {
     }
     if (currentScope()) {
       const deleted = new Set(deletedIds);
+      for (const sessionId of deletedIds) removedSessionIdsRef.current.add(sessionId);
       const remaining = sessionsRef.current.filter(session => !deleted.has(session.session_id));
       setSessions(current => current.filter(session => !deleted.has(session.session_id)));
       if (activeSessionIdRef.current && deleted.has(activeSessionIdRef.current)) {

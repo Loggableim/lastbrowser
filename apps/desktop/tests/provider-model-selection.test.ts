@@ -403,7 +403,7 @@ describe('provider-aware model selection', () => {
     expect(chat).toContain("operation: 'modelSelection'");
     expect(chat).not.toContain('sidekick.setDefaultModel');
     expect(chat).toContain('modelProvider={modelProvider}');
-    expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
+    expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName }, false)');
     expect(app).toContain("includeCatalog: true");
     expect(app).toContain('const copilotModelSelection = useMemo(() => {');
     expect(copilot).toContain("const activeModelId = modelName || '';");
@@ -414,7 +414,7 @@ describe('provider-aware model selection', () => {
   it('sends the active scoped model selection as an explicit chat model/provider pair', () => {
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     const startContract = readFileSync(path.resolve(process.cwd(), 'src/renderer/guarded-native-chat-start.ts'), 'utf8');
-    const selectionRead = app.indexOf('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
+    const selectionRead = app.indexOf('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName }, false)');
     const guard = app.indexOf('prepareGuardedNativeChatStart(createGuardedStartInput())', selectionRead);
     const transport = app.indexOf('return window.lastbrowser.sidekick.startChat(payload);', guard);
 

@@ -24,7 +24,7 @@ describe('browser shell layout', () => {
     expect(composer).toContain('onChange={(event) => onModelChange(event.target.value)}');
     expect(chatMain).toContain('saveSpaceModel(activeSpacePath, target.model, window.localStorage, target.provider)');
     expect(chatMain).toContain('setSelectedModelProvider(target.provider)');
-    expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
+    expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName }, false)');
     expect(chatMain).toContain("operation: 'modelSelection'");
     expect(app).toContain('prepareGuardedNativeChatStart(createGuardedStartInput())');
     expect(app).toContain('return window.lastbrowser.sidekick.startChat(payload);');

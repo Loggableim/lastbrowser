@@ -24,6 +24,7 @@ export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
   options: OpenUrlLifecycleOptions<TWindow>
 ) {
   const pendingUrls: string[] = [];
+  let pendingMainWindowReveal = false;
   const readyWindows = new WeakSet<object>();
 
   const isLive = (window: TWindow | null): window is TWindow =>
@@ -97,10 +98,15 @@ export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
       const url = extractUrlFromArgs(commandLine);
       if (url) {
         dispatchOpenUrl(url);
-      } else {
-        ensureMainWindow();
+      } else if (!ensureMainWindow()) {
+        pendingMainWindowReveal = true;
       }
       return url;
+    },
+    flushPendingMainWindowReveal(): void {
+      if (!pendingMainWindowReveal) return;
+      pendingMainWindowReveal = false;
+      ensureMainWindow();
     },
     onWindowLoading(window: TWindow): void {
       readyWindows.delete(window);

@@ -61,6 +61,37 @@ describe('external URL window lifecycle', () => {
     expect(fake.send).toHaveBeenCalledWith('lastbrowser:browser:openTab', 'https://example.com/queued');
   });
 
+  it('reveals a hidden main window when a second desktop shortcut starts without a URL', () => {
+    const fake = createFakeWindow();
+    const lifecycle = createOpenUrlLifecycle({
+      getMainWindow: () => fake.window,
+      createMainWindow: () => fake.window,
+      isAppReady: () => true
+    });
+
+    expect(lifecycle.handleSecondInstance(['Lastbrowser.exe'])).toBeNull();
+    expect(fake.window.show).toHaveBeenCalledOnce();
+    expect(fake.window.focus).toHaveBeenCalledOnce();
+  });
+
+  it('reveals the main window after startup when a shortcut arrived before the app was ready', () => {
+    const fake = createFakeWindow();
+    let appReady = false;
+    const lifecycle = createOpenUrlLifecycle({
+      getMainWindow: () => (appReady ? fake.window : null),
+      createMainWindow: () => fake.window,
+      isAppReady: () => appReady
+    });
+
+    expect(lifecycle.handleSecondInstance(['Lastbrowser.exe'])).toBeNull();
+    expect(fake.window.show).not.toHaveBeenCalled();
+
+    appReady = true;
+    lifecycle.flushPendingMainWindowReveal();
+    expect(fake.window.show).toHaveBeenCalledOnce();
+    expect(fake.window.focus).toHaveBeenCalledOnce();
+  });
+
   it('recreates and reveals a closed main window for a second-instance URL', () => {
     const closed = createFakeWindow({ destroyed: true });
     const created = createFakeWindow({ loading: true });

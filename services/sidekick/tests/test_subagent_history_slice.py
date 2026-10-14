@@ -16,6 +16,6 @@ def test_subagents_get_returns_only_requested_session(monkeypatch, tmp_path: Pat
     record(tmp_path, subagent_id="sa-a", session_id="chat-a", space_slug="aquarium-zentrum", status="completed", summary="ok")
     record(tmp_path, subagent_id="sa-b", session_id="chat-b", space_slug="finanzjunkie", status="completed", summary="hidden")
     monkeypatch.setattr(routes, "_routes_active_home", lambda: tmp_path)
-    response = TestClient(web_server.app).get("/api/subagents?session_id=chat-a", headers={web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN, "Origin": "http://testserver"})
+    response = TestClient(web_server.app).get("/api/subagents?session_id=chat-a", headers={web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN, "Origin": "http://127.0.0.1"})
     assert response.status_code == 200
     assert [row["subagent_id"] for row in response.json()["history"]] == ["sa-a"]

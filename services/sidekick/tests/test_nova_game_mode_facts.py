@@ -5,6 +5,9 @@ from types import SimpleNamespace
 def test_async_extract_facts_uses_remote_deepseek_in_game_mode(monkeypatch, tmp_path):
     from web.api import models
     from web.api import routes
+    from runtime.memory_policy import update_policy
+    update_policy({"enabled": True, "cloud_search_enabled": True}, tmp_path)
+    monkeypatch.setattr("web.api.profiles.get_profile_home", lambda _name: tmp_path)
 
     calls = []
     memory_dir = tmp_path / "memories"
@@ -42,7 +45,7 @@ def test_async_extract_facts_uses_remote_deepseek_in_game_mode(monkeypatch, tmp_
     )
     monkeypatch.setattr("runtime.auxiliary_client.call_llm", fake_call_llm)
 
-    routes._async_extract_facts("sess_1")
+    routes._async_extract_facts("sess_1", "default", str(tmp_path / "sessions"))
 
     assert calls, "Game Mode should route fact extraction through Ollama Cloud"
     assert calls[0]["kwargs"]["provider"] == "ollama-cloud"

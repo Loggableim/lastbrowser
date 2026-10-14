@@ -11,7 +11,7 @@ export type IndependentRunState = 'queued' | 'running' | 'waiting_for_user' | 'w
 
 /** Native-only independent broker operations. No caller supplies a route. */
 export const INDEPENDENT_OPERATIONS = new Set([
-  'resolveScope', 'assistantSnapshot', 'assistantTurn', 'cancelAssistantTurn', 'assistantReset', 'assistantControl',
+  'resolveScope', 'companion', 'assistantSnapshot', 'assistantTurn', 'cancelAssistantTurn', 'assistantReset', 'assistantControl',
   'interviewStart', 'interviewAnswer', 'interviewReview', 'interviewContinue', 'interviewConfirm', 'interviewSkip',
   'activity', 'globalActivity', 'modelSelection', 'definitions', 'connectionSetup', 'connectionConfigure', 'dispatch', 'runControl', 'permissions', 'approve', 'capabilities', 'bindings', 'events',
   'selectedContext', 'browser.spacePaths', 'browser.backendProfiles', 'backendProfiles', 'browser.handshake', 'browser.heartbeat', 'browser.event', 'browser.shutdown', 'browser.nativeValidate', 'browser.nativeView', 'browser.nativeTakeover',
@@ -345,6 +345,8 @@ export type KanbanBoardResponse = {
 };
 
 export type CreateKanbanTaskRequest = {
+  profile?: string;
+  workspacePath?: string;
   title: string;
   body?: string;
   status?: string;
@@ -432,16 +434,22 @@ export type CreateProfileRequest = ProfileNameRequest & {
 };
 
 export type MemoryWriteRequest = {
+  profile?: string;
+  workspacePath?: string;
   section: string;
   content: string;
 };
 
 export type MemorySearchRequest = {
+  profile?: string;
+  workspacePath?: string;
   query: string;
   limit?: number;
 };
 
 export type SupermemoryDocumentRequest = {
+  profile?: string;
+  workspacePath?: string;
   id?: string;
   title?: string;
   content?: string;
@@ -449,6 +457,7 @@ export type SupermemoryDocumentRequest = {
 };
 
 export type InsightsRequest = {
+  profile?: string;
   days?: number;
 };
 
@@ -922,17 +931,47 @@ export async function getAccessAuthStatus(webuiUrl: string, fetchImpl: FetchLike
 }
 
 export async function loginAccessPassword(webuiUrl: string, password: string, fetchImpl: FetchLike = fetch): Promise<{ ok: boolean }> {
-  const response = await fetchImpl(urlFor(webuiUrl, '/api/auth/login'), {
-    method: 'POST',
-    headers: { ...authHeader(), 'content-type': 'application/json' },
-    body: JSON.stringify({ password })
+  const controller = new AbortController();
+  const timeoutError = () => new Error(`Sidekick API request timed out after ${WEBUI_REQUEST_TIMEOUT_MS} ms.`);
+  let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timeoutHandle = setTimeout(() => {
+      controller.abort();
+      reject(timeoutError());
+    }, WEBUI_REQUEST_TIMEOUT_MS);
   });
-  captureSidekickAuthCookie(response);
-  const raw = await response.text();
-  let payload: Record<string, unknown> = {};
-  try { payload = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch {}
-  if (!response.ok) throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
-  return { ok: payload.ok === true };
+  const operation = (async () => {
+    let response: Response;
+    let raw: string;
+    try {
+      response = await fetchImpl(urlFor(webuiUrl, '/api/auth/login'), {
+        method: 'POST',
+        headers: { ...authHeader(), 'content-type': 'application/json' },
+        body: JSON.stringify({ password }),
+        signal: controller.signal
+      });
+      if (controller.signal.aborted) throw timeoutError();
+      raw = await response.text();
+    } catch {
+      // Fetch/body errors can contain URLs or request details. Neither may
+      // expose the submitted password through an IPC rejection.
+      if (controller.signal.aborted) throw timeoutError();
+      throw new Error('Sidekick API request failed.');
+    }
+    if (controller.signal.aborted) throw timeoutError();
+    let payload: Record<string, unknown> = {};
+    try { payload = raw ? JSON.parse(raw) as Record<string, unknown> : {}; } catch {}
+    // Commit the cookie only after the entire response completes in time.
+    // A fetch/body implementation ignoring abort must not unlock a late login.
+    captureSidekickAuthCookie(response);
+    if (!response.ok) throw new Error(String(payload.error || payload.message || `HTTP ${response.status}`));
+    return { ok: payload.ok === true };
+  })();
+  try {
+    return await Promise.race([operation, deadline]);
+  } finally {
+    if (timeoutHandle !== undefined) clearTimeout(timeoutHandle);
+  }
 }
 
 export function clearAccessAuthCookie(): void {
@@ -1442,30 +1481,12 @@ function queryString(params: Record<string, string | number | undefined | null> 
 
 export async function getKanbanBoard(
   webuiUrl: string,
-  options: { workspace?: string; board?: string } = {},
+  options: { workspace?: string; board?: string; profile?: string; workspacePath?: string } = {},
   fetchImpl: FetchLike = fetch
 ): Promise<KanbanBoardResponse> {
-  try {
-    return await jsonRequest(webuiUrl, `/api/kanban/board${kanbanQuery(options)}`, {}, fetchImpl);
-  } catch (error) {
-    if (options.workspace) {
-      try {
-        return await jsonRequest(webuiUrl, `/api/kanban/board${kanbanQuery({ board: options.board })}`, {}, fetchImpl);
-      } catch {
-        // fallback below
-      }
-    }
-    return {
-      columns: [
-        { name: 'triage', tasks: [] },
-        { name: 'todo', tasks: [] },
-        { name: 'ready', tasks: [] },
-        { name: 'running', tasks: [] },
-        { name: 'blocked', tasks: [] },
-        { name: 'done', tasks: [] }
-      ]
-    };
-  }
+  // A failed scoped board read must not silently show another Space or a fake empty board.
+  return jsonRequest(webuiUrl, `/api/kanban/board${kanbanQuery({ workspace: options.workspace || options.workspacePath, board: options.board })}`,
+    { headers: nativeChatReadHeaders(options) }, fetchImpl);
 }
 
 export function createKanbanTask(
@@ -1475,6 +1496,7 @@ export function createKanbanTask(
 ): Promise<{ task?: KanbanTaskSummary; [key: string]: unknown }> {
   return jsonRequest(webuiUrl, '/api/kanban/tasks', {
     method: 'POST',
+    headers: nativeChatReadHeaders(request),
     body: JSON.stringify({
       title: request.title,
       body: request.body || '',
@@ -1500,6 +1522,7 @@ export function updateKanbanTask(
   if (request.priority !== undefined) body.priority = request.priority;
   return jsonRequest(webuiUrl, `/api/kanban/tasks/${encodeURIComponent(request.taskId)}`, {
     method: 'PATCH',
+    headers: nativeChatReadHeaders(request),
     body: JSON.stringify(body)
   }, fetchImpl);
 }
@@ -1922,24 +1945,77 @@ export function deleteProfile(webuiUrl: string, request: ProfileNameRequest, fet
   }, fetchImpl);
 }
 
-export function getMemory(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, '/api/memory', {}, fetchImpl);
+export function getMemory(webuiUrl: string, fetchImpl: FetchLike = fetch, request: { profile?: string; workspacePath?: string } = {}): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/memory', { headers: nativeChatReadHeaders(request) }, fetchImpl);
+}
+
+/** Fixed agent actions retain the captured profile across asynchronous UI work. */
+export function scopedAgentOperation(webuiUrl: string, input: { operation: string; profile: string; request?: Record<string, unknown> }, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  if (!input.profile) throw new Error('An active assistant profile is required.');
+  const profileCookie = profileScopeHeaders(input.profile).cookie;
+  const scopedFetch: FetchLike = (url, init = {}) => {
+    const headers = new Headers(init.headers);
+    const previous = (headers.get('cookie') || '').split(';').filter(value => !value.trim().startsWith('sidekick_profile='));
+    headers.set('cookie', [...previous.filter(Boolean), profileCookie].join('; '));
+    return fetchImpl(url, { ...init, headers });
+  };
+  const request = input.request || {};
+  const slug = { slug: String(request.slug || '') };
+  switch (input.operation) {
+    case 'listAgents': return listAgents(webuiUrl, scopedFetch);
+    case 'getCurrentAgent': return getCurrentAgent(webuiUrl, scopedFetch);
+    case 'getAgentSplashStatus': return getAgentSplashStatus(webuiUrl, scopedFetch);
+    case 'getAgentStats': return getAgentStats(webuiUrl, scopedFetch);
+    case 'getAgentActivities': return getAgentActivities(webuiUrl, request as AgentActivitiesRequest, scopedFetch);
+    case 'getAgentProfiles': return getAgentProfiles(webuiUrl, scopedFetch);
+    case 'getAgentWorkspaces': return getAgentWorkspaces(webuiUrl, scopedFetch);
+    case 'getAgent': return getAgent(webuiUrl, slug, scopedFetch);
+    case 'getAgentMemory': return getAgentMemory(webuiUrl, slug, scopedFetch);
+    case 'getAgentSoul': return getAgentSoul(webuiUrl, slug, scopedFetch);
+    case 'createAgent': return createAgent(webuiUrl, request as CreateAgentRequest, scopedFetch);
+    case 'updateAgent': return updateAgent(webuiUrl, request as UpdateAgentRequest, scopedFetch);
+    case 'deleteAgent': return deleteAgent(webuiUrl, slug, scopedFetch);
+    case 'activateAgent': return activateAgent(webuiUrl, slug, scopedFetch);
+    case 'setCurrentAgent': return setCurrentAgent(webuiUrl, slug, scopedFetch);
+    case 'saveAgentProfile': return saveAgentProfile(webuiUrl, request as SaveAgentProfileRequest, scopedFetch);
+    case 'startAgentChat': return startAgentChat(webuiUrl, request as AgentChatRequest, scopedFetch);
+    case 'listAgentSessions': return listAgentSessions(webuiUrl, slug, scopedFetch);
+    case 'listAgentWorkspace': return listAgentWorkspace(webuiUrl, request as AgentSessionRequest, scopedFetch);
+    case 'startAgentWorkspaceProcess': return startAgentWorkspaceProcess(webuiUrl, request as AgentSessionRequest, scopedFetch);
+    case 'sendAgentWorkspaceCommand': return sendAgentWorkspaceCommand(webuiUrl, request as AgentWorkspaceCommandRequest, scopedFetch);
+    case 'stopAgentWorkspace': return stopAgentWorkspace(webuiUrl, request as AgentWorkspaceCommandRequest, scopedFetch);
+    default: throw new Error('Unknown assistant action.');
+  }
+}
+
+export function getMemoryPolicy(webuiUrl: string, request: { profile?: string } = {}, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/memory/policy', { headers: profileScopeHeaders(request.profile) }, fetchImpl);
+}
+
+export function setMemoryPolicy(webuiUrl: string, request: Record<string, unknown>, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+  const patch: Record<string, unknown> = {};
+  for (const key of ['enabled', 'cloud_search_enabled', 'assistants_enabled', 'gmail_ai_enabled', 'discord_agents_enabled', 'kanban_enabled']) {
+    if (typeof request?.[key] === 'boolean') patch[key] = request[key];
+  }
+  if (request?.scope === 'profile' || request?.scope === 'space') patch.scope = request.scope;
+  return jsonRequest(webuiUrl, '/api/memory/policy', { method: 'POST', headers: profileScopeHeaders(typeof request.profile === 'string' ? request.profile : undefined), body: JSON.stringify(patch) }, fetchImpl);
 }
 
 export function writeMemory(webuiUrl: string, request: MemoryWriteRequest, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
   return jsonRequest(webuiUrl, '/api/memory/write', {
     method: 'POST',
+    headers: nativeChatReadHeaders(request),
     body: JSON.stringify({ section: request.section, content: request.content })
   }, fetchImpl);
 }
 
-export function getSupermemoryStatus(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, '/api/memory/supermemory/status', {}, fetchImpl);
+export function getSupermemoryStatus(webuiUrl: string, fetchImpl: FetchLike = fetch, request: { profile?: string } = {}): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/memory/supermemory/status', { headers: profileScopeHeaders(request.profile) }, fetchImpl);
 }
 
-export async function listSupermemoryDocuments(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
+export async function listSupermemoryDocuments(webuiUrl: string, fetchImpl: FetchLike = fetch, request: { profile?: string } = {}): Promise<Record<string, unknown>> {
   try {
-    return await jsonRequest(webuiUrl, '/api/memory/supermemory/list', {}, fetchImpl);
+    return await jsonRequest(webuiUrl, '/api/memory/supermemory/list', { headers: profileScopeHeaders(request.profile) }, fetchImpl);
   } catch (error) {
     return { ok: false, configured: false, results: [], error: error instanceof Error ? error.message : String(error) };
   }
@@ -1951,7 +2027,7 @@ export async function getSupermemoryDocument(
   fetchImpl: FetchLike = fetch
 ): Promise<Record<string, unknown>> {
   try {
-    return await jsonRequest(webuiUrl, `/api/memory/supermemory/document${queryString({ id: request.id })}`, {}, fetchImpl);
+    return await jsonRequest(webuiUrl, `/api/memory/supermemory/document${queryString({ id: request.id })}`, { headers: profileScopeHeaders(request.profile) }, fetchImpl);
   } catch (error) {
     return { ok: false, configured: false, document: null, error: error instanceof Error ? error.message : String(error) };
   }
@@ -1961,6 +2037,7 @@ export async function searchSupermemory(webuiUrl: string, request: MemorySearchR
   try {
     return await jsonRequest(webuiUrl, '/api/memory/supermemory/search', {
       method: 'POST',
+      headers: nativeChatReadHeaders(request),
       body: JSON.stringify({ query: request.query, limit: request.limit })
     }, fetchImpl);
   } catch (error) {
@@ -1975,6 +2052,7 @@ export function addSupermemoryDocument(
 ): Promise<Record<string, unknown>> {
   return jsonRequest(webuiUrl, '/api/memory/supermemory/add', {
     method: 'POST',
+    headers: profileScopeHeaders(request.profile),
     body: JSON.stringify(request)
   }, fetchImpl);
 }
@@ -1986,6 +2064,7 @@ export function forgetSupermemoryDocument(
 ): Promise<Record<string, unknown>> {
   return jsonRequest(webuiUrl, '/api/memory/supermemory/forget', {
     method: 'POST',
+    headers: profileScopeHeaders(request.profile),
     body: JSON.stringify({ id: request.id })
   }, fetchImpl);
 }
@@ -2031,6 +2110,7 @@ export async function hybridMemorySearch(webuiUrl: string, request: MemorySearch
   try {
     return await jsonRequest(webuiUrl, '/api/memory/hybrid/search', {
       method: 'POST',
+      headers: nativeChatReadHeaders(request),
       body: JSON.stringify({ query: request.query, limit: request.limit })
     }, fetchImpl);
   } catch (error) {
@@ -2039,7 +2119,7 @@ export async function hybridMemorySearch(webuiUrl: string, request: MemorySearch
 }
 
 export function getInsights(webuiUrl: string, request: InsightsRequest = {}, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, `/api/insights${queryString({ days: request.days })}`, {}, fetchImpl);
+  return jsonRequest(webuiUrl, `/api/insights${queryString({ days: request.days })}`, { headers: profileScopeHeaders(request.profile) }, fetchImpl);
 }
 
 export function getWikiStatus(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
@@ -2090,8 +2170,8 @@ export function submitAppstoreApp(webuiUrl: string, request: AppstoreSubmitReque
   }, fetchImpl);
 }
 
-export function getSettings(webuiUrl: string, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
-  return jsonRequest(webuiUrl, '/api/settings', {}, fetchImpl);
+export function getSettings(webuiUrl: string, fetchImpl: FetchLike = fetch, request: { profile?: string } = {}): Promise<Record<string, unknown>> {
+  return jsonRequest(webuiUrl, '/api/settings', { headers: profileScopeHeaders(request.profile) }, fetchImpl);
 }
 
 export function saveSettings(webuiUrl: string, request: SettingsSaveRequest, fetchImpl: FetchLike = fetch): Promise<Record<string, unknown>> {
@@ -2648,9 +2728,9 @@ export async function startSidekickChat(
 export type QuickChatBackendRequest = Readonly<{
   quickChatId: string; scope: NativeSpaceScope; profile: string; workspacePath: string | null;
   nativeBridgeNonce: string; prompt: string; context?: Readonly<Record<string, string>>;
-  model?: string; modelProvider?: string | null;
+  model?: string; modelProvider?: string | null; reasoningEffort?: string;
 }>;
-export type QuickChatBackendStreamRequest = Omit<QuickChatBackendRequest, 'prompt' | 'context' | 'model' | 'modelProvider'> & { streamId: string };
+export type QuickChatBackendStreamRequest = Omit<QuickChatBackendRequest, 'prompt' | 'context' | 'model' | 'modelProvider' | 'reasoningEffort'> & { streamId: string };
 
 /** Quickchat uses a private, explicitly tagged Sidekick transcript, never /api/chat/start. */
 export function startQuickChat(webuiUrl: string, request: QuickChatBackendRequest,
@@ -2661,6 +2741,7 @@ export function startQuickChat(webuiUrl: string, request: QuickChatBackendReques
       nativeBridgeNonce: request.nativeBridgeNonce }),
     body: JSON.stringify({ quick_chat_id: request.quickChatId, space_scope: request.scope, profile: request.profile,
       workspace: request.workspacePath, prompt: request.prompt, context: request.context,
+      ...(request.reasoningEffort ? { reasoning_effort: request.reasoningEffort } : {}),
       ...(request.model ? { model: request.model } : {}), ...(request.modelProvider ? { model_provider: request.modelProvider } : {}) })
   }, fetchImpl);
 }

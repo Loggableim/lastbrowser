@@ -1,0 +1,7 @@
+.chat-memory-usage { margin-block: 10px; padding: 8px 12px; border: 1px solid var(--border-color, currentColor); border-radius: 8px; font-size: 12px; color: var(--text-secondary); }
+.chat-memory-usage summary { cursor: pointer; color: var(--text-primary); }
+.chat-memory-usage p { margin-block: 8px; }
+.chat-memory-usage ul { margin-block: 8px; padding-inline-start: 20px; }
+.chat-memory-usage button { padding: 4px; border: 0; background: transparent; color: var(--accent-primary, currentColor); font: inherit; text-decoration: underline; cursor: pointer; text-align: start; overflow-wrap: anywhere; }
+.chat-memory-usage button:disabled { cursor: default; opacity: .6; }
+.chat-memory-usage button:focus-visible, .chat-memory-usage summary:focus-visible { outline: 2px solid var(--accent-primary, currentColor); outline-offset: 2px; }

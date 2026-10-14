@@ -6,6 +6,7 @@ function group<P extends string, T extends Record<string, string>>(prefix: P, va
 }
 
 export const desktopJaOverrides = {
+  'settings.panels.providers.stableRelease': '安定版',
   'chat.header.moreActions': 'チャットのその他の操作',
   'chat.header.status.unknown': '状態不明',
   'chat.header.status.ready': 'Sidekick 利用可能',
@@ -299,5 +300,7 @@ export const desktopJaOverrides = {
   'browser.chrome.updateBackgroundDownload': '更新をバックグラウンドでダウンロードします。',
   'browser.chrome.updateDontShowAgain': 'この通知を再表示しない',
   'browser.chrome.updateLater': '後で',
-  'browser.chrome.updateNoticeSaveError': '更新通知の設定を保存できませんでした。'
+  'browser.chrome.updateNoticeSaveError': '更新通知の設定を保存できませんでした。',
+  'sidebar.drawer.zenMode': 'Zen Mode',
+  'sidebar.drawer.zenModeTitle': 'サイドバーを非表示（Zen Mode）'
 } satisfies Record<DesktopTranslationKey, string>;

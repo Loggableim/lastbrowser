@@ -1,0 +1,1577 @@
+{
+  "schemaVersion": 1,
+  "revision": "2026-10-13.1",
+  "licensePolicy": [
+    "apache-2.0",
+    "mit"
+  ],
+  "models": [
+    {
+      "modelId": "ibm-granite/granite-4.2-3b",
+      "name": "Granite 4.2 3B",
+      "publisher": "IBM",
+      "category": "text",
+      "vramClass": "4–8",
+      "quantization": "Q4_K_M",
+      "estimatedVramGiB": [
+        3.0,
+        4.5
+      ],
+      "estimatedRamGiB": [
+        16.0,
+        24.0
+      ],
+      "estimatedDownloadGiB": [
+        2.1,
+        2.1
+      ],
+      "recommendedGpuGiB": 6,
+      "engine": "llama.cpp",
+      "innovation": "Steuerbares Thinking und agentisches Posttraining im kleinen Modell.",
+      "useCases": [
+        "Strukturierte Assistenz",
+        "Werkzeugauswahl",
+        "Dokumente klassifizieren"
+      ],
+      "strengths": [
+        "Thinking lässt sich begrenzen",
+        "Offizielle GGUF-Varianten vorhanden"
+      ],
+      "limitations": [
+        "Komplexe mehrstufige Planung bleibt begrenzt",
+        "Exakter Runner und Tool-Parser noch nicht qualifiziert"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/ibm-granite/granite-4.2-3b",
+      "priority": true
+    },
+    {
+      "modelId": "YoozLabs/Qwen3.5-4B-qat-GGUF",
+      "name": "Qwen3.5 4B Yooz QAT",
+      "publisher": "Yooz Labs",
+      "category": "text",
+      "vramClass": "4–8",
+      "quantization": "Q4_0 QAT",
+      "estimatedVramGiB": [
+        4.0,
+        6.0
+      ],
+      "estimatedRamGiB": [
+        16.0,
+        24.0
+      ],
+      "estimatedDownloadGiB": [
+        2.1,
+        2.6
+      ],
+      "recommendedGpuGiB": 8,
+      "engine": "llama.cpp",
+      "innovation": "Nachtraining mit simulierter Quantisierung soll Recall und Aggregation bei vier Bit erhalten.",
+      "useCases": [
+        "Kleine Assistenz",
+        "Informationen zusammenführen",
+        "Mehrturn-Recall"
+      ],
+      "strengths": [
+        "Quantisierungsbewusst trainierte Gewichte",
+        "Kompakter llama.cpp-Kandidat"
+      ],
+      "limitations": [
+        "Community-Veröffentlichung ohne offenes Trainingsrezept",
+        "Qualitätsvorteile sind Herausgeberangaben"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/YoozLabs/Qwen3.5-4B-qat-GGUF",
+      "priority": false
+    },
+    {
+      "modelId": "google/gemma-4-E2B-it",
+      "name": "Gemma 4 E2B",
+      "publisher": "Google",
+      "category": "text",
+      "vramClass": "4–8",
+      "quantization": "Q4_0",
+      "estimatedVramGiB": [
+        4.0,
+        6.0
+      ],
+      "estimatedRamGiB": [
+        16.0,
+        24.0
+      ],
+      "estimatedDownloadGiB": [
+        2.6,
+        2.6
+      ],
+      "recommendedGpuGiB": 8,
+      "engine": "llama.cpp",
+      "innovation": "Per-Layer Embeddings ergänzen den kompakten Transformer um zusätzliche Kapazität.",
+      "useCases": [
+        "Alltagschat",
+        "Kurze Dokumente",
+        "Bildverständnis mit Zusatzkomponente"
+      ],
+      "strengths": [
+        "Kompakte multimodale Architektur",
+        "Hersteller-GGUF verfügbar"
+      ],
+      "limitations": [
+        "E2B ist nicht die gesamte gespeicherte Parameterzahl",
+        "Bildverarbeitung benötigt zusätzlichen Speicher"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/google/gemma-4-E2B-it",
+      "priority": true
+    },
+    {
+      "modelId": "mistralai/Ministral-3-3B-Instruct-2512",
+      "name": "Ministral 3 3B Instruct",
+      "publisher": "Mistral AI",
+      "category": "text",
+      "vramClass": "4–8",
+      "quantization": "Q8_0",
+      "estimatedVramGiB": [
+        4.5,
+        6.0
+      ],
+      "estimatedRamGiB": [
+        16.0,
+        24.0
+      ],
+      "estimatedDownloadGiB": [
+        3.4,
+        3.4
+      ],
+      "recommendedGpuGiB": 8,
+      "engine": "llama.cpp",
+      "innovation": "Mehrsprachiges Edge-Modell mit JSON, Werkzeugaufrufen und optionaler Vision.",
+      "useCases": [
+        "Mehrsprachiger Chat",
+        "Strukturierte Ausgabe",
+        "Kleine Werkzeugabläufe"
+      ],
+      "strengths": [
+        "Praktischer kompakter Allrounder",
+        "Hohe Präzision bei kleiner Modellgröße"
+      ],
+      "limitations": [
+        "Vision-Komponenten sind nicht in den Textbudgets enthalten",
+        "Keine Garantie für komplexe autonome Aufgaben"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512",
+      "priority": false
+    },
+    {
+      "modelId": "prism-ml/Ternary-Bonsai-2-27B-gguf",
+      "name": "Bonsai 2 27B",
+      "publisher": "Prism ML",
+      "category": "text",
+      "vramClass": "8–16",
+      "quantization": "PQ2_0 ternär",
+      "estimatedVramGiB": [
+        8.0,
+        10.5
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        6.7,
+        6.7
+      ],
+      "recommendedGpuGiB": 16,
+      "engine": "Prism llama.cpp (optional)",
+      "innovation": "Trainierte rotierte ternäre Gewichte bewahren große Modellkapazität bei wenig Gewichtsspeicher.",
+      "useCases": [
+        "Reasoning",
+        "Coding-Hilfe",
+        "Lokale Analyse"
+      ],
+      "strengths": [
+        "27B-Kapazität mit kompakten Gewichten",
+        "Eigene historische LastBrowser-Benchmarkkonfiguration vorhanden"
+      ],
+      "limitations": [
+        "Prism-Fork mit passenden Hadamard-Kernels erforderlich",
+        "Historische Ergebnisse gelten nicht automatisch für dieses Artefakt",
+        "Dateigröße ist kein VRAM-Peak"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf",
+      "priority": true
+    },
+    {
+      "modelId": "ibm-granite/granite-4.2-8b",
+      "name": "Granite 4.2 8B",
+      "publisher": "IBM",
+      "category": "text",
+      "vramClass": "8–16",
+      "quantization": "Q4_K_M",
+      "estimatedVramGiB": [
+        7.0,
+        9.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        5.0,
+        5.0
+      ],
+      "recommendedGpuGiB": 12,
+      "engine": "llama.cpp",
+      "innovation": "Thinking aus, begrenzt oder voll mit aktuellem agentischem Posttraining.",
+      "useCases": [
+        "Dokumentenassistenz",
+        "Strukturierte Ausgabe",
+        "Werkzeugabläufe"
+      ],
+      "strengths": [
+        "Flexible Antworttiefe",
+        "Offizieller GGUF-Pfad"
+      ],
+      "limitations": [
+        "Lange Denkantworten erhöhen die Latenz",
+        "Tool-Templates müssen zum Runner passen"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/ibm-granite/granite-4.2-8b",
+      "priority": true
+    },
+    {
+      "modelId": "google/gemma-4-E4B-it",
+      "name": "Gemma 4 E4B",
+      "publisher": "Google",
+      "category": "text",
+      "vramClass": "8–16",
+      "quantization": "Q4_0",
+      "estimatedVramGiB": [
+        6.0,
+        8.5
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        4.3,
+        4.3
+      ],
+      "recommendedGpuGiB": 12,
+      "engine": "llama.cpp",
+      "innovation": "Per-Layer Embeddings kombinieren geringe aktive Rechenlast mit größerer gespeicherter Kapazität.",
+      "useCases": [
+        "Vielseitiger Chat",
+        "Dokumentverständnis",
+        "Visuelle Assistenz"
+      ],
+      "strengths": [
+        "Kompakter Geräteassistent",
+        "Quantisierte Herstellerdateien verfügbar"
+      ],
+      "limitations": [
+        "Effektive Größe ist keine MoE-Aktivparameterzahl",
+        "Multimodale Nutzung benötigt zusätzliche Reserve"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/google/gemma-4-E4B-it",
+      "priority": true
+    },
+    {
+      "modelId": "google/gemma-4-12B-it",
+      "name": "Gemma 4 12B QAT",
+      "publisher": "Google",
+      "category": "text",
+      "vramClass": "8–16",
+      "quantization": "Q4 QAT, MTP optional",
+      "estimatedVramGiB": [
+        9.0,
+        12.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        6.7,
+        6.7
+      ],
+      "recommendedGpuGiB": 16,
+      "engine": "llama.cpp",
+      "innovation": "Vereinheitlichte multimodale Verarbeitung und quantisierungsbewusst trainierte Varianten; passender MTP-Drafter optional.",
+      "useCases": [
+        "Alltagsassistenz",
+        "Dokumente",
+        "Schnelle Antworten mit passendem MTP"
+      ],
+      "strengths": [
+        "Historische lokale MTP-Messungen vorhanden",
+        "Keine große separate Encoder-Kette für jede Modalität"
+      ],
+      "limitations": [
+        "MTP benötigt zusätzliches Modell und Runner-Unterstützung",
+        "Textbudget ohne zusätzliche Audio- oder Bildlast",
+        "Strukturierte Ausgabe war im historischen Benchmark nicht durchgehend zuverlässig"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/google/gemma-4-12B-it",
+      "priority": true
+    },
+    {
+      "modelId": "Qwen/Qwen3.5-9B",
+      "name": "Qwen3.5 9B",
+      "publisher": "Qwen",
+      "category": "text",
+      "vramClass": "8–16",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        7.5,
+        10.5
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        5.1,
+        6.1
+      ],
+      "recommendedGpuGiB": 16,
+      "engine": "llama.cpp",
+      "innovation": "DeltaNet und Attention verbinden effiziente Kontextverarbeitung mit allgemeiner Assistenz.",
+      "useCases": [
+        "Alltagschat",
+        "Coding-Hilfe",
+        "Dokumente"
+      ],
+      "strengths": [
+        "Vielseitige aktuelle Modellfamilie",
+        "Hybridarchitektur spart gegenüber voller Attention"
+      ],
+      "limitations": [
+        "Vision benötigt zusätzliche Komponenten",
+        "Längerer Kontext verändert das Speicherbudget"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3.5-9B",
+      "priority": false
+    },
+    {
+      "modelId": "zai-org/GLM-4.6V-Flash",
+      "name": "GLM 4.6V Flash",
+      "publisher": "Z.ai",
+      "category": "text",
+      "vramClass": "8–16",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        8.0,
+        11.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        5.1,
+        6.1
+      ],
+      "recommendedGpuGiB": 16,
+      "engine": "llama.cpp",
+      "innovation": "Kompakte visuelle Assistenz mit auf Werkzeugabläufe ausgerichteter Verarbeitung.",
+      "useCases": [
+        "GUI-Verständnis",
+        "Dokumente lesen",
+        "Visuelle Werkzeugauswahl"
+      ],
+      "strengths": [
+        "Kleine multimodale Klasse",
+        "Für visuelle Arbeitsabläufe interessant"
+      ],
+      "limitations": [
+        "Erkannte Oberfläche beweist keine zuverlässige Aktion",
+        "Bild- und Tool-Pfade separat qualifizieren"
+      ],
+      "license": "mit",
+      "sourceUrl": "https://huggingface.co/zai-org/GLM-4.6V-Flash",
+      "priority": false
+    },
+    {
+      "modelId": "mistralai/Ministral-3-8B-Instruct-2512",
+      "name": "Ministral 3 8B Instruct",
+      "publisher": "Mistral AI",
+      "category": "text",
+      "vramClass": "8–16",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        7.0,
+        9.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        4.7,
+        5.4
+      ],
+      "recommendedGpuGiB": 12,
+      "engine": "llama.cpp",
+      "innovation": "Mehrsprachiger Edge-Allrounder mit kompaktem Vision-Encoder und strukturierten Werkzeugausgaben.",
+      "useCases": [
+        "Chat",
+        "Dokumente",
+        "JSON und Tools"
+      ],
+      "strengths": [
+        "Ausgewogene mittlere Geräteklasse",
+        "Text und Bild in einer Familie"
+      ],
+      "limitations": [
+        "Vision nicht im Textbudget enthalten",
+        "Keine unabhängige LastBrowser-Qualitätsmessung dieser Variante"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/mistralai/Ministral-3-8B-Instruct-2512",
+      "priority": false
+    },
+    {
+      "modelId": "mistralai/Ministral-3-14B-Instruct-2512",
+      "name": "Ministral 3 14B Instruct",
+      "publisher": "Mistral AI",
+      "category": "text",
+      "vramClass": "8–16",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        10.0,
+        12.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        7.5,
+        8.4
+      ],
+      "recommendedGpuGiB": 16,
+      "engine": "llama.cpp",
+      "innovation": "Größere Edge-Variante für vielseitige lokale Analyse und Werkzeugassistenz.",
+      "useCases": [
+        "Analyse",
+        "Mehrsprachiger Chat",
+        "Werkzeuge"
+      ],
+      "strengths": [
+        "Mehr Kapazität als die kleineren Ministral-Varianten",
+        "Konservativ bei 4k Textkontext einzuordnen"
+      ],
+      "limitations": [
+        "16-GiB-Klasse liegt nahe der Budgetgrenze",
+        "Bildverarbeitung und längerer Kontext können eine größere Karte verlangen"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/mistralai/Ministral-3-14B-Instruct-2512",
+      "priority": false
+    },
+    {
+      "modelId": "Qwen/Qwen3.8-27B",
+      "name": "Qwen3.8 27B",
+      "publisher": "Qwen",
+      "category": "text",
+      "vramClass": "16–32",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        21.0,
+        24.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        16.0,
+        18.0
+      ],
+      "recommendedGpuGiB": 32,
+      "engine": "llama.cpp",
+      "innovation": "Aktueller Hybrid-Allrounder mit verbesserter Agenten- und Coding-Ausrichtung.",
+      "useCases": [
+        "Anspruchsvolle Assistenz",
+        "Coding",
+        "Recherche über bereitgestellte Quellen"
+      ],
+      "strengths": [
+        "Weniger stark komprimierte Alternative zu Bonsai",
+        "Steuerbare Reasoning-Tiefe"
+      ],
+      "limitations": [
+        "Höherer Speicherbedarf als ternäre Bonsai-Gewichte",
+        "Aktueller Runner und Bildpfad müssen separat passen"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3.8-27B",
+      "priority": true
+    },
+    {
+      "modelId": "google/gemma-4-26B-A4B-it",
+      "name": "Gemma 4 26B A4B QAT",
+      "publisher": "Google",
+      "category": "text",
+      "vramClass": "16–32",
+      "quantization": "Q4 QAT",
+      "estimatedVramGiB": [
+        19.0,
+        23.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        14.0,
+        16.0
+      ],
+      "recommendedGpuGiB": 32,
+      "engine": "llama.cpp",
+      "innovation": "Quantisierungsbewusstes Training plus sparsames MoE und lokale/globale Attention.",
+      "useCases": [
+        "Analyse",
+        "Werkzeugassistenz",
+        "Multimodale Aufgaben"
+      ],
+      "strengths": [
+        "Große Gesamtkapazität bei rund 3.8B aktiven Parametern",
+        "QAT reduziert Quantisierungsverlust"
+      ],
+      "limitations": [
+        "Alle Expertengewichte bleiben speicherrelevant",
+        "Bildlast nicht im Textbudget enthalten"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/google/gemma-4-26B-A4B-it",
+      "priority": true
+    },
+    {
+      "modelId": "openai/gpt-oss-20b",
+      "name": "gpt-oss 20B",
+      "publisher": "OpenAI",
+      "category": "text",
+      "vramClass": "16–32",
+      "quantization": "MXFP4",
+      "estimatedVramGiB": [
+        16.0,
+        20.0
+      ],
+      "estimatedRamGiB": [
+        32.0,
+        48.0
+      ],
+      "estimatedDownloadGiB": [
+        12.0,
+        13.5
+      ],
+      "recommendedGpuGiB": 32,
+      "engine": "llama.cpp",
+      "innovation": "Natives niedrigpräzises MoE mit steuerbarem Reasoning und Harmony-Protokoll.",
+      "useCases": [
+        "Reasoning",
+        "Technische Assistenz",
+        "Werkzeugaufrufe"
+      ],
+      "strengths": [
+        "MXFP4 als Modellformat",
+        "Reasoning-Tiefe konfigurierbar"
+      ],
+      "limitations": [
+        "Kein gewöhnlicher Q4_K_M-Export",
+        "Harmony-Template erforderlich",
+        "Unter 12-GiB-Modellbudget nicht automatisch empfohlen"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/openai/gpt-oss-20b",
+      "priority": false
+    },
+    {
+      "modelId": "mistralai/Ministral-3-14B-Reasoning-2512",
+      "name": "Ministral 3 14B Reasoning",
+      "publisher": "Mistral AI",
+      "category": "text",
+      "vramClass": "16–32",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        11.0,
+        15.0
+      ],
+      "estimatedRamGiB": [
+        32.0,
+        48.0
+      ],
+      "estimatedDownloadGiB": [
+        8.0,
+        9.0
+      ],
+      "recommendedGpuGiB": 24,
+      "engine": "llama.cpp",
+      "innovation": "Eigenes Reasoning-Posttraining der Ministral-Familie für technische Denkaufgaben.",
+      "useCases": [
+        "Mathematik",
+        "Codeanalyse",
+        "STEM"
+      ],
+      "strengths": [
+        "Gezielte Alternative zum Instruct-Checkpoint",
+        "Mittleres Speicherbudget"
+      ],
+      "limitations": [
+        "Thinking kann die erste sichtbare Antwort verzögern",
+        "Kein automatisch schneller Quickchat"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/mistralai/Ministral-3-14B-Reasoning-2512",
+      "priority": false
+    },
+    {
+      "modelId": "inclusionAI/Ling-3.0-tiny-GGUF",
+      "name": "Ling 3.0 Tiny",
+      "publisher": "inclusionAI",
+      "category": "text",
+      "vramClass": "16–32",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        7.0,
+        11.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        4.5,
+        5.5
+      ],
+      "recommendedGpuGiB": 16,
+      "engine": "llama.cpp",
+      "innovation": "KDA und MLA mit sehr sparsamem MoE verbinden Kapazität und niedrige aktive Rechenlast.",
+      "useCases": [
+        "Persönliche Assistenz",
+        "Werkzeugabläufe",
+        "Klassifikation"
+      ],
+      "strengths": [
+        "Etwa 1.3B aktive Parameter",
+        "Offizieller GGUF-Kandidat"
+      ],
+      "limitations": [
+        "Aktuelle bailingmoe3-Unterstützung nötig",
+        "Aktive Parameter sind nicht die Gewichtsspeichergröße"
+      ],
+      "license": "mit",
+      "sourceUrl": "https://huggingface.co/inclusionAI/Ling-3.0-tiny-GGUF",
+      "priority": false
+    },
+    {
+      "modelId": "mistralai/Devstral-Small-2-24B-Instruct-2512",
+      "name": "Devstral Small 2 24B",
+      "publisher": "Mistral AI",
+      "category": "text",
+      "vramClass": "16–32",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        18.0,
+        23.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        13.5,
+        15.5
+      ],
+      "recommendedGpuGiB": 32,
+      "engine": "llama.cpp",
+      "innovation": "Auf Repository-Navigation und Mehrdateiänderungen spezialisiertes Coding-Agent-Training.",
+      "useCases": [
+        "Repository verstehen",
+        "Code ändern",
+        "Werkzeuge beim Programmieren"
+      ],
+      "strengths": [
+        "Dedizierter Coding-Schwerpunkt",
+        "Mehrdatei-Arbeit statt nur Codevervollständigung"
+      ],
+      "limitations": [
+        "Werkzeugausführung bleibt unter Host-Kontrolle",
+        "Kein allgemeiner Latenzgewinner"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/mistralai/Devstral-Small-2-24B-Instruct-2512",
+      "priority": true
+    },
+    {
+      "modelId": "google/gemma-4-31B-it",
+      "name": "Gemma 4 31B",
+      "publisher": "Google",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        23.0,
+        28.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        18.0,
+        20.0
+      ],
+      "recommendedGpuGiB": 48,
+      "engine": "llama.cpp",
+      "innovation": "Größeres dichtes Modell mit effizienter lokaler und globaler Attention.",
+      "useCases": [
+        "Anspruchsvolle Analyse",
+        "Schreiben",
+        "Multimodale Assistenz"
+      ],
+      "strengths": [
+        "Dichtes Qualitätsmodell als MoE-Alternative",
+        "Aktuelle Gemma-Familie"
+      ],
+      "limitations": [
+        "Unter 25 Prozent Reserve nicht automatisch für 32-GiB-Karten empfohlen",
+        "Bildlast extra"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/google/gemma-4-31B-it",
+      "priority": true
+    },
+    {
+      "modelId": "ibm-granite/granite-4.2-30b",
+      "name": "Granite 4.2 30B",
+      "publisher": "IBM",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        22.0,
+        28.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        16.0,
+        18.0
+      ],
+      "recommendedGpuGiB": 48,
+      "engine": "llama.cpp",
+      "innovation": "Größere aktuelle Reasoning-Variante mit agentischem und strukturiertem Posttraining.",
+      "useCases": [
+        "Dokumentensuche",
+        "Strukturierte Aufgaben",
+        "Werkzeugassistenz"
+      ],
+      "strengths": [
+        "Offizieller GGUF",
+        "Steuerbares Thinking"
+      ],
+      "limitations": [
+        "Dichtes Modell benötigt entsprechende Speicherbandbreite",
+        "Exakte lokale Qualitätsmessung offen"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/ibm-granite/granite-4.2-30b",
+      "priority": false
+    },
+    {
+      "modelId": "Qwen/Qwen3.6-35B-A3B",
+      "name": "Qwen3.6 35B A3B",
+      "publisher": "Qwen",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        25.0,
+        30.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        20.0,
+        22.0
+      ],
+      "recommendedGpuGiB": 48,
+      "engine": "llama.cpp",
+      "innovation": "Hybrid-Attention mit sparsamem MoE für stabile agentische und Coding-Abläufe.",
+      "useCases": [
+        "Agenten",
+        "Coding",
+        "Analyse"
+      ],
+      "strengths": [
+        "Geringe aktive Rechenlast gegenüber der Gesamtgröße",
+        "Aktuelle agentische Ausrichtung"
+      ],
+      "limitations": [
+        "Vollständige Gewichte überschreiten konservatives 32-GiB-Budget",
+        "Exakter Expertensplit muss unterstützt werden"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3.6-35B-A3B",
+      "priority": true
+    },
+    {
+      "modelId": "zai-org/GLM-4.7-Flash",
+      "name": "GLM 4.7 Flash",
+      "publisher": "Z.ai",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        24.0,
+        30.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        17.0,
+        20.0
+      ],
+      "recommendedGpuGiB": 48,
+      "engine": "llama.cpp",
+      "innovation": "Effizientes Coding- und Reasoning-MoE mit kompakter aktiver Rechenlast.",
+      "useCases": [
+        "Coding",
+        "Reasoning",
+        "Werkzeuge"
+      ],
+      "strengths": [
+        "Kapazität eines größeren Expertenmodells",
+        "MIT-Lizenz"
+      ],
+      "limitations": [
+        "Flash ist keine lokale Latenzgarantie",
+        "Aktueller Glm4MoeLite-Pfad erforderlich"
+      ],
+      "license": "mit",
+      "sourceUrl": "https://huggingface.co/zai-org/GLM-4.7-Flash",
+      "priority": false
+    },
+    {
+      "modelId": "Qwen/Qwen3-Coder-Next",
+      "name": "Qwen3 Coder Next",
+      "publisher": "Qwen",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        52.0,
+        62.0
+      ],
+      "estimatedRamGiB": [
+        96.0,
+        128.0
+      ],
+      "estimatedDownloadGiB": [
+        44.0,
+        50.0
+      ],
+      "recommendedGpuGiB": 96,
+      "engine": "llama.cpp",
+      "innovation": "Ultra-sparsames 80B-MoE mit Hybrid-Attention und Coding-Agent-Training.",
+      "useCases": [
+        "Große Repositories",
+        "Coding-Agenten",
+        "Mehrstufige technische Arbeit"
+      ],
+      "strengths": [
+        "Rund 3B aktive Parameter",
+        "Offizielle GGUF-Dateien"
+      ],
+      "limitations": [
+        "80B Gesamtgewichte bleiben speicherrelevant",
+        "Aktueller Runner erforderlich"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3-Coder-Next",
+      "priority": true
+    },
+    {
+      "modelId": "Qwen/Qwen3.5-122B-A10B",
+      "name": "Qwen3.5 122B A10B",
+      "publisher": "Qwen",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        80.0,
+        94.0
+      ],
+      "estimatedRamGiB": [
+        128.0,
+        160.0
+      ],
+      "estimatedDownloadGiB": [
+        69.0,
+        76.0
+      ],
+      "recommendedGpuGiB": 128,
+      "engine": "llama.cpp",
+      "innovation": "Großes Hybrid-MoE für anspruchsvolle lokale Agenten und Multimodalität.",
+      "useCases": [
+        "Große Analysen",
+        "Agenten",
+        "Multimodale Aufgaben"
+      ],
+      "strengths": [
+        "Große Gesamtkapazität",
+        "Sparsame Aktivierung je Token"
+      ],
+      "limitations": [
+        "Enger 96-GiB-Modellrahmen auf 128-GiB-Hardware",
+        "Multi-GPU-Split und Kontext konkret prüfen"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3.5-122B-A10B",
+      "priority": true
+    },
+    {
+      "modelId": "mistralai/Mistral-Small-4-119B-2603",
+      "name": "Mistral Small 4 119B",
+      "publisher": "Mistral AI",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        78.0,
+        92.0
+      ],
+      "estimatedRamGiB": [
+        128.0,
+        160.0
+      ],
+      "estimatedDownloadGiB": [
+        67.0,
+        74.0
+      ],
+      "recommendedGpuGiB": 128,
+      "engine": "llama.cpp",
+      "innovation": "Ein gemeinsames Modell für Instruct, Reasoning, Coding und Vision mit optionaler EAGLE-Beschleunigung.",
+      "useCases": [
+        "Große Assistenz",
+        "Coding-Agenten",
+        "Multimodale Analyse"
+      ],
+      "strengths": [
+        "Mehrere Arbeitsweisen in einem Modell",
+        "Hersteller verweist auf llama.cpp"
+      ],
+      "limitations": [
+        "EAGLE-Drafter nicht im Speicherbudget enthalten",
+        "128-GiB-Klasse verlangt konkreten Split"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603",
+      "priority": true
+    },
+    {
+      "modelId": "inclusionAI/Ling-3.0-flash",
+      "name": "Ling 3.0 Flash",
+      "publisher": "inclusionAI",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "Q4",
+      "estimatedVramGiB": [
+        80.0,
+        94.0
+      ],
+      "estimatedRamGiB": [
+        128.0,
+        160.0
+      ],
+      "estimatedDownloadGiB": [
+        70.0,
+        78.0
+      ],
+      "recommendedGpuGiB": 128,
+      "engine": "llama.cpp",
+      "innovation": "KDA und MLA skalieren ein großes sparsames MoE mit niedriger aktiver Rechenlast.",
+      "useCases": [
+        "Große Agenten",
+        "Analyse",
+        "Werkzeugabläufe"
+      ],
+      "strengths": [
+        "Rund 5.1B aktive Parameter bei 124B gesamt",
+        "Innovativer Attention-Pfad"
+      ],
+      "limitations": [
+        "Neue Architektur muss im gewählten Runner unterstützt sein",
+        "Kein freier Speichergewinn durch kleine aktive Zahl"
+      ],
+      "license": "mit",
+      "sourceUrl": "https://huggingface.co/inclusionAI/Ling-3.0-flash",
+      "priority": false
+    },
+    {
+      "modelId": "openai/gpt-oss-120b",
+      "name": "gpt-oss 120B",
+      "publisher": "OpenAI",
+      "category": "text",
+      "vramClass": "32–128",
+      "quantization": "MXFP4",
+      "estimatedVramGiB": [
+        72.0,
+        88.0
+      ],
+      "estimatedRamGiB": [
+        96.0,
+        128.0
+      ],
+      "estimatedDownloadGiB": [
+        60.0,
+        68.0
+      ],
+      "recommendedGpuGiB": 128,
+      "engine": "llama.cpp",
+      "innovation": "Natives MXFP4-MoE mit steuerbarem Reasoning und Harmony.",
+      "useCases": [
+        "Große Reasoning-Aufgaben",
+        "Werkzeuge",
+        "Technische Assistenz"
+      ],
+      "strengths": [
+        "Niedrigpräzise Expertengewichte",
+        "Offene OpenAI-Modellfamilie"
+      ],
+      "limitations": [
+        "Harmony-Template zwingend",
+        "Speicherwerte sind keine Zusage für jede Exportvariante"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/openai/gpt-oss-120b",
+      "priority": false
+    },
+    {
+      "modelId": "zai-org/GLM-5.3-Flash",
+      "name": "GLM 5.3 Flash",
+      "publisher": "Z.ai",
+      "category": "text",
+      "vramClass": "über 128",
+      "quantization": "Q4 Planung",
+      "estimatedVramGiB": [
+        200.0,
+        225.0
+      ],
+      "estimatedRamGiB": [
+        256.0,
+        384.0
+      ],
+      "estimatedDownloadGiB": [
+        180.0,
+        200.0
+      ],
+      "recommendedGpuGiB": 384,
+      "engine": "llama.cpp",
+      "innovation": "Native Multimodalität mit neuer sparsamer und linearer Attention sowie Hyper-Connections.",
+      "useCases": [
+        "Server-Agenten",
+        "Große Coding-Aufgaben",
+        "Multimodale Forschung"
+      ],
+      "strengths": [
+        "Großer Expertenpool bei geringerer aktiver Rechenlast",
+        "Aktuelle Architektur"
+      ],
+      "limitations": [
+        "Forschungskandidat ohne LastBrowser-Runnerfreigabe",
+        "Neue Architektur und Quantisierung konkret prüfen"
+      ],
+      "license": "mit",
+      "sourceUrl": "https://huggingface.co/zai-org/GLM-5.3-Flash",
+      "priority": false
+    },
+    {
+      "modelId": "deepseek-ai/DeepSeek-V4.1-Flash",
+      "name": "DeepSeek V4.1 Flash",
+      "publisher": "DeepSeek",
+      "category": "text",
+      "vramClass": "über 128",
+      "quantization": "Q4 Planung",
+      "estimatedVramGiB": [
+        470.0,
+        540.0
+      ],
+      "estimatedRamGiB": [
+        768.0,
+        1024.0
+      ],
+      "estimatedDownloadGiB": [
+        430.0,
+        470.0
+      ],
+      "recommendedGpuGiB": 768,
+      "engine": "Nicht qualifiziert",
+      "innovation": "Engram-Lookup-Speicher, Encoder–Decoder und neue Hyper-Connections.",
+      "useCases": [
+        "Serverforschung",
+        "Große Agenten",
+        "Architekturvergleich"
+      ],
+      "strengths": [
+        "Innovative Speicher- und Rechenarchitektur",
+        "Große sparse Kapazität"
+      ],
+      "limitations": [
+        "Kein hier belegter llama.cpp- oder Prism-Pfad",
+        "Aggregierter GPU-Speicher allein reicht nicht für Kompatibilität"
+      ],
+      "license": "mit",
+      "sourceUrl": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
+      "priority": false
+    },
+    {
+      "modelId": "prism-ml/bonsai-image-ternary-4B-gemlite-2bit",
+      "name": "Bonsai Image Ternary 4B",
+      "publisher": "Prism ML",
+      "category": "image",
+      "vramClass": "8–16",
+      "quantization": "ternär Gemlite",
+      "estimatedVramGiB": [
+        6.8,
+        6.8
+      ],
+      "estimatedRamGiB": [
+        16.0,
+        24.0
+      ],
+      "estimatedDownloadGiB": [
+        4.24,
+        4.24
+      ],
+      "recommendedGpuGiB": 12,
+      "engine": "Gemlite/HQQ (separate integration)",
+      "innovation": "Ternäre Bildgewichte reduzieren den vollständigen Generator-Footprint.",
+      "useCases": [
+        "Bilder erzeugen",
+        "Kompakte lokale Bildfunktion"
+      ],
+      "strengths": [
+        "Publisher nennt 6.8 GiB Peak bei 1024² auf RTX 3080",
+        "Vollständiges Paket mit Encoder und VAE"
+      ],
+      "limitations": [
+        "Eigene Gemlite/HQQ-Laufzeit statt belegter SD.cpp-Unterstützung",
+        "Publisher-Messung nicht auf LastBrowser übertragen",
+        "WebGPU-Demo ist ein separater Integrationsweg"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-gemlite-2bit",
+      "priority": true
+    },
+    {
+      "modelId": "black-forest-labs/FLUX.2-klein-4B",
+      "name": "FLUX.2 klein 4B",
+      "publisher": "Black Forest Labs",
+      "category": "image",
+      "vramClass": "8–16",
+      "quantization": "Q4–Q5",
+      "estimatedVramGiB": [
+        4.0,
+        6.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        5.0,
+        7.0
+      ],
+      "recommendedGpuGiB": 8,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Kompakte destillierte Generierung und Bildbearbeitung mit wenigen Schritten.",
+      "useCases": [
+        "Bilder erzeugen",
+        "Referenzbilder bearbeiten",
+        "Schnelle Entwürfe"
+      ],
+      "strengths": [
+        "Kompakte aktuelle FLUX-Familie",
+        "SD.cpp-Pipeline dokumentiert"
+      ],
+      "limitations": [
+        "VRAM-Schätzung bei 1024² mit CPU-Offloading",
+        "Ohne Offloading etwa 8–12 GiB",
+        "Referenzen erhöhen den Bedarf"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/black-forest-labs/FLUX.2-klein-4B",
+      "priority": true
+    },
+    {
+      "modelId": "Tongyi-MAI/Z-Image-Turbo",
+      "name": "Z-Image Turbo",
+      "publisher": "Tongyi-MAI",
+      "category": "image",
+      "vramClass": "8–16",
+      "quantization": "Q4–Q5",
+      "estimatedVramGiB": [
+        4.0,
+        6.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        6.0,
+        8.0
+      ],
+      "recommendedGpuGiB": 8,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Destillierter Generator für schnelle fotorealistische Iterationen.",
+      "useCases": [
+        "Fotorealismus",
+        "Entwürfe",
+        "Textdarstellung"
+      ],
+      "strengths": [
+        "Wenige Generierungsschritte",
+        "SD.cpp-Pipeline dokumentiert"
+      ],
+      "limitations": [
+        "1024² Batch 1 mit CPU-Offload",
+        "Ohne Offload etwa 8–12 GiB",
+        "Distillation begrenzt freie CFG-Steuerung"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Tongyi-MAI/Z-Image-Turbo",
+      "priority": true
+    },
+    {
+      "modelId": "Qwen/Qwen-Image-2512",
+      "name": "Qwen Image 2512",
+      "publisher": "Qwen",
+      "category": "image",
+      "vramClass": "16–32",
+      "quantization": "Q4–Q5",
+      "estimatedVramGiB": [
+        8.0,
+        12.0
+      ],
+      "estimatedRamGiB": [
+        32.0,
+        48.0
+      ],
+      "estimatedDownloadGiB": [
+        16.0,
+        20.0
+      ],
+      "recommendedGpuGiB": 16,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Größere Bildgeneration mit Fokus auf Menschen, Details und Schrift.",
+      "useCases": [
+        "Grafiken",
+        "Schrift im Bild",
+        "Menschen und Natur"
+      ],
+      "strengths": [
+        "Reife größere Qwen-Image-Variante",
+        "Komposition und Textdarstellung"
+      ],
+      "limitations": [
+        "1024² Batch 1 mit CPU-Offload",
+        "GPU-resident etwa 20–28 GiB",
+        "Genaue SD.cpp-Checkpointversion noch zu qualifizieren"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen-Image-2512",
+      "priority": false
+    },
+    {
+      "modelId": "meituan-longcat/LongCat-Image",
+      "name": "LongCat Image",
+      "publisher": "Meituan",
+      "category": "image",
+      "vramClass": "8–16",
+      "quantization": "Q4–Q5",
+      "estimatedVramGiB": [
+        5.0,
+        8.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        8.0,
+        11.0
+      ],
+      "recommendedGpuGiB": 12,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Bildgenerator für fotorealistische Komposition und chinesische sowie englische Schrift.",
+      "useCases": [
+        "Fotorealismus",
+        "Poster",
+        "Text im Bild"
+      ],
+      "strengths": [
+        "SD.cpp-Pipeline dokumentiert",
+        "Spezifischer Schrift-Schwerpunkt"
+      ],
+      "limitations": [
+        "1024² Batch 1 mit CPU-Offload",
+        "GPU-resident etwa 11–16 GiB",
+        "Mehr Schritte als Turbo-Modelle"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/meituan-longcat/LongCat-Image",
+      "priority": true
+    },
+    {
+      "modelId": "robbyant/lingbot-video-dense-1.3b",
+      "name": "LingBot Video Dense 1.3B",
+      "publisher": "Robbyant",
+      "category": "video",
+      "vramClass": "8–16",
+      "quantization": "DiT Q8 + Encoder Q4",
+      "estimatedVramGiB": [
+        4.0,
+        8.0
+      ],
+      "estimatedRamGiB": [
+        24.0,
+        32.0
+      ],
+      "estimatedDownloadGiB": [
+        5.0,
+        7.0
+      ],
+      "recommendedGpuGiB": 12,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Kompakter neuer Text- und Bild-zu-Video-Basisgenerator.",
+      "useCases": [
+        "Kurze Textclips",
+        "Bilder animieren"
+      ],
+      "strengths": [
+        "Kleine Videomodellklasse",
+        "SD.cpp-Basispipeline dokumentiert"
+      ],
+      "limitations": [
+        "480p 33 Frames mit CPU-Offload",
+        "Strukturierte Captions nötig",
+        "Optionaler Prompt-Rewriter und Refiner nicht enthalten"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/robbyant/lingbot-video-dense-1.3b",
+      "priority": true
+    },
+    {
+      "modelId": "Wan-AI/Wan2.2-TI2V-5B",
+      "name": "Wan 2.2 TI2V 5B",
+      "publisher": "Wan-AI",
+      "category": "video",
+      "vramClass": "8–16",
+      "quantization": "DiT und Encoder Q4",
+      "estimatedVramGiB": [
+        8.0,
+        12.0
+      ],
+      "estimatedRamGiB": [
+        32.0,
+        48.0
+      ],
+      "estimatedDownloadGiB": [
+        7.0,
+        10.0
+      ],
+      "recommendedGpuGiB": 16,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Gemeinsamer Text- und Bild-zu-Video-Generator für mittlere Hardware.",
+      "useCases": [
+        "Text zu Video",
+        "Bild zu Video"
+      ],
+      "strengths": [
+        "Ein Modell für beide Eingabearten",
+        "SD.cpp-Pipeline dokumentiert"
+      ],
+      "limitations": [
+        "1280×704 121 Frames mit CPU-Offload",
+        "GPU-resident etwa 14–22 GiB",
+        "Eigene Wan2.2-VAE erforderlich"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Wan-AI/Wan2.2-TI2V-5B",
+      "priority": true
+    },
+    {
+      "modelId": "Wan-AI/Wan2.2-T2V-A14B",
+      "name": "Wan 2.2 T2V A14B",
+      "publisher": "Wan-AI",
+      "category": "video",
+      "vramClass": "16–32",
+      "quantization": "beide Noise-Experten Q4",
+      "estimatedVramGiB": [
+        10.0,
+        16.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        20.0,
+        24.0
+      ],
+      "recommendedGpuGiB": 24,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Größere Text-zu-Video-Variante mit High- und Low-Noise-Experten.",
+      "useCases": [
+        "Freie Textclips",
+        "Aufwendigere Szenen"
+      ],
+      "strengths": [
+        "Größere Generatorkapazität",
+        "SD.cpp-Pipeline dokumentiert"
+      ],
+      "limitations": [
+        "480p 81 Frames mit CPU-Offload",
+        "Beide Experten müssen installiert werden",
+        "GPU-resident etwa 28–40 GiB"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Wan-AI/Wan2.2-T2V-A14B",
+      "priority": false
+    },
+    {
+      "modelId": "Wan-AI/Wan2.2-I2V-A14B",
+      "name": "Wan 2.2 I2V A14B",
+      "publisher": "Wan-AI",
+      "category": "video",
+      "vramClass": "16–32",
+      "quantization": "beide Noise-Experten Q4",
+      "estimatedVramGiB": [
+        10.0,
+        16.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        20.0,
+        24.0
+      ],
+      "recommendedGpuGiB": 24,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Auf Bildanimation spezialisierte größere Wan-Variante.",
+      "useCases": [
+        "Bilder animieren",
+        "Szenen fortführen"
+      ],
+      "strengths": [
+        "Dedizierter Bild-zu-Video-Checkpoint",
+        "SD.cpp-Pipeline dokumentiert"
+      ],
+      "limitations": [
+        "480p 81 Frames mit CPU-Offload",
+        "Beide Experten erforderlich",
+        "GPU-resident etwa 28–40 GiB"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B",
+      "priority": false
+    },
+    {
+      "modelId": "Wan-AI/Wan2.2-S2V-14B",
+      "name": "Wan 2.2 S2V 14B",
+      "publisher": "Wan-AI",
+      "category": "video",
+      "vramClass": "16–32",
+      "quantization": "DiT und Encoder Q4",
+      "estimatedVramGiB": [
+        10.0,
+        16.0
+      ],
+      "estimatedRamGiB": [
+        48.0,
+        64.0
+      ],
+      "estimatedDownloadGiB": [
+        13.0,
+        17.0
+      ],
+      "recommendedGpuGiB": 24,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Audio- und sprachgesteuerte Personenanimation mit zusätzlichem Audioencoder.",
+      "useCases": [
+        "Sprechende Figuren",
+        "Audio zu Animation"
+      ],
+      "strengths": [
+        "Eigener Audio-Workflow",
+        "SD.cpp-S2V-Pfad dokumentiert"
+      ],
+      "limitations": [
+        "480p 81 Frames mit CPU-Offload",
+        "Wav2Vec2 erforderlich",
+        "Aktueller SD.cpp-Pfad auf einen kurzen Chunk begrenzt"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Wan-AI/Wan2.2-S2V-14B",
+      "priority": false
+    },
+    {
+      "modelId": "robbyant/lingbot-video-moe-30b-a3b",
+      "name": "LingBot Video MoE 30B A3B",
+      "publisher": "Robbyant",
+      "category": "video",
+      "vramClass": "16–32",
+      "quantization": "alle Experten Q4",
+      "estimatedVramGiB": [
+        12.0,
+        20.0
+      ],
+      "estimatedRamGiB": [
+        64.0,
+        96.0
+      ],
+      "estimatedDownloadGiB": [
+        20.0,
+        25.0
+      ],
+      "recommendedGpuGiB": 32,
+      "engine": "stable-diffusion.cpp",
+      "innovation": "Sparsamer Expertenpool für größere physikalische und verkörperte Videoszenen.",
+      "useCases": [
+        "Physikalische Szenen",
+        "Text- und Bildclips"
+      ],
+      "strengths": [
+        "Große Gesamtkapazität bei sparsamer Aktivierung",
+        "SD.cpp-Basispipeline dokumentiert"
+      ],
+      "limitations": [
+        "480p 33 Frames mit CPU-Offload",
+        "Alle Expertengewichte bleiben nötig",
+        "Optionaler großer Refiner und Prompt-Rewriter nicht enthalten"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/robbyant/lingbot-video-moe-30b-a3b",
+      "priority": false
+    }
+  ]
+}

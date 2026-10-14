@@ -72,7 +72,7 @@ async function main() {
   const root = path.resolve(__dirname, '../../..');
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-settings-plugins-'));
   try {
-    require('esbuild').buildSync({ stdin:{contents:fixture,loader:'tsx',resolveDir:path.join(root,'apps/desktop')}, bundle:true, platform:'browser', format:'iife', target:'chrome130', define:{'import.meta.env.VITE_ENABLE_AI_ORCHESTRATION':JSON.stringify('false'),'import.meta.url':JSON.stringify('file:///fixture.js')}, loader:{'.woff2':'dataurl'}, outfile:path.join(temp,'fixture.js') });
+    require('esbuild').buildSync({ stdin:{contents:fixture,loader:'tsx',resolveDir:path.join(root,'apps/desktop')}, bundle:true, platform:'browser', format:'iife', target:'chrome130', define:{'import.meta.env.VITE_ENABLE_AI_ORCHESTRATION':JSON.stringify('false'),'import.meta.url':JSON.stringify('file:///fixture.js')}, loader:{'.woff2':'dataurl','.woff':'dataurl','.ttf':'dataurl'}, outfile:path.join(temp,'fixture.js') });
     fs.writeFileSync(path.join(temp,'index.html'), '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:"><link rel="stylesheet" href="fixture.css"></head><body><div id="root"></div><script src="fixture.js"></script></body></html>');
     const env={...process.env}; delete env.ELECTRON_RUN_AS_NODE;
     const electronPackage=require.resolve('electron/package.json');

@@ -144,11 +144,11 @@ describe('settings update status and install action', () => {
 
   it('keeps the Hub skill cards visible while hiding the ineffective auto-approve control', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/renderer/components/UnifiedExtensionHub.tsx'), 'utf8');
-    expect(source).toContain('filteredSkills.map((skill)');
+    expect(source).toContain('visibleSkills.map(renderSkill)');
     expect(source).toContain('skill.name');
     expect(source).not.toContain('auto-approve-toggle');
     expect(source).not.toContain('Immer vertrauen (Auto-Approve)');
-    expect(source).toContain("localStorage.setItem('lastbrowser.mcp_skills.v1', JSON.stringify(next))");
+    expect(source).toContain('localStorage.setItem(BUILTIN_SKILLS_STORAGE_KEY, JSON.stringify(next))');
     expect(source).toContain("(s.id === id ? { ...s, ...updates } : s)");
     expect(source).not.toContain("localStorage.removeItem('lastbrowser.mcp_skills.v1')");
   });

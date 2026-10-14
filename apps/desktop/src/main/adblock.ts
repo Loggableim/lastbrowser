@@ -48,7 +48,10 @@ export type AdblockOptions = {
 
 const CACHE_FILE = 'adblocker-engine.bin';
 const CACHE_METADATA_FILE = `${CACHE_FILE}.json`;
-export const FILTER_ENGINE_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+// YouTube countermeasures change quickly; include Ghostery's maintained quick-fixes
+// and resources in each refresh rather than keeping a week-old engine in memory.
+export const FILTER_ENGINE_CACHE_MAX_AGE_MS = 4 * 60 * 60 * 1000;
+const FILTER_ENGINE_REFRESH_CHECK_MS = 60 * 60 * 1000;
 
 export type FilterEngineCacheOptions<T> = {
   cached: T | null;
@@ -162,7 +165,63 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
   let blockedCount = 0;
   let blocker: ElectronBlocker | null = null;
   let loadPromise: Promise<ElectronBlocker | null> | null = null;
+  let refreshPromise: Promise<void> | null = null;
+  let refreshTimer: ReturnType<typeof setInterval> | null = null;
+  let lastFilterRefreshAt = 0;
   const attached = new Set<Session>();
+
+  function prepareEngine(instance: ElectronBlocker): void {
+    instance.on('request-blocked', () => { blockedCount += 1; });
+    patchBlockerForStreaming(instance);
+    // The SDK uses process-wide IPC handlers for session preloads. A late IPC
+    // callback must not inject after the user disables blocking, or into a
+    // session which this controller never attached.
+    const inject = instance.onInjectCosmeticFilters.bind(instance);
+    instance.onInjectCosmeticFilters = async (event, url, message) => {
+      if (!enabled || !attached.has(event.sender.session)) return;
+      if (event.senderFrame?.url !== url) return;
+      return inject(event, url, message);
+    };
+    const observe = instance.onIsMutationObserverEnabled.bind(instance);
+    instance.onIsMutationObserverEnabled = async event => enabled
+      && attached.has(event.sender.session) && observe(event);
+  }
+
+  function startRefreshChecks(): void {
+    if (refreshTimer || options.loadBlocker) return;
+    refreshTimer = setInterval(() => { void refreshIfStale(); }, FILTER_ENGINE_REFRESH_CHECK_MS);
+    refreshTimer.unref();
+    app.once('before-quit', () => {
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = null;
+    });
+  }
+
+  async function refreshIfStale(): Promise<void> {
+    if (refreshPromise) return refreshPromise;
+    if (!blocker || options.loadBlocker || Date.now() - lastFilterRefreshAt < FILTER_ENGINE_CACHE_MAX_AGE_MS) return;
+    refreshPromise = (async () => {
+      try {
+        // Build and persist the replacement before touching active sessions.
+        // Offline refresh retains the last usable filter snapshot.
+        const replacement = await defaultLoadBlocker();
+        prepareEngine(replacement);
+        const previous = blocker;
+        for (const target of attached) {
+          try { if (previous?.isBlockingEnabled(target)) previous.disableBlockingInSession(target); } catch {}
+        }
+        blocker = replacement;
+        if (enabled) {
+          for (const target of attached) {
+            try { enableBlocking(replacement, target); } catch {}
+          }
+        }
+      } catch {
+        // A failed refresh must not disable the active working engine.
+      } finally { refreshPromise = null; }
+    })();
+    return refreshPromise;
+  }
 
   function status(): AdblockStatus {
     return { enabled, blockedCount, state, lastError };
@@ -187,12 +246,10 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
       try {
         const load = options.loadBlocker || defaultLoadBlocker;
         const instance = await load();
-        instance.on('request-blocked', () => {
-          blockedCount += 1;
-        });
-        patchBlockerForStreaming(instance);
+        prepareEngine(instance);
         blocker = instance;
         state = 'ready';
+        startRefreshChecks();
         return instance;
       } catch (error) {
         state = 'error';
@@ -228,11 +285,22 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
       }
     }
 
+    if (cachedAt !== undefined && cachedAt <= Date.now()) lastFilterRefreshAt = cachedAt;
     return loadFilterEngineCache({
       cached,
       cachedAt,
       now: Date.now(),
-      refresh: () => ElectronBlocker.fromPrebuiltAdsAndTracking(fetch),
+      refresh: async () => {
+        // SDK preset includes EasyList/EasyPrivacy, uBlock quick-fixes, unbreak
+        // exceptions and matching scriptlet resources, including YouTube rules.
+        const engine = await ElectronBlocker.fromPrebuiltAdsAndTracking(async url => {
+          const response = await fetch(url, { signal: AbortSignal.timeout(15000), credentials: 'omit' });
+          if (!response.ok) throw new Error(`Filter subscription HTTP ${response.status}`);
+          return response;
+        });
+        lastFilterRefreshAt = Date.now();
+        return engine;
+      },
       persist: async (engine) => {
         if (!file) return;
         await fs.writeFile(file, Buffer.from(engine.serialize()));
@@ -242,8 +310,21 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
   }
 
   async function attach(session: Session): Promise<void> {
-    if (attached.has(session)) return;
+    if (attached.has(session)) {
+      // Startup can await an attachment already scheduled by session-created.
+      if (loadPromise) await loadPromise;
+      return;
+    }
     attached.add(session);
+
+    // session-created fires synchronously before a new Space/webview navigates.
+    // Do not yield to a microtask when the startup engine is already available:
+    // the official cosmetic/scriptlet preload must be registered immediately.
+    if (blocker) {
+      try { if (enabled) enableBlocking(blocker, session); }
+      catch (error) { state = 'error'; lastError = error instanceof Error ? error.message : String(error); }
+      return;
+    }
 
     const instance = await loadBlocker();
     if (!instance) return;
@@ -281,6 +362,7 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
   function setEnabled(next: boolean): void {
     if (next === enabled) return;
     enabled = next;
+    if (next) void refreshIfStale();
     if (!blocker) return;
     for (const session of attached) {
       try {

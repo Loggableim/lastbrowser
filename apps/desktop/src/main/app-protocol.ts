@@ -48,6 +48,8 @@ export function registerAppScheme(): void {
         standard: true,
         secure: true,
         supportFetchAPI: true,
+        // Bundled opening sounds are served through streaming Response bodies.
+        stream: true,
         // Persistent storage (localStorage/IndexedDB) requires a real origin.
         allowServiceWorkers: true,
         corsEnabled: true
@@ -82,6 +84,8 @@ export function installAppProtocolHandler(rendererDir: string): void {
     const headers = new Headers(response.headers);
     headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
     headers.set('Pragma', 'no-cache');
+    // Renderer scripts must ship with the application; the preload has native privileges.
+    headers.set('Content-Security-Policy', "script-src 'self'; object-src 'none'; base-uri 'none'");
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,

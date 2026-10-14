@@ -624,7 +624,9 @@ def build_anthropic_client(
         # Browser-device access tokens are bearer credentials, not Anthropic keys.
         kwargs.pop("api_key", None)
         kwargs["auth_token"] = api_key
-    return _anthropic_sdk.Anthropic(**kwargs)
+    from runtime.provider_client_pool import create_pooled_sdk
+    return create_pooled_sdk(_anthropic_sdk.Anthropic, kwargs,
+        provider='anthropic-protocol', api_mode='anthropic_messages')
 
 
 def build_anthropic_bedrock_client(region: str):

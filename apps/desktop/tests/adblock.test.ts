@@ -14,6 +14,8 @@ function fakeBlocker() {
   const listeners = new Map<string, Listener[]>();
   const enabled = new Set<unknown>();
   return {
+    onInjectCosmeticFilters: vi.fn(async (_event: unknown, _url: string, _message?: unknown) => {}),
+    onIsMutationObserverEnabled: vi.fn(async (_event: unknown) => true),
     on: vi.fn((event: string, listener: Listener) => {
       const current = listeners.get(event) || [];
       current.push(listener);

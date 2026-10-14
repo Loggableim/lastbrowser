@@ -456,9 +456,31 @@ def local_ai_core_release_ready(manager,run_id):
 def dispatch_operation(operation: str, request: OperationRequest, actor: str):
     global _local_ai_broker, _local_ai_bootstrap_manager
     payload = request.payload
+    if (operation == 'localAi.store' and isinstance(payload.get('request'), dict)
+            and payload['request'].get('operation') in {'view', 'scan'}):
+        # Catalog browsing needs no bundled engine, cache binding, stored runtime
+        # receipt or worker manager. The normal private bridge and profile/Space
+        # authorization still apply before reading repository metadata.
+        scope = _scope(request)
+        hub().by_scope(scope, actor)
+        if set(payload) - {'request', 'cacheRoot', 'scanId'} or set(payload['request']) != {'operation'}:
+            raise ValueError('model_store_envelope_invalid')
+        hardware = None
+        if payload.get('scanId') is not None:
+            if not isinstance(payload['scanId'], str) or not payload['scanId']:
+                raise ValueError('model_store_scan_identity_invalid')
+            with _LOCK:
+                broker = _local_ai_broker
+            if broker is None:
+                raise ValueError('model_store_hardware_scan_unknown')
+            hardware = broker.scans.read(scope, payload['scanId']).hardware.model_dump(mode='json', by_alias=True)
+        from runtime.local_ai.store_curation import readonly_catalog_view
+        return {'schemaVersion': 1, 'scope': scope.model_dump(mode='json', by_alias=True),
+                'kind': 'model_store', 'operation': payload['request']['operation'],
+                'store': readonly_catalog_view(hardware), 'storeResult': None}
     # This release candidate deliberately excludes the bundled local model
     # store and llama.cpp runtime until redistribution and package evidence are
-    # closed. Reject every feature operation before constructing managers,
+    # closed. Reject every execution/mutation operation before constructing managers,
     # binding caches, reading runtime receipts, or reaching provider routes.
     if operation in {
         'localAi.bootstrap', 'localAi.roleProfile', 'localAi.store',
@@ -516,6 +538,10 @@ def dispatch_operation(operation: str, request: OperationRequest, actor: str):
             raise ScopeError("Backend profile is not configured; no default fallback")
         return hub().bind(actor, payload)
     scope = _scope(request)
+    if operation == "companion":
+        from runtime.independent.companion import companion_operation
+        store, resolver = hub().by_scope(scope, actor)
+        return companion_operation(store, resolver, scope, actor, payload)
     if (operation == "localAi.runtime" and isinstance(payload.get("request"), dict)
             and payload["request"].get("operation") == "receipt"):
         from web.api.local_ai_runtime_host import read_local_ai_runtime_receipt

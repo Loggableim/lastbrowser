@@ -163,9 +163,32 @@ class SessionDB:
                 value TEXT NOT NULL DEFAULT ''
                 ,updated_at REAL DEFAULT (strftime('%s','now'))
             );
+            CREATE TABLE IF NOT EXISTS usage_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL,
+                timestamp REAL NOT NULL,
+                provider TEXT,
+                model TEXT,
+                input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+                cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+                reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+                cost_usd REAL,
+                cost_status TEXT NOT NULL DEFAULT 'unknown',
+                cost_source TEXT,
+                token_usage_known INTEGER NOT NULL DEFAULT 1,
+                model_source TEXT NOT NULL DEFAULT 'request_route'
+            );
+            CREATE INDEX IF NOT EXISTS usage_events_timestamp ON usage_events(timestamp);
             """
         )
         self._migrate_session_columns()
+        usage_columns = self._table_columns("usage_events")
+        for name, definition in (("token_usage_known", "INTEGER NOT NULL DEFAULT 1"),
+                                 ("model_source", "TEXT NOT NULL DEFAULT 'request_route'")):
+            if name not in usage_columns:
+                self._conn.execute(f"ALTER TABLE usage_events ADD COLUMN {name} {definition}")
         self._repair_missing_parent_session_refs()
         self._init_message_search_index()
 
@@ -184,6 +207,11 @@ class SessionDB:
             ("api_call_count", "INTEGER DEFAULT 0"),
             ("tool_call_count", "INTEGER DEFAULT 0"),
             ("billing_provider", "TEXT DEFAULT ''"),
+            ("cache_write_tokens", "INTEGER DEFAULT 0"),
+            ("cost_status", "TEXT DEFAULT 'unknown'"),
+            ("cost_source", "TEXT DEFAULT 'none'"),
+            ("billing_mode", "TEXT DEFAULT 'unknown'"),
+            ("pricing_version", "TEXT"),
         )
         columns = self._table_columns("sessions")
         if all(name in columns for name, _ in additions):
@@ -544,6 +572,8 @@ class SessionDB:
         model: str | None = None,
         api_call_count: int = 0,
         absolute: bool = False,
+        usage_known: bool = True,
+        observed_model: str | None = None,
     ) -> None:
         """Persist token/cost accounting for one session.
 
@@ -629,6 +659,19 @@ class SessionDB:
             f"UPDATE sessions SET {', '.join(sets)} WHERE {pk_col} = ?",  # noqa: S608 - sets/pk_col are built from hardcoded schema branches.
             values,
         )
+        # One immutable observation per actual provider response. Absolute
+        # dashboard mirrors do not create new billable observations.
+        if api_call_count and not absolute:
+            amount = actual_cost_usd if actual_cost_usd is not None else estimated_cost_usd
+            self._conn.execute(
+                "INSERT INTO usage_events (session_id,timestamp,provider,model,input_tokens,output_tokens,"
+                "cache_read_tokens,cache_write_tokens,reasoning_tokens,cost_usd,cost_status,cost_source,token_usage_known,model_source) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (session_id, time.time(), billing_provider, observed_model or model, max(0, int(input_tokens)), max(0, int(output_tokens)),
+                 max(0, int(cache_read_tokens)), max(0, int(cache_write_tokens)), max(0, int(reasoning_tokens)),
+                 amount, cost_status or ("actual" if actual_cost_usd is not None else "unknown"), cost_source, int(usage_known),
+                 "provider_response" if observed_model else "request_route"),
+            )
 
     def _execute_write(self, fn: Any) -> None:
         """Run a caller-supplied write callback with the raw connection.

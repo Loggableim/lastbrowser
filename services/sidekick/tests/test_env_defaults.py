@@ -238,6 +238,9 @@ def test_async_call_llm_blocks_local_models_in_game_mode(monkeypatch, tmp_path):
 
 def test_delegate_task_returns_tool_error_for_blocked_game_mode_child(monkeypatch, tmp_path):
     from types import SimpleNamespace
+    from runtime.memory_policy import update_policy
+
+    update_policy({"assistants_enabled": True}, tmp_path)
 
     from web.api import config as web_cfg
 
@@ -259,6 +262,7 @@ def test_delegate_task_returns_tool_error_for_blocked_game_mode_child(monkeypatc
     )
 
     parent = SimpleNamespace(
+        _memory_policy_home=tmp_path,
         _delegate_depth=0,
         _credential_pool=None,
         provider="openrouter",
@@ -290,6 +294,9 @@ def test_delegate_task_returns_tool_error_for_blocked_game_mode_child(monkeypatc
 
 def test_delegate_task_surfaces_non_game_mode_child_build_errors(monkeypatch, tmp_path):
     from types import SimpleNamespace
+    from runtime.memory_policy import update_policy
+
+    update_policy({"assistants_enabled": True}, tmp_path)
 
     from web.api import config as web_cfg
 
@@ -316,6 +323,7 @@ def test_delegate_task_surfaces_non_game_mode_child_build_errors(monkeypatch, tm
     )
 
     parent = SimpleNamespace(
+        _memory_policy_home=tmp_path,
         _delegate_depth=0,
         _credential_pool=None,
         provider="openrouter",
@@ -341,6 +349,15 @@ def test_delegate_task_surfaces_non_game_mode_child_build_errors(monkeypatch, tm
 
     with pytest.raises(RuntimeError, match="boom"):
         delegate_tool.delegate_task(goal="hello", parent_agent=parent)
+
+
+def test_delegate_task_stops_before_building_a_child_when_assistants_are_disabled(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    import tools.delegate_tool as delegate_tool
+
+    monkeypatch.setattr(delegate_tool, "_build_child_agent", lambda *args, **kwargs: pytest.fail("Disabled assistants must not build a child"))
+    result = delegate_tool.delegate_task(goal="hello", parent_agent=SimpleNamespace(_memory_policy_home=tmp_path))
+    assert "assistants_disabled_enable_in_hub" in result
 
 
 def test_gateway_detached_mode_handles_unset_env(monkeypatch):

@@ -24,14 +24,50 @@ export function summarizeStoreHardware(value: unknown) {
     observedAt: typeof hardware.observedAt === 'string' && Number.isFinite(Date.parse(hardware.observedAt)) ? hardware.observedAt : null,
   };
 }
-export type StoreFilters = { query: string; publisher: string; showLarge: boolean; showUnknown: boolean };
-export function filterStoreModels(models: StoreModel[], filters: StoreFilters): StoreModel[] {
+export type StoreFilters = { query: string; publisher: string; showLarge: boolean; showUnknown: boolean; category?: 'text' | 'image' | 'video' };
+export function filterStoreModels(models: StoreModel[], filters: StoreFilters, hardware?: unknown): StoreModel[] {
   const query = filters.query.trim().toLocaleLowerCase('de-DE');
   return models.filter((model) => (!filters.publisher || model.publisher === filters.publisher)
-    && `${model.name} ${model.publisher} ${model.description}`.toLocaleLowerCase('de-DE').includes(query)
-    && (model.installed || model.eligibility.state === 'likely_suitable'
-      || model.eligibility.state === 'too_large' && filters.showLarge
-      || model.eligibility.state !== 'too_large' && model.eligibility.state !== 'likely_suitable' && filters.showUnknown));
+    && (!filters.category || storeModelCategory(model) === filters.category)
+    && `${model.name} ${model.publisher} ${model.description} ${model.curation?.innovation || ''} ${model.curation?.useCases.join(' ') || ''}`.toLocaleLowerCase('de-DE').includes(query)
+    && (model.installed || filters.showLarge || assessStoreGpuEstimate(model, hardware) === 'within'
+      || !model.curation && filters.showUnknown && model.eligibility.state !== 'too_large'));
+}
+export function storeModelCategory(model: StoreModel): 'text' | 'image' | 'video' { return model.curation?.category || 'text'; }
+export function formatStoreGiBRange(value?: [number, number]): string {
+  if (!value) return 'Noch nicht angegeben';
+  const format = (number: number) => number.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+  return value[0] === value[1] ? `${format(value[0])} GiB` : `${format(value[0])}–${format(value[1])} GiB`;
+}
+export function storeSourceUrl(value: string | undefined): string | null {
+  try { const url = new URL(value || ''); return ['https:', 'http:'].includes(url.protocol) ? url.href : null; } catch { return null; }
+}
+/** Display-only estimate. It never grants runtime, license, download or installation permission. */
+export function assessStoreGpuEstimate(model: StoreModel, value: unknown): 'unknown' | 'within' | 'outside' {
+  if (!model.curation) return 'unknown';
+  const hardware = record(value);
+  const adapters = Array.isArray(hardware.adapters) ? hardware.adapters.map(record) : [];
+  const measured = (value: unknown): number | null => {
+    const entry = record(value);
+    return entry.status === 'measured' && typeof entry.value === 'number' && Number.isFinite(entry.value) && entry.value > 0 ? entry.value : null;
+  };
+  const gib = 1024 ** 3;
+  // Curation RAM already includes OS/browser reserve. Never add it a second time.
+  const totalRam = measured(hardware.ramTotalBytes), disk = measured(hardware.diskFreeBytes);
+  if (totalRam !== null && totalRam < model.curation.estimatedRamGiB[1] * gib) return 'outside';
+  if (disk !== null && disk < model.curation.estimatedDownloadGiB[1] * gib * 2) return 'outside';
+  if (totalRam === null || disk === null) return 'unknown';
+  const dedicated = adapters.filter(adapter => adapter.sharedSystemMemory !== true);
+  const budgets = dedicated.map(adapter => measured(adapter.processBudgetBytes) ?? measured(adapter.dedicatedBytes)).filter((item): item is number => item !== null);
+  if (!budgets.length) return 'unknown';
+  const peak = model.curation.estimatedVramGiB[1] * gib;
+  return dedicated.some(adapter => {
+    const capacity = measured(adapter.dedicatedBytes);
+    const totalBudget = measured(adapter.processBudgetBytes) ?? capacity;
+    const usage = measured(adapter.processUsageBytes);
+    const budget = totalBudget === null ? null : Math.max(0, totalBudget - (usage ?? 0));
+    return budget !== null && peak <= budget * 0.75 && (capacity === null || capacity >= model.curation!.recommendedGpuGiB * gib);
+  }) ? 'within' : 'outside';
 }
 export function storeEmptyState(models: StoreModel[], filters: StoreFilters, hardware: unknown): 'scan_missing' | 'filtered' | 'compatibility_unknown' | 'catalog_empty' {
   if (filters.query.trim() || filters.publisher || filters.showUnknown && !filters.showLarge && models.some((model) => model.eligibility.state === 'too_large')) return 'filtered';

@@ -22,7 +22,7 @@ describe('model policy settings placement', () => {
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     expect(SETTINGS_SECTIONS.advanced.title).toBe('Advanced');
     expect(visibleSettingsSections().map(([id]) => id)).not.toContain('advanced');
-    expect(normalizeSettingsSectionId('advanced')).toBe('conversation');
+    expect(normalizeSettingsSectionId('advanced')).toBe('preferences');
     expect(settings).toContain("section === 'advanced' && <AdvancedModelPolicySettings");
     expect(settings).toContain("operation: 'resolveScope'");
     expect(settings).toContain('backendProfileName });');

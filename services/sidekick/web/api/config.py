@@ -2663,6 +2663,8 @@ def _models_cache_source_fingerprint() -> dict:
     fp = {
         "config_yaml": _models_cache_file_fingerprint(_get_config_path()),
         "auth_json": _models_cache_file_fingerprint(_get_auth_store_path()),
+        "opencode_device": _models_cache_file_fingerprint(Path(_get_auth_store_path()).parent / "opencode-device.json"),
+        "opencode_cli": _models_cache_file_fingerprint(Path(_get_auth_store_path()).parent / "opencode-data" / "opencode" / "auth.json"),
     }
     # Catalog construction only reads show_openrouter_paid from settings.json.
     # Fingerprint that effective value rather than the whole file's mtime so
@@ -3292,6 +3294,15 @@ def _openai_api_key_provider_ids(env_values: dict) -> set[str]:
     return set()
 
 
+def _annotate_provider_deployment(catalog):
+    from runtime.provider_deployment import provider_deployment
+    configuration = get_config()
+    for group in catalog.get("groups", []) if isinstance(catalog, dict) else []:
+        if isinstance(group, dict):
+            group["deployment"] = provider_deployment(group.get("provider_id"), configuration,
+                                                       active_provider=catalog.get("active_provider"))
+
+
 def get_available_models() -> dict:
     """
     Return available models grouped by provider.
@@ -3692,6 +3703,21 @@ def get_available_models() -> dict:
                 if _canonical in _PROVIDER_MODELS or _canonical in _cfg_providers or _pid_key in _cfg_providers:
                     detected_providers.add(_canonical)
 
+        # Device login is stored separately from API keys/config.yaml. Detect
+        # only this profile's validated workspace, including non-active Go.
+        _connected_opencode = set()
+        _device_opencode = set()
+        try:
+            from cli.opencode_device import has_credentials, credential_status
+            for _pid in ("opencode-go", "opencode-zen"):
+                if has_credentials(_pid):
+                    _device_opencode.add(_pid)
+                    if credential_status(_pid).get("logged_in") is True:
+                        _connected_opencode.add(_pid)
+                        detected_providers.add(_pid)
+        except Exception:
+            pass  # No account fallback, credential dump or synthetic model list.
+
         def _configured_provider_for_base_url(base_url: object) -> str:
             target = _normalize_base_url_for_match(base_url)
             if not target:
@@ -3941,6 +3967,7 @@ def get_available_models() -> dict:
         only_show_configured = providers_cfg.get("only_configured", False) if isinstance(providers_cfg, dict) else False
         if only_show_configured:
             configured_providers = set()
+            configured_providers.update(_connected_opencode)
             if active_provider:
                 configured_providers.add(active_provider)
             cfg_providers = cfg.get("providers", {})
@@ -4015,6 +4042,24 @@ def get_available_models() -> dict:
                             groups.append({"provider": _nc_display, "provider_id": pid, "models": _nc_models})
                     continue
                 provider_name = _PROVIDER_DISPLAY.get(pid, pid.title())
+                if pid in _device_opencode and pid not in _connected_opencode:
+                    continue  # Invalid bound workspace must not fall back to curated IDs.
+                if pid in _connected_opencode:
+                    # Use the authenticated workspace's supported models only;
+                    # curated IDs are not proof of this account's catalog.
+                    try:
+                        from cli.models import provider_model_ids
+                        provenance = {}
+                        discovered = provider_model_ids(pid, source_out=provenance) or []
+                        if provenance.get("source") == "provider_api":
+                            device_models = [{"id": mid if pid == active_provider else f"@{pid}:{mid}", "label": mid}
+                                             for mid in dict.fromkeys(discovered) if isinstance(mid, str) and mid]
+                            if device_models:
+                                groups.append({"provider": provider_name, "provider_id": pid,
+                                               "configured": True, "models": device_models})
+                    except Exception:
+                        pass
+                    continue
                 if pid == "openrouter":
                     # OpenRouter has two model surfaces:
                     #   (1) curated tool-supporting catalog via sidekick_cli.models.fetch_openrouter_models()
@@ -4649,6 +4694,7 @@ def get_available_models() -> dict:
             if cached is not None:
                 _remove_unavailable_antigravity_catalog(cached)
                 _annotate_model_reasoning_efforts(cached.get("groups"))
+                _annotate_provider_deployment(cached)
                 return cached
 
         # Reload config if changed
@@ -4665,6 +4711,7 @@ def get_available_models() -> dict:
         if cached is not None:
             _remove_unavailable_antigravity_catalog(cached)
             _annotate_model_reasoning_efforts(cached.get("groups"))
+            _annotate_provider_deployment(cached)
             return cached
 
         # Cold path: disk cache hit — use it (fast, no lock contention)
@@ -4675,6 +4722,7 @@ def get_available_models() -> dict:
             _available_models_cache_ts = now
             _available_models_cache_source_fingerprint = _models_cache_source_fingerprint()
             _save_models_cache_to_disk(disk_groups)
+            _annotate_provider_deployment(disk_groups)
             return copy.deepcopy(disk_groups)
 
         # Cold path: full rebuild — only one thread reaches here at a time
@@ -4696,6 +4744,7 @@ def get_available_models() -> dict:
             _cache_build_in_progress = False
             _cache_build_cv.notify_all()
         _save_models_cache_to_disk(result)
+        _annotate_provider_deployment(result)
         return copy.deepcopy(result)
 
 

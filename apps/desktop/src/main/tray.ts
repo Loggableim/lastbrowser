@@ -39,16 +39,26 @@ export function revealBrowserWindows(windows: TrayWindowTarget[], preferred?: Tr
   target?.focus();
 }
 
-export function resolveTrayIconPath(resourcesDir?: string): string {
+function trayIconCandidates(resourcesDir?: string): string[] {
   const candidates: string[] = [];
   if (resourcesDir) {
+    // brand is copied verbatim by extraResources; build/icon.ico is only an
+    // installer input and is not present at the packaged resources root.
+    candidates.push(path.join(resourcesDir, 'brand', 'assets', 'Lastbrowser.ico'));
+    candidates.push(path.join(resourcesDir, 'brand', 'assets', 'app-icon-32.png'));
     candidates.push(path.join(resourcesDir, 'icon.ico'));
     candidates.push(path.join(resourcesDir, 'apps', 'desktop', 'build', 'icon.ico'));
     candidates.push(path.join(resourcesDir, 'dist', 'renderer', 'app-icon-16.png'));
   }
+  candidates.push(path.join(process.cwd(), 'brand', 'assets', 'Lastbrowser.ico'));
+  candidates.push(path.join(process.cwd(), 'brand', 'assets', 'app-icon-32.png'));
   candidates.push(path.join(process.cwd(), 'apps', 'desktop', 'build', 'icon.ico'));
   candidates.push(path.join(process.cwd(), 'build', 'icon.ico'));
+  return candidates;
+}
 
+export function resolveTrayIconPath(resourcesDir?: string): string {
+  const candidates = trayIconCandidates(resourcesDir);
   for (const candidate of candidates) {
     if (existsSync(candidate)) return candidate;
   }
@@ -104,11 +114,20 @@ export function buildTrayContextMenu(
 }
 
 export function createAppTray(options: TrayOptions): TrayController {
-  const iconPath = resolveTrayIconPath(options.resourcesDir);
   let tray: Tray | null = null;
 
   try {
-    const icon = existsSync(iconPath) ? nativeImage.createFromPath(iconPath) : nativeImage.createEmpty();
+    let icon: Electron.NativeImage | undefined;
+    for (const candidate of trayIconCandidates(options.resourcesDir)) {
+      if (!existsSync(candidate)) continue;
+      try {
+        const loaded = nativeImage.createFromPath(candidate);
+        if (!loaded.isEmpty()) { icon = loaded; break; }
+      } catch (error) {
+        console.warn('[tray] Could not decode icon:', candidate, error);
+      }
+    }
+    if (!icon) throw new Error('No usable Lastbrowser tray icon found in packaged brand resources.');
     tray = new Tray(icon);
     tray.setToolTip('Lastbrowser — AI Browser & Messaging Gateway');
   } catch (err) {

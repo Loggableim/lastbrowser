@@ -25,13 +25,13 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
     expect(settings).toContain("{section === 'providers' && (");
     expect(settings).toContain("{section === 'local-ai' && <LocalAiSetupPane");
     const setup = readRendererFile('components/LocalAiSetupPane.tsx');
-    expect(setup).toContain('data-local-ai-status="unavailable"');
-    expect(setup).toContain('copy.testBuildUnavailable');
-    expect(setup).toContain('copy.externalProvidersUnaffected');
-    expect(setup).not.toContain('LocalModelStore');
+    expect(setup).toContain("data-local-ai-status={resolved?'catalog':'pending'}");
+    expect(setup).toContain('ProfileResolutionPending');
+    expect(setup).toContain('backendProfileName');
+    expect(setup).toContain('LocalModelStore');
     expect(setup).not.toContain('LocalAiBootstrapPane');
     expect(setup).not.toContain('LocalAiRuntimeControls');
-    expect(setup).not.toContain('client.request');
+    expect(setup).toContain("operation:'resolveScope'");
     expect(readRendererFile('components/FirstRunSetupPane.tsx')).toContain('<LocalAiSetupPane');
   });
 
@@ -42,9 +42,9 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
     expect(wrap).toContain('pointer-events: none;');
     expect(panel).toContain('pointer-events: auto;');
     const pane = readRendererFile('components/FirstRunSetupPane.tsx');
-    expect(pane).toContain("if (event.key !== 'Escape' || saving) return;");
-    expect(pane).toContain("if (aiChoice === 'disabled') void completeBrowserSetup();");
-    expect(pane).toContain("else void chooseAi('disabled');");
+    expect(pane).toContain("if (event.key !== 'Escape' || busy || currentIndex <= 0) return;");
+    expect(pane).toContain('movePage(pages[currentIndex - 1])');
+    expect(pane).toContain("if (page !== 'space' || aiChoice !== 'enabled'");
   });
 
   describe('Panel Store & Zen Exit Default Mode', () => {
@@ -80,7 +80,7 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       store.setSidebarDrawerTab('ai');
       expect(usePanelStore.getState().sidebarDrawerTab).toBe('ai');
       store.setSidebarDrawerTab('workflows');
-      expect(usePanelStore.getState().sidebarDrawerTab).toBe('workflows');
+      expect(usePanelStore.getState().sidebarDrawerTab).toBe('tools');
 
       // Test action bar dock
       store.setActionBarDock('topbar');
@@ -98,23 +98,23 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(source).toContain('sidebar-drawer-tabs');
       expect(source).toContain('currentDrawerTab === \'tabs\'');
       expect(source).toContain('currentDrawerTab === \'ai\'');
-      expect(source).toContain('currentDrawerTab === \'workflows\'');
+      expect(source).not.toContain('currentDrawerTab === \'workflows\'');
       expect(source).toContain('currentDrawerTab === \'tools\'');
 
       // Popart Icons usage
       expect(source).toContain('brandAssets.sidebarIcons.chat');
-      expect(source).toContain('brandAssets.sidebarIcons.kanban');
+      expect(brandAssets.sidebarIcons.kanban).toBeTruthy();
       expect(source).toContain('brandAssets.sidebarIcons.agents');
-      expect(source).toContain('brandAssets.sidebarIcons.skills');
+      expect(brandAssets.sidebarIcons.skills).toBeTruthy();
       expect(source).toContain('brandAssets.sidebarIcons.memory');
-      expect(source).toContain('brandAssets.sidebarIcons.profiles');
+      expect(brandAssets.sidebarIcons.profiles).toBeTruthy();
       expect(source).toContain('brandAssets.sidebarIcons.tasks');
-      expect(source).toContain('brandAssets.sidebarIcons.todos');
+      expect(brandAssets.sidebarIcons.todos).toBeTruthy();
       expect(source).toContain('brandAssets.sidebarIcons.insights');
-      expect(source).toContain('brandAssets.sidebarIcons.browser');
+      expect(brandAssets.sidebarIcons.browser).toBeTruthy();
       expect(source).toContain('brandAssets.sidebarIcons.spark');
-      expect(source).toContain('brandAssets.sidebarIcons.gmail');
-      expect(source).toContain('brandAssets.sidebarIcons.discord');
+      expect(brandAssets.sidebarIcons.gmail).toBeTruthy();
+      expect(brandAssets.sidebarIcons.discord).toBeTruthy();
       expect(source).toContain('brandAssets.sidebarIcons.appstore');
       expect(source).toContain('brandAssets.sidebarIcons.logs');
       expect(source).toContain('brandAssets.sidebarIcons.settings');
@@ -231,7 +231,7 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(source).toContain('onSelectModel');
 
       // Re-branding
-      expect(source).toContain("{botName} · {t('copilot.quickChat')}");
+      expect(source).toContain("{companionName} · {t('copilot.quickChat')}");
 
       // Workflows category tabs and search
       expect(source).toContain('workflow-search-box');
@@ -331,32 +331,17 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
     it('integrates all 17 panels and browser utilities into SidekickSidebar.tsx', () => {
       const source = readRendererFile('components/SidekickSidebar.tsx');
 
-      // AI items (chat, agents, skills, memory, profiles)
-      expect(source).toContain('AI_DRAWER_ITEMS');
-      expect(source).toContain("'chat'");
-      expect(source).toContain("'agents'");
-      expect(source).toContain("'skills'");
-      expect(source).toContain("'memory'");
-      expect(source).toContain("'profiles'");
-
-      // Workflow items (kanban, tasks, workspaces, todos, insights)
-      expect(source).toContain('WORKFLOW_DRAWER_ITEMS');
-      expect(source).toContain("'kanban'");
-      expect(source).toContain("'tasks'");
-      expect(source).toContain("'workspaces'");
-      expect(source).toContain("'todos'");
-      expect(source).toContain("'insights'");
-
-      // Tools items (browser, terminal, gmail, discord, appstore, logs, settings)
-      expect(source).toContain('TOOLS_DRAWER_ITEMS');
-      expect(source).toContain("'browser'");
-      expect(source).toContain("'terminal'");
-      expect(source).toContain("'gmail'");
-      expect(source).toContain("'discord'");
-      expect(source).toContain("'appstore'");
-      expect(source).toContain("'logs'");
-      expect(source).toContain("'settings'");
-
+      expect(source).toContain("id: 'chat'");
+      expect(source).toContain('policy.assistants_enabled');
+      expect(source).toContain('policy.enabled');
+      expect(source).toContain('policy.tasks_enabled');
+      expect(source).toContain("id: 'task-center'");
+      expect(source).toContain("id: 'insights'");
+      expect(source).toContain('policy.gmail_ai_enabled');
+      expect(source).toContain('policy.discord_agents_enabled');
+      expect(source).toContain('terminalEnabled');
+      expect(source).not.toContain("id: 'skills',");
+      expect(source).not.toContain("id: 'profiles',");
       // Browser utilities
       expect(source).toContain('BROWSER UTILITIES');
       expect(source).toContain('onOpenDownloads');

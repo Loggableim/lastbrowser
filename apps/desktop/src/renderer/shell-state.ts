@@ -3,6 +3,7 @@ import type { DesktopTranslationKey } from './i18n/keys.js';
 export type LastbrowserPanelId =
   | 'chat'
   | 'tasks'
+  | 'task-center'
   | 'kanban'
   | 'skills'
   | 'agents'
@@ -60,6 +61,8 @@ export type ProjectSummary = {
 };
 
 export type DesktopChatMessage = {
+  companion?: unknown;
+  memory_usage?: unknown;
   grill_question?: { questionId: string; revision: number };
   grill_fallback?: import('./native-grill-client.js').NativeGrillFallbackMarker;
   independentProgressId?: string;
@@ -153,6 +156,7 @@ export const installedSidebarAppsStorageKey = 'lastbrowser.installedSidebarApps'
 export const lastbrowserPanels: LastbrowserPanel[] = [
   { id: 'chat', label: 'Chat', tooltip: 'Chat' },
   { id: 'tasks', label: 'Tasks', tooltip: 'Tasks' },
+  { id: 'task-center', label: 'Aufgaben', tooltip: 'Aufgaben' },
   { id: 'kanban', label: 'Kanban', tooltip: 'Kanban' },
   { id: 'skills', label: 'Skills', tooltip: 'Skills' },
   { id: 'agents', label: 'Agents', tooltip: 'Agents' },
@@ -174,6 +178,7 @@ export const lastbrowserPanels: LastbrowserPanel[] = [
 export const panelLabelTranslationKeys: Record<LastbrowserPanelId, DesktopTranslationKey> = {
   chat: 'panel.chat',
   tasks: 'panel.tasks',
+  'task-center': 'panel.tasks',
   kanban: 'panel.kanban',
   skills: 'panel.skills',
   agents: 'panel.agents',

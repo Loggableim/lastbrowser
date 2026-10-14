@@ -372,6 +372,9 @@ def _server_settings(account):
 
 def _connect_imap(account=DEFAULT_ACCOUNT):
     """Get an IMAP connection for the current thread + account (pooled)."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["gmail_ai_enabled"]:
+        raise PermissionError("gmail_ai_disabled_enable_in_hub")
     if not account or str(account).strip().lower() == "none":
         accounts = _get_workspace_accounts()
         account = next(iter(accounts), account)
@@ -703,6 +706,9 @@ def _list_folders(account=DEFAULT_ACCOUNT):
 
 def _send_email(to, subject, body, account=DEFAULT_ACCOUNT, attachments=None):
     """Send email via Gmail SMTP. attachments: list of {filename, content_b64, mimetype}"""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["gmail_ai_enabled"]:
+        raise PermissionError("gmail_ai_disabled_enable_in_hub")
     import base64
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -850,6 +856,9 @@ _AGENT_GATEWAY_PORTS = [9119, 9118, 9120]
 
 def _ai_call(prompt, system_prompt="You are a helpful assistant.", max_tokens=300):
     """Try multiple AI backends in order. Returns text or None."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["gmail_ai_enabled"]:
+        return None
     blocked_message = _gmail_game_mode_block_message()
     if blocked_message:
         return blocked_message
@@ -908,6 +917,10 @@ def _ai_call(prompt, system_prompt="You are a helpful assistant.", max_tokens=30
 
 def _ai_call_stream(prompt, system_prompt="You are a helpful assistant.", model="llama3.2:latest"):
     """Stream tokens from an AI model. Yields (token, done)."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["gmail_ai_enabled"]:
+        yield ("gmail_ai_disabled_enable_in_hub", True)
+        return
     blocked_message = _gmail_game_mode_block_message()
     if blocked_message:
         yield (blocked_message, True)
@@ -1162,6 +1175,9 @@ def _get_account(parsed):
 
 
 def handle_gmail_get(handler, parsed) -> bool:
+    from runtime.memory_policy import read_policy
+    if not read_policy()["gmail_ai_enabled"]:
+        return j(handler, {"error": "gmail_ai_disabled_enable_in_hub"}, status=403)
     if parsed.path.startswith("/api/mail/"):
         from web.api.mail_plugin import handle
         return handle(handler, parsed)
@@ -1240,6 +1256,9 @@ def handle_gmail_get(handler, parsed) -> bool:
 
 
 def handle_gmail_post(handler, parsed, body) -> bool:
+    from runtime.memory_policy import read_policy
+    if not read_policy()["gmail_ai_enabled"]:
+        return j(handler, {"error": "gmail_ai_disabled_enable_in_hub"}, status=403)
     if parsed.path.startswith("/api/mail/"):
         from web.api.mail_plugin import handle
         return handle(handler, parsed, body or {})

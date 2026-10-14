@@ -30,7 +30,8 @@ describe('GitHub release auto-update flow', () => {
         provider: 'github',
         owner: 'Loggableim',
         repo: 'lastbrowser',
-        releaseType: 'release'
+        releaseType: 'prerelease',
+        channel: 'beta'
       }
     ]);
   });
@@ -46,15 +47,15 @@ describe('GitHub release auto-update flow', () => {
     expect(distScript).toContain("publish: null");
   });
 
-  it('keeps the 0.1.56 preview package versions aligned and excludes the unqualified b11377 runtime', () => {
+  it('keeps beta package versions aligned and excludes the unqualified b11377 runtime', () => {
     const root = readJson(rootPackagePath);
     const desktop = readJson(desktopPackagePath);
     const lock = readJson(path.join(repoRoot, 'package-lock.json'));
-    expect(root.version).toBe('0.1.56');
-    expect(desktop.version).toBe('0.1.56');
-    expect(lock.version).toBe('0.1.56');
-    expect(lock.packages[''].version).toBe('0.1.56');
-    expect(lock.packages['apps/desktop'].version).toBe('0.1.56');
+    expect(root.version).toMatch(/^0\.1\.57-beta\.\d+$/);
+    expect(desktop.version).toBe(root.version);
+    expect(lock.version).toBe(root.version);
+    expect(lock.packages[''].version).toBe(root.version);
+    expect(lock.packages['apps/desktop'].version).toBe(root.version);
     expect(desktop.build.extraResources).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ from: 'runtime/local-ai/b11377-cpu', to: 'apps/desktop/runtime/local-ai/b11377-cpu' })
     ]));

@@ -18,10 +18,11 @@ def handler_function(name="_handle_hybrid_search"):
     from web.api.helpers import require
     namespace = {
         "require": require,
-        "j": lambda handler, payload: payload,
+        "j": lambda handler, payload, **_kwargs: payload,
         "bad": lambda handler, error: {"ok": False, "error": error},
         "logger": SimpleNamespace(exception=lambda *args: None),
         "_redact_text": lambda content: content.replace("private-value", "[redacted]"),
+        "_memory_directory_for_request": lambda *_args, **_kwargs: sys.modules["web.api.space_engine"].resolve_active_space().memory_dir,
     }
     exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), "exec"), namespace)
     return namespace[function.name]
@@ -29,6 +30,9 @@ def handler_function(name="_handle_hybrid_search"):
 
 @pytest.fixture
 def memory_backend(monkeypatch, tmp_path):
+    from runtime.memory_policy import update_policy
+    update_policy({"enabled": True}, tmp_path)
+    monkeypatch.setattr("runtime.memory_policy.profile_home", lambda: tmp_path)
     engine = SupermemoryEngine(tmp_path / "documents.db")
     monkeypatch.setattr(engine, "_try_gemini_embedding", lambda *args: None)
     monkeypatch.setattr(engine, "_try_ollama_embedding", lambda *args: None)
@@ -42,6 +46,17 @@ def memory_backend(monkeypatch, tmp_path):
     (notes / "MEMORY.md").write_text("Browser private-value #tag:Work\n", encoding="utf-8")
     (notes / "USER.md").write_text("Browser preference\n", encoding="utf-8")
     return engine, notes, handler_function()
+
+
+def test_disabled_memory_denies_search_but_keeps_document_read_delete(memory_backend):
+    from runtime.memory_policy import update_policy
+    engine, _, handler = memory_backend
+    doc = engine.add_document("Stored content", title="Retained document")
+    update_policy({"enabled": False}, engine.policy_home)
+    assert handler(None, {"query": "Stored"})["error"] == "memory_disabled_enable_in_hub"
+    assert engine.search("Stored") == []
+    assert engine.get_document(doc["id"])["content"] == "Stored content"
+    assert engine.forget_document(doc["id"]) is True
 
 
 @pytest.mark.parametrize("query_key", ["q", "query"])

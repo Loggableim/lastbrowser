@@ -33,6 +33,28 @@ export class McpHubStateModel {
   private update(patch: Partial<typeof this.state>) { this.state = { ...this.state, ...patch }; this.listeners.forEach(listener => listener()); }
   setEditor = (editor: string) => this.update({ editor, error: '', notice: '' });
   resetEditor = () => this.update({ editor: this.state.savedEditor, error: '' });
+  prepareComposio = (): boolean => {
+    if (!this.state.loaded || this.state.busy) return false;
+    try {
+      const config = parseMcpEditor(this.state.editor);
+      if (Object.hasOwn(config, 'composio')) {
+        this.update({ notice: 'Composio ist bereits konfiguriert. Der vorhandene Eintrag bleibt erhalten.', error: '' });
+        return true;
+      }
+      this.update({
+        editor: JSON.stringify({ mcpServers: { ...config, composio: {
+          url: 'https://connect.composio.dev/mcp', auth: 'oauth', enabled: false,
+          sampling: { enabled: false }
+        } } }, null, 2),
+        notice: 'Composio vorbereitet. Konfiguration speichern und anschließend gezielt aktivieren. Konten werden über OAuth verbunden.',
+        error: ''
+      });
+      return true;
+    } catch {
+      this.update({ error: 'Bitte zuerst den ungültigen MCP-Konfigurationsentwurf korrigieren oder verwerfen.', notice: '' });
+      return false;
+    }
+  };
   private async read(version: number, replaceEditor?: string) {
     const payload = checked(await this.client.listServers());
     const config = payload.config as Payload | undefined;

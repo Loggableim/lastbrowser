@@ -53,6 +53,10 @@ def dispatch_run_once(*, dry_run: bool = False) -> dict:
         "errors": [],
         "per_space": {},
     }
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        report["errors"].append("kanban_disabled_enable_in_hub")
+        return report
 
     try:
         from web.api.space_engine import get_all_spaces
@@ -194,6 +198,12 @@ def _spawn_worker(
     the task using the configured model.
     """
     worker_id = f"{space.slug}/{board_slug}/{task_id}"
+    from runtime.memory_policy import read_policy, profile_home
+    policy_home = profile_home()
+    if not read_policy(policy_home)["kanban_enabled"]:
+        if slot_reserved:
+            _worker_semaphore.release()
+        return False
 
     if not slot_reserved and not _worker_semaphore.acquire(blocking=False):
         return False
@@ -214,7 +224,8 @@ def _spawn_worker(
 
     def _work():
         try:
-            _execute_task(space, agent_slug, task_id, board_slug, worker_id)
+            if read_policy(policy_home)["kanban_enabled"]:
+                _execute_task(space, agent_slug, task_id, board_slug, worker_id)
         finally:
             _worker_semaphore.release()
             with _dispatches_lock:

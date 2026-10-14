@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { isStableProvider } from './provider-verification.js';
 
 let showUntestedBetas = false;
 const listeners = new Set<() => void>();
@@ -33,7 +34,7 @@ export function filterQualifiedModelGroups<T extends {
   isQualified: (providerId: string, modelId: string, profileId: string) => boolean,
 ): T[] {
   return groups.flatMap(group => {
-    if (showBetas) return [group];
+    if (showBetas || isStableProvider(group.providerId)) return [group];
     const models = group.models.filter(model => isQualified(group.providerId, model.id, browserProfileId));
     return models.length ? [{ ...group, models }] : [];
   });
@@ -45,6 +46,7 @@ export function isProviderQualifiedByModels(
   browserProfileId: string,
   isQualified: (providerId: string, modelId: string, profileId: string) => boolean,
 ): boolean {
+  if (isStableProvider(providerId)) return true;
   return groups.some(group => group.providerId.trim().toLowerCase() === providerId.trim().toLowerCase()
     && group.models.some(model => isQualified(group.providerId, model.id, browserProfileId)));
 }

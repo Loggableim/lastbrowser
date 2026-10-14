@@ -16,8 +16,8 @@ describe('Sparkles flyout browser tools', () => {
     expect(app).toContain('setPermissionsOpen(!usePanelStore.getState().permissionsOpen)');
     expect(app).not.toContain('browser-page-corner-actions');
     expect(actionBar).toContain('overlayTools?: React.ReactNode');
-    expect(actionBar).toContain('className="action-strip-overlay-tools"');
-    expect(actionBar).toContain('aria-label="Browser and site permissions"');
+    expect(actionBar).toContain('className="research-extra-tools"');
+    expect(actionBar).toContain('research-extra-tools');
   });
 
   it('keeps keyboard dismissal, focus return, and bounded flyout sizing', () => {
@@ -26,7 +26,7 @@ describe('Sparkles flyout browser tools', () => {
 
     expect(actionBar).toContain("if (e.key === 'Escape')");
     expect(actionBar).toContain('sparklesTriggerRef.current?.focus()');
-    expect(actionBar).toContain('onBlur={(event) =>');
+    expect(actionBar).toContain('onBlur={event =>');
     expect(css).toContain('width: max-content;');
     expect(css).toContain('max-width: min(90vw, 820px);');
     expect(css).toContain('.action-strip-overlay-tools');

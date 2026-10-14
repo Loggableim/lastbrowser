@@ -32,6 +32,7 @@ import {
   StopCircle,
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
+import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
 import { describeChatContent } from '../chat-display.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
@@ -59,6 +60,7 @@ import type { ChildRunState } from '../child-run-controller.js';
 import { modelPolicyCopy } from '../i18n/model-policy-copy.js';
 import { useChatTranscriptScroll } from '../chat-transcript-scroll.js';
 import { TeamworkProcessCard } from '../components/TeamworkProcessCard.js';
+import { MemoryUsageBadge } from '../components/MemoryUsageBadge.js';
 import type { TeamworkMetadata } from '../teamwork-live-stream.js';
 import './chat-composer.css';
 
@@ -120,6 +122,7 @@ export function ChatTranscript({
   serviceStatus
 }: ChatTranscriptProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
+  const companion = useCompanionAppearance();
   const transcript=useChatTranscriptScroll(activeSession?.session_id??'',{messages,childGroups,pendingUserMessage});
   const numberFormat = new Intl.NumberFormat(locale);
   const normalizedPendingUserMessage = pendingUserMessage.replace(/\s+/g, ' ').trim();
@@ -147,7 +150,7 @@ export function ChatTranscript({
   if (!activeSession && !messages.length && !childGroups.length) {
     return (
       <div className="chat-transcript chat-empty-state">
-        <img src={brandAssets.sidekickAvatar} alt="" />
+        <img src={companion.avatar} alt="" />
         <h2>{t('chat.startOrSelect')}</h2>
         <p>{t('chat.emptyHint')}</p>
         <button type="button" className="primary-action compact" onClick={onCreateSession} disabled={!ready}>
@@ -162,6 +165,7 @@ export function ChatTranscript({
     <div ref={transcript} className="chat-transcript">
       {error && <div className="chat-error">{error}</div>}
       {messages.map((message, index) => {
+        const messageAppearance = messageCompanionAppearance(message.companion, companion);
         const isLastAssistant = message.role === 'assistant' && !messages.slice(index + 1).some((item) => item.role === 'assistant');
         const messageUsage = isLastAssistant ? latestTurnUsage : null;
         const inputTokens = messageUsage?.inputTokens;
@@ -174,15 +178,16 @@ export function ChatTranscript({
         return (
         <article key={`${message.role || 'message'}-${index}`} className={`chat-message ${message.role || 'assistant'} ${message.pending ? 'pending' : ''}`}>
           <div className={`message-avatar${message.role === 'user' ? ' message-avatar--user' : ''}`}>
-            <img src={brandAssets.sidekickAvatar} alt="" />
+            <img src={message.role === 'user' ? brandAssets.sidekickAvatar : messageAppearance.avatar} alt="" />
           </div>
           <div className="message-body">
             <div className="message-meta">
-              <strong>{message.role === 'user' ? nativeMessageCopy[locale].you : message.role === 'system' ? nativeMessageCopy[locale].system : 'Sidekick'}</strong>
+              <strong>{message.role === 'user' ? nativeMessageCopy[locale].you : message.role === 'system' ? nativeMessageCopy[locale].system : messageAppearance.botName}</strong>
               {(message.pending || (message.isPartial === true && message.streaming && (independentRunState === 'running' || independentRunState === 'pausing'))) && <Loader2 size={13} className="spin" />}
               {message.isPartial === true && <span className="chat-partial-label">{nativeMessageCopy[locale].partial}</span>}
             </div>
             <ChatMessageBody content={String(message.content || '')} />
+            {message.role === 'assistant' && <MemoryUsageBadge value={message.memory_usage} />}
             {message.role === 'assistant' && Boolean(message.teamwork && typeof message.teamwork === 'object') && (
               <TeamworkProcessCard metadata={message.teamwork as TeamworkMetadata} />
             )}
@@ -508,6 +513,7 @@ export function ChatComposer({
   onText
 }: ChatComposerProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
+  const companion = useCompanionAppearance();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
   const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
@@ -571,7 +577,7 @@ export function ChatComposer({
     <form className="chat-composer" onSubmit={submit}>
       <div className="composer-toolbar">
         <div className="composer-toolbar-group composer-command-group">
-          <img className="composer-sidekick" src={brandAssets.sidekickAvatar} alt="" aria-hidden="true" />
+          <img className="composer-sidekick" src={companion.avatar} alt="" aria-hidden="true" />
           {commandContext&&onCommandAction&&<button type="button" className="composer-command-button" title={commandCopy.menu} aria-label={commandCopy.menu}
             onClick={()=>{setSlashFilter('');setShowSlashDropdown(current=>!current);}}>/</button>}
           <div className="composer-mode" role="group" aria-label={`${t('chat.action')} / ${t('chat.plan')}`}>

@@ -114,14 +114,14 @@ describe('native update preference IPC', () => {
     expect(updater.channel).toBe('latest');
 
     const setChannel = handlers.get('lastbrowser:updates:set-channel');
-    expect(setChannel?.({}, 'preview')).toMatchObject({ automaticUpdatesEnabled: true, channel: 'preview', persisted: true });
+    expect(setChannel?.({}, 'preview')).toMatchObject({ automaticUpdatesEnabled: true, channel: 'beta', persisted: true });
     expect(updater.allowPrerelease).toBe(true);
     expect(updater.channel).toBe('beta');
     expect(updater.allowDowngrade).toBe(false);
-    expect(JSON.parse(files.get(updatePreferencesPath) || '{}')).toMatchObject({ channel: 'preview' });
+    expect(JSON.parse(files.get(updatePreferencesPath) || '{}')).toMatchObject({ channel: 'beta' });
 
     registerUpdateIpc(() => null);
-    expect(handlers.get('lastbrowser:updates:preferences')?.({})).toEqual({ automaticUpdatesEnabled: true, channel: 'preview' });
+    expect(handlers.get('lastbrowser:updates:preferences')?.({})).toEqual({ automaticUpdatesEnabled: true, channel: 'beta' });
     expect(updater.allowDowngrade).toBe(false);
   });
 

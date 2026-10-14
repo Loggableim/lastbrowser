@@ -1240,6 +1240,9 @@ def handle_kanban_get(handler, parsed) -> bool | None:
 def handle_kanban_post(handler, parsed, body) -> bool | None:
     """Dispatch a Kanban POST. See ``handle_kanban_get`` for the
     three-valued ``True | None | False`` contract (#1843)."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        return bad(handler, "kanban_disabled_enable_in_hub", status=403)
     path = parsed.path
     try:
         # Multi-board management endpoints — `_create_board_payload` and
@@ -1296,6 +1299,9 @@ def handle_kanban_post(handler, parsed, body) -> bool | None:
 def handle_kanban_patch(handler, parsed, body) -> bool | None:
     """Dispatch a Kanban PATCH. See ``handle_kanban_get`` for the
     three-valued ``True | None | False`` contract (#1843)."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        return bad(handler, "kanban_disabled_enable_in_hub", status=403)
     path = parsed.path
     try:
         # /boards/<slug> routes operate on the on-disk board collection
@@ -1337,6 +1343,9 @@ def handle_kanban_patch(handler, parsed, body) -> bool | None:
 def handle_kanban_delete(handler, parsed, body) -> bool | None:
     """Dispatch a Kanban DELETE. See ``handle_kanban_get`` for the
     three-valued ``True | None | False`` contract (#1843)."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        return bad(handler, "kanban_disabled_enable_in_hub", status=403)
     path = parsed.path
     try:
         # Same routing reorder as PATCH: /boards/<slug> path-routed first,

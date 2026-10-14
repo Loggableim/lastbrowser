@@ -4,6 +4,7 @@ import path from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { InPageActionBar } from '../src/renderer/components/InPageActionBar.js';
+import { DesktopI18nProvider } from '../src/renderer/i18n.js';
 import { createTabMuteControl, handleTabMuteShortcut, syncTabMuteToWebview } from '../src/renderer/tab-mute-controls.js';
 
 const actionBarProps = {
@@ -25,11 +26,11 @@ describe('tab mute controls', () => {
     const toggleTabMute = vi.fn();
     const firstTab = createTabMuteControl({ id: 'tab-a', isMuted: false }, toggleTabMute);
     const markup = renderToStaticMarkup(
-      React.createElement(InPageActionBar, {
+      React.createElement(DesktopI18nProvider, null, React.createElement(InPageActionBar, {
         ...actionBarProps,
         muted: firstTab.muted,
         onToggleMute: firstTab.onToggleMute
-      })
+      }))
     );
 
     expect(markup).toContain('Tab stummschalten (Ctrl+M)');
@@ -47,11 +48,11 @@ describe('tab mute controls', () => {
     const secondTab = createTabMuteControl({ id: 'tab-b', isMuted: true }, toggleTabMute);
     expect(secondTab.muted).toBe(true);
     const mutedMarkup = renderToStaticMarkup(
-      React.createElement(InPageActionBar, {
+      React.createElement(DesktopI18nProvider, null, React.createElement(InPageActionBar, {
         ...actionBarProps,
         muted: secondTab.muted,
         onToggleMute: secondTab.onToggleMute
-      })
+      }))
     );
     expect(mutedMarkup).toContain('Tab entstummen (Ctrl+M)');
     expect(mutedMarkup).toContain('aria-pressed="true"');

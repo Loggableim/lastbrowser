@@ -247,7 +247,8 @@ function loadSidebarDrawerTab(): SidebarDrawerTab {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const raw = window.localStorage.getItem(sidebarDrawerTabStorageKey);
-      if (raw === 'tabs' || raw === 'ai' || raw === 'workflows' || raw === 'tools') return raw;
+      if (raw === 'workflows') { window.localStorage.setItem(sidebarDrawerTabStorageKey, 'tools'); return 'tools'; }
+      if (raw === 'tabs' || raw === 'ai' || raw === 'tools') return raw;
     }
   } catch {
     // ignore
@@ -577,14 +578,15 @@ export const usePanelStore = create<PanelState>((set) => ({
   },
 
   setSidebarDrawerTab: (tab) => {
+    const normalizedTab = tab === 'workflows' ? 'tools' : tab;
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(sidebarDrawerTabStorageKey, tab);
+        window.localStorage.setItem(sidebarDrawerTabStorageKey, normalizedTab);
       }
     } catch {
       // ignore
     }
-    set({ sidebarDrawerTab: tab });
+    set({ sidebarDrawerTab: normalizedTab });
   },
 
   setActionBarDock: (dock) => {

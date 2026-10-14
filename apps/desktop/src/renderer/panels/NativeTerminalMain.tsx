@@ -4,10 +4,35 @@ import { Terminal } from '../vendor/xterm/xterm.mjs';
 import { FitAddon } from '../vendor/xterm/addon-fit.mjs';
 import '../vendor/xterm/xterm.css';
 import { createTerminalSession } from '../terminal-session.js';
+import { useTerminalEnabled } from '../terminal-feature.js';
+import { usePanelStore } from '../stores/usePanelStore.js';
+import { useDesktopI18n } from '../i18n.js';
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type TerminalMode = 'shell' | 'tui';
 
-export function NativeTerminalMain({ serviceStatus, activeSessionId, workspacePath }: {
+type NativeTerminalProps = { serviceStatus: ServiceStatus | null; activeSessionId: string | null; workspacePath: string };
+
+export function NativeTerminalMain(props: NativeTerminalProps): JSX.Element {
+  const enabled = useTerminalEnabled();
+  const { locale } = useDesktopI18n();
+  const copy = {
+    de: ['Terminal ist deaktiviert', 'Aktiviere Terminal im Extension & Skill Hub.', 'Extension & Skill Hub öffnen'],
+    en: ['Terminal is disabled', 'Enable Terminal in the Extension & Skill Hub.', 'Open Extension & Skill Hub'],
+    es: ['Terminal desactivado', 'Activa Terminal en Extension & Skill Hub.', 'Abrir Extension & Skill Hub'],
+    fr: ['Terminal désactivé', 'Activez Terminal dans Extension & Skill Hub.', 'Ouvrir Extension & Skill Hub'],
+    it: ['Terminale disattivato', 'Attiva Terminal in Extension & Skill Hub.', 'Apri Extension & Skill Hub'],
+    'pt-BR': ['Terminal desativado', 'Ative Terminal no Extension & Skill Hub.', 'Abrir Extension & Skill Hub'],
+    ru: ['Терминал отключён', 'Включите терминал в Extension & Skill Hub.', 'Открыть Extension & Skill Hub'],
+    ja: ['ターミナルは無効です', 'Extension & Skill Hubでターミナルを有効にしてください。', 'Extension & Skill Hubを開く']
+  }[locale];
+  if (!enabled) return <section className="browser-main native-rest-main"><h1>{copy[0]}</h1><p>{copy[1]}</p>
+    <button type="button" className="primary-action" onClick={() => {
+      usePanelStore.getState().setExtensionHubTab('skills'); usePanelStore.getState().setExtensionHubOpen(true);
+    }}>{copy[2]}</button></section>;
+  return <NativeTerminalRuntime {...props} />;
+}
+
+function NativeTerminalRuntime({ serviceStatus, activeSessionId, workspacePath }: {
   serviceStatus: ServiceStatus | null; activeSessionId: string | null; workspacePath: string;
 }): JSX.Element {
   const isWindows = /Windows/i.test(navigator.userAgent);

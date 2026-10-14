@@ -8,6 +8,304 @@ export type LocalReleaseNotes = { version: string; changes: readonly string[] };
 // the current UI or from an online changelog at runtime.
 const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, readonly string[]> }> = [
   {
+    version: '0.1.57-beta.3',
+    changes: {
+          "de": [
+                "First Launch führt jetzt seitenweise durch Suchmaschine, Datenimport, Dock, KI-Verbindung und den ersten Space.",
+                "Die Space-Persönlichkeit wird nach der KI-Einrichtung gewählt; ohne KI bleibt die Space-Einrichtung verfügbar.",
+                "Die Startseite bietet ein Dock-Raster mit verschiebbaren Bereichen, drei Größen und gespeicherten Layouts je Profil und Space.",
+                "Drei Rainbow-Rahmen mit runden Ecken; der einmalige Welcome-In-Abschluss spielt mit 8 % Lautstärke.",
+                "Der lokale Modellkatalog zeigt 40 kuratierte Modelle mit eigenen Detailseiten; die neuen Einträge sind noch nicht für Installation und Ausführung qualifiziert.",
+                "Das Windows-Tray-Symbol lädt die gepackten Markenassets; Quickchat-Modellauswahl und Profilfehlerbehandlung wurden korrigiert."
+          ],
+          "en": [
+                "First Launch now guides you through search, data import, dock, AI connection and your first Space in separate steps.",
+                "Choose your Space companion after AI setup; Space setup also works without AI.",
+                "The home screen has a dock grid with movable sections, three sizes and saved layouts per profile and Space.",
+                "Three rainbow borders with rounded corners; the one-time Welcome In completion plays at 8% volume.",
+                "The local model catalog lists 40 curated models with dedicated detail pages; new entries are not yet qualified for installation or execution.",
+                "The Windows tray icon loads packaged brand assets; Quickchat model access and profile error handling were corrected."
+          ],
+          "it": [
+                "La prima configurazione guida attraverso ricerca, importazione, dock, connessione IA e primo Space in pagine separate.",
+                "La personalità dello Space si sceglie dopo l’IA; lo Space si configura anche senza IA.",
+                "La pagina iniziale offre una griglia con sezioni spostabili, tre dimensioni e layout salvati per profilo e Space.",
+                "Tre bordi arcobaleno con angoli arrotondati; Welcome In viene riprodotto una sola volta all’8% del volume.",
+                "Il catalogo locale presenta 40 modelli curati e pagine dettagliate; le nuove voci non sono ancora abilitate per installazione ed esecuzione.",
+                "Corretti l’icona della barra di sistema Windows, l’accesso ai modelli Quickchat e la gestione degli errori di profilo."
+          ],
+          "es": [
+                "La configuración inicial guía por búsqueda, importación, dock, conexión de IA y primer Space en páginas separadas.",
+                "La personalidad del Space se elige después de configurar la IA; el Space también se configura sin IA.",
+                "La página inicial ofrece secciones móviles, tres tamaños y diseños guardados por perfil y Space.",
+                "Tres bordes arcoíris con esquinas redondeadas; Welcome In se reproduce una vez al 8% de volumen.",
+                "El catálogo local incluye 40 modelos seleccionados y páginas detalladas; las nuevas entradas aún no están habilitadas para instalación o ejecución.",
+                "Corregidos el icono de la bandeja de Windows, el acceso a modelos de Quickchat y los errores de perfil."
+          ],
+          "fr": [
+                "La première configuration présente recherche, importation, dock, connexion IA et premier Space sur des pages distinctes.",
+                "Choisissez la personnalité du Space après l’IA ; le Space peut aussi être configuré sans IA.",
+                "L’accueil propose des sections déplaçables, trois tailles et des dispositions enregistrées par profil et Space.",
+                "Trois bordures arc-en-ciel aux coins arrondis ; Welcome In est joué une seule fois à 8 % du volume.",
+                "Le catalogue local présente 40 modèles sélectionnés et des fiches détaillées ; les nouvelles entrées ne sont pas encore autorisées à être installées ou exécutées.",
+                "Corrections de l’icône Windows, de l’accès aux modèles Quickchat et de la gestion des erreurs de profil."
+          ],
+          "pt-BR": [
+                "A configuração inicial apresenta busca, importação, dock, conexão de IA e primeiro Space em páginas separadas.",
+                "Escolha a personalidade do Space após configurar a IA; o Space também funciona sem IA.",
+                "A página inicial oferece seções móveis, três tamanhos e layouts salvos por perfil e Space.",
+                "Três bordas arco-íris com cantos arredondados; Welcome In toca uma única vez a 8% do volume.",
+                "O catálogo local apresenta 40 modelos selecionados e páginas detalhadas; as novas entradas ainda não estão habilitadas para instalação ou execução.",
+                "Corrigidos o ícone da bandeja do Windows, o acesso aos modelos Quickchat e os erros de perfil."
+          ],
+          "ru": [
+                "Первоначальная настройка разделена на страницы: поиск, импорт, панель приложений, подключение ИИ и первый Space.",
+                "Личность помощника выбирается после настройки ИИ; Space можно настроить и без ИИ.",
+                "На главной странице можно перемещать блоки, выбирать три размера и сохранять расположение для каждого профиля и Space.",
+                "Три радужные рамки со скруглёнными углами; Welcome In звучит один раз с громкостью 8%.",
+                "В локальном каталоге представлены 40 отобранных моделей с подробными страницами; новые записи пока не допущены к установке и запуску.",
+                "Исправлены значок Windows, доступ к моделям Quickchat и обработка ошибок профиля."
+          ],
+          "ja": [
+                "初回設定は検索、データ移行、ドック、AI 接続、最初の Space の各ページに分かれました。",
+                "AI 設定後に Space のキャラクターを選択します。AI を使わない場合も Space を設定できます。",
+                "ホーム画面のブロックを移動し、3 種類のサイズとレイアウトをプロフィール・Space ごとに保存できます。",
+                "角を丸くした3種類のレインボー枠。初回完了時の Welcome In は音量8%で一度だけ再生します。",
+                "ローカルカタログに40モデルと詳細ページを追加しました。新しい項目はまだインストール・実行の対象ではありません。",
+                "Windows トレイアイコン、Quickchat のモデル選択、プロフィールのエラー処理を修正しました。"
+          ]
+    }
+  },
+  {
+    version: '0.1.57-beta.1',
+    changes: {
+      de: [
+        'Schlankere KI-Navigation: Gedächtnis, zusätzliche Assistenten und Integrationen bewusst im Extension & Skill Hub aktivieren.',
+        'Companion je Space wählen: Nova, Orion, Patch, Spark oder Zen, mit eigenem Namen und dezenter Antwort-Tonalität.',
+        'Quickchat startet mit kurzem Kontext und bietet „Chat zurücksetzen“.',
+        'Aufgaben bündeln aktuelle und geplante Arbeit; Kanban bleibt eine optionale, zunächst deaktivierte Beta-Funktion.',
+        'Nutzungsübersicht mit Messungen je Anbieter und Modell; unbekannte Token und Kosten bleiben als unbekannt erkennbar.',
+        'Chats mehrfach auswählen und direkt in der Sidebar mit Bestätigung löschen.',
+        'Mehrseitige Einstellungen mit klareren Bereichen für Modelle und Erweiterungen.',
+        'Überarbeiteter Zen-Modus für eine ruhigere Chatansicht.',
+        'Ollama Cloud getrennt von lokalen Ollama-Verbindungen auswählen.',
+        'Mermaid und KaTeX lokal gebündelt; externe Renderer-Skripte blockiert und Loopback-Host-Prüfung ergänzt.',
+        'Beta-Runtime auf Electron 45 Alpha mit Chromium 156 angehoben. Stable bleibt Standard, Beta ist separat aktivierbar.'
+      ],
+      en: [
+        'Simpler AI navigation: explicitly enable memory, additional assistants and integrations in the Extension & Skill Hub.',
+        'Choose a companion per Space: Nova, Orion, Patch, Spark or Zen, with a custom name and subtle response tone.',
+        'Quickchat starts with shorter context and includes Reset Chat.',
+        'Tasks brings current and scheduled work together; Kanban remains an optional Beta feature, disabled initially.',
+        'Usage shows observations by provider and model; missing token counts and prices remain visibly unknown.',
+        'Select multiple chats and delete directly in the sidebar with confirmation.',
+        'Paged settings with clearer model and extension sections.',
+        'Updated Zen Mode for a quieter chat view.',
+        'Select Ollama Cloud separately from local Ollama connections.',
+        'Mermaid and KaTeX bundled locally; external renderer scripts blocked and loopback Host checks added.',
+        'Beta runtime moved to Electron 45 Alpha with Chromium 156. Stable stays the default; Beta requires opt-in.'
+      ],
+      es: [
+        'Navegación de IA simplificada: activa memoria, asistentes adicionales e integraciones en Extension & Skill Hub.',
+        'Elige un compañero por Space: Nova, Orion, Patch, Spark o Zen, con nombre propio y tono de respuesta sutil.',
+        'Quickchat comienza con menos contexto e incluye Restablecer chat.',
+        'Tareas reúne trabajo actual y programado; Kanban sigue siendo una función Beta opcional, desactivada inicialmente.',
+        'Uso muestra mediciones por proveedor y modelo; los tokens y precios no disponibles figuran como desconocidos.',
+        'Selecciona varios chats y elimínalos desde la barra lateral con confirmación.',
+        'Ajustes por páginas con secciones más claras para modelos y extensiones.',
+        'Modo Zen renovado para una vista de chat más tranquila.',
+        'Selecciona Ollama Cloud por separado de las conexiones locales de Ollama.',
+        'Mermaid y KaTeX incluidos localmente; scripts externos del renderer bloqueados y comprobación Host de loopback añadida.',
+        'Runtime Beta actualizado a Electron 45 Alpha con Chromium 156. Stable sigue por defecto; Beta requiere activación.'
+      ],
+      fr: [
+        'Navigation IA simplifiée : activez mémoire, assistants supplémentaires et intégrations dans Extension & Skill Hub.',
+        'Choisissez un compagnon par Space : Nova, Orion, Patch, Spark ou Zen, avec nom personnalisé et tonalité discrète.',
+        'Quickchat démarre avec un contexte réduit et propose Réinitialiser le chat.',
+        'Tâches regroupe le travail actuel et planifié ; Kanban reste une fonction Beta facultative, désactivée au départ.',
+        'Utilisation affiche les mesures par fournisseur et modèle ; tokens et prix manquants restent indiqués comme inconnus.',
+        'Sélectionnez plusieurs chats et supprimez-les dans la barre latérale avec confirmation.',
+        'Paramètres répartis en pages, avec sections modèles et extensions plus claires.',
+        'Mode Zen remanié pour une vue de chat plus calme.',
+        'Sélectionnez Ollama Cloud séparément des connexions Ollama locales.',
+        'Mermaid et KaTeX intégrés localement ; scripts externes du renderer bloqués et contrôle Host loopback ajouté.',
+        'Runtime Beta porté sur Electron 45 Alpha avec Chromium 156. Stable reste le choix par défaut ; Beta exige une activation.'
+      ],
+      it: [
+        'Navigazione IA semplificata: attiva memoria, assistenti aggiuntivi e integrazioni in Extension & Skill Hub.',
+        'Scegli un compagno per Space: Nova, Orion, Patch, Spark o Zen, con nome personalizzato e tono di risposta discreto.',
+        'Quickchat parte con meno contesto e include Reimposta chat.',
+        'Attività riunisce il lavoro corrente e pianificato; Kanban resta una funzione Beta opzionale, inizialmente disattivata.',
+        'Utilizzo mostra misurazioni per provider e modello; token e prezzi mancanti restano indicati come sconosciuti.',
+        'Seleziona più chat ed eliminale dalla barra laterale con conferma.',
+        'Impostazioni divise in pagine, con sezioni più chiare per modelli ed estensioni.',
+        'Modalità Zen rinnovata per una vista chat più tranquilla.',
+        'Seleziona Ollama Cloud separatamente dalle connessioni Ollama locali.',
+        'Mermaid e KaTeX inclusi localmente; script esterni del renderer bloccati e controllo Host loopback aggiunto.',
+        'Runtime Beta aggiornato a Electron 45 Alpha con Chromium 156. Stable resta predefinito; Beta richiede attivazione.'
+      ],
+      'pt-BR': [
+        'Navegação de IA simplificada: ative memória, assistentes adicionais e integrações no Extension & Skill Hub.',
+        'Escolha um companheiro por Space: Nova, Orion, Patch, Spark ou Zen, com nome próprio e tom de resposta discreto.',
+        'Quickchat começa com menos contexto e inclui Redefinir chat.',
+        'Tarefas reúne o trabalho atual e agendado; Kanban continua uma função Beta opcional, inicialmente desativada.',
+        'Uso mostra medições por provedor e modelo; tokens e preços ausentes permanecem identificados como desconhecidos.',
+        'Selecione vários chats e exclua diretamente na barra lateral com confirmação.',
+        'Configurações em páginas, com áreas mais claras para modelos e extensões.',
+        'Modo Zen atualizado para uma conversa mais tranquila.',
+        'Selecione Ollama Cloud separadamente das conexões locais do Ollama.',
+        'Mermaid e KaTeX incluídos localmente; scripts externos do renderer bloqueados e verificação Host de loopback adicionada.',
+        'Runtime Beta atualizado para Electron 45 Alpha com Chromium 156. Stable continua padrão; Beta exige ativação.'
+      ],
+      ru: [
+        'Упрощена навигация ИИ: память, дополнительных помощников и интеграции можно включить в Extension & Skill Hub.',
+        'Выбор помощника для каждого Space: Nova, Orion, Patch, Spark или Zen, своё имя и ненавязчивый стиль ответа.',
+        'Quickchat запускается с коротким контекстом и позволяет сбросить чат.',
+        'Раздел задач объединяет текущую и запланированную работу; Kanban остаётся дополнительной Beta-функцией, изначально выключенной.',
+        'Статистика использует измерения по провайдеру и модели; отсутствующие токены и цены отмечены как неизвестные.',
+        'Выбирайте несколько чатов и удаляйте их прямо в боковой панели с подтверждением.',
+        'Настройки разделены на страницы с более понятными разделами моделей и расширений.',
+        'Обновлён режим Zen для спокойного просмотра чата.',
+        'Ollama Cloud выбирается отдельно от локальных подключений Ollama.',
+        'Mermaid и KaTeX включены локально; внешние скрипты renderer заблокированы, добавлена проверка Host для loopback.',
+        'Среда Beta обновлена до Electron 45 Alpha с Chromium 156. Stable остаётся стандартным каналом; Beta включается отдельно.'
+      ],
+      ja: [
+        'AIナビゲーションを簡素化。メモリ、追加アシスタント、連携機能はExtension & Skill Hubで有効にできます。',
+        'SpaceごとにNova、Orion、Patch、Spark、Zenを選択。名前を変更でき、回答の口調にも穏やかに反映されます。',
+        'Quickchatの開始コンテキストを短縮し、チャットのリセットを追加しました。',
+        'タスク画面に現在と予定の作業を統合。Kanbanは任意のBeta機能で、初期状態では無効です。',
+        '使用状況をプロバイダーとモデルごとの実測値で表示。未取得のトークン数や料金は不明と表示します。',
+        '複数のチャットを選択し、確認後にサイドバーから直接削除できます。',
+        '設定をページに分割し、モデルと拡張機能の項目を整理しました。',
+        '落ち着いたチャット表示のためZenモードを更新しました。',
+        'Ollama CloudをローカルOllama接続とは別に選択できます。',
+        'MermaidとKaTeXをローカルに同梱。外部rendererスクリプトを禁止し、loopbackのHost検査を追加しました。',
+        'BetaランタイムをChromium 156搭載のElectron 45 Alphaへ更新。標準はStableで、Betaは明示的に有効化します。'
+      ]
+    }
+  },
+{
+  "version": "0.1.56",
+  "changes": {
+    "de": [
+      "Neue Startseite mit wählbaren Hintergrundbildern, Dimmung und Unschärfe je Profil und Space.",
+      "Kompakter Chatkopf, aufgeräumtes Eingabefeld und schneller Zugriff auf Chataktionen.",
+      "Gemeinsame Anbieter- und Modellwahl in Einstellungen, Chat und Quickchat; die Auswahl bleibt an Profil und Space gebunden.",
+      "Lokale KI mit geführter Modelleinrichtung und Hinweisen zur passenden Hardware.",
+      "Die Suchmaschine lässt sich direkt bei der Ersteinrichtung auswählen.",
+      "Einstellungen per Escape oder Schließen verlassen; Zurück führt ohne Seitenverlauf zur Startseite.",
+      "Verbesserte Darstellung des ersten Fensters unter Windows.",
+      "Verbesserte MCP-Konfiguration und Werkzeuge sowie lokale Gedächtnissuche und das Leeren von Notizen.",
+      "Updatekanal zwischen Stable und Beta wählen; die ersten Betaversionen beginnen mit 0.1.57.",
+      "Arbeitsplatz mit konfigurierbaren Widgets, lokalen Notizen, Aufgaben, Fokustimer und Plugins. Passwortimport aus Browser-CSV mit lokal verschlüsseltem Speicher und bewusstem Ausfüllen auf passenden HTTPS-Seiten.",
+      "Vier Übergänge nach dem Entsperren und fünf optionale Startklänge mit passender Dauer, Lautstärke und Zufallsauswahl; Rainbow ist abschaltbar.",
+      "Automatische Chattitel sowie Pinnen, Archivieren und Löschen in der Sidebar. Conversation ist in Preferences integriert; Working Models enthält ChatGPT/Codex und OpenCode Go, weitere Anbieter stehen unter Beta Models.",
+      "Kompakte Nova-Research-Leiste, korrigierte Gmail-Seitenleistennavigation und erhaltene Schutzheader für eingebettete Loginseiten."
+    ],
+    "en": [
+      "New start page with selectable wallpapers, dimming and blur for each profile and Space.",
+      "Compact chat header, a cleaner composer and quick access to chat actions.",
+      "Shared provider and model selection across Settings, Chat and Quickchat, scoped to each profile and Space.",
+      "Guided local AI model setup with hardware guidance.",
+      "Choose your search engine during first-run setup.",
+      "Leave Settings with Escape or Close; Back returns to the start page when there is no page history.",
+      "Improved presentation of the first window on Windows.",
+      "Improved MCP configuration and tools, local memory search and clearing notes.",
+      "Choose the Stable or Beta update channel; beta releases start with 0.1.57.",
+      "Workspace with configurable widgets, local notes, tasks, focus timer and plugins. Import browser CSV passwords into encrypted local storage and explicitly fill matching HTTPS sites.",
+      "Four unlock transitions and five optional opening sounds with matching duration, volume and random selection; the rainbow border can be disabled.",
+      "Automatic chat titles and sidebar pin, archive and delete. Conversation is part of Preferences; Working Models contains ChatGPT/Codex and OpenCode Go, with other providers under Beta Models.",
+      "Compact Nova Research toolbar, corrected Gmail sidepanel navigation and retained framing protections for embedded login pages."
+    ],
+    "es": [
+      "Nueva página de inicio con fondos seleccionables, oscurecimiento y desenfoque por perfil y Space.",
+      "Cabecera de chat compacta, cuadro de escritura más claro y acceso rápido a las acciones.",
+      "Selección compartida de proveedor y modelo en Ajustes, Chat y Quickchat, por perfil y Space.",
+      "Configuración guiada de modelos de IA local con orientación sobre el hardware.",
+      "Elige el buscador durante la configuración inicial.",
+      "Sal de Ajustes con Escape o Cerrar; Atrás vuelve al inicio cuando no hay historial de páginas.",
+      "Presentación mejorada de la primera ventana en Windows.",
+      "Mejoras en la configuración y las herramientas MCP, la búsqueda de memoria local y el borrado de notas.",
+      "Elige el canal Stable o Beta; las versiones beta empiezan con 0.1.57.",
+      "Espacio de trabajo con widgets, notas locales, tareas, temporizador y plugins. Importación CSV de contraseñas con almacenamiento local cifrado y rellenado en sitios HTTPS correspondientes.",
+      "Cuatro transiciones y cinco sonidos opcionales sincronizados, con volumen, selección aleatoria y borde arcoíris configurables. Títulos de chat automáticos, fijar, archivar y eliminar; Working Models y Beta Models separados.",
+      "Barra Nova Research compacta, navegación Gmail corregida y protección conservada para páginas de acceso incrustadas."
+    ],
+    "fr": [
+      "Nouvelle page de démarrage avec fonds au choix, assombrissement et flou par profil et Space.",
+      "En-tête de chat compact, zone de saisie simplifiée et accès rapide aux actions.",
+      "Sélection commune du fournisseur et du modèle dans les paramètres, Chat et Quickchat, par profil et Space.",
+      "Configuration guidée des modèles IA locaux avec des indications sur le matériel.",
+      "Choisissez le moteur de recherche pendant la première configuration.",
+      "Quittez les paramètres avec Échap ou Fermer ; Retour revient au démarrage sans historique de page.",
+      "Affichage amélioré de la première fenêtre sous Windows.",
+      "Amélioration de la configuration et des outils MCP, de la recherche en mémoire locale et de la suppression des notes.",
+      "Choisissez le canal Stable ou Beta ; les versions bêta commencent avec 0.1.57.",
+      "Espace de travail avec widgets, notes locales, tâches, minuteur et plugins. Importation CSV des mots de passe avec stockage local chiffré et remplissage sur les sites HTTPS correspondants.",
+      "Quatre transitions et cinq sons facultatifs synchronisés, avec volume, choix aléatoire et bordure arc-en-ciel réglables. Titres de chat automatiques, épingler, archiver et supprimer ; séparation Working Models et Beta Models.",
+      "Barre Nova Research compacte, navigation Gmail corrigée et protections conservées pour les pages de connexion intégrées."
+    ],
+    "it": [
+      "Nuova pagina iniziale con sfondi selezionabili, oscuramento e sfocatura per profilo e Space.",
+      "Intestazione chat compatta, area di scrittura più chiara e accesso rapido alle azioni.",
+      "Selezione condivisa di provider e modello in Impostazioni, Chat e Quickchat, per profilo e Space.",
+      "Configurazione guidata dei modelli IA locali con indicazioni sul tipo di hardware.",
+      "Scegli il motore di ricerca durante la configurazione iniziale.",
+      "Esci dalle Impostazioni con Escape o Chiudi; Indietro torna alla pagina iniziale senza cronologia.",
+      "Visualizzazione migliorata della prima finestra su Windows.",
+      "Miglioramenti alla configurazione e agli strumenti MCP, alla ricerca nella memoria locale e alla cancellazione delle note.",
+      "Scegli il canale Stable o Beta; le versioni beta iniziano con 0.1.57.",
+      "Area di lavoro con widget, note locali, attività, timer e plugin. Importazione CSV delle password con archiviazione locale cifrata e compilazione sui siti HTTPS corrispondenti.",
+      "Quattro transizioni e cinque suoni opzionali sincronizzati, con volume, scelta casuale e bordo arcobaleno configurabili. Titoli chat automatici, fissare, archiviare ed eliminare; Working Models e Beta Models separati.",
+      "Barra Nova Research compatta, navigazione Gmail corretta e protezioni mantenute per le pagine di accesso incorporate."
+    ],
+    "pt-BR": [
+      "Nova página inicial com fundos selecionáveis, escurecimento e desfoque por perfil e Space.",
+      "Cabeçalho de chat compacto, área de escrita mais clara e acesso rápido às ações.",
+      "Seleção compartilhada de provedor e modelo em Configurações, Chat e Quickchat, por perfil e Space.",
+      "Configuração guiada de modelos de IA local com orientações sobre o hardware.",
+      "Escolha o mecanismo de pesquisa durante a configuração inicial.",
+      "Saia das Configurações com Escape ou Fechar; Voltar retorna ao início quando não há histórico de páginas.",
+      "Exibição aprimorada da primeira janela no Windows.",
+      "Melhorias na configuração e nas ferramentas MCP, na busca de memória local e na limpeza de notas.",
+      "Escolha o canal Stable ou Beta; as versões beta começam em 0.1.57.",
+      "Área de trabalho com widgets, notas locais, tarefas, temporizador e plugins. Importação CSV de senhas com armazenamento local criptografado e preenchimento nos sites HTTPS correspondentes.",
+      "Quatro transições e cinco sons opcionais sincronizados, com volume, escolha aleatória e borda arco-íris configuráveis. Títulos de chat automáticos, fixar, arquivar e excluir; Working Models e Beta Models separados.",
+      "Barra Nova Research compacta, navegação Gmail corrigida e proteções mantidas para páginas de login incorporadas."
+    ],
+    "ru": [
+      "Новая стартовая страница с выбором фона, затемнением и размытием для каждого профиля и Space.",
+      "Компактный заголовок чата, упорядоченное поле ввода и быстрый доступ к действиям.",
+      "Общий выбор провайдера и модели в настройках, чате и Quickchat с привязкой к профилю и Space.",
+      "Пошаговая настройка локальных моделей ИИ с рекомендациями по оборудованию.",
+      "Выбор поисковой системы при первоначальной настройке.",
+      "Выход из настроек клавишей Escape или кнопкой закрытия; Назад возвращает на стартовую страницу без истории переходов.",
+      "Улучшено отображение первого окна в Windows.",
+      "Улучшены настройки и инструменты MCP, поиск в локальной памяти и очистка заметок.",
+      "Выбор канала обновлений Stable или Beta; бета-версии начинаются с 0.1.57.",
+      "Рабочий стол с виджетами, локальными заметками, задачами, таймером и плагинами. Импорт паролей из CSV с локальным шифрованием и заполнением на соответствующих HTTPS-сайтах.",
+      "Четыре перехода и пять необязательных звуков с синхронизацией, громкостью и случайным выбором; радужная рамка отключается. Автоматические названия чатов, закрепление, архивирование и удаление; Working Models и Beta Models разделены.",
+      "Компактная панель Nova Research, исправленная навигация Gmail и сохранение защиты встроенных страниц входа."
+    ],
+    "ja": [
+      "プロファイルとSpaceごとに背景画像、暗さ、ぼかしを選べる新しいスタートページ。",
+      "コンパクトなチャットヘッダー、整理された入力欄、操作メニューへの素早いアクセス。",
+      "設定、チャット、Quickchatで共通のプロバイダー・モデル選択を使用し、プロファイルとSpaceごとに保持。",
+      "ハードウェアの案内付きでローカルAIモデルを設定。",
+      "初回設定で検索エンジンを選択。",
+      "Escapeまたは閉じるボタンで設定を終了。ページ履歴がない場合、戻る操作でスタートページに移動。",
+      "Windowsで最初のウィンドウの表示を改善。",
+      "MCP設定とツール、ローカルメモリー検索、ノートの消去を改善。",
+      "更新チャネルをStableとBetaから選択。ベータ版は0.1.57から開始。",
+      "ウィジェット、ローカルメモ、タスク、タイマー、プラグインを備えたワークスペース。CSVからパスワードを読み込み、ローカルで暗号化し、一致するHTTPSサイトに入力できます。",
+      "4種類の画面遷移と5種類の任意の起動音を同期。音量、ランダム選択、虹色の枠を設定できます。チャットの自動タイトル、固定、アーカイブ、削除と、Working Models・Beta Modelsの分離。",
+      "コンパクトなNova Research、Gmailのナビゲーション修正、埋め込みログインページの保護維持。"
+    ]
+  }
+},
+
+  {
     version: '0.1.53',
     changes: {
       en: ['First-run setup no longer blocks the sidebar or top navigation.', 'Escape lets you leave the AI choice and finish browser-only setup safely.'],
@@ -50,14 +348,14 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
     version: '0.1.46',
     changes: {
       en: [
-        'Open Zen and Focus mode directly from the compact NovaDock.',
+        'Open Zen Mode directly from the compact NovaDock.',
         'Fixed Quickchat startup on Windows.',
         'Choose Teamwork models from the manual model picker.',
         'Authentication status checks remain read-only.',
         'Reasoning-only output is no longer used as a finished draft.'
       ],
       de: [
-        'Zen- und Fokusmodus lassen sich direkt über das kompakte NovaDock öffnen.',
+        'Zen Mode lässt sich direkt über das kompakte NovaDock öffnen.',
         'Der Quickchat-Start unter Windows wurde korrigiert.',
         'Teamwork-Modelle sind in der manuellen Modellauswahl verfügbar.',
         'Authentifizierungsstatus-Abfragen bleiben lesend.',

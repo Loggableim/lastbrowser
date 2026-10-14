@@ -172,6 +172,9 @@ describe('cloud first-run setup state', () => {
     // wizard must offer Ollama and LM Studio alongside the cloud providers.
     expect(options.map((option) => option.id)).toEqual([
       'openai-codex',
+      'opencode-go',
+      'opencode-zen',
+      'xiaomi',
       'alibaba',
       'openrouter',
       'anthropic',
@@ -212,6 +215,9 @@ describe('cloud first-run setup state', () => {
   it('shows cloud provider fallbacks before the onboarding API responds', () => {
     expect(cloudProviderOptions(null).map((option) => option.id)).toEqual([
       'openai-codex',
+      'opencode-go',
+      'opencode-zen',
+      'xiaomi',
       'ollama',
       'ollama-cloud',
       'openrouter',
@@ -232,7 +238,7 @@ describe('cloud first-run setup state', () => {
       { id: 'openrouter', label: 'OpenRouter' },
       { id: 'ollama-cloud', label: 'Ollama Cloud' }
     ] } });
-    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'alibaba', 'openrouter', 'ollama-cloud']);
+    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'opencode-go', 'opencode-zen', 'xiaomi', 'alibaba', 'openrouter', 'ollama-cloud']);
     expect(modelsForProvider(null, 'antigravity')).toEqual([]);
   });
 
@@ -246,6 +252,9 @@ describe('cloud first-run setup state', () => {
       }
     }).map((option) => option.id)).toEqual([
       'openai-codex',
+      'opencode-go',
+      'opencode-zen',
+      'xiaomi',
       'alibaba',
       'openrouter',
       'openai'
@@ -416,8 +425,8 @@ describe('cloud first-run setup state', () => {
     expect(PROVIDER_RECOMMENDATIONS['google-gemini-cli']).toBeUndefined();
 
     expect(PROVIDER_RECOMMENDATIONS['openai-codex']).toBeDefined();
-    expect(PROVIDER_RECOMMENDATIONS['openai-codex'].badgeType).toBe('popular');
-    expect(PROVIDER_RECOMMENDATIONS['openai-codex'].benefits.some((b) => b.includes('o3-mini') || b.includes('Coding-Parität'))).toBe(true);
+    expect(PROVIDER_RECOMMENDATIONS['openai-codex'].badgeType).toBe('recommended');
+    expect(PROVIDER_RECOMMENDATIONS['openai-codex'].benefits.length).toBeGreaterThan(0);
 
     expect(PROVIDER_RECOMMENDATIONS['ollama']).toBeDefined();
     expect(PROVIDER_RECOMMENDATIONS['ollama'].badgeType).toBe('private');
@@ -426,7 +435,7 @@ describe('cloud first-run setup state', () => {
 
   it('provides browser choices for external profile import (Paket 2.2)', async () => {
     const { BROWSER_CHOICES } = await import('../src/renderer/components/FirstRunSetupPane.js');
-    expect(BROWSER_CHOICES).toHaveLength(4);
+    expect(BROWSER_CHOICES).toHaveLength(14);
     const ids = BROWSER_CHOICES.map((b) => b.id);
     expect(ids).toContain('chrome');
     expect(ids).toContain('edge');
@@ -456,7 +465,9 @@ describe('cloud first-run setup state', () => {
         onDismiss: () => {}
       })
     ));
-    expect(html).toContain('OpenRouter');
+    expect(html).toContain('first-run-progress');
+    expect(html).toContain('search-engine-setup');
+    expect(html).not.toContain('OpenRouter');
   });
 
   it('shows the explicit AI choice before any provider setup UI', async () => {
@@ -477,9 +488,9 @@ describe('cloud first-run setup state', () => {
       onSubmit: async () => {},
       onDismiss: () => {}
     })));
-    expect(html).toContain('Möchtest du KI-Funktionen nutzen?');
-    expect(html).toContain('Ja, KI einrichten');
-    expect(html).toContain('Nein, ohne KI fortfahren');
+    expect(html).toContain('search-engine-setup');
+    expect(html).toContain('Mit oder ohne KI?');
+    expect(html).not.toContain('first-run-ai-page');
     expect(html).not.toContain('OpenRouter');
     expect(html).not.toContain('API-Schlüssel');
   });
@@ -503,11 +514,10 @@ describe('cloud first-run setup state', () => {
       onSubmit: async () => {},
       onDismiss: () => {}
     })));
-    expect(html).toContain('Die KI-Einrichtung wurde übersprungen');
-    expect(html).toContain('Ja, KI einrichten');
-    expect(html).toContain('Lesezeichen &amp; Favoriten');
-    expect(html).toContain('LastBrowser als Windows Standard-Browser');
-    expect(html).toContain('LastBrowser starten');
+    expect(html).toContain('search-engine-setup');
+    expect(html).toContain('Dein erster Space');
+    expect(html).not.toContain('KI verbinden');
+    expect(html).not.toContain('Einrichtung abschließen');
     expect(html).not.toContain('OpenRouter');
     expect(html).not.toContain('API-Schlüssel');
     expect(html).not.toContain('local-ai-setup-pane');

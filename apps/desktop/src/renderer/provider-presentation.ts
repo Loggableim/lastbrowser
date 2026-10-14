@@ -8,6 +8,38 @@
  */
 
 export type ProviderCategory = 'connect' | 'cloud' | 'local';
+export type ProviderDeployment = 'local' | 'cloud' | 'remote' | 'unknown';
+
+export function providerDeployment(providerId: string, endpoint?: string, deployment?: string): ProviderDeployment {
+  const id = providerId.trim().toLowerCase().replace(/[_\s]+/g, '-');
+  if (id === 'ollama-cloud') return 'cloud';
+  if (endpoint) {
+    try {
+      const url = new URL(endpoint);
+      const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+      if (!['http:', 'https:'].includes(url.protocol)) return 'unknown';
+      if (host === 'localhost' || host === '::1' || /^127(?:\.\d{1,3}){3}$/.test(host)) return 'local';
+      if (host === 'ollama.com' || host === 'www.ollama.com') return 'cloud';
+      return 'remote';
+    } catch { return 'unknown'; }
+  }
+  if (['local', 'cloud', 'remote', 'unknown'].includes(deployment || '')) return deployment as ProviderDeployment;
+  if (['ollama', 'lmstudio', 'lm-studio'].includes(id)) return 'local';
+  if (['custom', 'localai', 'local-ai'].includes(id) || id.startsWith('custom:')) return 'unknown';
+  return 'cloud';
+}
+
+/** Hosting labels describe the endpoint, not the model vendor or brand. */
+export function providerHostingLabel(providerId: string, fallback: string, deployment?: string): string {
+  const id = providerId.trim().toLowerCase().replace(/[_\s]+/g, '-');
+  const hosting = providerDeployment(id, undefined, deployment);
+  if (id === 'ollama-cloud') return 'Ollama Cloud';
+  const brand = id === 'ollama' ? 'Ollama' : ['localai', 'local-ai'].includes(id) ? 'LocalAI' : fallback;
+  if (['ollama', 'localai', 'local-ai', 'lmstudio', 'lm-studio', 'custom'].includes(id) || id.startsWith('custom:')) {
+    return `${brand} · ${hosting === 'local' ? 'Local' : hosting === 'cloud' ? 'Cloud' : hosting === 'remote' ? 'Remote' : 'Endpoint'}`;
+  }
+  return fallback;
+}
 
 export type ProviderPresentation = {
   /** Short line explaining what this provider gives the user. */
@@ -28,6 +60,8 @@ const PRESENTATION: Record<string, ProviderPresentation> = {
     mark: '⌘',
     color: '#10a37f'
   },
+  'opencode-go': { description: 'Connect OpenCode Go and choose from your available models.', category: 'cloud', mark: '⌘', color: '#18181b' },
+  'opencode-zen': { description: 'Connect OpenCode Zen and choose from your available models.', category: 'cloud', mark: '⌘', color: '#18181b' },
   anthropic: {
     description: 'Connect Claude Code, or paste an Anthropic API key.',
     category: 'connect',
@@ -96,12 +130,18 @@ const PRESENTATION: Record<string, ProviderPresentation> = {
     color: '#000000'
   },
   ollama: {
-    description: 'Run models locally, or use Ollama Cloud with a key.',
+    description: 'Connect an Ollama server. Only loopback endpoints run on this computer.',
     category: 'local',
     mark: '🦙',
     color: '#000000',
-    keyHint: 'Leave empty for a local Ollama. Paste an Ollama Cloud key to use hosted models.'
+    keyHint: 'A key is optional for a local server. Choose Ollama Cloud for hosted models.'
   },
+  'ollama-cloud': {
+    description: 'Hosted Ollama models. Requests are sent to Ollama Cloud.', category: 'cloud', mark: '🦙', color: '#000000',
+    keyHint: 'Use your Ollama Cloud credentials.'
+  },
+  localai: { description: 'Connect a LocalAI endpoint.', category: 'cloud', mark: '⌂', color: '#596b8a' },
+  'local-ai': { description: 'Connect a LocalAI endpoint.', category: 'cloud', mark: '⌂', color: '#596b8a' },
   lmstudio: {
     description: 'Connect to a local LM Studio server.',
     category: 'local',
@@ -111,7 +151,7 @@ const PRESENTATION: Record<string, ProviderPresentation> = {
   },
   custom: {
     description: 'Any OpenAI-compatible endpoint (vLLM, llama.cpp, …).',
-    category: 'local',
+    category: 'cloud',
     mark: '⚙',
     color: '#64748b',
     keyHint: 'Provide the base URL of your endpoint. A key is optional for local servers.'
@@ -125,8 +165,11 @@ const FALLBACK: ProviderPresentation = {
   color: '#64748b'
 };
 
-export function providerPresentation(providerId: string): ProviderPresentation {
-  return PRESENTATION[providerId] || FALLBACK;
+export function providerPresentation(providerId: string, endpoint?: string, deployment?: string): ProviderPresentation {
+  const id = providerId.trim().toLowerCase().replace(/[_\s]+/g, '-');
+  const presentation = PRESENTATION[id] || FALLBACK;
+  const hosting = providerDeployment(id, endpoint, deployment);
+  return { ...presentation, category: hosting === 'local' ? 'local' : presentation.category === 'connect' && !endpoint ? 'connect' : 'cloud' };
 }
 
 export const categoryLabels: Record<ProviderCategory, { title: string; hint: string }> = {
@@ -140,7 +183,7 @@ export const categoryLabels: Record<ProviderCategory, { title: string; hint: str
   },
   local: {
     title: 'Run locally',
-    hint: 'Point Sidekick at a model server on this machine or your network.'
+    hint: 'Use a model endpoint running on this computer.'
   }
 };
 
@@ -222,16 +265,22 @@ export type ProviderRecommendation = {
   actionPrompt: string;
 };
 
+export const RECOMMENDED_PROVIDER_IDS = ['openai-codex', 'opencode-go'] as const;
+
 export const PROVIDER_RECOMMENDATIONS: Record<string, ProviderRecommendation> = {
+  "opencode-go": {"id": "opencode-go", "badge": "Empfohlen", "badgeType": "recommended", "headline": "OpenCode Go", "benefits": ["Modelle aus dem verfügbaren Katalog deines Kontos wählen"], "bestFor": "Für Modelle aus deinem verbundenen Konto", "actionPrompt": "OpenCode Go verbinden"},
+  "opencode-zen": {"id": "opencode-zen", "badge": "Beta", "badgeType": "power", "headline": "OpenCode Zen", "benefits": ["Modelle aus dem verfügbaren Katalog deines Kontos wählen"], "bestFor": "Für Modelle aus deinem verbundenen Konto", "actionPrompt": "OpenCode Zen verbinden"},
+  "xiaomi": {"id": "xiaomi", "badge": "Beta", "badgeType": "power", "headline": "Xiaomi MiMo", "benefits": ["Modelle aus dem verfügbaren Katalog deines Kontos wählen"], "bestFor": "Für Modelle aus deinem verbundenen Konto", "actionPrompt": "Xiaomi MiMo verbinden"},
+
   'openai-codex': {
     id: 'openai-codex',
-    badge: 'Beliebt • Mit ChatGPT Plus/Team',
-    badgeType: 'popular',
+    badge: 'Empfohlen • ChatGPT-Konto',
+    badgeType: 'recommended',
     headline: 'ChatGPT / OpenAI (Bestehendes Abo nutzen)',
     benefits: [
       'Nutze dein vorhandenes ChatGPT Plus-, Team- oder Enterprise-Abonnement',
-      'Zugriff auf GPT-4o, o3-mini und OpenAI Reasoning-Modelle',
-      'Volle Coding-Parität ohne zusätzliche API-Token-Abrechnung',
+      'Wähle ein Modell aus dem verfügbaren Katalog deines Kontos',
+      'Modelle und Nutzungslimits richten sich nach deinem Zugang',
       'Sicherer Device-Login ohne Passworteingabe in der App'
     ],
     bestFor: 'Ideal, wenn du bereits ein monatliches ChatGPT-Abo nutzt',
@@ -305,7 +354,7 @@ export const PERSONALITY_PROFILES: PersonalityProfile[] = [
   },
   {
     id: 'analytical',
-    name: 'Analyst & Forscher',
+    name: 'Orion · Analyst & Forscher',
     tagline: 'Präzise & Akademisch',
     description: 'Tiefgründig, methodisch und strukturiert. Nennt Quellen, wägt Vor- und Nachteile ab und prüft Annahmen gründlich.',
     badge: 'Exakt',
@@ -316,7 +365,7 @@ export const PERSONALITY_PROFILES: PersonalityProfile[] = [
   },
   {
     id: 'developer',
-    name: 'Coder / Hacker',
+    name: 'Patch · Coder',
     tagline: 'Code & Architektur',
     description: 'Minimaler Text, sauber formatierter Code, Best Practices, CLI-Befehle und pragmatische Problemlösung.',
     badge: 'Code-Fokus',
@@ -327,7 +376,7 @@ export const PERSONALITY_PROFILES: PersonalityProfile[] = [
   },
   {
     id: 'creative',
-    name: 'Brainstormer',
+    name: 'Spark · Kreativ',
     tagline: 'Kreativ & Out-of-the-Box',
     description: 'Ideenreich, bildhaft und unkonventionell. Eröffnet neue Blickwinkel und findet innovative Ansätze.',
     badge: 'Inspirierend',
@@ -338,7 +387,7 @@ export const PERSONALITY_PROFILES: PersonalityProfile[] = [
   },
   {
     id: 'mentor',
-    name: 'Mentor & Begleiter',
+    name: 'Zen · Mentor',
     tagline: 'Geduldig & Erklärend',
     description: 'Schritt-für-Schritt-Anleitungen, warmherzig und pädagogisch wertvoll. Ideal zum Lernen und Verstehen.',
     badge: 'Didaktisch',
@@ -351,7 +400,8 @@ export const PERSONALITY_PROFILES: PersonalityProfile[] = [
 
 export const BOT_NAME_PRESETS = [
   { name: 'Nova', desc: 'Modern & KI-nativ' },
-  { name: 'Sidekick', desc: 'Klassischer Begleiter' },
-  { name: 'Hermes', desc: 'Schnell & Agil' },
-  { name: 'Aura', desc: 'Ruhig & Fokussiert' }
+  { name: 'Orion', desc: 'Analyst & Forscher' },
+  { name: 'Patch', desc: 'Coder' },
+  { name: 'Spark', desc: 'Kreativ' },
+  { name: 'Zen', desc: 'Mentor' }
 ];

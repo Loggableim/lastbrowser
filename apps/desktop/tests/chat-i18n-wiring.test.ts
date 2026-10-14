@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 describe('chat localization wiring', () => {
   it('renders localized Nova empty-state copy instead of fixed German text', () => {
     const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
-    expect(source).toContain("t('copilot.emptyTitle', { botName })");
+    expect(source).toContain("t('copilot.emptyTitle', { botName: companionName })");
     expect(source).toContain("t('copilot.quickChatDescription')");
     expect(source).not.toContain('Frag {botName} zur aktuellen Seite');
     expect(source).not.toContain('Erhalte Zusammenfassungen, Übersetzungen');

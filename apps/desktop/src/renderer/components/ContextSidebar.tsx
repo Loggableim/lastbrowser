@@ -28,6 +28,7 @@ import { useDesktopI18n } from '../i18n.js';
 export type SidekickActionId = 'summarize-page' | 'explain-selection' | 'research-page';
 
 export type SidekickMessage = {
+  memory_usage?: unknown;
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
@@ -44,12 +45,13 @@ export type SidekickMessage = {
 export const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
   skills: ['Library', 'Editor', 'Linked files', 'Create skill'],
   agents: ['Dashboard', 'Agents', 'Chat sessions', 'Workspace terminal', 'Create agent'],
-  memory: ['Core memory', 'User facts', 'Supermemory', 'Hybrid search'],
+  memory: [],
   workspaces: ['Spaces', 'Active workspace', 'Files', 'New chat'],
   profiles: ['Profiles', 'Active profile', 'Gateway', 'Model defaults'],
-  tasks: ['Scheduled jobs', 'Active', 'Paused', 'History'],
-  kanban: ['Board', 'Triage', 'Running', 'Done'],
-  todos: ['Pending', 'In progress', 'Completed'],
+  'task-center': [],
+  tasks: [],
+  kanban: [],
+  todos: [],
   insights: ['Usage', 'Models', 'Cost', 'LLM wiki'],
   logs: ['Agent', 'WebUI', 'Errors', 'Gateway'],
   gmail: ['Inbox', 'Search', 'Compose', 'Mail settings'],

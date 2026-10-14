@@ -4,7 +4,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
 import https from 'node:https';
-import { createUpdateController, type LastbrowserUpdateStatus, type UpdateChannel, type UpdateController } from './update-controller.js';
+import { createUpdateController, normalizeUpdateChannel, type LastbrowserUpdateStatus, type UpdateChannel, type UpdateController } from './update-controller.js';
 import { isOfflineTestBuild } from './update-build-variant.js';
 import { acknowledgeUpdateNotice, decideUpdateNotice, parseUpdateNoticeState, recordDownloadedUpdate } from './update-notice-state.js';
 
@@ -128,8 +128,12 @@ export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): vo
     return { enabled: preferences.automaticUpdatesEnabled, persisted };
   });
   ipcMain.handle('lastbrowser:updates:set-channel', (_event, channel: unknown) => {
-    if (channel !== 'stable' && channel !== 'preview') return { ...preferences, persisted: false };
-    const persisted = applyPreferences({ ...preferences, channel });
+    if (channel !== 'stable' && channel !== 'beta' && channel !== 'preview') return { ...preferences, persisted: false };
+    const normalizedChannel = normalizeUpdateChannel(channel);
+    if (normalizedChannel !== preferences.channel && ['checking', 'available', 'downloading', 'downloaded'].includes(controller?.getStatus().state || '')) {
+      return { ...preferences, persisted: false };
+    }
+    const persisted = applyPreferences({ ...preferences, channel: normalizedChannel });
     return { ...preferences, persisted };
   });
 }
@@ -155,7 +159,7 @@ function applyPreferences(next: PersistedUpdatePreferences): boolean {
   const channelChanged = next.channel !== preferences.channel;
   const normalized: PersistedUpdatePreferences = {
     automaticUpdatesEnabled: next.automaticUpdatesEnabled === true,
-    channel: next.channel === 'preview' ? 'preview' : 'stable'
+    channel: normalizeUpdateChannel(next.channel)
   };
   try {
     mkdirSync(path.dirname(preferencesPath), { recursive: true });
@@ -193,10 +197,21 @@ function readUpdatePreferences(filePath: string): PersistedUpdatePreferences {
     const parsed: unknown = JSON.parse(readFileSync(filePath, 'utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return { ...DEFAULT_UPDATE_PREFERENCES };
     const record = parsed as Record<string, unknown>;
-    return {
+    const normalized = {
       automaticUpdatesEnabled: record.automaticUpdatesEnabled !== false,
-      channel: record.channel === 'preview' ? 'preview' : 'stable'
+      channel: normalizeUpdateChannel(record.channel)
     };
+    if (record.channel === 'preview') {
+      // Persist the migration once; a legacy Preview opt-in remains Beta.
+      try {
+        const temporaryPath = `${filePath}.${process.pid}.migration.tmp`;
+        writeFileSync(temporaryPath, `${JSON.stringify(normalized, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+        renameSync(temporaryPath, filePath);
+      } catch (error) {
+        console.warn('[updates] Could not persist beta channel migration:', error);
+      }
+    }
+    return normalized;
   } catch {
     return { ...DEFAULT_UPDATE_PREFERENCES };
   }

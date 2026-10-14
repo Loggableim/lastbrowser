@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 // Mock electron
 vi.mock('electron', () => {
@@ -22,7 +25,7 @@ vi.mock('electron', () => {
       return emitter;
     }),
     nativeImage: {
-      createFromPath: vi.fn(() => ({})),
+      createFromPath: vi.fn(() => ({ isEmpty: () => false })),
       createEmpty: vi.fn(() => ({}))
     }
   };
@@ -31,6 +34,33 @@ vi.mock('electron', () => {
 import { buildTrayContextMenu, createAppTray, setupMinimizeToTray, resolveTrayIconPath, revealBrowserWindows } from '../src/main/tray.js';
 
 describe('system tray and background operation', () => {
+  it.each([
+    ['missing tray controller', false, 'win32', null, false],
+    ['missing native tray', false, 'win32', { tray: null }, false],
+    ['destroyed native tray', false, 'win32', { tray: { isDestroyed: () => true } }, false],
+    ['confirmed quit', true, 'win32', { tray: { isDestroyed: () => false } }, false],
+    ['macOS close behavior', false, 'darwin', { tray: { isDestroyed: () => false } }, false],
+    ['healthy Windows tray', false, 'win32', { tray: { isDestroyed: () => false } }, true],
+    ['healthy Linux tray', false, 'linux', { tray: { isDestroyed: () => false } }, true]
+  ])('Main and detached close guards preserve window reachability: %s', (_name, quitting, platform, tray, shouldHide) => {
+    const source = readFileSync(path.resolve(__dirname, '../src/main/main.ts'), 'utf8');
+    // Evaluate the actual callbacks wired in Main, without importing its
+    // app-startup side effects or duplicating the production guard expression.
+    const callbacks = [...source.matchAll(/setupMinimizeToTray\((window|detachedWindow), \(\) => \{([\s\S]*?)\n\s*\}\)/g)];
+    expect(callbacks.map(match => match[1])).toEqual(['window', 'detachedWindow']);
+    for (const callback of callbacks) {
+      const guard = new Function('isQuitting', 'process', 'appTray', callback[2]);
+      const win = Object.assign(new EventEmitter(), { hide: vi.fn() });
+      const close = { preventDefault: vi.fn() };
+      const dispose = setupMinimizeToTray(win as any, () => guard(quitting, { platform }, tray));
+      win.emit('close', close);
+      expect(close.preventDefault).toHaveBeenCalledTimes(shouldHide ? 1 : 0);
+      expect(win.hide).toHaveBeenCalledTimes(shouldHide ? 1 : 0);
+      dispose();
+      win.emit('close', close);
+      expect(win.hide).toHaveBeenCalledTimes(shouldHide ? 1 : 0);
+    }
+  });
   it('restores detached windows from the tray and focuses the main window', () => {
     const main = {
       isDestroyed: vi.fn(() => false),
@@ -177,5 +207,20 @@ describe('system tray and background operation', () => {
     const iconPath = resolveTrayIconPath();
     expect(typeof iconPath).toBe('string');
     expect(iconPath.length).toBeGreaterThan(0);
+  });
+
+  it('resolves the packaged brand icon without an installer build directory', () => {
+    const resources = mkdtempSync(path.join(tmpdir(), 'lastbrowser-tray-'));
+    try {
+      const assets = path.join(resources, 'brand', 'assets');
+      mkdirSync(assets, { recursive: true });
+      const icon = path.join(assets, 'Lastbrowser.ico');
+      writeFileSync(icon, 'path fixture, nativeImage is mocked');
+      expect(resolveTrayIconPath(resources)).toBe(icon);
+      rmSync(icon);
+      const fallback = path.join(assets, 'app-icon-32.png');
+      writeFileSync(fallback, 'path fixture, nativeImage is mocked');
+      expect(resolveTrayIconPath(resources)).toBe(fallback);
+    } finally { rmSync(resources, { recursive: true, force: true }); }
   });
 });

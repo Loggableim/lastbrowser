@@ -31,7 +31,8 @@ export function ProviderWorkspace({
   emptyMessage,
   tabLabels,
   panel,
-  footer
+  footer,
+  navigation
 }: {
   providers: ProviderWorkspaceItem[];
   initialProviderId: string;
@@ -42,6 +43,7 @@ export function ProviderWorkspace({
   tabLabels: Record<ProviderWorkspaceTab, string>;
   panel: (provider: ProviderWorkspaceItem, tab: ProviderWorkspaceTab) => ReactNode;
   footer?: ReactNode;
+  navigation?: ReactNode;
 }): JSX.Element {
   const [selectedId, setSelectedId] = useState(initialProviderId);
   const [selectedTab, setSelectedTab] = useState<ProviderWorkspaceTab>('connection');
@@ -62,24 +64,23 @@ export function ProviderWorkspace({
   }, [providers, selectedId, initialProviderId]);
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>): void {
-    const next = providerWorkspaceTabForKey(event.key, selectedTab);
+    const next = providerWorkspaceTabForKey(event.key === 'ArrowDown' ? 'ArrowRight' : event.key === 'ArrowUp' ? 'ArrowLeft' : event.key, selectedTab);
     if (!next) return;
     event.preventDefault();
     setSelectedTab(next);
     tabRefs.current[next]?.focus();
   }
 
-  if (!selectedProvider) return <div className="provider-workspace-empty" role="status">{emptyMessage}</div>;
-
   return (
     <div className="provider-workspace" data-provider-scope={scopeKey}>
       <nav className="provider-workspace-list" aria-label={providerListLabel}>
+        {navigation}
         {providers.map((provider) => (
           <button
             key={provider.id}
             type="button"
-            className={`provider-workspace-item${provider.id === selectedProvider.id ? ' active' : ''}`}
-            aria-pressed={provider.id === selectedProvider.id}
+            className={`provider-workspace-item${provider.id === selectedProvider?.id ? ' active' : ''}`}
+            aria-pressed={provider.id === selectedProvider?.id}
             onClick={() => setSelectedId(provider.id)}
           >
             <span className="provider-workspace-mark" style={provider.color ? { backgroundColor: provider.color } : undefined}>{provider.mark}</span>
@@ -89,14 +90,7 @@ export function ProviderWorkspace({
             </span>
           </button>
         ))}
-      </nav>
-
-      <section className="provider-workspace-main" aria-label={selectedProvider.label}>
-        <header className="provider-workspace-heading">
-          <span className="provider-workspace-mark" style={selectedProvider.color ? { backgroundColor: selectedProvider.color } : undefined}>{selectedProvider.mark}</span>
-          <h2>{selectedProvider.label}</h2>
-        </header>
-        <div className="provider-workspace-tabs" role="tablist" aria-label={tabsAriaLabel}>
+        {selectedProvider && <div className="provider-workspace-tabs" role="tablist" aria-orientation="vertical" aria-label={tabsAriaLabel}>
           {PROVIDER_WORKSPACE_TABS.map((tab) => (
             <button
               key={tab}
@@ -113,13 +107,20 @@ export function ProviderWorkspace({
               {tabLabels[tab]}
             </button>
           ))}
-        </div>
+        </div>}
+      </nav>
+
+      {selectedProvider ? <section className="provider-workspace-main" aria-label={selectedProvider.label}>
+        <header className="provider-workspace-heading">
+          <span className="provider-workspace-mark" style={selectedProvider.color ? { backgroundColor: selectedProvider.color } : undefined}>{selectedProvider.mark}</span>
+          <h2>{selectedProvider.label}</h2>
+        </header>
         <div className="provider-workspace-panel" role="tabpanel" id="provider-workspace-panel"
           aria-labelledby={`provider-workspace-tab-${selectedTab}`} tabIndex={0}>
           {panel(selectedProvider, selectedTab)}
         </div>
         {footer && <footer className="provider-workspace-footer">{footer}</footer>}
-      </section>
+      </section> : <div className="provider-workspace-empty" role="status">{emptyMessage}</div>}
     </div>
   );
 }

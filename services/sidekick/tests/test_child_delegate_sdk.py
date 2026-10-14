@@ -12,6 +12,8 @@ from web.api.subagent_history import scoped_child_history
 
 
 def test_two_actual_sdk_children_keep_answers_out_of_parent(tmp_path, monkeypatch):
+    from runtime.memory_policy import update_policy
+    update_policy({'assistants_enabled': True}, tmp_path)
     from web.api import config as web_config
     monkeypatch.setattr(web_config, 'SETTINGS_FILE', tmp_path/'settings.json')
     web_config.save_settings({'game_mode_enabled': False})
@@ -73,6 +75,7 @@ def test_two_actual_sdk_children_keep_answers_out_of_parent(tmp_path, monkeypatc
         quiet_mode=True, session_db=db, platform='webui',
         tool_progress_callback=lambda kind,*args,**kw: events.append((kind,kw)),
         stream_delta_callback=parent_text.append)
+    parent._memory_policy_home = tmp_path
     parent._child_parent_context = ChildParentContext(
         Scope(backend_profile_id='a'*32,space_id='b'*32,browser_profile_id='default'),
         tmp_path, 'A', tmp_path/'sessions', parent.session_id, 'sdk-turn')

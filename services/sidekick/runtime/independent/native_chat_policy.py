@@ -76,6 +76,9 @@ def _protected_tool_path(path: Path, context: NativeChatContext, *, mutation: bo
         return True
     trees = [Path(context.sessions_dir).resolve(), space / "agents"]
     if mutation:
+        trees.append(space / ".lastbrowser-companions")
+    from runtime.memory_policy import memory_enabled
+    if mutation or not memory_enabled(home):
         trees.append(space / "memory")
     secret_files = [space / name for name in (".env", "auth.json", "config.yaml", ".anthropic_oauth.json")]
     control_files = [space / name for name in ("space.yaml", "workspace.yaml", "nova-management-audit.jsonl")]

@@ -8,12 +8,15 @@ from types import SimpleNamespace
 
 def test_run_in_terminal_captures_output_on_windows_pipe(tmp_path):
     from web.api.agent_workspace import _run_in_terminal
+    from runtime.memory_policy import update_policy
+    update_policy({"assistants_enabled": True}, tmp_path)
 
     session = {
         "id": "session-1",
         "events": [],
         "event_queue": queue.Queue(),
         "workdir": str(tmp_path),
+        "policy_home": str(tmp_path),
     }
     command = subprocess.list2cmdline(
         [sys.executable, "-c", "print('hello from workspace')"]
@@ -67,6 +70,8 @@ class _StubbornProcess:
 
 
 def test_run_in_terminal_kills_process_after_timeout(monkeypatch, tmp_path):
+    from runtime.memory_policy import update_policy
+    update_policy({"assistants_enabled": True}, tmp_path)
     from web.api import agent_workspace
 
     created = []
@@ -84,6 +89,7 @@ def test_run_in_terminal_kills_process_after_timeout(monkeypatch, tmp_path):
         "events": [],
         "event_queue": queue.Queue(),
         "workdir": str(tmp_path),
+        "policy_home": str(tmp_path),
     }
 
     result = agent_workspace._run_in_terminal(session, "slow-command", timeout=0)

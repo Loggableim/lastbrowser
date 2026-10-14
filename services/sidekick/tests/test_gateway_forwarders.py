@@ -6,14 +6,22 @@ def test_legacy_gateway_forwarders_import():
 
 
 def test_gateway_session_context_exports_helpers():
+    from contextvars import Context
     from gateway.session_context import clear_session_vars, get_session_env, set_session_vars
 
-    tokens = set_session_vars(platform="webui-smoke", session_key="test-session")
-    try:
-        assert get_session_env("SIDEKICK_SESSION_PLATFORM") == "webui-smoke"
-        assert get_session_env("SIDEKICK_SESSION_KEY") == "test-session"
-    finally:
-        clear_session_vars(tokens)
+    def exercise_worker_context():
+        tokens = set_session_vars(platform="webui-smoke", session_key="test-session")
+        try:
+            assert get_session_env("SIDEKICK_SESSION_PLATFORM") == "webui-smoke"
+            assert get_session_env("SIDEKICK_SESSION_KEY") == "test-session"
+        finally:
+            clear_session_vars(tokens)
+        # Clearing intentionally blocks stale environment fallback. Keep that
+        # state in this worker context instead of leaking it into other tests.
+        assert get_session_env("SIDEKICK_SESSION_PLATFORM") == ""
+        assert get_session_env("SIDEKICK_SESSION_KEY") == ""
+
+    Context().run(exercise_worker_context)
 
 
 def test_gateway_game_mode_block_result_is_non_llm_response():
@@ -39,14 +47,18 @@ def test_gateway_checks_game_mode_before_agent_construction():
     assert resolved < guard < agent_ctor
 
 
-def test_discord_adapter_rejects_send_without_token(monkeypatch):
+def test_discord_adapter_rejects_send_without_token(monkeypatch, tmp_path):
     import asyncio
 
     from gateway.platforms.discord import DiscordAdapter
     from runtime.gateway.config import PlatformConfig
+    from runtime.memory_policy import update_policy
+
+    update_policy({"discord_agents_enabled": True}, tmp_path)
 
     monkeypatch.delenv("DISCORD_BOT_TOKEN", raising=False)
     adapter = DiscordAdapter(PlatformConfig(enabled=True))
+    adapter._policy_home = tmp_path
 
     result = asyncio.run(adapter.send("123", "hello"))
 
@@ -54,12 +66,15 @@ def test_discord_adapter_rejects_send_without_token(monkeypatch):
     assert "token" in result["error"].lower()
 
 
-def test_discord_adapter_delegates_send_to_rest_helper(monkeypatch):
+def test_discord_adapter_delegates_send_to_rest_helper(monkeypatch, tmp_path):
     import asyncio
 
     from gateway.platforms.discord import DiscordAdapter
     from runtime.gateway.config import PlatformConfig
     from tools import send_message_tool
+    from runtime.memory_policy import update_policy
+
+    update_policy({"discord_agents_enabled": True}, tmp_path)
 
     calls = []
 
@@ -74,6 +89,7 @@ def test_discord_adapter_delegates_send_to_rest_helper(monkeypatch):
 
     monkeypatch.setattr(send_message_tool, "_send_discord", fake_send_discord)
     adapter = DiscordAdapter(PlatformConfig(enabled=True, token="bot-token"))
+    adapter._policy_home = tmp_path
 
     result = asyncio.run(
         adapter.send("channel-1", content="hello", metadata={"thread_id": "thread-1"})
@@ -81,6 +97,20 @@ def test_discord_adapter_delegates_send_to_rest_helper(monkeypatch):
 
     assert result == {"success": True, "message_id": "msg-1"}
     assert calls == [("bot-token", "channel-1", "hello", "thread-1", None)]
+
+
+def test_discord_adapter_requires_profile_opt_in_before_sending(monkeypatch, tmp_path):
+    import asyncio
+    from gateway.platforms.discord import DiscordAdapter
+    from runtime.gateway.config import PlatformConfig
+    from tools import send_message_tool
+
+    monkeypatch.setattr(send_message_tool, "_send_discord", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Disabled Discord must not send")))
+    adapter = DiscordAdapter(PlatformConfig(enabled=True, token="fixture-token"))
+    adapter._policy_home = tmp_path
+    result = asyncio.run(adapter.send("channel", "hello"))
+    assert result["success"] is False
+    assert result["error"] == "discord_agents_disabled_enable_in_hub"
 
 
 def test_discord_adapter_exposes_runner_lifecycle_aliases(monkeypatch):

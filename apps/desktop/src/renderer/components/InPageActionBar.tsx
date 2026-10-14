@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useId } from 'react';
 import {
   Clock,
   Download,
@@ -6,6 +6,7 @@ import {
   GripVertical,
   Layout,
   MessageSquare,
+  MoreHorizontal,
   Search,
   Sparkles,
   Volume2,
@@ -14,13 +15,15 @@ import {
 } from 'lucide-react';
 import type { SidekickActionId } from '../bridge.js';
 import type { ActionBarDock } from '../stores/usePanelStore.js';
+import { useDesktopI18n } from '../i18n.js';
+import './research-sidebar.css';
 
 export interface InPageActionBarProps {
   /**
    * 'in-page': Floating or docked strip inside the webview container.
    * 'topbar': Compact icon in ModernTitlebar that unfolds over the address bar on hover/click.
    */
-  variant?: 'in-page' | 'topbar';
+  variant?: 'in-page' | 'topbar' | 'sidebar';
   busy?: boolean;
   onAction: (actionId: SidekickActionId) => void;
   zoomFactor: number;
@@ -88,6 +91,8 @@ export function InPageActionBar({
   dockMode = 'topbar',
   onSetDockMode
 }: InPageActionBarProps): React.JSX.Element | null {
+  const { t } = useDesktopI18n();
+  const flyoutId = useId();
   const [internalDock, setInternalDock] = useState<ActionBarDock>(() => {
     try {
       const saved = window.localStorage.getItem('lastbrowser.actionBarDock.v1') as ActionBarDock;
@@ -255,7 +260,7 @@ export function InPageActionBar({
       clearTimeout(hoverTimeoutRef.current);
     }
     hoverTimeoutRef.current = setTimeout(() => {
-      setIsHovered(false);
+      if (!containerRef.current?.contains(document.activeElement)) setIsHovered(false);
     }, 280);
   }
 
@@ -266,6 +271,7 @@ export function InPageActionBar({
     }
     setIsHovered(false);
     setIsPinned(false);
+    setMenuOpen(false);
     sparklesTriggerRef.current?.focus();
   }
 
@@ -295,191 +301,86 @@ export function InPageActionBar({
   // ──────────────────────────────────────────────────────────────────────────
   // VARIANT: TOPBAR (Icon only, folds out over address bar on hover / click)
   // ──────────────────────────────────────────────────────────────────────────
+  if (variant === 'sidebar') {
+    if (activeDock !== 'sidebar') return null;
+    return <details className="sidebar-research-tools" data-nova-research-sidebar>
+      <summary><Sparkles size={15} /><span>Nova Research</span></summary>
+      <div className="sidebar-research-actions">
+        <button type="button" disabled={busy} onClick={() => void onAction('summarize-page')}><Sparkles size={14} />{t('browser.actions.summarize')}</button>
+        <button type="button" disabled={busy} onClick={() => void onAction('explain-selection')}><MessageSquare size={14} />{t('browser.actions.explain')}</button>
+        <button type="button" disabled={busy} onClick={() => void onAction('research-page')}><Globe2 size={14} />{t('browser.actions.research')}</button>
+        <button type="button" onClick={onFindOpen}><Search size={14} />{t('browser.chrome.findInPage')}</button>
+        <button type="button" aria-pressed={historyOpen} onClick={onToggleHistory}><Clock size={14} />{t('sidebar.utilities.history.title')}</button>
+        <button type="button" aria-pressed={downloadsOpen} onClick={onToggleDownloads}><Download size={14} />{t('sidebar.utilities.downloads.title')}{hasActiveDownloads ? ' •' : ''}</button>
+        {Math.abs(zoomFactor - 1) > 0.001 && <button type="button" onClick={onResetZoom}>Zoom {Math.round(zoomFactor * 100)}% → 100%</button>}
+        <button type="button" aria-pressed={muted} onClick={onToggleMute}>{muted ? <VolumeX size={14} /> : <Volume2 size={14} />}Audio</button>
+      </div>
+      {overlayTools && <div className="sidebar-research-actions">{overlayTools}</div>}
+      <label className="sidebar-research-position"><Layout size={14} /><span>Position</span>
+        <select value={normalizedDock} onChange={event => handleSelectDock(event.target.value as ActionBarDock)} aria-label="Nova Research Position">
+          {DOCK_SELECTION_OPTIONS.map(mode => <option key={mode} value={mode}>{DOCK_LABELS[mode]}</option>)}
+        </select>
+      </label>
+    </details>;
+  }
   if (variant === 'topbar') {
     if (activeDock !== 'topbar') return null;
-
-    const isFlyoutOpen = isHovered || isPinned;
-
+    const isFlyoutOpen = isHovered || isPinned || menuOpen;
     return (
-      <div
-        className="titlebar-research-dock"
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-      >
-        <button
-          type="button"
-          ref={sparklesTriggerRef}
+      <div ref={containerRef} className="titlebar-research-dock research-toolbar-dock"
+        onMouseEnter={handleMouseEnter} onMouseLeave={handleMouseLeave}
+        onMouseDown={event => event.stopPropagation()}
+        onDoubleClick={event => event.stopPropagation()}
+        onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPinned) {
+            setIsHovered(false); setMenuOpen(false);
+          }
+        }}>
+        <button type="button" ref={sparklesTriggerRef}
           className={`titlebar-tool-btn titlebar-research-trigger-btn ${isFlyoutOpen ? 'active' : ''}`}
-          onClick={() => setIsPinned((prev) => !prev)}
-          title="Nova Research Bar (Mouseover klappt über Adressleiste aus, Klick zum Fixieren)"
-          aria-label="Nova Research Bar"
-          aria-expanded={isFlyoutOpen}
-        >
+          onClick={() => { setIsPinned(previous => !previous); setIsHovered(true); }}
+          onKeyDown={event => {
+            if (event.key !== 'ArrowDown') return;
+            event.preventDefault(); setIsPinned(true);
+            requestAnimationFrame(() => document.getElementById(flyoutId)?.querySelector<HTMLButtonElement>('button')?.focus());
+          }}
+          title="Nova Research · Hover / click · Esc" aria-label="Nova Research" aria-expanded={isFlyoutOpen} aria-controls={flyoutId}>
           <Sparkles size={14} className="research-sparkles-icon" />
         </button>
-        <button
-          type="button"
-          className={`titlebar-tool-btn mute-trigger ${muted ? 'active' : ''}`}
-          onClick={onToggleMute}
-          title={muted ? 'Tab entstummen (Ctrl+M)' : 'Tab stummschalten (Ctrl+M)'}
-          aria-label={muted ? 'Tab entstummen' : 'Tab stummschalten'}
-          aria-pressed={muted}
-        >
+        <button type="button" className={`titlebar-tool-btn mute-trigger ${muted ? 'active' : ''}`} onClick={onToggleMute}
+          title={muted ? 'Tab entstummen (Ctrl+M)' : 'Tab stummschalten (Ctrl+M)'} aria-label={muted ? 'Tab entstummen' : 'Tab stummschalten'} aria-pressed={muted}>
           {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
         </button>
-
-        {isFlyoutOpen && (
-          <div
-            className="titlebar-research-flyout"
-            role="toolbar"
-            aria-label="Nova In-Page AI Actions"
-            onMouseDown={(e) => e.stopPropagation()}
-            onBlur={(event) => {
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPinned) {
-                setIsHovered(false);
-              }
-            }}
-          >
-            <div className="flyout-brand">
-              <Sparkles size={13} />
-              <span>Nova Research</span>
-            </div>
-
-            <div className="action-strip-divider" />
-
-            {/* AI Action Buttons */}
-            <button
-              type="button"
-              className="action-strip-btn ai-action"
-              onClick={() => void onAction('summarize-page')}
-              disabled={busy}
-              title="Seite zusammenfassen (Nova AI)"
-            >
-              <Sparkles size={13} />
-              <span>Summarize</span>
-            </button>
-
-            <button
-              type="button"
-              className="action-strip-btn ai-action"
-              onClick={() => void onAction('explain-selection')}
-              disabled={busy}
-              title="Markierten Text oder Seite erklären"
-            >
-              <MessageSquare size={13} />
-              <span>Explain</span>
-            </button>
-
-            <button
-              type="button"
-              className="action-strip-btn ai-action"
-              onClick={() => void onAction('research-page')}
-              disabled={busy}
-              title="Tiefenrecherche & Quellenabgleich"
-            >
-              <Globe2 size={13} />
-              <span>Research</span>
-            </button>
-
-            {overlayTools && (
-              <>
-                <div className="action-strip-divider" />
-                <div
-                  className="action-strip-overlay-tools"
-                  role="group"
-                  aria-label="Browser and site permissions"
-                  onClick={closeFlyoutAndRestoreFocus}
-                >
-                  {overlayTools}
-                </div>
-              </>
-            )}
-
-            <div className="action-strip-divider" />
-
-            {/* Zoom indicator */}
-            {Math.abs(zoomFactor - 1) > 0.001 && (
-              <button
-                type="button"
-                className="zoom-indicator"
-                title="Zoom auf 100% zurücksetzen (Ctrl+0)"
-                onClick={onResetZoom}
-              >
-                {Math.round(zoomFactor * 100)}%
-              </button>
-            )}
-
-            {/* Find in page */}
-            <button
-              type="button"
-              className="find-trigger"
-              title="Auf Seite suchen (Ctrl+F)"
-              onClick={onFindOpen}
-            >
-              <Search size={13} />
-            </button>
-
-
-            {/* History */}
-            <button
-              type="button"
-              className={`history-trigger ${historyOpen ? 'active' : ''}`}
-              title="Verlauf / Chronik"
-              onClick={onToggleHistory}
-            >
-              <Clock size={13} />
-            </button>
-
-            {/* Mute */}
-            <button
-              type="button"
-              className={`mute-trigger ${muted ? 'active' : ''}`}
-              title={muted ? 'Tab entstummen (Ctrl+M)' : 'Tab stummschalten (Ctrl+M)'}
-              onClick={onToggleMute}
-            >
-              {muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
-            </button>
-
-            {/* Dock Position Switcher Menu */}
-            <div className="action-strip-dock-anchor" ref={menuRef}>
-              <button
-                type="button"
-                className={`dock-menu-trigger-btn ${menuOpen ? 'open' : ''}`}
-                title={`Andock-Position ändern (${DOCK_LABELS[normalizedDock] || DOCK_LABELS[activeDock]})`}
-                onClick={() => setMenuOpen((prev) => !prev)}
-              >
-                <Layout size={13} />
-              </button>
-
-              {menuOpen && (
-                <div className="action-strip-dock-dropdown" role="menu">
-                  <div className="dock-dropdown-header">Andocken an Menüs:</div>
-                  {DOCK_SELECTION_OPTIONS.map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      className={`dock-dropdown-item ${normalizedDock === mode ? 'selected' : ''}`}
-                      onClick={() => handleSelectDock(mode)}
-                    >
-                      <span>{DOCK_LABELS[mode]}</span>
-                      {normalizedDock === mode && <span className="dock-check-badge">✓</span>}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Close / Dismiss Flyout Button */}
-            <button
-              type="button"
-              className="flyout-close-btn"
-              title="Leiste schließen (Esc)"
-              onClick={closeFlyoutAndRestoreFocus}
-            >
-              <X size={13} />
-            </button>
+        {isFlyoutOpen && <div id={flyoutId} className="titlebar-research-flyout research-toolbar" role="toolbar" aria-label="Nova Research">
+          <div className="research-primary-actions">
+            <button type="button" className="research-action" disabled={busy} onClick={() => void onAction('summarize-page')}
+              title={t('browser.actions.summarize')} aria-label={t('browser.actions.summarize')}><Sparkles size={14} /><span>{t('browser.actions.summarize')}</span></button>
+            <button type="button" className="research-action" disabled={busy} onClick={() => void onAction('explain-selection')}
+              title={t('browser.actions.explain')} aria-label={t('browser.actions.explain')}><MessageSquare size={14} /><span>{t('browser.actions.explain')}</span></button>
+            <button type="button" className="research-action" disabled={busy} onClick={() => void onAction('research-page')}
+              title={t('browser.actions.research')} aria-label={t('browser.actions.research')}><Globe2 size={14} /><span>{t('browser.actions.research')}</span></button>
           </div>
-        )}
+          <div className="research-more-anchor" ref={menuRef}>
+            <button type="button" className="research-action research-icon-action" title={t('chat.header.moreActions')}
+              aria-label={t('chat.header.moreActions')} aria-expanded={menuOpen} aria-controls={`${flyoutId}-more`}
+              onClick={() => setMenuOpen(previous => !previous)}><MoreHorizontal size={15} /></button>
+            {menuOpen && <div id={`${flyoutId}-more`} className="research-more-popover" role="group" aria-label={t('chat.header.moreActions')}>
+              {overlayTools && <div className="research-extra-tools" role="group" aria-label="Browser tools" onClick={closeFlyoutAndRestoreFocus}>{overlayTools}</div>}
+              <div className="research-utility-actions">
+                <button type="button" className="research-action" title={t('browser.chrome.findInPage')} onClick={onFindOpen}><Search size={14} /><span>{t('browser.chrome.findInPage')}</span></button>
+                <button type="button" className={`research-action ${historyOpen ? 'active' : ''}`} title={t('sidebar.utilities.history.title')} aria-pressed={historyOpen} onClick={onToggleHistory}><Clock size={14} /><span>{t('sidebar.utilities.history.title')}</span></button>
+                <button type="button" className={`research-action ${downloadsOpen ? 'active' : ''}`} title={t('sidebar.utilities.downloads.title')} aria-pressed={downloadsOpen} onClick={onToggleDownloads}><Download size={14} /><span>{t('sidebar.utilities.downloads.title')}{hasActiveDownloads ? ' •' : ''}</span></button>
+                {Math.abs(zoomFactor - 1) > 0.001 && <button type="button" className="research-action" title="Zoom · Ctrl+0" onClick={onResetZoom}>{Math.round(zoomFactor * 100)}% → 100%</button>}
+              </div>
+              <details className="research-dock-options"><summary><Layout size={14} />{DOCK_LABELS[normalizedDock] || DOCK_LABELS[activeDock]}</summary>
+                {DOCK_SELECTION_OPTIONS.map(mode => <button key={mode} type="button" className="research-action" aria-pressed={normalizedDock === mode} onClick={() => handleSelectDock(mode)}>
+                  <span>{DOCK_LABELS[mode]}</span>{normalizedDock === mode && <span aria-hidden="true">✓</span>}
+                </button>)}
+              </details>
+            </div>}
+          </div>
+          <button type="button" className="research-action research-icon-action" title={`${t('common.close')} (Esc)`} aria-label={t('common.close')} onClick={closeFlyoutAndRestoreFocus}><X size={14} /></button>
+        </div>}
       </div>
     );
   }
@@ -488,7 +389,7 @@ export function InPageActionBar({
   // VARIANT: IN-PAGE (Rendered floating or docked inside BrowserMain)
   // When activeDock is 'topbar', nothing is shown on the page (leaves webview clean).
   // ──────────────────────────────────────────────────────────────────────────
-  if (activeDock === 'topbar') {
+  if (activeDock === 'topbar' || activeDock === 'sidebar') {
     return null;
   }
 

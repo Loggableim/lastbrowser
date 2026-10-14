@@ -228,12 +228,9 @@ describe('browser shell layout', () => {
     expect(source).toContain('<WorkspacePanel');
     expect(source).toContain('<SpaceSelector');
     expect(source).toContain('<NativeChatMain');
-    expect(source).toContain('<NativeTasksMain');
-    expect(source).toContain('<NativeKanbanMain');
-    expect(source).toContain('<NativeTodosMain');
+    expect(source).toContain('<NativeTaskCenterMain');
     expect(source).toContain('<NativeSkillsMain');
-    expect(source).toContain('<NativeAgentsMain');
-    expect(source).toContain('<NativeProfilesMain');
+    expect(source).toContain('<NativeAssistantsMain');
     expect(source).toContain('<NativeMemoryMain');
     expect(source).toContain('<NativeInsightsMain');
     expect(source).toContain('<NativeLogsMain');
@@ -315,9 +312,13 @@ describe('browser shell layout', () => {
     expect(taskSource).toContain('getKanbanBoard');
     expect(taskSource).toContain('createKanbanTask');
     expect(taskSource).toContain('extractTodosFromSession');
-    expect(source).toContain('<NativeTasksMain activeContextItem={activeContextItem}');
-    expect(source).toContain('<NativeKanbanMain activeContextItem={activeContextItem}');
-    expect(source).toContain('<NativeTodosMain activeContextItem={activeContextItem}');
+    expect(source).toContain("case 'task-center':");
+    for (const panel of ['tasks', 'kanban', 'todos']) expect(source).toContain(`case '${panel}':`);
+    expect(source).toContain("<NativeTaskCenterMain initialSection={activePanel === 'tasks' ? 'scheduled' : activePanel === 'kanban' ? 'board' : 'now'} activeContextItem={activeContextItem}");
+    expect(taskSource).toContain("section === 'now' && <NativeTodosMain");
+    expect(taskSource).toContain("section === 'scheduled' && <NativeTasksMain");
+    expect(taskSource).toContain("section === 'board' && <NativeKanbanMain");
+    expect(taskSource).toContain('optional.loaded && optional.policy.kanban_enabled');
     expect(css).toContain('.tasks-main');
     expect(css).toContain('.kanban-main');
     expect(css).toContain('.todos-main');
@@ -368,8 +369,11 @@ describe('browser shell layout', () => {
     expect(source).toContain("case 'memory'");
     expect(source).toContain("case 'settings'");
     expect(source).toContain('<NativeSkillsMain activeContextItem={activeContextItem}');
-    expect(source).toContain('<NativeAgentsMain activeContextItem={activeContextItem}');
-    expect(source).toContain('<NativeProfilesMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeAssistantsMain activeContextItem={activeContextItem}');
+    expect(source).toContain('<NativeAssistantsMain activeContextItem="Profiles"');
+    expect(restPanels).toContain('settings ? <NativeProfilesMain');
+    expect(restPanels).toContain(': <NativeAgentsMain');
+    expect(restPanels).toContain("useState(activeContextItem === 'Profiles')");
     expect(source).toContain('<NativeMemoryMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeLogsMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeGmailMain activeContextItem={activeContextItem} serviceStatus={serviceStatus}');
@@ -389,7 +393,10 @@ describe('browser shell layout', () => {
     expect(restPanels).toContain('settings-section-nav');
     expect(restPanels).toContain('applyDesktopAppearancePreview(');
     expect(restPanels).toContain('<AdvancedWebUiTools');
-    expect(restPanels).toContain("panel=\"agents\"");
+    // Assistant controls are native and explicitly profile-bound; developer
+    // WebUI tools remain accessible from Settings rather than this panel.
+    expect(restPanels).toContain('bridge.scopedAgentOperation({ operation, profile, request })');
+    expect(restPanels).toContain('optional.loaded && optional.policy.assistants_enabled');
     expect(restPanels).toContain("panel=\"settings\"");
     // Advanced model policy uses the actual chat identity, never a fabricated session.
     expect(restPanels).toContain('<AdvancedModelPolicySettings sessionId={activeSessionId}');

@@ -1,11 +1,8 @@
-import React, { useState, useEffect, useMemo, useSyncExternalStore, FormEvent } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useSyncExternalStore, FormEvent } from 'react';
 import {
   Puzzle,
   Sparkles,
   Shield,
-  ShieldAlert,
-  ShieldCheck,
-  Terminal,
   Cpu,
   Layers,
   Globe,
@@ -18,14 +15,15 @@ import {
   X,
   Search,
   Sliders,
-  AlertTriangle,
-  RefreshCw,
-  FileCode,
-  HardDrive
+  RefreshCw
 } from 'lucide-react';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import type { ExtensionRecord, ExtensionPreset } from '../../main/extensions.js';
 import { McpHubStateModel } from './mcp-hub-state.js';
+import { BUILTIN_SKILLS_STORAGE_KEY, BUILTIN_SKILLS_CHANGED_EVENT } from '../terminal-feature.js';
+import { useOptionalAiPolicy } from '../optional-ai-policy.js';
+import { useDesktopI18n } from '../i18n.js';
+import './extension-hub.css';
 
 export type McpPermissionType =
   | 'read_only'
@@ -45,7 +43,7 @@ export interface McpSkillItem {
   autoApprove: boolean;
   enabled: boolean;
   type: 'builtin' | 'mcp_server';
-  serverType?: 'stdio' | 'sse';
+  serverType?: 'stdio' | 'sse' | 'http';
   endpoint?: string;
 }
 
@@ -59,19 +57,19 @@ export const BUILTIN_MCP_SKILLS: McpSkillItem[] = [
     workspaceScope: 'coding',
     permissions: ['terminal_execute', 'filesystem_write'],
     autoApprove: false,
-    enabled: true,
+    enabled: false,
     type: 'builtin'
   },
   {
     id: 'mcp-supermemory',
-    name: 'Supermemory Vector Search',
-    description: 'Semantische Vektorsuche und persistente Notiz- & Wissensverwaltung in lokalem SQLite Supermemory.',
+    name: 'Gedächtnis & Wissen',
+    description: 'Vorlieben, Fakten und Dokumente kontrollieren. Cloud-Suche nur nach separater Zustimmung.',
     category: 'research',
     icon: '🧠',
     workspaceScope: 'recherche',
     permissions: ['read_only', 'filesystem_write'],
     autoApprove: true,
-    enabled: true,
+    enabled: false,
     type: 'builtin'
   },
   {
@@ -143,12 +141,22 @@ export function UnifiedExtensionHub({
   onClose,
   activeSpace
 }: UnifiedExtensionHubProps): React.JSX.Element | null {
+  const optional = useOptionalAiPolicy(`${activeSpace || ''}:${open}`);
+  const { locale } = useDesktopI18n();
+  const openPanel = (panel: 'skills' | 'memory' | 'agents' | 'profiles' | 'kanban' | 'task-center') => {
+    usePanelStore.getState().setActivePanel(panel);
+    onClose();
+  };
   const {
     extensionHubTab,
     setExtensionHubTab
   } = usePanelStore();
 
-  const [activePillar, setActivePillar] = useState<'webextensions' | 'skills'>(extensionHubTab || 'webextensions');
+  const [activePillar, setActivePillar] = useState<'webextensions' | 'skills' | 'mcp'>(extensionHubTab || 'webextensions');
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive' | 'beta'>('all');
   const [extensions, setExtensions] = useState<ExtensionRecord[]>([]);
   const [presets, setPresets] = useState<ExtensionPreset[]>([]);
   const [cwsInput, setCwsInput] = useState('');
@@ -159,11 +167,14 @@ export function UnifiedExtensionHub({
   // Pillar 2 (MCP Skills) state
   const [builtinSkills, setBuiltinSkills] = useState<McpSkillItem[]>(() => {
     try {
-      const stored: unknown = JSON.parse(localStorage.getItem('lastbrowser.mcp_skills.v1') || 'null');
+      const stored: unknown = JSON.parse(localStorage.getItem(BUILTIN_SKILLS_STORAGE_KEY) || 'null');
       if (Array.isArray(stored)) {
         const savedBuiltins = stored.filter((item): item is McpSkillItem => item && typeof item === 'object'
           && (item as McpSkillItem).type === 'builtin');
-        if (savedBuiltins.length) return savedBuiltins;
+        if (savedBuiltins.length) return BUILTIN_MCP_SKILLS.map(defaults => {
+          const saved = savedBuiltins.find(item => item.id === defaults.id);
+          return saved ? { ...defaults, ...saved, id: defaults.id, type: defaults.type } : defaults;
+        });
       }
     } catch {}
     return BUILTIN_MCP_SKILLS;
@@ -171,10 +182,10 @@ export function UnifiedExtensionHub({
   const [mcpModel] = useState(() => new McpHubStateModel(window.lastbrowser.mcp));
   const mcp = useSyncExternalStore(mcpModel.subscribe, mcpModel.getSnapshot);
   const skills = useMemo<McpSkillItem[]>(() => [
-    ...builtinSkills,
+    ...builtinSkills.map(skill => skill.id === 'mcp-supermemory' ? { ...skill, enabled: optional.loaded && optional.policy.enabled } : skill),
     ...mcp.servers.map((server): McpSkillItem => {
       const name = String(server.name || '');
-      const transport = server.transport === 'stdio' ? 'stdio' : 'sse';
+      const transport = server.transport === 'stdio' ? 'stdio' : server.transport === 'sse' ? 'sse' : 'http';
       return {
         id: `mcp-ext-${name}`,
         name: `MCP: ${name}`,
@@ -189,7 +200,7 @@ export function UnifiedExtensionHub({
         serverType: transport
       };
     })
-  ], [builtinSkills, mcp.servers]);
+  ], [builtinSkills, mcp.servers, optional.loaded, optional.policy.enabled]);
   const [skillSearch, setSkillSearch] = useState('');
   const [skillWorkspaceFilter, setSkillWorkspaceFilter] = useState<'all' | 'coding' | 'recherche' | 'design'>('all');
 
@@ -206,9 +217,27 @@ export function UnifiedExtensionHub({
   // Sync tab with store
   useEffect(() => {
     if (extensionHubTab) {
-      setActivePillar(extensionHubTab);
+      setActivePillar(current => extensionHubTab === 'skills' && current === 'mcp' ? 'mcp' : extensionHubTab);
     }
   }, [extensionHubTab]);
+
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
+      if (event.key !== 'Tab') return;
+      const nodes = [...(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),a[href]') || [])]
+        .filter(node => node.getClientRects().length > 0);
+      const first = nodes[0], last = nodes[nodes.length - 1];
+      if (!first) { event.preventDefault(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === dialogRef.current)) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => { document.removeEventListener('keydown', keydown); previous?.focus(); };
+  }, [open]);
 
   const loadExtensionData = async () => {
     try {
@@ -238,6 +267,10 @@ export function UnifiedExtensionHub({
 
   // Persist skills state
   const updateSkill = (id: string, updates: Partial<McpSkillItem>) => {
+    if (id === 'mcp-supermemory') {
+      if (typeof updates.enabled === 'boolean') void optional.update({ enabled: updates.enabled });
+      return;
+    }
     if (id.startsWith('mcp-ext-') && typeof updates.enabled === 'boolean') {
       void mcpModel.toggle(id.slice('mcp-ext-'.length), updates.enabled);
       return;
@@ -245,7 +278,8 @@ export function UnifiedExtensionHub({
     setBuiltinSkills((prev) => {
       const next = prev.map((s) => (s.id === id ? { ...s, ...updates } : s));
       try {
-        localStorage.setItem('lastbrowser.mcp_skills.v1', JSON.stringify(next));
+        localStorage.setItem(BUILTIN_SKILLS_STORAGE_KEY, JSON.stringify(next));
+        queueMicrotask(() => window.dispatchEvent(new Event(BUILTIN_SKILLS_CHANGED_EVENT)));
       } catch {}
       return next;
     });
@@ -368,423 +402,182 @@ export function UnifiedExtensionHub({
     });
   }, [skills, skillSearch, skillWorkspaceFilter]);
 
+  const de = locale === 'de';
+  const text = (german: string, english: string) => de ? german : english;
+  const matches = (name: string, description = '') => !skillSearch.trim()
+    || `${name} ${description}`.toLocaleLowerCase().includes(skillSearch.trim().toLocaleLowerCase());
+  const matchesStatus = (enabled: boolean, beta = false) => statusFilter === 'all'
+    || statusFilter === 'active' && enabled || statusFilter === 'inactive' && !enabled || statusFilter === 'beta' && beta;
+  const features = [
+    { key: 'assistants_enabled', name: text('Zusätzliche Assistenten', 'Additional assistants'), description: text('Eigene Assistenten und ihre Profile verwalten.', 'Manage your assistants and their profiles.'), panel: 'agents', beta: '', icon: <Cpu size={20} /> },
+    { key: 'gmail_ai_enabled', name: 'Gmail AI', description: text('KI-Funktionen für Gmail.', 'AI features for Gmail.'), beta: text('Beta · ungetestet', 'Beta · untested'), icon: <Globe size={20} /> },
+    { key: 'discord_agents_enabled', name: 'Discord Agents', description: text('Assistenten mit Discord verbinden.', 'Connect assistants to Discord.'), beta: text('Beta · ungetestet', 'Beta · untested'), icon: <Sparkles size={20} /> },
+    { key: 'kanban_enabled', name: text('Aufgaben-Board', 'Task board'), description: text('Gespeicherte Boards ansehen und Aufgaben ordnen.', 'View saved boards and organize tasks.'), panel: 'kanban', beta: text('Beta · unfertig / ungetestet', 'Beta · unfinished / untested'), icon: <Layers size={20} /> },
+    { key: 'tasks_enabled', name: text('Aufgaben', 'Tasks'), description: text('Gespeicherte und geplante Aufgaben ansehen.', 'View saved and scheduled tasks.'), panel: 'task-center', beta: text('Beta · funktioniert derzeit nicht', 'Beta · not working'), icon: <CheckCircle2 size={20} /> }
+  ] as const;
+  const visibleFeatures = features.filter(feature => matches(feature.name, feature.description) && matchesStatus(optional.policy[feature.key], !!feature.beta));
+  const visibleSkills = filteredSkills.filter(skill => (activePillar === 'mcp' ? skill.type === 'mcp_server' : skill.type === 'builtin') && matchesStatus(skill.enabled));
+  const visibleExtensions = extensions.filter(extension => matches(extension.name, extension.description) && matchesStatus(extension.enabled));
+  const visiblePresets = presets.filter(preset => matches(preset.name, preset.description) && statusFilter === 'all');
+  const pickTab = (tab: typeof activePillar) => {
+    setActivePillar(tab);
+    setExtensionHubTab(tab === 'mcp' ? 'skills' : tab);
+  };
+  const status = (enabled: boolean) => <span className={`eh-state ${enabled ? 'is-active' : ''}`}>{enabled ? text('Aktiv', 'Active') : text('Inaktiv', 'Inactive')}</span>;
+
   if (!open) return null;
 
   return (
-    <div
-      className="unified-hub-backdrop"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Unified Extension & Skill Hub"
-    >
-      <div className="unified-hub-modal">
-        {/* Modal Header */}
-        <header className="unified-hub-header">
-          <div className="hub-header-branding">
-            <div className="hub-brand-icon">
-              <Puzzle size={22} className="puzzle-icon" />
-              <Sparkles size={14} className="sparkles-overlay" />
-            </div>
-            <div>
-              <div className="hub-title-row">
-                <h2>Unified Extension & Skill Hub</h2>
-                <span className="hub-shortcut-chip" title="Globaler Shortcut">Ctrl+Shift+X</span>
-              </div>
-              <p className="hub-subtitle">
-                Zwei-Säulen-Architektur: Chrome MV3 WebExtensions & Native Nova AI Skills (MCP)
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            className="hub-close-btn"
-            aria-label="Schließen (Esc)"
-            title="Schließen"
-            onClick={onClose}
-          >
-            <X size={18} />
-          </button>
+    <div className="unified-hub-backdrop eh-backdrop">
+      <div ref={dialogRef} tabIndex={-1} className="eh-dialog" role="dialog" aria-modal="true" aria-labelledby="extension-hub-title">
+        <header className="eh-header">
+          <div className="eh-heading"><span className="eh-brand"><Puzzle size={23} /></span><div>
+            <h2 id="extension-hub-title">{text('Erweiterungen & Skills', 'Extensions & skills')}</h2>
+            <p>{text('Dein Browser. Deine Werkzeuge.', 'Your browser. Your tools.')}{activeSpace ? ` · ${activeSpace}` : ''}</p>
+          </div></div>
+          <button type="button" className="eh-icon-button" onClick={onClose} aria-label={text('Schließen', 'Close')} title="Esc"><X size={20} /></button>
         </header>
 
-        {/* Feedback Banner */}
-        {feedback && (
-          <div className={`hub-feedback-banner ${feedback.error ? 'error' : 'success'}`}>
-            {feedback.error ? <AlertTriangle size={15} /> : <CheckCircle2 size={15} />}
-            <span>{feedback.text}</span>
-          </div>
-        )}
-
-        {/* Two-Pillar Switcher Tabs */}
-        <nav className="hub-pillar-nav" role="tablist">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activePillar === 'webextensions'}
-            className={`hub-pillar-tab ${activePillar === 'webextensions' ? 'active' : ''}`}
-            onClick={() => {
-              setActivePillar('webextensions');
-              setExtensionHubTab('webextensions');
-            }}
-          >
-            <Globe size={16} />
-            <span>Web-Erweiterungen (Chrome MV3)</span>
-            <span className="hub-tab-badge">{extensions.length}</span>
-          </button>
-
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activePillar === 'skills'}
-            className={`hub-pillar-tab ${activePillar === 'skills' ? 'active' : ''}`}
-            onClick={() => {
-              setActivePillar('skills');
-              setExtensionHubTab('skills');
-            }}
-          >
-            <Cpu size={16} />
-            <span>Nova AI Skills & Tools (MCP)</span>
-            <span className="hub-tab-badge green">{mcp.servers.filter((server) => server.active === true).length}</span>
-          </button>
+        <nav className="eh-tabs" role="tablist" aria-label={text('Bereich', 'Section')}>
+          {([
+            ['webextensions', text('Erweiterungen', 'Extensions'), <Puzzle size={16} />],
+            ['skills', 'Skills', <Sparkles size={16} />],
+            ['mcp', text('Verbindungen · MCP', 'Connections · MCP'), <Globe size={16} />]
+          ] as const).map(([id, label, icon]) => <button key={id} id={`eh-tab-${id}`} type="button" role="tab"
+            aria-selected={activePillar === id} aria-controls="eh-results" tabIndex={activePillar === id ? 0 : -1}
+            onKeyDown={event => {
+              const tabs = ['webextensions', 'skills', 'mcp'] as const;
+              if (event.key === 'ArrowRight' || event.key === 'ArrowLeft' || event.key === 'Home' || event.key === 'End') {
+                event.preventDefault();
+                const index = event.key === 'Home' ? 0 : event.key === 'End' ? 2 : (tabs.indexOf(id) + (event.key === 'ArrowRight' ? 1 : 2)) % 3;
+                pickTab(tabs[index]); document.getElementById(`eh-tab-${tabs[index]}`)?.focus();
+              }
+            }} onClick={() => pickTab(id)}>{icon}{label}</button>)}
         </nav>
 
-        {/* ── PILLAR 1: CHROME MV3 WEBEXTENSIONS ── */}
-        {activePillar === 'webextensions' && (
-          <div className="hub-content-pane webextensions-pane">
-            {/* Quick-Install Showcase */}
-            <section className="hub-section">
-              <div className="hub-section-head">
-                <h3>Kuratierter 1-Klick Showcase</h3>
-                <p>Verifizierte Manifest V3 Erweiterungen für Privatsphäre, Sicherheit und Styles.</p>
-              </div>
+        <div className="eh-toolbar">
+          <label className="eh-search"><Search size={17} /><input type="search" value={skillSearch} onChange={event => setSkillSearch(event.target.value)}
+            aria-label={text('Hub durchsuchen', 'Search hub')} placeholder={text('Suchen…', 'Search…')} /></label>
+          <select aria-label={text('Status filtern', 'Filter status')} value={statusFilter} onChange={event => setStatusFilter(event.target.value as typeof statusFilter)}>
+            <option value="all">{text('Alle', 'All')}</option><option value="active">{text('Aktiv', 'Active')}</option>
+            <option value="inactive">{text('Inaktiv', 'Inactive')}</option><option value="beta">Beta</option>
+          </select>
+          {activePillar !== 'webextensions' && <select aria-label={text('Zuordnung filtern', 'Filter category')} value={skillWorkspaceFilter}
+            onChange={event => setSkillWorkspaceFilter(event.target.value as typeof skillWorkspaceFilter)}>
+            <option value="all">{text('Alle Bereiche', 'All categories')}</option><option value="coding">Coding</option><option value="recherche">{text('Recherche', 'Research')}</option><option value="design">Design</option>
+          </select>}
+        </div>
 
-              <div className="hub-preset-grid">
-                {presets.map((preset) => {
-                  const isInstalled = extensions.some((e) => e.id === preset.cwsId || e.name === preset.name);
-                  const isBusy = installingId === preset.id;
-                  return (
-                    <div key={preset.id} className="hub-preset-card">
-                      <div className="preset-card-top">
-                        <span className="preset-icon">{preset.icon}</span>
-                        <div>
-                          <strong>{preset.name}</strong>
-                          <span className="preset-category">{preset.category}</span>
-                        </div>
-                      </div>
-                      <p className="preset-desc">{preset.description}</p>
-                      <button
-                        type="button"
-                        className={`preset-install-btn ${isInstalled ? 'installed' : ''}`}
-                        disabled={isInstalled || isBusy}
-                        onClick={() => handleInstallPreset(preset)}
-                      >
-                        {isBusy ? (
-                          <RefreshCw size={13} className="spin" />
-                        ) : isInstalled ? (
-                          <Check size={13} />
-                        ) : (
-                          <Plus size={13} />
-                        )}
-                        <span>{isInstalled ? 'Installiert' : 'Hinzufügen'}</span>
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+        <div className="eh-scroll" id="eh-results" role="tabpanel" aria-labelledby={`eh-tab-${activePillar}`}>
+          {feedback && <p className={`eh-notice ${feedback.error ? 'is-error' : ''}`} role={feedback.error ? 'alert' : 'status'}>{feedback.text}</p>}
+          {optional.error && activePillar === 'skills' && <p className="eh-notice is-error" role="alert">{optional.error}</p>}
+          {activePillar === 'webextensions' && <>
+            <section className="eh-section">
+              <div className="eh-section-heading"><h3>{text('Installiert', 'Installed')} <small>{extensions.length}</small></h3>
+                <button type="button" className="eh-text-button" disabled={loading} onClick={() => void loadExtensionData()}><RefreshCw size={14} />{text('Aktualisieren', 'Refresh')}</button></div>
+              {loading ? <p role="status" className="eh-empty">{text('Erweiterungen werden geladen…', 'Loading extensions…')}</p> : visibleExtensions.length === 0
+                ? <p className="eh-empty">{extensions.length ? text('Keine passenden Erweiterungen.', 'No matching extensions.') : text('Noch keine Erweiterungen installiert.', 'No extensions installed yet.')}</p>
+                : <div className="eh-grid">{visibleExtensions.map(ext => <article className="eh-card" key={ext.id}>
+                  <div className="eh-card-head"><span className="eh-card-icon">{ext.iconDataUrl ? <img src={ext.iconDataUrl} alt="" /> : <Puzzle size={21} />}</span>
+                    <div className="eh-card-title"><h4>{ext.name}</h4><span className="eh-muted">v{ext.version}{ext.source === 'unpacked' ? text(' · Lokal geladen', ' · Loaded locally') : ''}</span></div>{status(ext.enabled)}</div>
+                  <p>{ext.description || text('Keine Beschreibung vorhanden.', 'No description available.')}</p>
+                  <details className="eh-details"><summary>{text('Optionen & Berechtigungen', 'Options & permissions')}</summary>
+                    <label>{text('Zuordnung', 'Category')}<select value={extensionScopes[ext.id] || 'all'} onChange={event => handleUpdateExtensionScope(ext.id, event.target.value as 'all' | 'coding' | 'recherche' | 'design')}>
+                      <option value="all">{text('Alle Bereiche', 'All categories')}</option><option value="coding">Coding</option><option value="recherche">{text('Recherche', 'Research')}</option><option value="design">Design</option></select></label>
+                    <label className="eh-check"><input type="checkbox" checked={!!ext.allowInIncognito} onChange={() => void handleToggleIncognito(ext)} />{text('In privaten Fenstern erlauben', 'Allow in private windows')}</label>
+                    <div className="eh-permissions">{(ext.permissions || []).map(permission => <span key={permission}>{permission}</span>)}</div>
+                  </details>
+                  <footer className="eh-card-footer"><label className="eh-check"><input type="checkbox" checked={!!ext.enabled} onChange={() => void handleToggleExtension(ext)} />{text('Aktiviert', 'Enabled')}</label>
+                    <button type="button" className="eh-icon-button is-danger" onClick={() => void handleRemoveExtension(ext)} aria-label={`${ext.name}: ${text('Entfernen', 'Remove')}`}><Trash2 size={16} /></button></footer>
+                </article>)}</div>}
             </section>
-
-            {/* Install from CWS or Unpacked */}
-            <section className="hub-section install-actions-section">
-              <div className="hub-section-head">
-                <h3>Weitere Erweiterung installieren</h3>
-              </div>
-              <div className="install-actions-row">
-                <form className="cws-url-form" onSubmit={handleInstallCws}>
-                  <Globe size={15} />
-                  <input
-                    type="text"
-                    value={cwsInput}
-                    onChange={(e) => setCwsInput(e.target.value)}
-                    placeholder="Chrome Web Store URL oder 32-Zeichen Extension-ID..."
-                    className="cws-input"
-                  />
-                  <button
-                    type="submit"
-                    className="cws-submit-btn"
-                    disabled={!cwsInput.trim() || installingId === 'cws-custom'}
-                  >
-                    {installingId === 'cws-custom' ? <RefreshCw size={14} className="spin" /> : <Plus size={14} />}
-                    <span>Installieren</span>
-                  </button>
-                </form>
-
-                <button
-                  type="button"
-                  className="unpacked-load-btn"
-                  disabled={installingId === 'unpacked'}
-                  onClick={handleInstallUnpacked}
-                  title="Entpackten Erweiterungsordner mit manifest.json auswählen"
-                >
-                  <FolderOpen size={15} />
-                  <span>Entpackte Erweiterung laden...</span>
-                </button>
-              </div>
+            <section className="eh-section"><h3>{text('Hinzufügen', 'Add an extension')}</h3>
+              <form className="eh-install-form" onSubmit={handleInstallCws}><input value={cwsInput} onChange={event => setCwsInput(event.target.value)}
+                aria-label={text('Chrome Web Store Link oder Erweiterungs-ID', 'Chrome Web Store link or extension ID')} placeholder={text('Chrome Web Store Link oder ID', 'Chrome Web Store link or ID')} />
+                <button type="submit" className="eh-primary" disabled={!cwsInput.trim() || installingId !== null}><Plus size={15} />{installingId === 'cws-custom' ? text('Installiert…', 'Installing…') : text('Installieren', 'Install')}</button>
+                <button type="button" disabled={installingId !== null} onClick={() => void handleInstallUnpacked()}><FolderOpen size={15} />{text('Aus Ordner', 'From folder')}</button></form>
+              {visiblePresets.length > 0 && <><h4 className="eh-subheading">{text('Entdecken', 'Discover')}</h4><div className="eh-grid">{visiblePresets.map(preset => {
+                const installed = extensions.some(ext => ext.id === preset.cwsId || ext.name === preset.name);
+                return <article key={preset.id} className="eh-card"><div className="eh-card-head"><span className="eh-card-icon">{preset.icon}</span><div className="eh-card-title"><h4>{preset.name}</h4><span className="eh-muted">{preset.category}</span></div></div>
+                  <p>{preset.description}</p><footer className="eh-card-footer"><button type="button" disabled={installed || installingId !== null} onClick={() => void handleInstallPreset(preset)}>
+                    {installed ? <Check size={15} /> : <Plus size={15} />}{installed ? text('Installiert', 'Installed') : installingId === preset.id ? text('Installiert…', 'Installing…') : text('Hinzufügen', 'Add')}</button></footer></article>;
+              })}</div></>}
             </section>
+          </>}
 
-            {/* Installed Extensions List */}
-            <section className="hub-section installed-section">
-              <div className="hub-section-head">
-                <h3>Installierte Erweiterungen ({extensions.length})</h3>
-                <p>Granulare Schalter für Normal- und Inkognito-Modus sowie Workspace-Zuordnung.</p>
-              </div>
-
-              {loading ? (
-                <div className="hub-loading">Lade Erweiterungen...</div>
-              ) : extensions.length === 0 ? (
-                <div className="hub-empty-state">
-                  <Puzzle size={28} />
-                  <p>Noch keine Erweiterungen installiert. Wähle oben ein Preset oder lade eine CRX-Datei.</p>
-                </div>
-              ) : (
-                <div className="hub-installed-list">
-                  {extensions.map((ext) => (
-                    <div key={ext.id} className={`hub-extension-row ${!ext.enabled ? 'disabled' : ''}`}>
-                      <div className="ext-row-left">
-                        {ext.iconDataUrl ? (
-                          <img src={ext.iconDataUrl} alt="" className="ext-icon-img" />
-                        ) : (
-                          <div className="ext-icon-fallback">🧩</div>
-                        )}
-                        <div className="ext-meta">
-                          <div className="ext-name-row">
-                            <strong>{ext.name}</strong>
-                            <span className="ext-version">v{ext.version}</span>
-                            {ext.source === 'unpacked' && <span className="ext-pill unpacked">Entpackt</span>}
-                          </div>
-                          <p className="ext-desc">{ext.description || 'Keine Beschreibung hinterlegt.'}</p>
-                          <div className="ext-permissions-pills">
-                            {(ext.permissions || []).map((perm) => (
-                              <span key={perm} className="ext-perm-pill">{perm}</span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="ext-row-controls">
-                        {/* Scope Selector */}
-                        <div className="ext-scope-control">
-                          <label>Workspace:</label>
-                          <select
-                            value={extensionScopes[ext.id] || 'all'}
-                            onChange={(e) => handleUpdateExtensionScope(ext.id, e.target.value as any)}
-                            className="ext-workspace-select"
-                            title="Workspace-Scoping"
-                          >
-                            <option value="all">Alle Workspaces</option>
-                            <option value="coding">Coding</option>
-                            <option value="recherche">Recherche</option>
-                            <option value="design">Design</option>
-                          </select>
-                        </div>
-
-                        {/* Incognito Switch */}
-                        <label className="hub-toggle-label" title="Im privaten / Inkognito-Fenster erlauben">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(ext.allowInIncognito)}
-                            onChange={() => handleToggleIncognito(ext)}
-                          />
-                          <span className="hub-toggle-text">Inkognito</span>
-                        </label>
-
-                        {/* Enable/Disable Switch */}
-                        <label className="hub-toggle-label main-toggle">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(ext.enabled)}
-                            onChange={() => handleToggleExtension(ext)}
-                          />
-                          <span className="hub-toggle-text">{ext.enabled ? 'Aktiv' : 'Inaktiv'}</span>
-                        </label>
-
-                        {/* Delete Button */}
-                        <button
-                          type="button"
-                          className="ext-delete-btn"
-                          title="Erweiterung deinstallieren"
-                          onClick={() => handleRemoveExtension(ext)}
-                        >
-                          <Trash2 size={15} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+          {activePillar === 'skills' && <>
+            <section className="eh-section"><div className="eh-section-heading"><h3>{text('Optionale Funktionen', 'Optional features')}</h3><span className="eh-muted">{text('Für das aktive KI-Profil', 'For the active AI profile')}</span></div>
+              <div className="eh-grid">{visibleFeatures.map(feature => <article key={feature.key} className="eh-card">
+                <div className="eh-card-head"><span className="eh-card-icon">{feature.icon}</span><div className="eh-card-title"><h4>{feature.name}</h4></div>{status(optional.loaded && optional.policy[feature.key])}</div>
+                {feature.beta && <span className="eh-beta">{feature.beta}</span>}<p>{feature.description}</p>
+                <footer className="eh-card-footer"><label className="eh-check"><input type="checkbox" checked={optional.policy[feature.key]} disabled={!optional.loaded || optional.busy}
+                  onChange={event => void optional.update({ [feature.key]: event.target.checked })} />{text('Aktivieren', 'Enable')}</label>
+                  {'panel' in feature && <button type="button" onClick={() => openPanel(feature.panel)}>{text('Verwalten', 'Manage')}</button>}</footer>
+              </article>)}</div>
             </section>
-          </div>
-        )}
+            <section className="eh-section"><div className="eh-section-heading"><h3>{text('Werkzeuge', 'Tools')}</h3>
+              <button type="button" onClick={() => openPanel('skills')}>{text('Alle Skills verwalten', 'Manage all skills')}<ExternalLink size={13} /></button></div>
+              <div className="eh-grid">{visibleSkills.map(renderSkill)}</div>
+              {visibleSkills.length === 0 && visibleFeatures.length === 0 && <p className="eh-empty">{text('Keine passenden Skills.', 'No matching skills.')}</p>}
+            </section>
+          </>}
 
-        {/* ── PILLAR 2: NOVA AI SKILLS & TOOLS (MCP) ── */}
-        {activePillar === 'skills' && (
-          <div className="hub-content-pane skills-pane">
-            <div aria-live="polite">
-              {mcp.error && <p className="hub-feedback-banner error" role="alert">{mcp.error}</p>}
-              {mcp.notice && <p role="status">{mcp.notice}</p>}
-              {mcp.busy && <p role="status">MCP-Konfiguration wird geladen oder gespeichert …</p>}
-              {mcp.runtimeAvailable === false && <p role="status">MCP-Laufzeit nicht verfügbar. Server lassen sich konfigurieren, aber derzeit nicht verbinden.</p>}
-            </div>
-            {/* Filter & Search Bar */}
-            <div className="hub-skills-filterbar">
-              <div className="skills-search-wrap">
-                <Search size={15} />
-                <input
-                  type="text"
-                  value={skillSearch}
-                  onChange={(e) => setSkillSearch(e.target.value)}
-                  placeholder="Skills, Werkzeuge oder Berechtigungen durchsuchen..."
-                  className="skills-search-input"
-                />
-              </div>
-
-              <div className="skills-scope-chips">
-                <span className="scope-chip-label">Workspace-Scoping:</span>
-                {(['all', 'coding', 'recherche', 'design'] as const).map((scope) => (
-                  <button
-                    key={scope}
-                    type="button"
-                    className={`scope-filter-pill ${skillWorkspaceFilter === scope ? 'active' : ''}`}
-                    onClick={() => setSkillWorkspaceFilter(scope)}
-                  >
-                    {scope === 'all' ? 'Alle Workspaces' : scope.charAt(0).toUpperCase() + scope.slice(1)}
-                  </button>
-                ))}
-              </div>
-
-              <button
-                type="button"
-                className={`mcp-config-btn ${showMcpConfig ? 'active' : ''}`}
-                onClick={() => setShowMcpConfig((prev) => !prev)}
-                title="mcp_servers.json Konfiguration öffnen"
-              >
-                <FileCode size={14} />
-                <span>mcp_servers.json</span>
-              </button>
-            </div>
-
-            {/* MCP Servers Config Drawer */}
-            {showMcpConfig && (
-              <div className="mcp-config-drawer">
-                <div className="mcp-config-head">
-                  <div>
-                    <strong>Model Context Protocol (MCP) Server Konfiguration</strong>
-                    <p>Externe stdio- und HTTP-Server konfigurieren. Änderungen erfordern einen Neustart von Nova. Maskierte Zugangsdaten bleiben beim Speichern erhalten.</p>
-                  </div>
-                  <button
-                    type="button"
-                    className="save-mcp-btn"
-                    onClick={handleApplyMcpConfig}
-                    disabled={!mcp.loaded || mcp.busy}
-                  >
-                    <Check size={14} />
-                    <span>Konfiguration anwenden</span>
-                  </button>
-                </div>
-                <textarea
-                  aria-label="MCP-Serverkonfiguration"
-                  className="mcp-json-editor"
-                  value={mcp.editor}
-                  onChange={(e) => mcpModel.setEditor(e.target.value)}
-                  rows={8}
-                  spellCheck={false}
-                />
-                <p role="status">{mcp.editor === mcp.savedEditor ? 'Aktuell gespeicherte Konfiguration' : 'Ungespeicherter Entwurf'}</p>
-                <div className="native-card-actions">
-                  <button type="button" onClick={mcpModel.resetEditor} disabled={mcp.busy}>Entwurf verwerfen</button>
-                  <button type="button" onClick={() => void mcpModel.load()} disabled={mcp.busy}>Serverstatus aktualisieren</button>
-                  <button type="button" onClick={importLegacyMcpDraft} disabled={mcp.busy}>Älteren lokalen Entwurf laden</button>
-                </div>
-              </div>
-            )}
-
-            {/* Security & Sandboxing Manifesto Notice */}
-            <div className="hub-security-banner">
-              <ShieldCheck size={18} className="shield-good" />
-              <div>
-                <strong>Granulares Sandboxing & Berechtigungsmanagement (Security First)</strong>
-                <p>
-                  Kritische Fähigkeiten wie <code>terminal_execute</code> oder <code>filesystem_write</code> verlangen standardmäßig eine interaktive Bestätigung im Chat (Human-in-the-Loop).
-                </p>
-              </div>
-            </div>
-
-            {/* Skills Grid */}
-            <div className="hub-skills-grid">
-              {filteredSkills.map((skill) => (
-                <div key={skill.id} className={`mcp-skill-card ${!skill.enabled ? 'disabled' : ''}`}>
-                  <div className="skill-card-header">
-                    <span className="skill-avatar">{skill.icon}</span>
-                    <div className="skill-title-block">
-                      <div className="skill-name-row">
-                        <strong>{skill.name}</strong>
-                        <span className={`skill-type-pill ${skill.type}`}>
-                          {skill.type === 'builtin' ? 'Nativ' : 'MCP Server'}
-                        </span>
-                      </div>
-                      <span className="skill-category-tag">{skill.category.toUpperCase()}</span>
-                    </div>
-
-                    {/* Enable/Disable Toggle */}
-                    <label className="skill-main-switch" title={skill.enabled ? 'Skill aktiv' : 'Skill deaktiviert'}>
-                      <input
-                        type="checkbox"
-                        checked={skill.enabled}
-                        onChange={(e) => updateSkill(skill.id, { enabled: e.target.checked })}
-                      />
-                      <span className="slider round" />
-                    </label>
-                  </div>
-
-                  <p className="skill-description">{skill.description}</p>
-
-                  {/* Permission Pills */}
-                  <div className="skill-permissions-block">
-                    <span className="block-label">Erforderliche Berechtigungen:</span>
-                    <div className="permission-chips-row">
-                      {skill.permissions.map((perm) => {
-                        const meta = MCP_PERMISSION_LABELS[perm] || { label: perm, icon: '🛡️', level: 'safe' };
-                        return (
-                          <span key={perm} className={`perm-chip ${meta.level}`}>
-                            <span className="perm-chip-icon">{meta.icon}</span>
-                            <span>{meta.label}</span>
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Workspace scope control. Legacy autoApprove data stays preserved but is not exposed until runtime support exists. */}
-                  <div className="skill-card-footer">
-                    <div className="skill-workspace-picker">
-                      <label>Workspace:</label>
-                      <select
-                        value={skill.workspaceScope}
-                        onChange={(e) => updateSkill(skill.id, { workspaceScope: e.target.value as any })}
-                      >
-                        <option value="all">Alle Workspaces</option>
-                        <option value="coding">Coding</option>
-                        <option value="recherche">Recherche</option>
-                        <option value="design">Design</option>
-                      </select>
-                    </div>
-
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+          {activePillar === 'mcp' && <>
+            <section className="eh-section"><div className="eh-section-heading"><div><h3>{text('App-Verbindungen', 'App connections')}</h3><p className="eh-muted">{text('Externe Werkzeuge über MCP verbinden.', 'Connect external tools through MCP.')}</p></div>
+              <button type="button" onClick={() => setShowMcpConfig(value => !value)} aria-expanded={showMcpConfig}><Sliders size={15} />{text('Konfigurieren', 'Configure')}</button></div>
+              <div aria-live="polite">{mcp.error && <p className="eh-notice is-error" role="alert">{mcp.error}</p>}{mcp.notice && <p className="eh-notice" role="status">{mcp.notice}</p>}
+                {mcp.busy && <p className="eh-muted" role="status">{text('Verbindungen werden aktualisiert…', 'Updating connections…')}</p>}
+                {mcp.runtimeAvailable === false && <p className="eh-notice">{text('Derzeit nicht verbindbar. Konfiguration bleibt möglich.', 'Connections are currently unavailable. Configuration is still possible.')}</p>}</div>
+              {matches('Composio', 'Slack Gmail GitHub Notion') && matchesStatus(mcp.servers.some(server => server.name === 'composio' && server.enabled === true), true) && <article className="eh-card eh-connection-intro">
+                <div className="eh-card-head"><span className="eh-card-icon"><Globe size={20} /></span><div className="eh-card-title"><h4>Composio</h4><span className="eh-beta">{text('Beta · ungetestet', 'Beta · untested')}</span></div></div>
+                <p>{text('Slack, Gmail, GitHub und weitere Apps verbinden. Du gibst Konten und Zugriffe bei der Einrichtung frei.', 'Connect Slack, Gmail, GitHub and more. You approve accounts and access during setup.')}</p>
+                <footer className="eh-card-footer"><button type="button" disabled={!mcp.loaded || mcp.busy} onClick={() => { if (mcpModel.prepareComposio()) setShowMcpConfig(true); }}>{text('Einrichten', 'Set up')}</button>
+                  <a href="https://docs.composio.dev/docs/composio-connect" target="_blank" rel="noopener noreferrer">{text('Anleitung', 'Guide')}<ExternalLink size={13} /></a></footer>
+              </article>}
+              {showMcpConfig && <section className="eh-config" aria-label={text('MCP-Konfiguration', 'MCP configuration')}>
+                <h4>{text('Verbindungen konfigurieren', 'Configure connections')}</h4>
+                <p>{text('Serverkonfiguration für stdio oder HTTP. Änderungen benötigen einen Neustart von Nova. Maskierte Zugangsdaten bleiben erhalten.', 'Server configuration for stdio or HTTP. Changes require restarting Nova. Masked credentials are preserved.')}</p>
+                <textarea aria-label={text('MCP-Serverkonfiguration', 'MCP server configuration')} value={mcp.editor} onChange={event => mcpModel.setEditor(event.target.value)} rows={8} spellCheck={false} />
+                <p className="eh-muted" role="status">{mcp.editor === mcp.savedEditor ? text('Gespeichert', 'Saved') : text('Ungespeicherter Entwurf', 'Unsaved draft')}</p>
+                <div className="eh-actions"><button type="button" className="eh-primary" onClick={handleApplyMcpConfig} disabled={!mcp.loaded || mcp.busy}>{text('Speichern', 'Save')}</button>
+                  <button type="button" onClick={mcpModel.resetEditor} disabled={mcp.busy}>{text('Verwerfen', 'Discard')}</button>
+                  <button type="button" onClick={() => void mcpModel.load()} disabled={mcp.busy}>{text('Status aktualisieren', 'Refresh status')}</button>
+                  <button type="button" onClick={importLegacyMcpDraft} disabled={mcp.busy}>{text('Alten Entwurf laden', 'Load old draft')}</button></div>
+              </section>}
+              <div className="eh-grid">{visibleSkills.map(renderSkill)}</div>
+              {visibleSkills.length === 0 && <p className="eh-empty">{text('Keine passenden Server konfiguriert.', 'No matching servers configured.')}</p>}
+            </section>
+          </>}
+        </div>
+        <footer className="eh-footer"><Shield size={14} /><span>{text('Du bestimmst, welche Funktionen aktiv sind.', 'You choose which features are enabled.')}</span><kbd>Esc</kbd></footer>
       </div>
     </div>
   );
+
+  function renderSkill(skill: McpSkillItem) {
+    const memory = skill.id === 'mcp-supermemory';
+    const permissionNames: Record<McpPermissionType, string> = {
+      read_only: text('Lesen', 'Read'), filesystem_write: text('Dateien ändern', 'Change files'), terminal_execute: text('Befehle ausführen', 'Run commands'),
+      network_outbound: text('Internet', 'Internet'), agent_autonomy: text('Selbstständige Aktionen', 'Autonomous actions')
+    };
+    return <article key={skill.id} className="eh-card">
+      <div className="eh-card-head"><span className="eh-card-icon">{skill.icon}</span><div className="eh-card-title"><h4>{skill.name}</h4>
+        <span className="eh-muted">{skill.type === 'builtin' ? text('Integriert', 'Built in') : skill.serverType?.toUpperCase()}</span></div>{status(skill.enabled)}</div>
+      <p>{skill.description}</p>
+      {memory && <p className="eh-muted">{text('Gespeicherte Daten bleiben auch inaktiv einsehbar und löschbar. Cloud-Suche wird separat in den Gedächtnis-Einstellungen aktiviert.', 'Saved data can be viewed and deleted while inactive. Cloud search is enabled separately in memory settings.')}</p>}
+      <details className="eh-details"><summary>{text('Details & Zuordnung', 'Details & category')}</summary>
+        <div className="eh-permissions">{skill.permissions.map(permission => <span key={permission}>{permissionNames[permission]}</span>)}</div>
+        <label>{text('Zuordnung', 'Category')}<select value={skill.workspaceScope} disabled={skill.type === 'mcp_server'}
+          onChange={event => updateSkill(skill.id, { workspaceScope: event.target.value as McpSkillItem['workspaceScope'] })}>
+          <option value="all">{text('Alle Bereiche', 'All categories')}</option><option value="coding">Coding</option><option value="recherche">{text('Recherche', 'Research')}</option><option value="design">Design</option>
+        </select></label>
+      </details>
+      <footer className="eh-card-footer"><label className="eh-check"><input type="checkbox" checked={skill.enabled}
+        aria-label={`${skill.name}: ${text('Aktivieren', 'Enable')}`}
+        disabled={memory ? !optional.loaded || optional.busy : skill.type === 'mcp_server' ? !mcp.loaded || mcp.busy : false}
+        onChange={event => updateSkill(skill.id, { enabled: event.target.checked })} />{text('Aktivieren', 'Enable')}</label>
+        {memory && <button type="button" onClick={() => openPanel('memory')}>{text('Daten verwalten', 'Manage data')}</button>}
+      </footer>
+    </article>;
+  }
 }

@@ -36,9 +36,12 @@ def test_cosine_similarity() -> None:
     assert round(cosine_similarity(v1, v4), 4) == 0.7071
 
 
-def test_supermemory_crud_and_bm25_search(tmp_path: Path) -> None:
+def test_supermemory_crud_and_bm25_search(tmp_path: Path, monkeypatch) -> None:
+    from runtime.memory_policy import update_policy
+    update_policy({"enabled": True}, tmp_path)
     db_file = tmp_path / "test_supermemory.db"
     engine = SupermemoryEngine(db_file)
+    monkeypatch.setattr(engine, "_try_ollama_embedding", lambda *_args: None)
 
     # 1. Status initially
     status = engine.status()
@@ -108,6 +111,8 @@ def test_supermemory_crud_and_bm25_search(tmp_path: Path) -> None:
 
 
 def test_supermemory_tier1_gemini_fallback(tmp_path: Path) -> None:
+    from runtime.memory_policy import update_policy
+    update_policy({"enabled": True, "cloud_search_enabled": True}, tmp_path)
     db_file = tmp_path / "test_gemini.db"
     engine = SupermemoryEngine(db_file)
 
@@ -132,6 +137,8 @@ def test_supermemory_tier1_gemini_fallback(tmp_path: Path) -> None:
 
 
 def test_supermemory_tier2_ollama_fallback(tmp_path: Path) -> None:
+    from runtime.memory_policy import update_policy
+    update_policy({"enabled": True}, tmp_path)
     db_file = tmp_path / "test_ollama.db"
     engine = SupermemoryEngine(db_file)
 
@@ -154,3 +161,24 @@ def test_supermemory_tier2_ollama_fallback(tmp_path: Path) -> None:
             search_res = engine.search("Ollama Query")
             assert len(search_res) == 1
             assert search_res[0]["tier"] == TIER_OLLAMA
+
+
+def test_memory_defaults_off_and_never_attempts_embeddings(tmp_path: Path) -> None:
+    engine = SupermemoryEngine(tmp_path / "private.db")
+    with patch.object(engine, "_try_gemini_embedding") as cloud, patch.object(engine, "_try_ollama_embedding") as local:
+        doc = engine.add_document("Saved for later", title="Manual note")
+        assert doc["tier"] == TIER_LOCAL_BM25
+        assert engine.search("Saved") == []
+        assert engine.get_document(doc["id"])["content"] == "Saved for later"
+        cloud.assert_not_called()
+        local.assert_not_called()
+
+
+def test_enabled_memory_does_not_imply_cloud_consent(tmp_path: Path) -> None:
+    from runtime.memory_policy import update_policy
+    update_policy({"enabled": True}, tmp_path)
+    engine = SupermemoryEngine(tmp_path / "private.db")
+    with patch.object(engine, "_try_gemini_embedding") as cloud, patch.object(engine, "_try_ollama_embedding", return_value=None):
+        assert engine.add_document("Local only", title="Local note")["tier"] == TIER_LOCAL_BM25
+        assert engine.search("Local")
+        cloud.assert_not_called()

@@ -3,14 +3,17 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
+import { DesktopI18nProvider } from '../src/renderer/i18n.js';
 import { StartupScreen } from '../src/renderer/startup/StartupScreen.js';
+import { StartupPreferencesPanel } from '../src/renderer/startup/StartupPreferencesPanel.js';
 import { reduceStartupOpeningState } from '../src/renderer/startup/startup-opening-state.js';
 import { startupScreenCopy, startupLocaleIds } from '../src/renderer/startup/startup-screen-copy.js';
 import { chooseStartupIcon, chooseStartupQuoteIndex, deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isStartupReady, isValidStartupModelCatalog, nextStartupQuoteIndex, startupIconIds, type StartupReadinessSignals } from '../src/renderer/startup/startup-screen-state.js';
 
 const sourceRoot = path.resolve(process.cwd(), 'src/renderer/startup');
+const renderWithI18n = (element: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(DesktopI18nProvider, { children: element }));
 
 describe('startup screen launch state', () => {
   it('opens only after a verified protected login and completed auth plus browser readiness', () => {
@@ -86,6 +89,21 @@ describe('startup screen launch state', () => {
 });
 
 describe('startup screen copy and motion rules', () => {
+  it('exposes three distinct border styles and all five supplied sounds in the existing settings', () => {
+    try {
+      vi.stubGlobal('navigator', { language: 'en' });
+      vi.stubGlobal('localStorage', { getItem: () => null });
+      const panel = renderWithI18n(createElement(StartupPreferencesPanel, { compact: false }));
+      for (const style of ['Classic rainbow flow', 'Soft aurora flow', 'Orbit light band']) expect(panel).toContain(style);
+      for (const sound of ['Welcome In', 'Three Ascending Tones', 'First Light', 'Spring vibes', 'Unlock Gesture']) expect(panel).toContain(sound);
+      expect(panel).toContain('startup-rainbow-swatch');
+      expect(panel).toContain('startup-rainbow-classic');
+      expect(panel).toContain('Preview sound &amp; animation');
+      vi.stubGlobal('navigator', { language: 'de' });
+      const german = renderWithI18n(createElement(StartupPreferencesPanel, { compact: false }));
+      for (const style of ['Klassischer Rainbow-Flow', 'Sanfter Aurora-Flow', 'Umlaufendes Lichtband']) expect(german).toContain(style);
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('covers every current app locale with seven quotes and all eight real phase labels', () => {
     expect(startupLocaleIds).toEqual(desktopLocaleIds);
     for (const locale of desktopLocaleIds) {
@@ -118,28 +136,28 @@ describe('startup screen copy and motion rules', () => {
     expect(component).toContain('window.setInterval');
     expect(component).toContain('4_000');
     expect(component).toContain('window.clearInterval(timer)');
-    expect(component).toContain('if (error || motionIsReduced) return undefined;');
+    expect(component).toContain('if (error || motionIsReduced || opening) return undefined;');
   });
 
   it('renders the selected launch icon, localized phase, and retryable error state', () => {
-    const screen = renderToStaticMarkup(createElement(StartupScreen, {
+    const screen = renderWithI18n(createElement(StartupScreen, {
       locale: 'de', launchIcon: 'sidekick-03', phase: 'engine', reducedMotion: true
     }));
     expect(screen).toContain('sidekick-03');
     expect(screen).toContain('Lokale Engine startet');
     expect(screen).toContain('LastBrowser');
-    const ready = renderToStaticMarkup(createElement(StartupScreen, {
+    const ready = renderWithI18n(createElement(StartupScreen, {
       locale: 'de', launchIcon: 'sidekick-03', phase: 'ready', reducedMotion: true
     }));
     expect(ready).toContain('Dein Browser ist bereit.');
 
-    const opening = renderToStaticMarkup(createElement(StartupScreen, {
+    const opening = renderWithI18n(createElement(StartupScreen, {
       locale: 'de', launchIcon: 'sidekick-03', phase: 'ready', opening: true, reducedMotion: false
     }));
     expect(opening).toContain('startup-screen--opening');
     expect(opening).toContain('tabindex="-1"');
 
-    const error = renderToStaticMarkup(createElement(StartupScreen, {
+    const error = renderWithI18n(createElement(StartupScreen, {
       locale: 'de', launchIcon: 'sidekick-03', phase: 'engine', error: 'Ein Testfehler', onRetry: () => undefined
     }));
     expect(error).toContain('Ein Testfehler');
@@ -157,15 +175,17 @@ describe('startup screen copy and motion rules', () => {
     expect(styles).toContain('aspect-ratio: 1.071 / 1');
     expect(styles).toContain('.startup-screen--error {');
     expect(styles).toContain('linear-gradient(#314259, #314259) border-box');
-    expect(styles).toContain('#ff0018 0deg 60deg');
-    expect(styles).toContain('#ff8c00 60deg 120deg');
-    expect(styles).toContain('#ffe600 120deg 180deg');
-    expect(styles).toContain('#008026 180deg 240deg');
-    expect(styles).toContain('#004dff 240deg 300deg');
-    expect(styles).toContain('#750787 300deg 360deg');
+    expect(styles).toContain('.startup-rainbow-frame::before');
+    expect(styles).toContain('border-radius: inherit');
+    expect(styles).toContain('mask-composite: exclude');
+    expect(styles).toContain('inset: 1px');
+    expect(styles).toContain('.startup-rainbow-aurora::before');
+    expect(styles).toContain('startup-aurora-drift 16s');
+    expect(styles).toContain('.startup-rainbow-orbit::before');
+    expect(styles).toContain('startup-pride-lap 7s');
     expect(styles).not.toContain('startup-rainbow-trail');
-    expect(styles).toContain('startup-open-overlay 650ms');
-    expect(styles).toContain('startup-open-mascot 650ms');
+    expect(styles).toContain('startup-open-overlay var(--startup-opening-duration,650ms)');
+    expect(styles).toContain('startup-open-mascot var(--startup-opening-duration,650ms)');
   });
 
   it('keeps all six original icon assets byte-bound to their documented sources', () => {

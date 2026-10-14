@@ -595,8 +595,9 @@ _LEGACY_EVENT_MAP: Dict[str, DelegateEvent] = {
 
 
 def check_delegate_requirements() -> bool:
-    """Delegation has no external requirements -- always available."""
-    return True
+    """Optional assistants must be activated before exposing delegation."""
+    from runtime.memory_policy import read_policy
+    return read_policy()["assistants_enabled"]
 
 
 def _build_child_system_prompt(
@@ -2099,6 +2100,11 @@ def delegate_task(
 
     Returns JSON with results array, one entry per task.
     """
+    from runtime.memory_policy import require_assistants
+    try:
+        require_assistants(getattr(parent_agent, '_memory_policy_home', None))
+    except PermissionError as exc:
+        return tool_error(str(exc))
     if parent_agent is None:
         return tool_error("delegate_task requires a parent agent context.")
     if vars(parent_agent).get('_child_context_error'):

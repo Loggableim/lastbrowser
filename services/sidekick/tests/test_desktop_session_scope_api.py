@@ -131,7 +131,7 @@ def test_desktop_session_scope_survives_create_rename_reload_and_lists_by_profil
         else None,
     )
 
-    client = TestClient(web_server.app)
+    client = TestClient(web_server.app, base_url="http://127.0.0.1")
     headers = _profile_headers(web_server, "default")
     workspace_query = ""
 
@@ -256,7 +256,7 @@ def test_legacy_browser_goal_namespace_is_migrated_without_becoming_storage_owne
         encoding="utf-8",
     )
 
-    response = TestClient(web_server.app).get(
+    response = TestClient(web_server.app, base_url="http://127.0.0.1").get(
         f"/api/session?session_id=legacy-goal-session&workspace_path={workspace}&messages=0",
         headers=_profile_headers(web_server, "default"),
     )
@@ -307,7 +307,7 @@ def test_desktop_workspace_path_api_rejects_untrusted_profile_path_without_resol
     )
 
     query = urlencode({"workspace_path": str(foreign_workspace)})
-    response = TestClient(web_server.app).get(
+    response = TestClient(web_server.app, base_url="http://127.0.0.1").get(
         f"/api/sessions?{query}",
         headers=_profile_headers(web_server, "default"),
     )

@@ -21,9 +21,9 @@ export function isOAuthUrl(url: string): boolean {
  * that sends X-Frame-Options or CSP frame-ancestors headers which prevent
  * the Electron webview from rendering the login page.
  *
- * Domains covered:
+ * Exact login origins and paths covered:
  *  - Disney+ BAM SSO:  sso.id.bamgrid.com, disneyplus.com (login paths)
- *  - Amazon Prime:     www.amazon.com (signin), api.amazon.com
+ *  - Amazon Prime:     www.amazon.com / www.amazon.de (signin paths)
  *  - HBO/Max:          auth.max.com, id.hbo.com
  *  - Paramount+:       login.paramountplus.com
  *  - Apple TV+:        idmsa.apple.com, appleid.apple.com
@@ -33,17 +33,17 @@ export function isStreamingLoginUrl(url: string): boolean {
     const { hostname, pathname } = new URL(url);
     const h = hostname.toLowerCase();
     // Disney+ / BAM identity provider and login bridge
-    if (h === 'sso.id.bamgrid.com' || h.endsWith('.bamgrid.com')) return true;
-    if (h === 'login.disney.com' || h.endsWith('.disney.com') && /\/(login|bridge|identity|sso)/i.test(pathname)) return true;
+    if (h === 'sso.id.bamgrid.com' || h === 'auth.bamgrid.com') return true;
+    if (h === 'login.disney.com' && /\/(login|bridge|identity|sso)(\/|$)/i.test(pathname)) return true;
     if ((h === 'www.disneyplus.com' || h === 'disneyplus.com') &&
-        /^\/(login|de\/login|en-gb\/login|signup|identity)/i.test(pathname)) return true;
+        /^\/(login|de\/login|en-gb\/login|signup|identity)(\/|$)/i.test(pathname)) return true;
     // Amazon Prime Video signin
-    if ((h === 'www.amazon.com' || h === 'www.amazon.de' || h.endsWith('.amazon.com')) &&
-        /\/(ap\/signin|gp\/sign-in|auth)/i.test(pathname)) return true;
+    if ((h === 'www.amazon.com' || h === 'www.amazon.de') &&
+        /\/(ap\/signin|gp\/sign-in|auth)(\/|$)/i.test(pathname)) return true;
     // HBO / Max
-    if (h === 'auth.max.com' || h === 'id.hbo.com' || h.endsWith('.hbo.com')) return true;
+    if ((h === 'auth.max.com' || h === 'id.hbo.com') && /^\/(oauth|login|signin|account)(\/|$)/i.test(pathname)) return true;
     // Paramount+
-    if (h === 'login.paramountplus.com' || h.endsWith('.paramountplus.com')) return true;
+    if (h === 'login.paramountplus.com' && /^\/(account|oauth|login|signin)(\/|$)/i.test(pathname)) return true;
     // Apple TV+
     if (h === 'idmsa.apple.com' || h === 'appleid.apple.com') return true;
     return false;

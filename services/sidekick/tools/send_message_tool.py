@@ -943,6 +943,9 @@ async def _send_discord(token, chat_id, message, thread_id=None, media_files=Non
     process-local probe cache, and only as a last resort with a live
     GET /channels/{id} probe (whose result is memoized).
     """
+    from runtime.memory_policy import read_policy
+    if not read_policy()["discord_agents_enabled"]:
+        return {"error": "discord_agents_disabled_enable_in_hub"}
     try:
         import aiohttp
     except ImportError:

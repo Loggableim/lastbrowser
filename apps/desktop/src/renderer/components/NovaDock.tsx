@@ -587,7 +587,7 @@ export function NovaDock({
             </div>
           </div>
 
-          {/* One-click, localized entry to Zen / Focus Mode */}
+          {/* One-click, localized entry to Zen Mode */}
           <div
             className="nova-dock-item-wrapper"
             onMouseEnter={() => setHoveredIndex(zenIndex)}

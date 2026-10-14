@@ -3403,8 +3403,12 @@ def test_discord_fastapi_admin_updates_member_roles_when_available(monkeypatch):
     ]
 
 
-def test_discord_api_reports_missing_token_without_raising(monkeypatch):
+def test_discord_api_reports_missing_token_without_raising(monkeypatch, tmp_path):
     from web.api import discord_bot
+    from runtime.memory_policy import update_policy
+
+    monkeypatch.setattr("web.api.profiles.get_active_profile_home", lambda: tmp_path)
+    update_policy({"discord_agents_enabled": True}, tmp_path)
 
     monkeypatch.setattr(discord_bot, "_active_bot_token", lambda: "")
 

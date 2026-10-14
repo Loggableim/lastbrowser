@@ -54,6 +54,22 @@ def _discover_model_catalog(context, include_capabilities, *, available_models=N
         codex_ids = []
         codex_provenance["source"] = "unavailable"
     raw = copy.deepcopy(available_models())
+    account_catalog = providers()
+    # Connected OpenCode workspaces must be probed even when the legacy UI
+    # cache predates device login or another provider is currently selected.
+    if isinstance(raw, dict):
+        raw.setdefault("groups", [])
+        from cli.providers import normalize_provider
+        for account in account_catalog.get("providers", []) if isinstance(account_catalog, dict) else []:
+            if not isinstance(account, dict):
+                continue
+            provider_id = normalize_provider(str(account.get("id") or "").replace("_", "-"))
+            if (provider_id not in {"opencode-go", "opencode-zen"}
+                    or account.get("provider_available") is False
+                    or not (account.get("has_key") is True or account.get("oauth_connected") is True)):
+                continue
+            if not any(isinstance(group, dict) and normalize_provider(str(group.get("provider_id") or "").replace("_", "-")) == provider_id for group in raw["groups"]):
+                raw["groups"].append({"provider_id": provider_id, "provider": account.get("display_name") or provider_id, "models": []})
     # Keep provider-list evidence separate from the legacy UI catalog. The
     # latter may contain curated fallback IDs and must not imply a live list.
     evidence = []
@@ -126,7 +142,7 @@ def _discover_model_catalog(context, include_capabilities, *, available_models=N
             existing = {str(row.get("id")) for row in group["models"] if isinstance(row, dict)}
             group["models"].extend({"id": model_id, "label": model_id} for model_id in model_ids if model_id not in existing)
     config = configuration()
-    result = public_catalog(raw, providers(), config)
+    result = public_catalog(raw, account_catalog, config)
     # Keep a known provider group visible even when its returned list is empty;
     # the scoped response can then explain unavailable/unknown discovery.
     for provider_id in seen_providers:

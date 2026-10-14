@@ -162,7 +162,7 @@ Im Verzeichnis `docs/legal/drafts/` wurden folgende fertige Textentwürfe bereit
 2. **`docs/legal/drafts/NOTICE`:**  
    Offizieller Notice-Text mit zwingender Attribution von Nous Research (Hermes Agent), Sidekick, llama.cpp, Ghostery und Braille Institute.
 3. **`docs/legal/drafts/THIRD-PARTY-LICENSES.md`:**  
-   Strukturierte Vollübersicht aller 345+ npm-Pakete, Python-Bibliotheken, Fonts und Binärdateien mit SPDX-Bezeichnern.
+   Strukturierte Vollübersicht der **406** npm-Lockfile-Einträge aus `package-lock.json` (§4.1), der gepinnten Python-Laufzeit, Fonts und Binärdateien mit SPDX-Bezeichnern.
 4. **`docs/legal/drafts/README-license-section.md`:**  
    Prägnanter Einzeiler und Abschnitt für das Haupt-README:  
    *„LastBrowser is licensed under the GNU General Public License v3.0. A commercial license without copyleft obligations is available for enterprise integration.“*

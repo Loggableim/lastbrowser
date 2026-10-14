@@ -42,6 +42,15 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     const requestGeneration=generation.current;
     if(!quiet){setBusy(true);setPendingOperation(data.operation);setError('');}
     try{
+      // Download admission needs a current disk/RAM snapshot. Refresh it as
+      // part of the install action rather than requiring a second user click.
+      if(data.operation==='install'||data.operation==='importModel'){
+        const scanned=await client.request({schemaVersion:1,operation:'localAi',scope,payload:{action:'store',request:{operation:'scan'}}});
+        if(!mounted.current||requestGeneration!==generation.current||currentScopeKey.current!==scopeKey)return;
+        if(!scanned.ok){if(!quiet)setError(operationErrors[scanned.error.code]??`Lokale KI: ${scanned.error.code}`);return;}
+        if(!('kind'in scanned.value)||scanned.value.kind!=='model_store'){if(!quiet)setError('Ungültige Store-Antwort');return;}
+        setViewState({key:scopeKey,value:scanned.value.store});
+      }
       const response=await client.request({schemaVersion:1,operation:'localAi',scope,payload:{action:'store',request:data}});
       if(!mounted.current||requestGeneration!==generation.current||currentScopeKey.current!==scopeKey)return;
       if(!response.ok){if(!quiet)setError(operationErrors[response.error.code]??`Lokale KI: ${response.error.code}`);return;}

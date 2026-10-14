@@ -2,7 +2,7 @@ ENTWURF. Nicht in README, Website oder eine Root-LICENSE kopieren, bis Cid diese
 
 # License & Commercial Use
 
-LastBrowser is free and open source software licensed under the **GNU General Public License v3.0 (GPL-3.0-or-later)**.
+LastBrowser is licensed under the **GNU General Public License v3.0 (GPL-3.0-or-later)**.
 
 ```
 Copyright (C) 2026 LastBrowser Project and Contributors

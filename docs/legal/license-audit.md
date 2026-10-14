@@ -13,7 +13,7 @@
 
 | Prüfdimension | Status | Bewertung & Handlungsbedarf |
 | :--- | :---: | :--- |
-| **Abhängigkeiten** | ⚠️ **Inventar, kein Freigabeurteil** | 406 npm-Pakete aus `package-lock.json` haben ein Lizenzfeld. 66 gepinnte Python-Pakete aus `requirements-runtime.txt`, darunter `mcp==1.26.0` (PyPI: MIT). Optionale Python-Namen ohne Pin haben keine Version und damit keine Lizenzaussage. |
+| **Abhängigkeiten** | ⚠️ **Inventar, kein Freigabeurteil** | npm-Zahl steht im versionierten Inventar und umfasst den vollständigen Lockfile-Baum inklusive verschachtelter `node_modules`, nicht nur die oberste Ebene. 66 gepinnte Python-Pakete aus `requirements-runtime.txt`, darunter `mcp==1.26.0` (PyPI: MIT). Optionale Python-Namen ohne Pin haben keine Version und damit keine Lizenzaussage. |
 | **Herkunft Sidekick / Nous** | ❌ **Ungeprüft** | `services/sidekick/LICENSE` nennt MIT sowie „Copyright (c) 2025 Sidekick“ und „Copyright (c) 2025 Nous Research“. Das ist kein Nachweis, dass Cid die Rechtekette hält oder den Code zweitlizenzieren darf. |
 | **Git-Historie** | ℹ️ **Nur Identität** | `git log` zeigt den Committer. Das belegt nicht das alleinige Urheberrecht an übernommenem Code. |
 | **Zweitlizenz** | ⚠️ **Nur für eigenen Code** | Eine kommerzielle Zweitlizenz kommt nur für Code in Betracht, dessen Rechte Cid nachweislich hält. Übernommener Sidekick-/Nous-Code ist bis zur Prüfung der Rechtekette ausgenommen. |
@@ -32,7 +32,7 @@ Eine vollständige forensische Prüfung des Git-Verlaufs (`git log --format='%an
 Der Git-Autor ist kein Beleg für alleinige Rechte. Eine Zweitlizenz gilt nur für Code, den Cid nachweislich selbst hält. Übernommener Sidekick-/Nous-Code bleibt außen vor, bis die Rechtekette geprüft ist. Der Commit-Verlauf ersetzt diese Prüfung nicht.
 
 ### 2.3 Notwendigkeit eines Contributor License Agreements (CLA)
-- **Problemstellung bei reinem DCO (Developer Certificate of Origin):** Wenn externe Open-Source-Entwickler Pull Requests unter einem DCO einreichen, verbleibt ihr Urheberrecht bei ihnen und wird nur unter der Inbound-Lizenz (GPL-3.0) gewährt. Cid dürfte deren Code dann **nicht** in die kommerzielle proprietäre Version übernehmen.
+- **Problemstellung bei reinem DCO (Developer Certificate of Origin):** Wenn externe Beitragende Pull Requests unter einem DCO einreichen, verbleibt ihr Urheberrecht bei ihnen und wird nur unter der Inbound-Lizenz (GPL-3.0) gewährt. Cid dürfte deren Code dann **nicht** in die kommerzielle proprietäre Version übernehmen.
 - **Empfehlung:** Einführung eines **LastBrowser Contributor Agreements (CLA)** nach Vorbild von Canonical/MariaDB/Qt, in dem Contributor dem Projekt ein unbeschränktes, weltweites Zweitverwertungs- und Relizenzierungsrecht einräumen.
 
 ---
@@ -140,7 +140,7 @@ Ohne Pin und deshalb ohne Lizenzaussage: numpy, chromadb, sentence-transformers,
 ## 5. Dual-Licensing-Architektur & Strategie
 
 ### 5.1 Mechanik des Modells (GPL-3.0 + Kommerzielle Zweitlizenz)
-1. **Der Open-Source-Pfad (Community):**
+1. **Der GPL-Pfad (Community):**
    - Jeder Nutzer darf LastBrowser kostenlos herunterladen, ausführen, untersuchen, modifizieren und weitergeben.
    - Wenn ein Dritter LastBrowser modifiziert weiterverbreitet oder in eigene Anwendungen integriert, greift der **Copyleft-Effekt (GPL-3.0 §5)**: Sämtliche Änderungen und das abgeleitete Gesamtsystem müssen ebenfalls unter GPL-3.0 samt Quellcode offengelegt werden.
 2. **Der kommerzielle Pfad (Enterprise / OEM):**
@@ -148,7 +148,7 @@ Ohne Pin und deshalb ohne Lizenzaussage: numpy, chromadb, sentence-transformers,
    - Die kommerzielle Lizenz befreit den Lizenznehmer von den GPL-Copyleft-Pflichten.
 
 ### 5.2 Notwendige Schutzmaßnahmen
-1. **Kein Vermischen von Dritt-GPL-Code:** Es darf niemals GPL-Code von **fremden** Open-Source-Projekten in den Eigen-Code übernommen werden (nur MIT, BSD, Apache, MPL). Fremder GPL-Code würde das gesamte Repository mit fremdem Copyleft infizieren, wodurch Cid das Recht zur kommerziellen Zweitlizenzierung verlieren würde.
+1. **Kein Vermischen von Dritt-GPL-Code:** Es darf niemals GPL-Code von **fremden** Projekten in den Eigen-Code übernommen werden (nur MIT, BSD, Apache, MPL). Fremder GPL-Code würde das gesamte Repository mit fremdem Copyleft infizieren, wodurch Cid das Recht zur kommerziellen Zweitlizenzierung verlieren würde.
 2. **CLA für Community-PRs:** Zukünftige Pull Requests aus der Community müssen das Contributor Agreement unterzeichnen, damit Cid deren Änderungen auch in die kommerzielle Version übernehmen darf.
 
 ---
@@ -165,7 +165,7 @@ Im Verzeichnis `docs/legal/drafts/` wurden folgende fertige Textentwürfe bereit
    Strukturierte Vollübersicht aller 345+ npm-Pakete, Python-Bibliotheken, Fonts und Binärdateien mit SPDX-Bezeichnern.
 4. **`docs/legal/drafts/README-license-section.md`:**  
    Prägnanter Einzeiler und Abschnitt für das Haupt-README:  
-   *„LastBrowser is free and open source software under the GNU General Public License v3.0. A commercial license without copyleft obligations is available for enterprise integration.“*
+   *„LastBrowser is licensed under the GNU General Public License v3.0. A commercial license without copyleft obligations is available for enterprise integration.“*
 5. **`docs/legal/drafts/CONTRIBUTING-cla-dco.md`:**  
    Vorschlag für ein praxistaugliches Contributor Agreement (CLA) zur Absicherung des Dual-Licensing-Modells.
 
@@ -177,3 +177,4 @@ Im Verzeichnis `docs/legal/drafts/` wurden folgende fertige Textentwürfe bereit
 2. Die Rechtekette Sidekick/Nous ist ungeprüft. Eine Zweitlizenz dafür wird nicht empfohlen.
 3. `jo.wav` ist unbekannt, nicht permissiv.
 4. Die Entwürfe bleiben in `docs/legal/drafts/`. Root-`LICENSE`, README und Website bleiben unverändert, bis Cid freigibt und A-022 folgt.
+5. Die npm-Zählung umfasst jeden Nicht-Link-Eintrag unter `node_modules` im Lockfile, auch verschachtelte Einträge. Ein Workspace-Link wird als übersprungen genannt. Der gesperrte Lizenz-/Marketingbegriff steht nicht mehr in den Entwürfen unter `docs/legal/`. `docs/test-reports/` enthält ihn in diesem Stand nicht.

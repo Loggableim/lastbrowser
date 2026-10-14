@@ -2,13 +2,13 @@
 
 Thank you for your interest in contributing to LastBrowser!
 
-Because LastBrowser is offered under a **Dual-Licensing Model** (free and open source under **GNU GPL-3.0-or-later**, alongside a proprietary **Commercial License** for enterprise customers), we must ensure that the project maintainers hold the legal right to distribute, re-license, and protect all parts of the codebase.
+Because LastBrowser is offered under a **Dual-Licensing Model** (**GNU GPL-3.0-or-later**, alongside a proprietary **Commercial License** for enterprise customers), we must ensure that the project maintainers hold the legal right to distribute, re-license, and protect all parts of the codebase.
 
 ---
 
 ## 1. Why LastBrowser Uses a Contributor License Agreement (CLA)
 
-Under open-source copyright law:
+Under ordinary inbound-license practice:
 - In a standard project using only a Developer Certificate of Origin (DCO), each contributor keeps 100% of their copyright and only licenses their pull request under the inbound license (GPL-3.0).
 - If LastBrowser only used a DCO, the project maintainer could **not** include community contributions in the commercial/enterprise dual-licensed version without tracking down every individual contributor for separate permission.
 - A **Contributor License Agreement (CLA)** solves this by granting LastBrowser a non-exclusive, perpetual, worldwide license to re-license your contribution under both GPL-3.0 and the commercial license, while **you still retain ownership of your own copyright**.

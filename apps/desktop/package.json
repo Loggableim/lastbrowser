@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.57-beta.3",
+  "version": "0.1.56",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
@@ -47,7 +47,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "electron": "github:castlabs/electron-releases#059d79860d288044df48e8839d9c621dee4a17e1",
+    "electron": "github:castlabs/electron-releases#v37.10.3+wvcus",
     "electron-builder": "^26.0.0",
     "esbuild": "^0.27.7",
     "typescript": "^5.7.0",
@@ -58,7 +58,7 @@
     "productName": "LastBrowser",
     "executableName": "Lastbrowser",
     "npmRebuild": false,
-    "electronVersion": "45.0.0-alpha.14+wvcus",
+    "electronVersion": "37.10.3+wvcus",
     "electronDownload": {
       "mirror": "https://github.com/castlabs/electron-releases/releases/download/v"
     },

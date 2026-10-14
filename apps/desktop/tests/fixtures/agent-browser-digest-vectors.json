@@ -1,0 +1,48 @@
+[
+  {
+    "name": "observe",
+    "action": {
+      "schemaVersion": 2,
+      "kind": "agent_browser_observe",
+      "includeElements": true,
+      "includeFrames": false,
+      "includeScreenshot": false
+    },
+    "digest": "b4c51b5f41765886c6bcbd4e23bbfc40a537fb27798777d0eb7a4cd08e82fcfb"
+  },
+  {
+    "name": "click",
+    "action": {
+      "schemaVersion": 2,
+      "kind": "agent_browser_click",
+      "snapshotId": "snap1234",
+      "elementRef": "elem1234",
+      "expectation": { "kind": "navigation" }
+    },
+    "digest": "141cfb2476108bac1e90f225e7f9247a1cdcde310263d9f409b7c11046069dc3"
+  },
+  {
+    "name": "fill",
+    "action": {
+      "schemaVersion": 2,
+      "kind": "agent_browser_fill",
+      "snapshotId": "snap1234",
+      "elementRef": "elem1234",
+      "text": "secret-token",
+      "clear": true
+    },
+    "digest": "21c21c3d0ed0ebaabedf3efe5497430eb53d468e653f0f09ef419e15f1fe7338"
+  },
+  {
+    "name": "unicode",
+    "action": {
+      "schemaVersion": 2,
+      "kind": "agent_browser_fill",
+      "snapshotId": "snap1234",
+      "elementRef": "elem1234",
+      "text": "Marktplatz ä",
+      "clear": false
+    },
+    "digest": "dda010b30ebf6a6d2c0ed31b5ca323f9c07dafd37f56a5b77ca661ff7a3c4f6c"
+  }
+]

@@ -54,13 +54,15 @@ import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQual
 import { ProviderBetaCatalogToggle } from '../components/ProviderBetaCatalogToggle.js';
 import { ProviderWorkspace, type ProviderWorkspaceItem } from '../components/ProviderWorkspace.js';
 import { SettingsPageDeck } from '../components/SettingsPageDeck.js';
+import { SettingsSectionPages } from '../components/SettingsSectionPages.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { clearBrowserDataWithFeedback } from '../utils/clear-browser-data.js';
 import { copyDoctorOutput, runDoctorExclusively } from '../utils/doctor-dashboard.js';
 import { searchEngines } from '../tabs.js';
 import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
-import { chromeWebStoreSearchUrl, EXTENSION_RECOMMENDATION_PAGE_SIZE, filterExtensionRecommendations, loadExtensionSettingsData, paginateExtensionRecommendations, USER_APPROVED_EXTENSION_CANDIDATES } from '../extension-settings-state.js';
+import { chromeWebStoreSearchUrl, loadExtensionSettingsData } from '../extension-settings-state.js';
+import { CuratedExtensionStore, ExtensionPersonalReport } from '../components/CuratedExtensionStore.js';
 import { useDesktopI18n } from '../i18n.js';
 import type { DoctorReport } from '../shell-state.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
@@ -1654,7 +1656,7 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
   );
 }
 
-export function ExtensionsSettingsSection(): JSX.Element {
+export function ExtensionsSettingsSection({ activeProfileId }: { activeProfileId: string }): JSX.Element {
   const { t } = useDesktopI18n();
   type ExtensionSettingsTab = 'recommended' | 'store' | 'installed';
   const [extensions, setExtensions] = useState<ExtensionRecord[]>([]);
@@ -1662,10 +1664,8 @@ export function ExtensionsSettingsSection(): JSX.Element {
   const [loadError, setLoadError] = useState('');
   const [cwsInput, setCwsInput] = useState('');
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const extensionInstallInFlight = useRef(false);
   const [extensionTab, setExtensionTab] = useState<ExtensionSettingsTab>('recommended');
-  const [recommendationSearch, setRecommendationSearch] = useState('');
-  const [recommendationCategory, setRecommendationCategory] = useState('all');
-  const [recommendationPage, setRecommendationPage] = useState(0);
   const [storeSearch, setStoreSearch] = useState('');
   const extensionTabRefs = useRef<Partial<Record<ExtensionSettingsTab, HTMLButtonElement | null>>>({});
 
@@ -1692,7 +1692,8 @@ export function ExtensionsSettingsSection(): JSX.Element {
 
   const handleInstallCws = async (e: FormEvent) => {
     e.preventDefault();
-    if (!cwsInput.trim()) return;
+    if (!cwsInput.trim() || extensionInstallInFlight.current) return;
+    extensionInstallInFlight.current = true;
     setInstallingId('custom-cws');
     try {
       const rec = await window.lastbrowser.extensions.installCws(cwsInput.trim());
@@ -1702,11 +1703,14 @@ export function ExtensionsSettingsSection(): JSX.Element {
     } catch (err) {
       showToast(`Installation failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      extensionInstallInFlight.current = false;
       setInstallingId(null);
     }
   };
 
   const handleInstallUnpacked = async () => {
+    if (extensionInstallInFlight.current) return;
+    extensionInstallInFlight.current = true;
     try {
       const dir = await window.lastbrowser.extensions.chooseDir();
       if (!dir) return;
@@ -1717,6 +1721,7 @@ export function ExtensionsSettingsSection(): JSX.Element {
     } catch (err) {
       showToast(`Failed to load extension: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
+      extensionInstallInFlight.current = false;
       setInstallingId(null);
     }
   };
@@ -1750,13 +1755,15 @@ export function ExtensionsSettingsSection(): JSX.Element {
     }
   };
 
-  const approvedRecommendationIds = new Set<string>(USER_APPROVED_EXTENSION_CANDIDATES.map((entry) => entry.id));
-  const recommendations = USER_APPROVED_EXTENSION_CANDIDATES;
-  const recommendationCategories = ['all', ...new Set(recommendations.map((entry) => entry.category))];
-  const filteredRecommendations = filterExtensionRecommendations(recommendations, recommendationSearch, recommendationCategory, approvedRecommendationIds);
-  const recommendationPageSize = EXTENSION_RECOMMENDATION_PAGE_SIZE;
-  const recommendationPageCount = Math.max(1, Math.ceil(filteredRecommendations.length / recommendationPageSize));
-  const currentRecommendations = paginateExtensionRecommendations(filteredRecommendations, recommendationPage, recommendationPageSize);
+  const handleInstallRecommendation = async (extensionId: string) => {
+    if (extensionInstallInFlight.current) throw Error('Another extension is being installed.');
+    extensionInstallInFlight.current = true;
+    setInstallingId(extensionId);
+    try {
+      await window.lastbrowser.extensions.installCws(extensionId);
+      await loadData();
+    } finally { extensionInstallInFlight.current = false; setInstallingId(null); }
+  };
 
   const openChromeWebStoreSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -1798,66 +1805,9 @@ export function ExtensionsSettingsSection(): JSX.Element {
       <div id="extension-settings-panel" role="tabpanel"
         aria-labelledby={`extension-settings-tab-${extensionTab}`} tabIndex={0}>
       {/* Curated Store Presets */}
-      {extensionTab === 'recommended' && <>
-      <SettingsCard
-        title={t('settings.panels.plugins.extensionTabRecommended')}
-        description={t('settings.panels.plugins.recommendationsUnverified')}
-      >
-        <div className="extension-recommendation-controls">
-          <input type="search" value={recommendationSearch} onChange={(event) => { setRecommendationSearch(event.target.value); setRecommendationPage(0); }}
-            placeholder={t('settings.panels.plugins.recommendationSearch')} aria-label={t('settings.panels.plugins.recommendationSearch')} />
-          <div className="extension-category-list" role="group" aria-label={t('settings.panels.plugins.recommendationCategory')}>
-            {recommendationCategories.map((category) => <button type="button" key={category}
-              className={recommendationCategory === category ? 'active' : ''}
-              onClick={() => { setRecommendationCategory(category); setRecommendationPage(0); }}>
-              {category === 'all' ? t('settings.panels.plugins.recommendationAll') : category === 'privacy'
-                ? t('settings.panels.plugins.recommendationCategoryPrivacy') : category === 'passwords'
-                  ? t('settings.panels.plugins.recommendationCategoryPasswords') : t('settings.panels.plugins.recommendationCategoryEmail')}
-            </button>)}
-          </div>
-        </div>
-        <div className="extension-store-grid">
-          {currentRecommendations.map((candidate) => {
-            return (
-              <div key={candidate.id} className="extension-store-card">
-                <div className="extension-store-card-header">
-                  <span className="extension-store-icon"><Puzzle size={18} /></span>
-                  <div className="extension-store-info">
-                    <div className="extension-store-title-row">
-                      <strong>{candidate.name}</strong>
-                      <span className="extension-badge">{t('settings.panels.plugins.unverifiedNoInstall')}</span>
-                    </div>
-                    <small className="extension-store-author">{candidate.category === 'privacy'
-                      ? t('settings.panels.plugins.recommendationCategoryPrivacy') : candidate.category === 'passwords'
-                        ? t('settings.panels.plugins.recommendationCategoryPasswords') : t('settings.panels.plugins.recommendationCategoryEmail')}</small>
-                  </div>
-                </div>
-                <p className="extension-store-desc">{t('settings.panels.plugins.candidateReviewPending')}</p>
-                <div className="extension-store-actions">
-                  <a href={`https://chromewebstore.google.com/search/${encodeURIComponent(candidate.name)}`}
-                    target="_blank" rel="noopener noreferrer" className="extension-link-btn" title={t('settings.panels.plugins.openStoreListing')}>
-                    <ExternalLink size={12} />
-                  </a>
-                  <button
-                    type="button"
-                    className="secondary-action compact"
-                    disabled
-                  >
-                    <span>{t('settings.panels.plugins.unverifiedNoInstall')}</span>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        {!currentRecommendations.length && <p role="status" className="extension-empty-list">{t('settings.panels.plugins.noRecommendations')}</p>}
-        {filteredRecommendations.length > recommendationPageSize && <nav className="extension-pagination" aria-label={t('settings.panels.plugins.recommendationPages')}>
-          <button type="button" className="secondary-action compact" disabled={recommendationPage === 0} onClick={() => setRecommendationPage((page) => Math.max(0, page - 1))}>{t('settings.panels.plugins.previousPage')}</button>
-          <span>{recommendationPage + 1} / {recommendationPageCount}</span>
-          <button type="button" className="secondary-action compact" disabled={recommendationPage + 1 >= recommendationPageCount} onClick={() => setRecommendationPage((page) => Math.min(recommendationPageCount - 1, page + 1))}>{t('settings.panels.plugins.nextPage')}</button>
-        </nav>}
-      </SettingsCard>
-      </>}
+      {extensionTab === 'recommended' && <CuratedExtensionStore key={activeProfileId}
+        profileId={activeProfileId} extensions={extensions} installingId={installingId}
+        onInstall={handleInstallRecommendation} />}
 
       {extensionTab === 'store' && <SettingsCard title={t('settings.panels.plugins.extensionTabStore')}
         description={t('settings.panels.plugins.storeSearchDescription')}>
@@ -1888,7 +1838,7 @@ export function ExtensionsSettingsSection(): JSX.Element {
             <button
               type="submit"
               className="primary-action compact"
-              disabled={!cwsInput.trim() || installingId === 'custom-cws'}
+              disabled={!cwsInput.trim() || Boolean(installingId)}
             >
               {installingId === 'custom-cws' ? <Loader2 size={13} className="spin" /> : <Download size={13} />}
               <span>Install</span>
@@ -1899,7 +1849,7 @@ export function ExtensionsSettingsSection(): JSX.Element {
             type="button"
             className="secondary-action compact extension-unpacked-btn"
             onClick={() => void handleInstallUnpacked()}
-            disabled={installingId === 'unpacked'}
+            disabled={Boolean(installingId)}
           >
             {installingId === 'unpacked' ? <Loader2 size={13} className="spin" /> : <FolderOpen size={14} />}
             <span>Load unpacked extension…</span>
@@ -1964,6 +1914,9 @@ export function ExtensionsSettingsSection(): JSX.Element {
                     )}
                   </div>
                 </div>
+
+                {/^[a-p]{32}$/.test(ext.id) && <ExtensionPersonalReport
+                  key={`${activeProfileId}:${ext.id}:${ext.version}`} profileId={activeProfileId} extension={ext} />}
 
                 <div className="extension-card-actions">
                   <label className="extension-incognito-label" title="Allow this extension in private/incognito tabs">
@@ -3605,55 +3558,48 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   return (
     <section className="browser-main native-rest-main settings-main">
-      <NativeHeader
-        icon={<Settings size={21} />}
-        title={t('settings.title')}
-        kicker={t('settings.system')}
-        detail={t('settings.detail')}
-        loading={settingsState.loading}
-        ready={ready}
-        onRefresh={refreshSettingsData}
-        onClose={onClose}
-        closeLabel={t('browser.chrome.close')}
-      />
+      <header className="settings-compact-header">
+        <div className="settings-compact-title"><Settings size={19} aria-hidden="true" />
+          <h1>{t('settings.title')} <span aria-hidden="true">›</span> {t(SETTINGS_SECTION_COPY[section].title)}</h1>
+        </div>
+        <div className="settings-compact-actions">
+          <span className={`native-rest-pill ${ready && !dirty ? 'ready' : ''}`} role="status">
+            <span className={`status-dot ${ready && !dirty ? 'ready' : ''}`} />
+            {ready ? <>Online · {dirty ? t('settings.status.unsaved') : t('settings.status.saved')}</> : t('insights.sidekickStarting')}
+          </span>
+          {dirty && <>
+            <button type="button" className="secondary-action compact" onClick={() => void restoreDraft()} disabled={!ready}>
+              <span>{t('settings.reset')}</span>
+            </button>
+            <button type="button" className="secondary-action compact" onClick={() => void save()} disabled={!ready || saving}>
+              {saving ? <Loader2 size={15} className="spin" /> : <Save size={15} />}<span>{t('settings.save')}</span>
+            </button>
+          </>}
+          <button type="button" className="secondary-action compact" onClick={() => void refreshSettingsData()} disabled={!ready || settingsState.loading}
+            aria-label={locale === 'de' ? 'Aktualisieren' : 'Refresh'} title={locale === 'de' ? 'Aktualisieren' : 'Refresh'}>
+            <RefreshCw size={16} className={settingsState.loading ? 'spin' : undefined} />
+          </button>
+          {onClose && <button type="button" className="secondary-action compact" onClick={onClose} aria-label={t('browser.chrome.close')} title={t('browser.chrome.close')}><X size={16} /></button>}
+        </div>
+      </header>
       <ErrorLine error={settingsState.error || authState.error || pluginsState.error} />
 
       <div className="settings-native-grid">
         <nav className="settings-section-nav native-work-card">
           {sectionList.map(([key, meta]) => (
-            <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
+            <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}
+              title={t(SETTINGS_SECTION_COPY[key].description)} aria-label={`${t(SETTINGS_SECTION_COPY[key].title)}: ${t(SETTINGS_SECTION_COPY[key].description)}`} aria-current={key === section ? 'page' : undefined}>
               <span className="settings-section-button-icon">{meta.icon}</span>
               <span className="settings-section-button-text">
                   <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
-                  <small>{t(SETTINGS_SECTION_COPY[key].description)}</small>
               </span>
             </button>
           ))}
         </nav>
 
-        <main className={`native-work-card settings-editor${section === 'providers' ? ' settings-provider-editor' : ' settings-panel-scroll'}`}>
-          <header className="settings-editor-head">
-            <div>
-              <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>
-              <span>{t(SETTINGS_SECTION_COPY[section].description)}</span>
-            </div>
-            <div className="settings-editor-actions">
-              <span className={`native-rest-pill ${dirty ? '' : 'ready'}`}>
-                <span className={`status-dot ${dirty ? '' : 'ready'}`} />
-                {dirty ? t('settings.status.unsaved') : t('settings.status.saved')}
-              </span>
-              <button type="button" className="secondary-action compact" onClick={() => void restoreDraft()} disabled={!ready || !dirty}>
-                <RefreshCw size={15} />
-                <span>{t('settings.reset')}</span>
-              </button>
-              <button type="button" className="secondary-action compact" onClick={() => void save()} disabled={!ready || saving || !dirty}>
-                {saving ? <Loader2 size={15} className="spin" /> : <Save size={15} />}
-                <span>{t('settings.save')}</span>
-              </button>
-            </div>
-          </header>
-
+        <main className={`native-work-card settings-editor settings-paged-editor${section === 'providers' ? ' settings-provider-editor' : ''}`}>
           <div className="settings-panel-stack">
+            <SettingsSectionPages section={section} locale={locale} scopeKey={JSON.stringify([activeProfileId, activeSpacePath, activeBackendProfileName || '', section])}>
             {section === 'advanced' && <AdvancedModelPolicySettings sessionId={activeSessionId} workspacePath={activeSpacePath}
               browserProfileId={activeProfileId} backendProfileName={activeBackendProfileName ?? null} ready={ready} locale={locale} />}
             {section === 'preferences' && (
@@ -4262,25 +4208,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </select>
                   </SettingsField>
                 </SettingsCard>
-
-                {dirty && (
-                  <div className="settings-floating-action-bar" style={{ position: 'sticky', bottom: 12, zIndex: 10, padding: '10px 16px', borderRadius: 10, background: 'var(--lb-surface-strong)', border: '1px solid var(--accent-primary)', boxShadow: '0 8px 24px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span className="status-dot" style={{ background: 'var(--accent-primary)' }} />
-                      <span style={{ fontSize: 12, fontWeight: 500 }} role={!ready ? 'status' : undefined}>
-                        {ready ? t('settings.panels.appearance.livePreview') : t('insights.sidekickStarting')}
-                      </span>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <button type="button" className="secondary-action compact" onClick={() => void restoreDraft()} disabled={!ready || !dirty}>
-                        {t('settings.panels.appearance.resetDraft')}
-                      </button>
-                      <button type="button" className="primary-action compact" onClick={() => void save()} disabled={!ready || saving || !dirty} style={{ background: 'var(--accent-primary)', color: 'var(--accent-text, #ffffff)' }}>
-                        {saving ? t('settings.panels.appearance.saving') : t('settings.panels.appearance.saveSettings')}
-                      </button>
-                    </div>
-                  </div>
-                )}
 
                 <SettingsCard title={t('settings.panels.appearance.sessionView')} description={t('settings.panels.appearance.sessionViewDescription')}>
                   <div className="settings-field-grid">
@@ -5170,7 +5097,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
             {section === 'plugins' && (
               <>
-                <ExtensionsSettingsSection />
+                <ExtensionsSettingsSection key={activeProfileId} activeProfileId={activeProfileId} />
                 <SettingsCard title={t('settings.panels.plugins.connectedApps')} description={t('settings.panels.plugins.connectedAppsDescription')}>
                   <div className="settings-field-grid">
                     <SettingsToggle
@@ -5344,6 +5271,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 </SettingsCard>
               </>
             )}
+            </SettingsSectionPages>
           </div>
         </main>
       </div>

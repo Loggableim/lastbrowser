@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "2026-10-13.1",
+  "revision": "2026-10-14.2",
   "licensePolicy": [
     "apache-2.0",
     "mit"
@@ -1572,6 +1572,130 @@
       "license": "apache-2.0",
       "sourceUrl": "https://huggingface.co/robbyant/lingbot-video-moe-30b-a3b",
       "priority": false
+    },
+    {
+      "modelId": "Nanbeige/Nanbeige4.1-3B",
+      "name": "Nanbeige 4.1 3B",
+      "publisher": "Nanbeige",
+      "category": "text",
+      "vramClass": "4–8",
+      "quantization": "Q4_K_M",
+      "estimatedVramGiB": [
+        3.5,
+        5
+      ],
+      "estimatedRamGiB": [
+        8,
+        16
+      ],
+      "estimatedDownloadGiB": [
+        2.2753263115882874,
+        2.2753263115882874
+      ],
+      "recommendedGpuGiB": 6,
+      "engine": "llama.cpp",
+      "innovation": "Kompaktes Reasoning-Modell mit eigener Llama-Architektur und Werkzeugtraining; gepinnte Community-GGUF verfügbar.",
+      "useCases": [
+        "Lokales Reasoning",
+        "Codefragen",
+        "Recherche"
+      ],
+      "strengths": [
+        "3,93 Milliarden Gesamtparameter; rund 2,28 GiB Q4_K_M-Gewichte",
+        "Apache-2.0 laut Original, Basismodell und Quantisierung"
+      ],
+      "limitations": [
+        "Community-Quantisierung von mradermacher, keine offizielle Nanbeige-GGUF",
+        "Thinking kann Antworten verlängern; kein automatischer Quickchat-Favorit",
+        "Tool-XML/JSON und Jinja-Template erst per Geräteprüfung qualifizieren",
+        "256K ist Architekturgrenze; Ressourcenschätzung gilt für kurzen 4K-Kontext"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Nanbeige/Nanbeige4.1-3B",
+      "priority": true
+    },
+    {
+      "modelId": "Nanbeige/Nanbeige4.2-3B",
+      "name": "Nanbeige 4.2 3B",
+      "publisher": "Nanbeige",
+      "category": "text",
+      "vramClass": "4–8",
+      "quantization": "Q4_K_M (Schätzung)",
+      "estimatedVramGiB": [
+        4,
+        6
+      ],
+      "estimatedRamGiB": [
+        12,
+        20
+      ],
+      "estimatedDownloadGiB": [
+        2.4,
+        3.2
+      ],
+      "recommendedGpuGiB": 8,
+      "engine": "llama.cpp · nanbeige42-Fork erforderlich",
+      "innovation": "Looped Transformer für kompakte Agenten und Coding; nur entdecken, eigener nanbeige42-Engine-Fork erforderlich.",
+      "useCases": [
+        "Agentische Recherche",
+        "Code-Agenten",
+        "Lokale Assistenz"
+      ],
+      "strengths": [
+        "Layer-Wiederverwendung erweitert Rechenkapazität ohne proportional mehr Gewichte",
+        "Thinking abschaltbar; XML- oder JSON-Toolformat im Herausgeber-Template"
+      ],
+      "limitations": [
+        "Mit gebündeltem stock llama.cpp nicht qualifiziert; nicht installierbar",
+        "Quantisierte Größe geschätzt, kein gepinntes Downloadartefakt",
+        "Original-Card und Basis deklarieren Apache-2.0, keine separate LICENSE-Datei",
+        "FP8/GPTQ brauchen andere Loader; DSpark ist Zusatzgewicht, kein eigenständiger Chatbot"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Nanbeige/Nanbeige4.2-3B",
+      "priority": true
+    },
+    {
+      "modelId": "Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "name": "Qwen3 235B A22B Instruct 2507",
+      "publisher": "Qwen",
+      "category": "text",
+      "vramClass": "über 128",
+      "quantization": "Q4_K_M",
+      "estimatedVramGiB": [
+        140,
+        160
+      ],
+      "estimatedRamGiB": [
+        192,
+        256
+      ],
+      "estimatedDownloadGiB": [
+        132.39129900932312,
+        132.39129900932312
+      ],
+      "recommendedGpuGiB": 192,
+      "engine": "llama.cpp",
+      "innovation": "Nicht-thinking Mixture-of-Experts für große Systeme: 235 Milliarden Gesamtparameter, 22 Milliarden je Token aktiv.",
+      "useCases": [
+        "Große lokale Assistenz",
+        "Mehrsprachige Analyse",
+        "Code und Werkzeugauswahl"
+      ],
+      "strengths": [
+        "Apache-2.0; gepinnte Unsloth Q4_K_M-Community-Quantisierung",
+        "Drei zusammengehörige Shards, insgesamt rund 132,39 GiB Gewichte"
+      ],
+      "limitations": [
+        "22B aktiv reduziert Rechenarbeit, nicht den Speicher für alle 235B Gewichte",
+        "Q4_K_M passt vollständig nicht in 128 GiB VRAM",
+        "Aktueller Vulkan-Pfad nutzt eine GPU; kein automatischer Multi-GPU-Verbund",
+        "CPU-Betrieb braucht sehr viel freien RAM; Geschwindigkeit nicht gemessen",
+        "256K ist Architekturgrenze; kurze 4K-Konfiguration zuerst prüfen"
+      ],
+      "license": "apache-2.0",
+      "sourceUrl": "https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507",
+      "priority": true
     }
   ]
 }

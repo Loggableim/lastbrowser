@@ -14,6 +14,7 @@ from .contracts import ArtifactFile
 from .runtime_probe import RuntimeBuildManifest
 
 UNAVAILABLE_MODELS={
+    'Nanbeige/Nanbeige4.2-3B':('nanbeige42_engine_required','Nanbeige 4.2 requires its nanbeige42 llama.cpp fork. The pinned stock engine is not qualified for this architecture; discovery only.'),
     'prism-ml/Ternary-Bonsai-2-27B-gguf':('prism_pq2_engine_required','The pinned stock llama.cpp engine cannot load Prism PQ2. A separately pinned compatible engine is required.'),
     'prism-ml/bonsai-image-ternary-4B-gemlite-2bit':('gemlite_hqq_engine_required','This image model needs a Gemlite/HQQ adapter; the pinned stable-diffusion.cpp engine does not implement it.'),
     'deepseek-ai/DeepSeek-V4.1-Flash':('deepseek_v41_loader_unavailable','No exact DeepSeek-V4.1 loader and immutable compatible weight bundle are verified for the pinned engine.'),

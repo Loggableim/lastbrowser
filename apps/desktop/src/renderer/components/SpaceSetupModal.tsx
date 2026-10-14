@@ -4,6 +4,7 @@ import type { DesktopTranslationKey } from '../i18n/keys.js';
 import type { BackendProfileEntry, BackendProfilesResponse, ProfilePatch } from '../independent-contracts.js';
 import { isBackendProfilesResponse } from '../independent-assistant-client.js';
 import { backendProfileCopy } from '../i18n/backend-profile-copy.js';
+import { isCustomCompanionPromptValid } from '../personality-avatar.js';
 import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
 import {
   X,
@@ -313,9 +314,10 @@ export function SpaceSetupModal({
 
   const duplicateName = isDuplicateSpaceName(name, existingSpaceNames);
   const isNameValid = name.trim().length > 0 && !duplicateName;
+  const isCompanionValid = companion.personality !== 'custom' || isCustomCompanionPromptValid(companion.customPrompt);
 
   const handleFinish = async () => {
-    if (!isNameValid || isSubmitting) return;
+    if (!isNameValid || !isCompanionValid || isSubmitting) return;
     setIsSubmitting(true);
     setCreateError('');
     const error = await submitSpaceSetup({
@@ -617,7 +619,7 @@ export function SpaceSetupModal({
             <button
               type="button"
               className="space-btn primary"
-              disabled={!isNameValid || isSubmitting}
+              disabled={!isNameValid || !isCompanionValid || isSubmitting}
               onClick={() => setStep((step + 1) as 1 | 2 | 3)}
               style={{ background: color, color: '#000000' }}
             >
@@ -628,7 +630,7 @@ export function SpaceSetupModal({
             <button
               type="button"
               className="space-btn primary finish"
-              disabled={!isNameValid || isSubmitting}
+              disabled={!isNameValid || !isCompanionValid || isSubmitting}
               onClick={() => void handleFinish()}
               style={{ background: color, color: '#000000' }}
             >

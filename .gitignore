@@ -51,3 +51,7 @@ smoke-output/
 $payload/
 .playwright-cli/
 .permission-adblock-live-audit.mjs
+
+!brand/assets/installer/
+!brand/assets/installer/nova-sidekick.png
+!apps/desktop/src/renderer/startup/assets/sidekick-custom.png

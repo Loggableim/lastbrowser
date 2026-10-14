@@ -175,7 +175,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string): Quic
         {
           id: 'tldr',
           category: 'code',
-          label: '⚡ TL;DR',
+          label: 'Kurz zusammenfassen',
           icon: '⚡',
           tooltip: 'Kompakte technische Zusammenfassung der Seite',
           promptTemplate: 'Erstelle eine kurze technische TL;DR-Zusammenfassung dieser Dokumentation/Bibliothek.'
@@ -195,7 +195,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string): Quic
         {
           id: 'tldr',
           category: 'tabular',
-          label: '⚡ TL;DR',
+          label: 'Kurz zusammenfassen',
           icon: '⚡',
           tooltip: 'Produkte, Preise und wichtigste Merkmale zusammenfassen',
           promptTemplate: 'Fasse die wichtigsten Produkte, Preise und Kennzahlen dieser Seite kurz zusammen.'
@@ -207,7 +207,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string): Quic
         {
           id: 'tldr',
           category: 'news',
-          label: '⚡ TL;DR',
+          label: 'Kurz zusammenfassen',
           icon: '⚡',
           tooltip: 'Die 3 wichtigsten Kernaussagen dieses Artikels zusammenfassen',
           promptTemplate: 'Erstelle eine prägnante TL;DR-Zusammenfassung mit den 3 wichtigsten Kernaussagen dieses Artikels.'
@@ -228,7 +228,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string): Quic
         {
           id: 'tldr',
           category: 'general',
-          label: '⚡ TL;DR',
+          label: 'Kurz zusammenfassen',
           icon: '⚡',
           tooltip: 'Kompakte Zusammenfassung der aktuellen Webseite',
           promptTemplate: 'Erstelle eine prägnante Zusammenfassung der Kernaussagen dieser Seite.'

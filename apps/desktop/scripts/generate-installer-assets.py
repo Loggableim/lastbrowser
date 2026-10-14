@@ -7,6 +7,8 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 ROOT = Path(__file__).resolve().parents[1]
 CD_ROOT = ROOT.parents[1] / "sidekick_cd_mappe_final" / "assets"
 BUILD_DIR = ROOT / "build"
+NOVA_PATH = ROOT.parents[1] / "brand" / "assets" / "installer" / "nova-sidekick.png"
+NOVA_INSTALLER_PATH = BUILD_DIR / "installerNova.bmp"
 
 
 HEADER_SIZE = (150, 57)
@@ -85,7 +87,7 @@ def fit_contain(image: Image.Image, target: tuple[int, int]) -> Image.Image:
 
 def make_header() -> Image.Image:
     logo = load_rgba(CD_ROOT / "logos" / "lastbrowser-logo-transparent.png")
-    icon = load_rgba(CD_ROOT / "app-icons" / "lastbrowser-app-icon-512.png")
+    icon = load_rgba(NOVA_PATH)
 
     canvas = gradient_bg(HEADER_SIZE, MIDNIGHT, DEEP)
     add_glow(canvas, (4, 8, 52, 52), CYAN, radius=20, intensity=52)
@@ -96,35 +98,35 @@ def make_header() -> Image.Image:
 
 def make_sidebar() -> Image.Image:
     logo = load_rgba(CD_ROOT / "logos" / "lastbrowser-logo-transparent.png")
-    icon = load_rgba(CD_ROOT / "app-icons" / "lastbrowser-app-icon-512.png")
+    icon = load_rgba(NOVA_PATH)
 
     canvas = gradient_bg(SIDEBAR_SIZE, MIDNIGHT, DEEP)
     add_glow(canvas, (0, 12, 164, 194), BLUE, radius=38, intensity=62)
     add_glow(canvas, (48, 102, 165, 254), CYAN, radius=34, intensity=30)
     draw = ImageDraw.Draw(canvas)
 
-    # One quiet browser illustration reads clearly at the narrow NSIS sidebar size.
-    draw.rounded_rectangle((18, 22, 146, 132), radius=14, fill=(11, 24, 43, 244), outline=(80, 132, 190, 150), width=1)
-    draw.rounded_rectangle((19, 23, 145, 43), radius=13, fill=(20, 37, 60, 255))
-    draw.rectangle((19, 34, 145, 43), fill=(20, 37, 60, 255))
-    for x, color in ((30, CYAN), (39, BLUE), (48, (119, 137, 164))):
-        draw.ellipse((x, 30, x + 5, 35), fill=(*color, 255))
-    draw.rounded_rectangle((27, 53, 137, 62), radius=4, fill=(27, 46, 69, 255))
-    draw.rounded_rectangle((27, 70, 68, 120), radius=6, fill=(16, 31, 51, 255))
-    draw.rounded_rectangle((75, 70, 137, 120), radius=6, fill=(14, 27, 46, 255))
-    draw.rounded_rectangle((34, 81, 61, 85), radius=2, fill=(40, 83, 121, 255))
-    draw.rounded_rectangle((34, 91, 57, 95), radius=2, fill=(35, 62, 91, 255))
-    draw.rounded_rectangle((82, 80, 127, 85), radius=2, fill=(39, 76, 111, 255))
-    draw.rounded_rectangle((82, 91, 119, 96), radius=2, fill=(32, 56, 82, 255))
-    draw.rounded_rectangle((82, 102, 124, 107), radius=2, fill=(32, 56, 82, 255))
-
-    canvas.alpha_composite(fit_contain(logo, (122, 31)), (21, 163))
-    header_font = load_font(14, bold=True)
+    nova = fit_contain(icon, (94, 94))
+    canvas.alpha_composite(nova, ((SIDEBAR_SIZE[0] - nova.width) // 2, 24))
+    draw_gradient_bar(draw, (22, 138, 142, 140), [CYAN, BLUE, (147, 78, 255), PINK])
+    canvas.alpha_composite(fit_contain(logo, (122, 31)), (21, 155))
+    header_font = load_font(13, bold=True)
     body_font = load_font(10, bold=False)
-    draw.text((22, 215), "Dein Browser.", fill=WHITE, font=header_font)
-    draw.text((22, 234), "Bereit fuer mehr.", fill=(104, 214, 255, 255), font=header_font)
-    draw.line((22, 263, 142, 263), fill=(77, 105, 142, 180), width=1)
-    draw.text((22, 276), "KI spaeter einrichten.", fill=(190, 203, 221, 255), font=body_font)
+    draw.text((22, 211), "Sidekick ist dabei.", fill=WHITE, font=header_font)
+    draw.text((22, 231), "Lokal auf deinem", fill=(190, 203, 221, 255), font=body_font)
+    draw.text((22, 246), "Rechner. Privat.", fill=(190, 203, 221, 255), font=body_font)
+    draw.line((22, 270, 142, 270), fill=(77, 105, 142, 180), width=1)
+    draw.text((22, 282), "KI spaeter verbinden.", fill=(104, 214, 255, 255), font=body_font)
+    return canvas.convert("RGB")
+
+
+def make_installer_nova() -> Image.Image:
+    icon = load_rgba(NOVA_PATH)
+    size = (72, 72)
+    canvas = Image.new("RGBA", size, (247, 250, 255, 255))
+    draw = ImageDraw.Draw(canvas)
+    draw.ellipse((3, 3, 69, 69), fill=(231, 247, 255, 255), outline=(203, 226, 244, 255), width=1)
+    nova = fit_contain(icon, (62, 62))
+    canvas.alpha_composite(nova, ((size[0] - nova.width) // 2, (size[1] - nova.height) // 2))
     return canvas.convert("RGB")
 
 
@@ -132,10 +134,13 @@ def main() -> None:
     BUILD_DIR.mkdir(parents=True, exist_ok=True)
     header = make_header()
     sidebar = make_sidebar()
+    nova = make_installer_nova()
     header.save(BUILD_DIR / "installerHeader.bmp")
     sidebar.save(BUILD_DIR / "installerSidebar.bmp")
+    nova.save(NOVA_INSTALLER_PATH)
     print(f"Wrote {BUILD_DIR / 'installerHeader.bmp'}")
     print(f"Wrote {BUILD_DIR / 'installerSidebar.bmp'}")
+    print(f"Wrote {NOVA_INSTALLER_PATH}")
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ import type {ModelStoreRequest,StoreView,StoreModel} from '../model-store-contra
 import './local-model-store.css';
 import { storeConsentKey, storeExecutionLabel, storeJobLabel, storeModelActions } from './model-store-actions.js';
 import { LocalModelMediaForm, LocalModelMediaResult } from './LocalModelMedia.js';
+import { BonsaiImageTrial } from './BonsaiImageTrial.js';
 
 const bytes = formatStoreBytes;
 const active=(s:string)=>['pending','running','downloading','verifying','stopping'].includes(s);
@@ -75,6 +76,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   const hardware = summarizeStoreHardware(view?.hardware);
   const emptyState = storeEmptyState(models, filters, view?.hardware);
   const suitableCount = models.filter(model => storeHardwareRecommendation(model,view?.hardware).fit==='within').length;
+  const trialCount = models.filter(model => storeHardwareRecommendation(model,view?.hardware).fit==='trial').length;
   const scanPending = pendingOperation === 'scan';
   const hardwareStale = models.some(model => model.eligibility.reasons.includes('hardware_scan_stale'));
   useLayoutEffect(() => {
@@ -125,6 +127,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
             {(model.active || model.deviceConfirmed) && <CheckCircle2 size={12} aria-hidden="true"/>}
             {model.execution ? storeExecutionLabel(model) : model.curated&&!model.installed&&!model.eligibility.allowed?'Nur entdecken':storeModelStatus(model)}</span>
           {fit==='outside'&&<span className="local-model-fit">Über deiner Speicherklasse</span>}
+          {fit==='trial'&&<span className="local-model-fit">Ausprobierbar · kompakte Konfiguration ungeprüft</span>}
           {fit==='within'&&<span className="local-model-fit">{recommendation.placement==='cpu'?'Für Prozessor und freien Speicher geprüft':'Speicherklasse passt · Schätzung'}</span>}
         </span>
       </button>
@@ -154,7 +157,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
         <p>Gemessene Werte beschreiben den Scanzeitpunkt. CPU-Ausführung wird separat bewertet; erkannte GPUs bestätigen keine Runtime-Unterstützung.</p><pre>{JSON.stringify(view?.hardware,null,2)}</pre></details>}
     </section>
     <section className="local-model-catalog" aria-label="Modellkatalog">
-      <div className="local-model-section-heading"><div><h4>{hardware.scanned?'Kuratierte Auswahl':'Kuratierte Auswahl · Hardware noch nicht geprüft'}</h4><p>{models.length} im Katalog{ suitableCount>0?` · ${suitableCount} passen zur Speicherschätzung`:''}</p></div>
+      <div className="local-model-section-heading"><div><h4>{hardware.scanned?'Kuratierte Auswahl':'Kuratierte Auswahl · Hardware noch nicht geprüft'}</h4><p>{models.length} im Katalog{ suitableCount>0?` · ${suitableCount} passen zur Speicherschätzung`:''}{trialCount>0?` · ${trialCount} experimentell ausprobierbar`:''}</p></div>
         {(query||publisher||showUnknown||showLarge)&&<button className="local-model-text-button" type="button" onClick={()=>{setQuery('');setPublisher('');setShowUnknown(false);setShowLarge(false);}}>Filter zurücksetzen</button>}</div>
       <div className="local-model-search"><Search size={18} aria-hidden="true"/><label className="local-model-sr-only" htmlFor={searchId}>Modelle suchen</label>
         <input id={searchId} type="search" placeholder="Nach Modell oder Herausgeber suchen…" value={query} onChange={e=>setQuery(e.target.value)}/></div>
@@ -169,6 +172,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
             }
           }}><Icon size={15} aria-hidden="true"/>{label}<span>{models.filter(model=>storeModelCategory(model)===id).length}</span></button>)}
       </nav>
+      {category==='image'&&<BonsaiImageTrial/>}
       <details className="local-model-filter-details"><summary><SlidersHorizontal size={15} aria-hidden="true"/> Filter und weitere Modelle <ChevronDown size={14} aria-hidden="true"/></summary>
         <div className="local-model-filters"><label>Herausgeber <select value={publisher} onChange={e=>setPublisher(e.target.value)}><option value="">Alle Herausgeber</option>{[...new Set(models.map(m=>m.publisher))].map(p=><option key={p}>{p}</option>)}</select></label>
           <label><input type="checkbox" checked={showLarge} onChange={e=>setShowLarge(e.target.checked)}/> Auch nicht empfohlene und ungeprüfte Modelle anzeigen</label></div>
@@ -180,7 +184,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
         <p>{emptyState==='scan_missing'?'Scanne deine Hardware für eine Einschätzung. Du kannst vorher schon den Katalog ansehen.':emptyState==='filtered'?'Ändere die Suche oder zeige auch Modelle mit ungeklärter Kompatibilität an.':emptyState==='compatibility_unknown'?'Die Hardware-, Lizenz- oder Runtime-Prüfung ist noch offen. Die Voraussetzungen findest du bei jedem Modell.':'Prüfe, ob der lokale Dienst bereit ist, und lade die Ansicht erneut.'}</p>
         {models.length>0?<button type="button" className="local-model-secondary" onClick={showAllModels}>Alle Modelle ansehen <ArrowRight size={15} aria-hidden="true"/></button>:<button type="button" disabled={!ready||busy} onClick={()=>void request({operation:'view'})}>Ansicht neu laden</button>}
       </div>}
-      <p className="local-model-catalog-note">Karten zeigen eine Speicherschätzung, keine bestätigte Ausführung. „Nur entdecken“ ist noch nicht direkt installierbar. Details per Klick.</p>
+      <p className="local-model-catalog-note">Karten zeigen eine Speicherschätzung, keine bestätigte Ausführung. „Ausprobierbar“ nutzt die untere Schätzung mit derselben GPU-Reserve; Quantisierung, Kontext und Runtime müssen separat passen. „Nur entdecken“ ist noch nicht direkt installierbar. Details per Klick.</p>
       <div id={`${titleId}-catalog`} role="tabpanel" aria-labelledby={`${titleId}-${category}`} className="local-model-grid">{visible.map(card)}</div>
     </section>
     </>}
@@ -214,7 +218,9 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
               <div><dt>Gesamtparameter</dt><dd>{selected.totalParameters===null?'Noch nicht angegeben':`${(selected.totalParameters/1e9).toLocaleString('de-DE',{maximumFractionDigits:2})} Mrd.`}</dd></div>
             </dl>
             <p className="local-model-catalog-note">Eine unterstützte Modellfamilie oder ein passendes Speicherbudget bestätigt noch keine Ausführung in dieser LastBrowser-Version.</p>
+            <p className="local-model-catalog-note">Die GPU-Klasse ist ein Komfortziel für die obere Schätzung. Kompakte Gewichte und kurzer Kontext können darunter passen; lange Kontexte vergrößern den KV-Cache. CPU- und GPU-Ausführung werden getrennt geprüft. Der Gerätetest verwendet seine festgelegte Konfiguration.</p>
           </section>
+          {selected.id==='prism-ml/bonsai-image-ternary-4B-gemlite-2bit'&&<BonsaiImageTrial/>}
           <section className="local-model-detail-section"><h4>Quellen & Lizenz</h4>
             <p><strong>{selected.licenseLabel}</strong>{selected.curation?.license && ` · ${selected.curation.license==='mit'?'MIT':'Apache 2.0'}`}</p>
             <div className="local-model-source-links">{[...new Set([storeSourceUrl(selected.curation?.sourceUrl),storeSourceUrl(selected.sourceUrl)].filter((url):url is string=>!!url))].map((url,index)=><a key={url} href={url} target="_blank" rel="noopener noreferrer">{index===0?'Modellkarte & Herausgeber':'Katalog-/Artefaktquelle'}<ArrowRight size={13} aria-hidden="true"/></a>)}</div>
@@ -239,7 +245,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
               {selected.downloadBytes!==null&&<div><dt>Konkreter Download</dt><dd>{bytes(selected.downloadBytes)}</dd></div>}
             </dl>
             <p className="local-model-catalog-note">{selected.curation?'Die RAM-Spanne enthält bereits System und Browser. ':''}{storeModelCategory(selected)==='text'?'VRAM-Schätzung: Text, 4K Kontext, eine Anfrage.':'Die Medien-Schätzung gilt für die in den Grenzen beschriebene Konfiguration.'} Für die Grafikkarte bleiben mindestens 25 % Reserve eingeplant.</p>
-            <p className="local-model-fit">{storeHardwareRecommendation(selected,view?.hardware).placement==='cpu'?'Prozessor und freier Speicher wurden für diese Ausführung geprüft':!hardware.scanned?'Hardware noch nicht geprüft':assessStoreGpuEstimate(selected,view?.hardware)==='outside'?'Außerhalb der erfassten Speicherklasse':assessStoreGpuEstimate(selected,view?.hardware)==='within'?'Speicherklasse passt zur Schätzung · Ausführung noch separat prüfen':'Keine ausreichenden Messwerte für eine Zuordnung'}</p>
+            <p className="local-model-fit">{storeHardwareRecommendation(selected,view?.hardware).placement==='cpu'?'Prozessor und freier Speicher wurden für diese Ausführung geprüft':!hardware.scanned?'Hardware noch nicht geprüft':assessStoreGpuEstimate(selected,view?.hardware)==='outside'?'Außerhalb der erfassten Speicherklasse':assessStoreGpuEstimate(selected,view?.hardware)==='within'?'Speicherklasse passt zur Schätzung · Ausführung noch separat prüfen':assessStoreGpuEstimate(selected,view?.hardware)==='trial'?'Experimentell ausprobierbar: untere Speicherschätzung passt; kompakte Konfiguration noch ungeprüft':'Keine ausreichenden Messwerte für eine Zuordnung'}</p>
           </section>
 
           <section className="local-model-detail-section local-model-install-panel"><h4>{selected.installed?'Deine Installation':'Auf diesem PC nutzen'}</h4>

@@ -3280,13 +3280,13 @@ function AppContent(): JSX.Element {
   }
 
   const pendingCreatedCompanionSpacesRef = useRef(new Set<string>());
-  async function saveSpaceCompanion(scope: IndependentScope, preference: { personality: string; botName: string }): Promise<void> {
-    const personality: CompanionPersonality = ['nova', 'analytical', 'developer', 'creative', 'mentor'].includes(preference.personality)
+  async function saveSpaceCompanion(scope: IndependentScope, preference: { personality: string; botName: string; customPrompt?: string }): Promise<void> {
+    const personality: CompanionPersonality = ['nova', 'analytical', 'developer', 'creative', 'mentor', 'custom'].includes(preference.personality)
       ? preference.personality as CompanionPersonality : 'nova';
     const current = await assistantController.request({ schemaVersion: 1, operation: 'companion', scope, payload: { action: 'get' } });
     if (!current.ok) throw new Error(current.error.message);
     const saved = await assistantController.request({ schemaVersion: 1, operation: 'companion', scope,
-      payload: { action: 'set', personality, botName: preference.botName, expectedRevision: current.value.revision, clientRequestId: newIndependentRequestId() } });
+      payload: { action: 'set', personality, botName: preference.botName, ...(personality === 'custom' ? { customPrompt: preference.customPrompt } : {}), expectedRevision: current.value.revision, clientRequestId: newIndependentRequestId() } });
     if (!saved.ok) throw new Error(saved.error.message);
     window.dispatchEvent(new Event('lastbrowser:companion-changed'));
   }
@@ -3364,7 +3364,7 @@ function AppContent(): JSX.Element {
         confirmOverwrite: true, scopeSelection };
       const nextStatus = await window.lastbrowser.sidekick.applyCloudSetup(setupRequest);
       requireSuccess(nextStatus);
-      await saveSpaceCompanion(resolved.value.scope, { botName, personality });
+      await saveSpaceCompanion(resolved.value.scope, { botName, personality, customPrompt: form.customPrompt });
       ensureCurrent();
       // Save completion without replacing the normal chat's base profile.
       // The legacy no-argument completion endpoint would target the backend default profile.

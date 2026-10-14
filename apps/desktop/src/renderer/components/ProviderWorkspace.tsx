@@ -46,9 +46,18 @@ export function ProviderWorkspace({
   navigation?: ReactNode;
 }): JSX.Element {
   const [selectedId, setSelectedId] = useState(initialProviderId);
-  const [selectedTab, setSelectedTab] = useState<ProviderWorkspaceTab>('connection');
   const tabRefs = useRef<Partial<Record<ProviderWorkspaceTab, HTMLButtonElement | null>>>({});
   const selectedProvider = providers.find((provider) => provider.id === selectedId) || providers[0];
+  const panelIdentity = JSON.stringify([scopeKey, selectedProvider?.id || '']);
+  const [tabSelection, setTabSelection] = useState<{ identity: string; tab: ProviderWorkspaceTab }>({ identity: '', tab: 'connection' });
+  const selectedTab = tabSelection.identity === panelIdentity ? tabSelection.tab : 'connection';
+  function setSelectedTab(tab: ProviderWorkspaceTab): void { setTabSelection({ identity: panelIdentity, tab }); }
+  const [visitedPanels, setVisitedPanels] = useState<{ identity: string; tabs: ProviderWorkspaceTab[] }>({ identity: '', tabs: [] });
+  const mountedTabs = [...new Set([...(visitedPanels.identity === panelIdentity ? visitedPanels.tabs : []), selectedTab])];
+  useEffect(() => {
+    setVisitedPanels(previous => previous.identity === panelIdentity && previous.tabs.includes(selectedTab)
+      ? previous : { identity: panelIdentity, tabs: [...new Set([...(previous.identity === panelIdentity ? previous.tabs : []), selectedTab])] });
+  }, [panelIdentity, selectedTab]);
 
   useEffect(() => {
     setSelectedId(initialProviderId);
@@ -99,7 +108,7 @@ export function ProviderWorkspace({
               role="tab"
               id={`provider-workspace-tab-${tab}`}
               aria-selected={selectedTab === tab}
-              aria-controls="provider-workspace-panel"
+              aria-controls={`provider-workspace-panel-${tab}`}
               tabIndex={selectedTab === tab ? 0 : -1}
               onClick={() => setSelectedTab(tab)}
               onKeyDown={handleTabKeyDown}
@@ -115,10 +124,13 @@ export function ProviderWorkspace({
           <span className="provider-workspace-mark" style={selectedProvider.color ? { backgroundColor: selectedProvider.color } : undefined}>{selectedProvider.mark}</span>
           <h2>{selectedProvider.label}</h2>
         </header>
-        <div className="provider-workspace-panel" role="tabpanel" id="provider-workspace-panel"
-          aria-labelledby={`provider-workspace-tab-${selectedTab}`} tabIndex={0}>
-          {panel(selectedProvider, selectedTab)}
-        </div>
+        {/* Visit before mounting: retaining drafts must not activate an unseen
+            provider/local setup pane or its effects. Scope changes discard it. */}
+        {mountedTabs.map(tab => <div key={`${panelIdentity}:${tab}`} className="provider-workspace-panel" role="tabpanel"
+          id={`provider-workspace-panel-${tab}`} aria-labelledby={`provider-workspace-tab-${tab}`}
+          hidden={selectedTab !== tab} inert={selectedTab !== tab} tabIndex={selectedTab === tab ? 0 : -1}>
+          {panel(selectedProvider, tab)}
+        </div>)}
         {footer && <footer className="provider-workspace-footer">{footer}</footer>}
       </section> : <div className="provider-workspace-empty" role="status">{emptyMessage}</div>}
     </div>

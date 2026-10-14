@@ -1,0 +1,14 @@
+.companion-picker-options { display: grid; grid-template-columns: repeat(auto-fit, minmax(72px, 1fr)); gap: 8px; }
+.companion-picker-option { display: grid; justify-items: center; gap: 4px; padding: 8px; border: 2px solid transparent; border-radius: 10px; background: var(--lb-surface-panel); color: var(--lb-text); cursor: pointer; }
+.companion-picker-option[aria-pressed="true"] { border-color: var(--lb-accent); }
+.companion-picker-option img { width: 52px; height: 52px; object-fit: contain; }
+.companion-name-field { display: grid; gap: 6px; margin-block: 12px; }
+.companion-custom-editor { display: grid; gap: 8px; text-align: left; }
+.companion-custom-editor label { font-weight: 600; }
+.companion-custom-editor p { margin: 0; color: var(--lb-muted); font-size: 12px; line-height: 1.5; }
+.companion-custom-editor textarea { box-sizing: border-box; width: 100%; min-height: 140px; resize: vertical; border: 1px solid var(--lb-border); border-radius: 8px; padding: 10px; background: var(--lb-surface); color: var(--lb-text); font: inherit; font-size: 12px; line-height: 1.5; }
+.companion-custom-editor-footer { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--lb-muted); font-size: 11px; }
+.companion-custom-editor-footer button { border: 1px solid var(--lb-border); border-radius: 6px; background: var(--lb-surface-panel); color: var(--lb-text); padding: 5px 8px; cursor: pointer; }
+.companion-picker button:focus-visible, .companion-custom-editor textarea:focus-visible { outline: 2px solid var(--lb-accent); outline-offset: 2px; }
+.companion-name-field input { box-sizing: border-box; width: 100%; border: 1px solid var(--lb-border); border-radius: 8px; padding: 9px 10px; background: var(--lb-surface); color: var(--lb-text); font: inherit; }
+.companion-name-field input:focus-visible { outline: 2px solid var(--lb-accent); outline-offset: 2px; }

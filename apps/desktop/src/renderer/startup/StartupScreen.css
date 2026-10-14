@@ -361,16 +361,22 @@
 .startup-screen--opening.startup-screen--reduced-motion::after { animation:none; }
 .startup-preferences-trigger { position:absolute; z-index:5; right:18px; bottom:18px; text-align:left; }
 .startup-preferences-gear { display:grid; place-items:center; width:32px; height:32px; padding:0; border:1px solid rgb(167 200 255 / 18%); border-radius:9px; color:#bdd0e7; background:rgb(13 31 52 / 75%); cursor:pointer; }
-.startup-preferences-panel { display:grid; gap:12px; width:min(330px,calc(100vw - 48px)); padding:18px; border:1px solid rgb(167 200 255 / 25%); border-radius:14px; background:#10243b; color:#e5efff; font:13px/1.45 system-ui,sans-serif; box-shadow:0 12px 48px #0006; }
-.startup-preferences-trigger .startup-preferences-panel { position:absolute; right:0; bottom:42px; max-height:calc(100vh - 100px); overflow:auto; }
+.startup-preferences-panel { display:grid; grid-template-columns:minmax(0,1fr); align-content:start; gap:12px; box-sizing:border-box; width:min(330px,calc(100vw - 48px)); padding:18px; border:1px solid rgb(167 200 255 / 25%); border-radius:14px; background:#10243b; color:#e5efff; font:13px/1.45 system-ui,sans-serif; overflow-wrap:anywhere; box-shadow:0 12px 48px #0006; }
+.startup-preferences-trigger .startup-preferences-panel { position:absolute; right:0; bottom:42px; max-height:calc(100vh - 100px); max-height:calc(100dvh - 100px); overflow-x:hidden; overflow-y:auto; }
 .startup-preferences-inline .startup-preferences-panel { width:100%; box-shadow:none; box-sizing:border-box; }
+/* Native selects size themselves from the longest option. Both grid levels
+   must be able to shrink so one sound name cannot widen every row. */
+.startup-preferences-panel > * { min-width:0; }
 .startup-preferences-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.startup-preferences-panel label { display:grid; gap:6px; }
+.startup-preferences-heading button { flex:none; }
+.startup-preferences-panel label { display:grid; grid-template-columns:minmax(0,1fr); gap:6px; }
 .startup-preferences-panel label.startup-preferences-check { display:flex; align-items:center; gap:9px; }
-.startup-preferences-panel input[type=checkbox] { width:16px; height:16px; accent-color:#6ecbff; }
-.startup-preferences-panel input[type=range] { width:100%; accent-color:#6ecbff; }
+.startup-preferences-panel input[type=checkbox] { flex:none; width:16px; height:16px; accent-color:#6ecbff; }
+.startup-preferences-panel input[type=range] { min-width:0; width:100%; margin:0; accent-color:#6ecbff; }
 .startup-preferences-panel select,.startup-preferences-panel button { min-height:32px; border:1px solid #466080; border-radius:7px; background:#142f4d; color:#e5efff; padding:5px 9px; font:inherit; }
+.startup-preferences-panel select { box-sizing:border-box; min-width:0; width:100%; max-width:100%; }
 .startup-preferences-panel button { display:flex; align-items:center; justify-content:center; gap:7px; cursor:pointer; }
+.startup-preferences-panel button svg { flex:none; }
 .startup-preferences-panel button:disabled,.startup-preferences-panel select:disabled { opacity:.5; cursor:default; }
 .startup-preferences-panel :focus-visible,.startup-preferences-gear:focus-visible { outline:2px solid #70d5ff; outline-offset:3px; }
 .startup-preferences-panel small { color:#b4c4d9; }

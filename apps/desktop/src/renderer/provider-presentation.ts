@@ -401,7 +401,8 @@ export const PERSONALITY_PROFILES: PersonalityProfile[] = [
     icon: '🌱',
     tone: 'Warmherzig & Didaktisch',
     samplePhrase: '„Lass uns das Schritt für Schritt gemeinsam durchgehen.“'
-  }
+  },
+  { id: 'custom', name: 'Custom · Eigener Sidekick', tagline: 'Dein Name & Antwortstil', description: 'Passe den Quickchat-Prompt für diesen Space an. Normale Chats übernehmen nur den Stil und behalten ihre Standardregeln.', badge: 'Individuell', badgeType: 'creative', icon: '✦', tone: 'Von dir festgelegt', samplePhrase: '„Wie soll dein Sidekick antworten?“' }
 ];
 
 export const BOT_NAME_PRESETS = [
@@ -409,5 +410,6 @@ export const BOT_NAME_PRESETS = [
   { name: 'Orion', desc: 'Analyst & Forscher' },
   { name: 'Patch', desc: 'Coder' },
   { name: 'Spark', desc: 'Kreativ' },
-  { name: 'Zen', desc: 'Mentor' }
+  { name: 'Zen', desc: 'Mentor' },
+  { name: 'Custom', desc: 'Eigener Sidekick' }
 ];

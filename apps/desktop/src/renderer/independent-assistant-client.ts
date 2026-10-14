@@ -292,7 +292,8 @@ const isModelEntry: Guard<ScopedModelEntry> = (v): v is ScopedModelEntry => isIn
   && boolean(v.supportsIndependent) && optional(v.reasoning_efforts, values => list(values, ref))
   && optional(v.deploymentKind,value=>oneOf(value,['local','cloud','remote','unknown']))
   && optional(v.contextLength,value=>nullable(value,revision))
-  && optional(v.contextLengthSource,value=>oneOf(value,['local_catalog','unknown']))
+  && optional(v.contextLengthSource,value=>oneOf(value,['live_catalog','local_catalog','official_model_docs','catalog',
+    'provided_catalog','models_dev','explicit_config','unknown']))
   && optional(v.localRuntime,isLocalStoreRuntimeCapability)
   && optional(v.nativeAvailability, isNativeModelAvailability);
 const isModelGroup: Guard<ScopedModelGroup> = (v): v is ScopedModelGroup => isIndependentRecord(v) && ref(v.provider) && text(v.provider_id)
@@ -385,7 +386,8 @@ const isResetResult: Guard<AssistantResetResult> = (v): v is AssistantResetResul
 const decoders: { [K in IndependentOperation]: (value: unknown) => IndependentOperations[K]['response'] } = {
   resolveScope: decode(isResolvedScope),
   companion: decode((v): v is IndependentOperations['companion']['response'] => versioned(v) && isIndependentScope(v.scope) && v.purpose === 'quickchat'
-    && oneOf(v.personality, ['nova','analytical','developer','creative','mentor']) && text(v.botName) && v.botName.trim().length > 0 && v.botName.length <= 80
+    && oneOf(v.personality, ['nova','analytical','developer','creative','mentor','custom']) && text(v.botName) && v.botName.trim().length > 0 && v.botName.length <= 80
+    && (v.customPrompt === undefined || (text(v.customPrompt) && v.customPrompt.trim().length > 0 && v.customPrompt.length <= 4000 && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(v.customPrompt) && !/[\ud800-\udfff]/u.test(v.customPrompt)))
     && v.avatarKey === v.personality && integer(v.revision)),
   backendProfiles: decode(isBackendProfilesResponse),
   profileBindings: decode(isProfileBindingsResponse),

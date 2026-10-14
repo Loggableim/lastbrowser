@@ -42,7 +42,8 @@ import {
   X
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
-import { companionDefaultNames, personalityAvatar, type CompanionPersonality } from '../personality-avatar.js';
+import { CustomCompanionPrompt } from './CompanionPicker.js';
+import { DEFAULT_CUSTOM_QUICKCHAT_PROMPT, isCustomCompanionPromptValid, companionDefaultNames, personalityAvatar, type CompanionPersonality } from '../personality-avatar.js';
 import { importBookmarksFromHtml, importBookmarksFromJson, mergeBookmarks } from '../bookmark-io.js';
 import { loadBookmarks, saveBookmarks } from '../bookmarks.js';
 import { saveImportedVisitedSites } from '../history.js';
@@ -88,6 +89,7 @@ export type SetupForm = {
   baseUrl?: string;
   botName: string;
   personality: string;
+  customPrompt?: string;
   defaultBrowser?: boolean;
   importedBookmarksCount?: number;
   firstSpaceName?: string;
@@ -218,6 +220,7 @@ export function FirstRunSetupPane({
   const effectiveBotName = botName.trim() || selectedBotPreset;
   const setBotName = (name: string) => setCustomBotNames(current => ({ ...current, [selectedBotPreset]: name }));
   const [personality, setPersonality] = useState<string>('nova');
+  const [customPrompt, setCustomPrompt] = useState(DEFAULT_CUSTOM_QUICKCHAT_PROMPT);
 
   // Setup mode tab: featured recommendations vs API-key providers.
   const [activeTab, setActiveTab] = useState<'featured' | 'custom'>('featured');
@@ -248,7 +251,7 @@ export function FirstRunSetupPane({
   const providerModelsReady = !['google-gemini-cli', 'openai-codex'].includes(provider) || models.length > 0;
   const keyRequired = Boolean(activeProviderOption && !activeProviderOption.oauthProvider && !activeProviderOption.keyOptional);
   const credentialsReady = !keyRequired || Boolean(apiKey.trim()) || savedProviderCredentials;
-  const canSubmitForm = canSubmit && oauthLoginReady && providerModelsReady && credentialsReady && Boolean(model);
+  const canSubmitForm = canSubmit && oauthLoginReady && providerModelsReady && credentialsReady && Boolean(model) && (personality !== 'custom' || isCustomCompanionPromptValid(customPrompt));
 
   const chooseAi = async (choice: FirstRunAiChoice) => {
     setFlowError('');
@@ -761,6 +764,7 @@ export function FirstRunSetupPane({
       baseUrl: baseUrl.trim() || undefined,
       botName: effectiveBotName,
       personality: personality || 'nova',
+      ...(personality === 'custom' ? { customPrompt } : {}),
       defaultBrowser: isDefaultBrowser === true,
       importedBookmarksCount: importedBookmarksCount || 0,
       firstSpaceName: firstSpaceName.trim()
@@ -1622,6 +1626,7 @@ export function FirstRunSetupPane({
                 );
               })}
             </div>
+            {personality === 'custom' && <CustomCompanionPrompt value={customPrompt} onChange={setCustomPrompt} disabled={busy} />}
           </div>
 
 </>}

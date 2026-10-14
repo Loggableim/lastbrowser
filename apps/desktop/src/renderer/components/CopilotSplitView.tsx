@@ -34,6 +34,7 @@ import { RichTextRenderer } from '../NativeRichText.js';
 import { AiFeedbackModal } from './AiFeedbackModal.js';
 import { TeamworkProcessCard, type TeamworkMetadata } from './TeamworkProcessCard.js';
 import { SmartTrackProcessCard } from './SmartTrackProcessCard.js';
+import './copilot-quick-actions.css';
 import type { QuickActionChip } from '../quick-actions.js';
 import {
   WORKFLOW_TEMPLATES,
@@ -41,7 +42,7 @@ import {
   type AgenticWorkflowTemplate
 } from '../workflow-templates.js';
 import type { ScopedModelSelection } from '../independent-contracts.js';
-import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
+import { isCustomCompanionPromptValid, messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
 import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
@@ -791,7 +792,7 @@ export function CopilotSplitView({
         <div ref={companionPickerRef} style={{ position: 'relative' }}>
         <button type="button" className="copilot-header-brand" ref={companionTriggerRef} aria-label="Space-Persönlichkeit wechseln" aria-haspopup="dialog" aria-expanded={companionPickerOpen}
           style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}
-          onClick={() => { setCompanionDraft({ personality: companion.personality, botName: companion.botName }); setCompanionPickerOpen(current => !current); }}>
+          onClick={() => { setCompanionDraft({ personality: companion.personality, botName: companion.botName, customPrompt: companion.customPrompt }); setCompanionPickerOpen(current => !current); }}>
           <div className="copilot-logo-circle">
             <img src={companion.avatar} alt="" className="copilot-header-avatar" draggable={false} />
           </div>
@@ -804,7 +805,7 @@ export function CopilotSplitView({
           {companion.error && <button type="button" onClick={companion.retry}>{locale.startsWith('de') ? 'Erneut laden' : 'Reload'}</button>}
           {!companion.loaded && !companion.error && <p role="status">Wird geladen …</p>}
           <div className="native-card-actions">
-            <button type="button" disabled={!companion.loaded || companion.busy} onClick={async () => { if (await companion.setSelection(companionDraft.personality, companionDraft.botName)) { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } }}>Speichern</button>
+            <button type="button" disabled={!companion.loaded || companion.busy || (companionDraft.personality === 'custom' && !isCustomCompanionPromptValid(companionDraft.customPrompt))} onClick={async () => { if (await companion.setSelection(companionDraft.personality, companionDraft.botName, companionDraft.customPrompt)) { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } }}>Speichern</button>
             <button type="button" onClick={() => { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); }}>Abbrechen</button>
           </div>
         </section>}
@@ -1084,19 +1085,25 @@ export function CopilotSplitView({
             <span className="copilot-quick-chat-label">{companionName} · {t('copilot.quickChat')}</span>
 
             {quickActions && quickActions.length > 0 && (
-              <div className="copilot-starter-chips">
+              <section className="copilot-page-shortcuts" aria-label="Fragen zur aktuellen Seite">
+                <div className="copilot-page-shortcuts-heading"><FileText size={14} aria-hidden="true" /><span>Aktuelle Seite</span></div>
+                <div className="copilot-starter-chips">
                 {quickActions.map((chip) => (
                   <button
                     key={chip.id}
                     type="button"
                     className="copilot-starter-chip"
+                    title={chip.tooltip}
+                    disabled={!onExecuteQuickAction}
                     onClick={() => onExecuteQuickAction?.(chip)}
                   >
-                    <span>{chip.icon}</span>
+                    {chip.id !== 'tldr' && <span aria-hidden="true">{chip.icon}</span>}
                     <span>{chip.label}</span>
                   </button>
                 ))}
-              </div>
+                </div>
+                <p className="copilot-page-shortcuts-note">Verwendet den verfügbaren Seiteninhalt.</p>
+              </section>
             )}
           </div>
         ) : (

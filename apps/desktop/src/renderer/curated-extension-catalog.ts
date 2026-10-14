@@ -1,0 +1,332 @@
+/** Curated product metadata; no LastBrowser compatibility or security certification. */
+export type CuratedExtension = { id:string; name:string; category:string; cwsId:string; author:string; homepageUrl:string; storeUrl?:string; description:string; descriptionDe:string };
+export const CURATED_EXTENSION_CATALOG: readonly CuratedExtension[] = [
+  {
+    "id": "ublock-origin-lite",
+    "name": "uBlock Origin Lite",
+    "category": "privacy",
+    "cwsId": "ddkjiahejlhfcafbddmgiahcphecmpfh",
+    "author": "Raymond Hill",
+    "homepageUrl": "https://github.com/gorhill/uBlock",
+    "storeUrl": "https://chromewebstore.google.com/detail/ddkjiahejlhfcafbddmgiahcphecmpfh",
+    "description": "Blocks ads and trackers using declarative rules.",
+    "descriptionDe": "Blockiert Werbung und Tracker mit deklarativen Regeln."
+  },
+  {
+    "id": "adguard",
+    "name": "AdGuard AdBlocker",
+    "category": "privacy",
+    "cwsId": "bgnkhhnnamicmpeenaelnjfhikgbkllg",
+    "author": "Adguard Software Ltd.",
+    "homepageUrl": "https://adguard.com/",
+    "storeUrl": "https://chromewebstore.google.com/detail/bgnkhhnnamicmpeenaelnjfhikgbkllg",
+    "description": "Filters ads and tracking with configurable lists.",
+    "descriptionDe": "Filtert Werbung und Tracking mit anpassbaren Listen."
+  },
+  {
+    "id": "privacy-badger",
+    "name": "Privacy Badger",
+    "category": "privacy",
+    "cwsId": "pkehgijcmpdhfbdbbnkijodmdjhbjlgp",
+    "author": "Electronic Frontier Foundation",
+    "homepageUrl": "https://privacybadger.org/",
+    "storeUrl": "https://chromewebstore.google.com/detail/pkehgijcmpdhfbdbbnkijodmdjhbjlgp",
+    "description": "Blocks tracking and sends privacy preference signals.",
+    "descriptionDe": "Blockiert Tracking und sendet Datenschutzeinstellungen."
+  },
+  {
+    "id": "duckduckgo-tracker-protection",
+    "name": "DuckDuckGo Search & Tracker Protection",
+    "category": "privacy",
+    "cwsId": "bkdgflcldnnnapblkhphbgpggdiikppg",
+    "author": "Duck Duck Go, Inc.",
+    "homepageUrl": "https://duckduckgo.com/",
+    "storeUrl": "https://chromewebstore.google.com/detail/bkdgflcldnnnapblkhphbgpggdiikppg",
+    "description": "Private search and tracking protection; can change search defaults.",
+    "descriptionDe": "Private Suche und Trackerschutz; kann Suchvorgaben ändern."
+  },
+  {
+    "id": "disconnect",
+    "name": "Disconnect",
+    "category": "privacy",
+    "cwsId": "jeoacafpbcihiomhlakheieifhpjdfeo",
+    "author": "Disconnect, Inc.",
+    "homepageUrl": "https://disconnect.me/",
+    "storeUrl": "https://chromewebstore.google.com/detail/jeoacafpbcihiomhlakheieifhpjdfeo",
+    "description": "Shows and blocks third-party tracking requests.",
+    "descriptionDe": "Zeigt und blockiert Trackinganfragen von Drittanbietern."
+  },
+  {
+    "id": "clearurls",
+    "name": "ClearURLs",
+    "category": "privacy",
+    "cwsId": "",
+    "author": "ClearURLs project",
+    "homepageUrl": "https://github.com/ClearURLs/Addon",
+    "description": "Removes tracking parameters from links. Current official store listing unavailable.",
+    "descriptionDe": "Entfernt Trackingparameter aus Links. Aktuelles offizielles Storeangebot nicht verfügbar."
+  },
+  {
+    "id": "consent-o-matic",
+    "name": "Consent-O-Matic",
+    "category": "privacy",
+    "cwsId": "mdjildafknihdffpkfmmpnpoiajfjnjd",
+    "author": "CAVI · Aarhus University",
+    "homepageUrl": "https://github.com/cavi-au/Consent-O-Matic",
+    "storeUrl": "https://chromewebstore.google.com/detail/mdjildafknihdffpkfmmpnpoiajfjnjd",
+    "description": "Answers supported cookie banners using your privacy choices.",
+    "descriptionDe": "Beantwortet unterstützte Cookiebanner nach deinen Vorgaben."
+  },
+  {
+    "id": "cookie-autodelete",
+    "name": "Cookie AutoDelete",
+    "category": "privacy",
+    "cwsId": "fhcgjolkccmbidfldomjliifgaodjagh",
+    "author": "CAD Team",
+    "homepageUrl": "https://github.com/Cookie-AutoDelete/Cookie-AutoDelete",
+    "storeUrl": "https://chromewebstore.google.com/detail/fhcgjolkccmbidfldomjliifgaodjagh",
+    "description": "Removes cookies after tabs close, with exceptions you control.",
+    "descriptionDe": "Löscht Cookies nach dem Schließen von Tabs mit eigenen Ausnahmen."
+  },
+  {
+    "id": "localcdn",
+    "name": "LocalCDN",
+    "category": "privacy",
+    "cwsId": "",
+    "author": "LocalCDN project",
+    "homepageUrl": "https://www.localcdn.org/",
+    "description": "Replaces supported CDN resources locally. Official store listing unavailable.",
+    "descriptionDe": "Ersetzt unterstützte CDN-Ressourcen lokal. Offizielles Storeangebot nicht verfügbar."
+  },
+  {
+    "id": "jshelter",
+    "name": "JShelter",
+    "category": "privacy",
+    "cwsId": "ammoloihpcbognfddfjcljgembpibcmb",
+    "author": "JShelter project",
+    "homepageUrl": "https://jshelter.org/",
+    "storeUrl": "https://chromewebstore.google.com/detail/ammoloihpcbognfddfjcljgembpibcmb",
+    "description": "Limits JavaScript tracking surfaces; may affect websites.",
+    "descriptionDe": "Begrenzt Tracking über JavaScript; kann Webseiten beeinflussen."
+  },
+  {
+    "id": "bitwarden",
+    "name": "Bitwarden",
+    "category": "passwords",
+    "cwsId": "nngceckbapebfimnlniiiahkandclblb",
+    "author": "Bitwarden Inc.",
+    "homepageUrl": "https://bitwarden.com/",
+    "storeUrl": "https://chromewebstore.google.com/detail/nngceckbapebfimnlniiiahkandclblb",
+    "description": "Stores and fills passwords; requires your vault sign-in.",
+    "descriptionDe": "Speichert und füllt Passwörter; benötigt deinen Tresorlogin."
+  },
+  {
+    "id": "proton-pass",
+    "name": "Proton Pass",
+    "category": "passwords",
+    "cwsId": "ghmbeldphafepmbegfdlkpapadhbakde",
+    "author": "Proton AG",
+    "homepageUrl": "https://proton.me/pass",
+    "storeUrl": "https://chromewebstore.google.com/detail/ghmbeldphafepmbegfdlkpapadhbakde",
+    "description": "Password management and email aliases with a Proton account.",
+    "descriptionDe": "Passwortverwaltung und E-Mail-Aliase mit Protonkonto."
+  },
+  {
+    "id": "keepassxc-browser",
+    "name": "KeePassXC Browser",
+    "category": "passwords",
+    "cwsId": "oboonakemofpalcgghocfoadofidjkkk",
+    "author": "KeePassXC team",
+    "homepageUrl": "https://keepassxc.org/",
+    "storeUrl": "https://chromewebstore.google.com/detail/oboonakemofpalcgghocfoadofidjkkk",
+    "description": "Connects to your KeePassXC desktop vault; native integration required.",
+    "descriptionDe": "Verbindet den KeePassXC-Desktoptresor; native Integration nötig."
+  },
+  {
+    "id": "1password",
+    "name": "1Password",
+    "category": "passwords",
+    "cwsId": "aeblfdkhhhdcdjpifhhbdiojplfjncoa",
+    "author": "1Password",
+    "homepageUrl": "https://1password.com/downloads/browser-extension",
+    "storeUrl": "https://chromewebstore.google.com/detail/aeblfdkhhhdcdjpifhhbdiojplfjncoa",
+    "description": "Fills credentials and passkeys; requires a 1Password account.",
+    "descriptionDe": "Füllt Zugangsdaten und Passkeys; benötigt ein 1Password-Konto."
+  },
+  {
+    "id": "authenticator",
+    "name": "Authenticator",
+    "category": "passwords",
+    "cwsId": "bhghoamapcdpbohphigoooaddinpkbai",
+    "author": "Authenticator Extension",
+    "homepageUrl": "https://authenticator.cc/",
+    "storeUrl": "https://chromewebstore.google.com/detail/bhghoamapcdpbohphigoooaddinpkbai",
+    "description": "Generates two-factor codes; keep recovery backups separately.",
+    "descriptionDe": "Erzeugt Zwei-Faktor-Codes; Wiederherstellung separat sichern."
+  },
+  {
+    "id": "mailvelope",
+    "name": "Mailvelope",
+    "category": "research",
+    "cwsId": "kajibbejlbohfaggdiogboambcijhkke",
+    "author": "Mailvelope GmbH",
+    "homepageUrl": "https://mailvelope.com/",
+    "storeUrl": "https://chromewebstore.google.com/detail/kajibbejlbohfaggdiogboambcijhkke",
+    "description": "Encrypts supported webmail using OpenPGP.",
+    "descriptionDe": "Verschlüsselt unterstütztes Webmail mit OpenPGP."
+  },
+  {
+    "id": "flowcrypt",
+    "name": "FlowCrypt",
+    "category": "research",
+    "cwsId": "bnjglocicdkmhmoohhfkfkbbkejdhdgc",
+    "author": "FlowCrypt",
+    "homepageUrl": "https://flowcrypt.com/",
+    "storeUrl": "https://chromewebstore.google.com/detail/bnjglocicdkmhmoohhfkfkbbkejdhdgc",
+    "description": "Adds OpenPGP encryption to Gmail.",
+    "descriptionDe": "Ergänzt OpenPGP-Verschlüsselung in Gmail."
+  },
+  {
+    "id": "simplelogin",
+    "name": "SimpleLogin",
+    "category": "privacy",
+    "cwsId": "dphilobhebphkdjbpfohgikllaljmgbn",
+    "author": "Proton AG",
+    "homepageUrl": "https://simplelogin.io/",
+    "storeUrl": "https://chromewebstore.google.com/detail/dphilobhebphkdjbpfohgikllaljmgbn",
+    "description": "Creates email aliases through your SimpleLogin account.",
+    "descriptionDe": "Erstellt E-Mail-Aliase über dein SimpleLogin-Konto."
+  },
+  {
+    "id": "addyio",
+    "name": "addy.io",
+    "category": "privacy",
+    "cwsId": "iadbdpnoknmbdeolbapdackdcogdmjpe",
+    "author": "addy.io",
+    "homepageUrl": "https://addy.io/",
+    "storeUrl": "https://chromewebstore.google.com/detail/iadbdpnoknmbdeolbapdackdcogdmjpe",
+    "description": "Creates and manages email aliases; account required.",
+    "descriptionDe": "Erstellt und verwaltet E-Mail-Aliase; Konto erforderlich."
+  },
+  {
+    "id": "onetab",
+    "name": "OneTab",
+    "category": "productivity",
+    "cwsId": "chphlpgkkbolifaimnlloiipkdnihall",
+    "author": "OneTab Ltd.",
+    "homepageUrl": "https://www.one-tab.com/",
+    "storeUrl": "https://chromewebstore.google.com/detail/chphlpgkkbolifaimnlloiipkdnihall",
+    "description": "Collects open tabs into restorable lists.",
+    "descriptionDe": "Sammelt offene Tabs in wiederherstellbaren Listen."
+  },
+  {
+    "id": "tab-session-manager",
+    "name": "Tab Session Manager",
+    "category": "productivity",
+    "cwsId": "iaiomicjabeggjcfkbimgmglanimpnae",
+    "author": "sienori",
+    "homepageUrl": "https://tab-session-manager.sienori.com/",
+    "storeUrl": "https://chromewebstore.google.com/detail/iaiomicjabeggjcfkbimgmglanimpnae",
+    "description": "Saves and restores groups of tabs and windows.",
+    "descriptionDe": "Speichert und stellt Gruppen von Tabs und Fenstern wieder her."
+  },
+  {
+    "id": "todoist",
+    "name": "Todoist",
+    "category": "productivity",
+    "cwsId": "jldhpllghnbhlbpcmnajkpdmadaolakh",
+    "author": "Doist",
+    "homepageUrl": "https://todoist.com/",
+    "storeUrl": "https://chromewebstore.google.com/detail/jldhpllghnbhlbpcmnajkpdmadaolakh",
+    "description": "Captures tasks from websites; Todoist account required.",
+    "descriptionDe": "Übernimmt Aufgaben aus Webseiten; Todoist-Konto erforderlich."
+  },
+  {
+    "id": "raindrop",
+    "name": "Raindrop.io",
+    "category": "research",
+    "cwsId": "ldgfbffkinooeloadekpmfoklnobpien",
+    "author": "Raindrop.io",
+    "homepageUrl": "https://raindrop.io/",
+    "storeUrl": "https://chromewebstore.google.com/detail/ldgfbffkinooeloadekpmfoklnobpien",
+    "description": "Saves bookmarks into searchable collections.",
+    "descriptionDe": "Speichert Lesezeichen in durchsuchbaren Sammlungen."
+  },
+  {
+    "id": "zotero",
+    "name": "Zotero Connector",
+    "category": "research",
+    "cwsId": "ekhagklcjbdpajgpjgmbionohlpdbjgc",
+    "author": "Corporation for Digital Scholarship",
+    "homepageUrl": "https://www.zotero.org/",
+    "storeUrl": "https://chromewebstore.google.com/detail/ekhagklcjbdpajgpjgmbionohlpdbjgc",
+    "description": "Captures research references; works with Zotero.",
+    "descriptionDe": "Erfasst Literaturquellen und arbeitet mit Zotero."
+  },
+  {
+    "id": "dark-reader",
+    "name": "Dark Reader",
+    "category": "design",
+    "cwsId": "eimadpbcbfnmbkopoojfekhnkhdbieeh",
+    "author": "Dark Reader Ltd.",
+    "homepageUrl": "https://darkreader.org/",
+    "storeUrl": "https://chromewebstore.google.com/detail/eimadpbcbfnmbkopoojfekhnkhdbieeh",
+    "description": "Adjusts website contrast and dark appearance.",
+    "descriptionDe": "Passt Webseitenkontrast und dunkle Darstellung an."
+  },
+  {
+    "id": "stylus",
+    "name": "Stylus",
+    "category": "design",
+    "cwsId": "clngdbkpkpeebahjckkjfobafhncgmne",
+    "author": "Stylus team",
+    "homepageUrl": "https://github.com/openstyles/stylus",
+    "storeUrl": "https://chromewebstore.google.com/detail/clngdbkpkpeebahjckkjfobafhncgmne",
+    "description": "Applies user styles to websites; review styles you install.",
+    "descriptionDe": "Wendet eigene Webseitenstile an; installierte Stile prüfen."
+  },
+  {
+    "id": "languagetool",
+    "name": "LanguageTool",
+    "category": "language",
+    "cwsId": "oldceeleldhonbafppcapldpdifcinji",
+    "author": "LanguageTooler GmbH",
+    "homepageUrl": "https://languagetool.org/",
+    "storeUrl": "https://chromewebstore.google.com/detail/oldceeleldhonbafppcapldpdifcinji",
+    "description": "Checks spelling and writing; provider may process entered text.",
+    "descriptionDe": "Prüft Rechtschreibung und Texte; Anbieter kann Eingaben verarbeiten."
+  },
+  {
+    "id": "react-devtools",
+    "name": "React Developer Tools",
+    "category": "developer",
+    "cwsId": "fmkadmapgofadopljbjfkapdkoienihi",
+    "author": "Meta",
+    "homepageUrl": "https://react.dev/learn/react-developer-tools",
+    "storeUrl": "https://chromewebstore.google.com/detail/fmkadmapgofadopljbjfkapdkoienihi",
+    "description": "Inspects React components through developer tools.",
+    "descriptionDe": "Untersucht React-Komponenten über Entwicklertools."
+  },
+  {
+    "id": "violentmonkey",
+    "name": "Violentmonkey",
+    "category": "developer",
+    "cwsId": "jinjaccalgkegednnccohejagnlnfdag",
+    "author": "Violentmonkey team",
+    "homepageUrl": "https://violentmonkey.github.io/",
+    "storeUrl": "https://chromewebstore.google.com/detail/jinjaccalgkegednnccohejagnlnfdag",
+    "description": "Manages user scripts; only run scripts you trust.",
+    "descriptionDe": "Verwaltet Userscripts; nur vertrauenswürdige Skripte ausführen."
+  },
+  {
+    "id": "sponsorblock",
+    "name": "SponsorBlock",
+    "category": "media",
+    "cwsId": "mnjggcdmjocbbbhaepdhchncahnbgone",
+    "author": "Ajay Ramachandran",
+    "homepageUrl": "https://sponsor.ajay.app/",
+    "storeUrl": "https://chromewebstore.google.com/detail/mnjggcdmjocbbbhaepdhchncahnbgone",
+    "description": "Skips community-marked video segments using its external service.",
+    "descriptionDe": "Überspringt markierte Videosegmente über einen externen Dienst."
+  }
+];

@@ -3451,12 +3451,12 @@ function AppContent(): JSX.Element {
     }
   }
 
-  async function readCapturedSpaceModelSelection(context: { profileId: string; spacePath: string; backendProfileName?: string | null }) {
+  async function readCapturedSpaceModelSelection(context: { profileId: string; spacePath: string; backendProfileName?: string | null }, includeCatalog = true) {
     const resolved = await assistantController.resolveScope({ browserProfileId: context.profileId, workspacePath: context.spacePath || null },
       context.backendProfileName ?? activeBackendProfileNameRef.current ?? undefined);
     if (!resolved.ok) throw new Error(resolved.error.message);
     const selection = await assistantController.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
-      payload: { action: 'get', includeCatalog: true } });
+      payload: includeCatalog ? { action: 'get', includeCatalog: true } : { action: 'get', includeCatalog: false } });
     if (!selection.ok) throw new Error(selection.error.message);
     return { ...selection.value, scope: resolved.value.scope };
   }
@@ -4311,7 +4311,9 @@ function AppContent(): JSX.Element {
 
     let chatModelSelection: Awaited<ReturnType<typeof readCapturedSpaceModelSelection>>;
     try {
-      chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName });
+      // The saved Space model is enough to address the turn. A full catalog
+      // probe rediscovers every provider and held the send for several seconds.
+      chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName }, false);
     } catch (error) {
       if (submission && preflightStopRequestedSubmissionRef.current === submission) {
         submission.stoppedBeforeAcceptance = true;

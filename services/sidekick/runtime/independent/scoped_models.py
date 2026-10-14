@@ -28,7 +28,7 @@ NATIVE_AVAILABILITY_REASONS = frozenset({
     "independent_unsupported", "context_missing", "cloud_denied", "binding_mismatch",
 })
 
-_CATALOG_REUSE_SECONDS = 5.0
+_CATALOG_REUSE_SECONDS = 60.0
 _CATALOG_SETUP_LOCK = threading.Lock()
 
 

@@ -13449,6 +13449,13 @@ def _handle_chat_start(handler, body, diag=None):
             return bad(handler, "message is required")
         diag.stage("normalize_attachments") if diag else None
         attachments = _normalize_chat_attachments(body.get("attachments") or [])[:20]
+        from web.api.fast_opencode_chat import try_start_fast_opencode_chat
+
+        fast_response = try_start_fast_opencode_chat(handler, s, msg, attachments, body)
+        if fast_response is not None:
+            status = int(fast_response.pop("_status", 200) or 200)
+            diag.stage("fast_opencode_response") if diag else None
+            return j(handler, fast_response, status=status)
         diag.stage("resolve_workspace") if diag else None
         try:
             workspace = str(resolve_trusted_workspace(body.get("workspace") or s.workspace))

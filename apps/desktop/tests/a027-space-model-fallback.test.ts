@@ -1,78 +1,51 @@
+import { describe, expect, it, vi, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { createElement } from 'react';
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
-import { chooseActiveModel, setModelActive } from '../src/renderer/active-model-selection.js';
-import { CopilotSplitView } from '../src/renderer/components/CopilotSplitView.js';
-import { DesktopI18nProvider } from '../src/renderer/i18n.js';
-import { acceptQuickChatModelChoice } from '../src/renderer/quick-chat-model-choice.js';
-import { resolvePreferredChatModelSelection } from '../src/renderer/provider-model-selection.js';
+import { readQuickchatFavoriteState, setQuickchatFavorite } from '../src/renderer/quickchat-preferences.js';
 import { loadSpaceModelSelection, saveSpaceModel } from '../src/renderer/space-models.js';
 
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
-  return {
-    getItem: key => values.get(key) ?? null,
-    setItem: (key, value) => { values.set(key, value); },
-    removeItem: key => { values.delete(key); },
-    clear: () => { values.clear(); },
-    key: index => Array.from(values.keys())[index] ?? null,
-    get length() { return values.size; },
-  };
+  return { getItem: key => values.get(key) ?? null, setItem: (key, value) => { values.set(key, value); },
+    removeItem: key => { values.delete(key); }, clear: () => values.clear(), key: index => Array.from(values.keys())[index] ?? null,
+    get length() { return values.size; } };
 }
+afterEach(() => vi.unstubAllGlobals());
 
-describe('A-027 saved Space model fallback through App and Copilot', () => {
-  it('shows active B after disabled A falls back, remains B on rerender and reopen', () => {
+describe('Quickchat selection isolated from normal Space models', () => {
+  it('persists only the explicit favorite while keeping the normal Space selection unchanged', () => {
+    const storage = memoryStorage(), dispatchEvent = vi.fn();
+    vi.stubGlobal('window', { localStorage: storage, dispatchEvent });
+    const scope = { browserProfileId: 'browser-a', workspacePath: 'space-a', backendProfileName: 'personal' };
+    saveSpaceModel('space-a', 'main-model', storage, 'main-provider');
+    setQuickchatFavorite(scope, { model: 'quick-model', provider: 'quick-provider' });
+    expect(readQuickchatFavoriteState(scope)).toEqual({ favorite: { model: 'quick-model', provider: 'quick-provider' }, invalid: false });
+    expect(loadSpaceModelSelection('space-a', storage)).toEqual({ model: 'main-model', provider: 'main-provider' });
+    expect(readQuickchatFavoriteState({ ...scope, workspacePath: 'space-b' }).favorite).toBeNull();
+    expect(readQuickchatFavoriteState({ ...scope, browserProfileId: 'browser-b' }).favorite).toBeNull();
+    expect(readQuickchatFavoriteState({ ...scope, backendProfileName: 'other' }).favorite).toBeNull();
+    setQuickchatFavorite(scope, null);
+    expect(readQuickchatFavoriteState(scope)).toEqual({ favorite: null, invalid: false });
+    expect(loadSpaceModelSelection('space-a', storage)).toEqual({ model: 'main-model', provider: 'main-provider' });
+    expect(dispatchEvent).toHaveBeenCalledTimes(2);
+  });
+  it('treats a malformed present favorite as invalid until the user explicitly chooses Auto', () => {
     const storage = memoryStorage();
-    const spacePath = 'C:/work/space-a';
-    const scope = { browserProfileId: 'browser-a', backendProfileName: 'personal' };
-    const catalog = [{ id: 'model-a', providerId: 'provider-a' }, { id: 'model-b', providerId: 'provider-a' }];
-    let selectedModel = 'model-a';
-    let selectedProvider = 'provider-a';
-
-    // App gives a saved Space choice priority over the Chat store when it renders Copilot.
-    const appSelection = () => resolvePreferredChatModelSelection({
-      spaceSelection: loadSpaceModelSelection(spacePath, storage),
-      selectedModel, selectedModelProvider: selectedProvider,
-    });
-    const copilotChoice = () => chooseActiveModel(catalog, appSelection(), storage, scope);
-    saveSpaceModel(spacePath, 'model-a', storage, 'provider-a');
-    setModelActive(storage, scope, 'provider-a', 'model-a', false);
-    expect(appSelection()).toMatchObject({ model: 'model-a', provider: 'provider-a' });
-    expect(copilotChoice()).toEqual({ choice: catalog[1], changed: true });
-
-    // Copilot's fallback calls App's picker callback with B.
-    const fallback = copilotChoice().choice!;
-    expect(acceptQuickChatModelChoice({ storage, ...scope, spacePath, model: fallback.id, provider: fallback.providerId,
-      allowMultiAgent: false, setSelectedModel: value => { selectedModel = value; },
-      setSelectedModelProvider: value => { selectedProvider = value; } })).toBe(true);
-
-    expect(loadSpaceModelSelection(spacePath, storage)).toEqual({ model: 'model-b', provider: 'provider-a' });
-    vi.stubGlobal('window', { localStorage: storage });
-    vi.stubGlobal('navigator', { language: 'en-US' });
-    try {
-      for (let render = 0; render < 2; render += 1) {
-        const selection = appSelection();
-        expect(selection).toMatchObject({ model: 'model-b', provider: 'provider-a' });
-        expect(copilotChoice()).toEqual({ choice: catalog[1], changed: false });
-        const html = renderToStaticMarkup(createElement(DesktopI18nProvider, null,
-          createElement(CopilotSplitView, { isOpen: true, onClose: () => {},
-            modelName: selection.model, modelProvider: selection.provider,
-            messages: [], busy: false, onSendMessage: () => {},
-            browserProfileId: scope.browserProfileId, workspacePath: spacePath,
-            backendProfileName: scope.backendProfileName })));
-        expect(html).toContain('class="copilot-header-model-name">model-b</span>');
-        expect(html).not.toContain('class="copilot-header-model-name">model-a</span>');
-      }
-    } finally {
-      vi.unstubAllGlobals();
-    }
-
-    // Keep the integration route in place: the tested callback is invoked by App's Copilot prop.
-    const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
-    const copilot = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
-    expect(app).toContain('if (!acceptQuickChatModelChoice({ storage: window.localStorage,');
-    expect(copilot).toContain('onSelectModel?.(choice.choice.id, choice.choice.providerId);');
+    vi.stubGlobal('window', { localStorage: storage, dispatchEvent: vi.fn() });
+    const scope = { browserProfileId: 'browser-a', workspacePath: '', backendProfileName: 'personal' };
+    const key = 'lastbrowser.quickchat.favorite.v1:' + JSON.stringify(['browser-a', '', 'personal']);
+    storage.setItem(key, '{broken-json');
+    expect(readQuickchatFavoriteState(scope)).toEqual({ favorite: null, invalid: true });
+    setQuickchatFavorite(scope, null);
+    expect(readQuickchatFavoriteState(scope)).toEqual({ favorite: null, invalid: false });
+    expect(() => setQuickchatFavorite(scope, { provider: 'auto', model: 'auto' })).toThrow();
+  });
+  it('routes actual choices only through the scoped favorite callback and allows editing during a response', () => {
+    const copilot = readFileSync(new URL('../src/renderer/components/CopilotSplitView.tsx', import.meta.url), 'utf8');
+    expect(copilot).toContain('setQuickchatFavorite(favoriteScope, { provider: identity.provider, model: identity.model })');
+    expect(copilot).toContain('setQuickchatFavorite(favoriteScope, null)');
+    expect(copilot).not.toContain('setSelectedModel(');
+    expect(copilot).not.toContain('setSelectedModelProvider(');
+    expect(copilot).toContain('onSelectModel?.(identity.model, identity.provider)');
+    expect(copilot).toContain('(!busy && modelGateReason !== null)');
   });
 });

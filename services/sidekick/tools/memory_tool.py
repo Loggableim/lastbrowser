@@ -486,6 +486,9 @@ def memory_tool(
 
     Returns JSON string with results.
     """
+    from runtime.memory_policy import memory_enabled
+    if not memory_enabled():
+        return tool_error("Memory is disabled. Enable Memory & Knowledge in the Hub.", success=False)
     if store is None:
         return tool_error("Memory is not available. It may be disabled in config or this environment.", success=False)
 
@@ -516,8 +519,9 @@ def memory_tool(
 
 
 def check_memory_requirements() -> bool:
-    """Memory tool has no external requirements -- always available."""
-    return True
+    """Expose automatic memory tools only after explicit profile activation."""
+    from runtime.memory_policy import memory_enabled
+    return memory_enabled()
 
 
 # =============================================================================

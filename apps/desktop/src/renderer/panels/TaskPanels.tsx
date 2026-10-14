@@ -1,4 +1,4 @@
-import React, { FormEvent, useCallback, useEffect, useState } from 'react';
+import React, { FormEvent, useCallback, useContext, useEffect, useState } from 'react';
 import {
   CalendarDays,
   CheckCircle2,
@@ -16,6 +16,34 @@ import { canCallSidekickApi } from '../runtime-readiness.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { jsonPreview } from './NativeRestPanels.js';
 import type { DesktopChatMessage, DesktopSessionDetail } from '../shell-state.js';
+import { OptionalAiProfileContext, useOptionalAiPolicy } from '../optional-ai-policy.js';
+import { useDesktopI18n } from '../i18n.js';
+
+export function NativeTaskCenterMain(props: { initialSection: 'now' | 'scheduled' | 'board'; activeContextItem: string; activeSpacePath: string; activeSession: DesktopSessionDetail | null; messages: DesktopChatMessage[]; serviceStatus: ServiceStatus | null }): JSX.Element {
+  const { locale } = useDesktopI18n();
+  const profile = useContext(OptionalAiProfileContext);
+  return <ScopedTaskCenter key={`${profile || ''}::${props.activeSpacePath}`} {...props} locale={locale} />;
+}
+
+function ScopedTaskCenter({ initialSection, activeContextItem, activeSpacePath, activeSession, messages, serviceStatus, locale }: { initialSection: 'now' | 'scheduled' | 'board'; activeContextItem: string; activeSpacePath: string; activeSession: DesktopSessionDetail | null; messages: DesktopChatMessage[]; serviceStatus: ServiceStatus | null; locale: string }): JSX.Element {
+  const optional = useOptionalAiPolicy();
+  const [section, setSection] = useState(initialSection);
+  const de = locale === 'de';
+  const todoContext = ['Pending', 'In progress', 'Completed / cancelled'].includes(activeContextItem) ? activeContextItem : '';
+  const cronContext = ['Scheduled jobs', 'Active', 'Paused'].includes(activeContextItem) ? activeContextItem : '';
+  const boardContext = ['Board', 'Triage', 'Running', 'Done'].includes(activeContextItem) ? activeContextItem : '';
+  return <section className="browser-main native-work-main task-center-main">
+    <header className="native-work-header"><div><span className="eyebrow">{de ? 'Aufgaben' : 'Tasks'}</span><h1>{de ? 'Jetzt und geplant' : 'Now and scheduled'}</h1></div></header>
+    <div className="native-card-actions insights-tabs" role="tablist" aria-label={de ? 'Aufgaben' : 'Tasks'}>
+      <button type="button" role="tab" aria-selected={section === 'now'} onClick={() => setSection('now')}>{de ? 'Jetzt' : 'Now'}</button>
+      <button type="button" role="tab" aria-selected={section === 'scheduled'} onClick={() => setSection('scheduled')}>{de ? 'Geplant' : 'Scheduled'}</button>
+      {optional.loaded && optional.policy.kanban_enabled && <button type="button" role="tab" aria-selected={section === 'board'} onClick={() => setSection('board')}>Board · Beta</button>}
+    </div>
+    {section === 'now' && <NativeTodosMain activeContextItem={initialSection === 'now' ? todoContext : ''} activeSession={activeSession} messages={messages} serviceStatus={serviceStatus} />}
+    {section === 'scheduled' && <NativeTasksMain activeContextItem={initialSection === 'scheduled' ? cronContext : ''} serviceStatus={serviceStatus} />}
+    {section === 'board' && <NativeKanbanMain activeContextItem={initialSection === 'board' ? boardContext : ''} activeSpacePath={activeSpacePath} serviceStatus={serviceStatus} />}
+  </section>;
+}
 
 export type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type CronJobSummary = Awaited<ReturnType<typeof window.lastbrowser.sidekick.listCrons>>['jobs'][number];
@@ -111,7 +139,7 @@ export function NativeTasksMain({
   const [name, setName] = useState('');
   const [schedule, setSchedule] = useState('0 9 * * *');
   const [prompt, setPrompt] = useState('');
-  const [section, setSection] = useState(activeContextItem || 'Scheduled jobs');
+  const [section, setSection] = useState(activeContextItem === 'History' ? 'Scheduled jobs' : activeContextItem || 'Scheduled jobs');
   const [dispatchState, setDispatchState] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -146,7 +174,7 @@ export function NativeTasksMain({
   }, [refreshDispatchState]);
 
   useEffect(() => {
-    setSection(activeContextItem || 'Scheduled jobs');
+    setSection(activeContextItem === 'History' ? 'Scheduled jobs' : activeContextItem || 'Scheduled jobs');
   }, [activeContextItem]);
 
   const visibleJobs = jobs.filter((job) => {
@@ -222,7 +250,7 @@ export function NativeTasksMain({
         <div>
           <span className="eyebrow">Tasks</span>
           <h1>{section}</h1>
-          <p>Native port of the WebUI Tasks panel. Jobs use the existing Sidekick cron backend.</p>
+          <p>Wiederkehrende Aufgaben anlegen, pausieren und ausführen.</p>
         </div>
         <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
           {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
@@ -234,7 +262,7 @@ export function NativeTasksMain({
         </button>
       </header>
       <div className="native-card-actions insights-tabs">
-        {['Scheduled jobs', 'Active', 'Paused', 'History'].map((item) => (
+        {['Scheduled jobs', 'Active', 'Paused'].map((item) => (
           <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
         ))}
       </div>
@@ -312,6 +340,10 @@ export function NativeKanbanMain({
   activeSpacePath: string;
   serviceStatus: ServiceStatus | null;
 }): JSX.Element {
+  const optional = useOptionalAiPolicy();
+  const profile = useContext(OptionalAiProfileContext);
+  const { locale } = useDesktopI18n();
+  const mayEdit = !!profile && optional.loaded && optional.policy.kanban_enabled;
   const ready = canCallSidekickApi(serviceStatus);
   const [board, setBoard] = useState<KanbanBoardResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -323,10 +355,10 @@ export function NativeKanbanMain({
   const [dispatchState, setDispatchState] = useState<Record<string, unknown> | null>(null);
 
   const refresh = useCallback(async (): Promise<void> => {
-    if (!ready) return;
+    if (!ready || !profile) return;
     setLoading(true);
     try {
-      const result = await window.lastbrowser.sidekick.getKanbanBoard({ workspace: activeSpacePath || undefined });
+      const result = await window.lastbrowser.sidekick.getKanbanBoard({ workspace: activeSpacePath || undefined, workspacePath: activeSpacePath, profile });
       setBoard(result);
       setError('');
     } catch (loadError) {
@@ -334,7 +366,7 @@ export function NativeKanbanMain({
     } finally {
       setLoading(false);
     }
-  }, [activeSpacePath, ready]);
+  }, [activeSpacePath, profile, ready]);
 
   useEffect(() => {
     void refresh();
@@ -366,9 +398,10 @@ export function NativeKanbanMain({
 
   async function createTask(event: FormEvent): Promise<void> {
     event.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim() || !mayEdit || !profile) return;
     try {
       await window.lastbrowser.sidekick.createKanbanTask({
+        profile, workspacePath: activeSpacePath,
         title: title.trim(),
         body: body.trim(),
         status
@@ -382,9 +415,9 @@ export function NativeKanbanMain({
   }
 
   async function moveTask(task: KanbanTaskSummary, nextStatus: string): Promise<void> {
-    if (!task.id || !nextStatus) return;
+    if (!task.id || !nextStatus || !mayEdit || !profile) return;
     try {
-      await window.lastbrowser.sidekick.updateKanbanTask({ taskId: task.id, status: nextStatus });
+      await window.lastbrowser.sidekick.updateKanbanTask({ taskId: task.id, status: nextStatus, profile, workspacePath: activeSpacePath });
       await refresh();
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : String(updateError));
@@ -392,7 +425,7 @@ export function NativeKanbanMain({
   }
 
   async function runDispatcher(): Promise<void> {
-    if (!ready) return;
+    if (!ready || !mayEdit) return;
     await window.lastbrowser.sidekick.runDispatchOnce({ dryRun: false });
     await Promise.all([refresh(), refreshDispatchState()]);
   }
@@ -403,17 +436,18 @@ export function NativeKanbanMain({
         <div>
           <span className="eyebrow">Kanban</span>
           <h1>{section}</h1>
-          <p>{activeSpacePath ? workspaceLabel(activeSpacePath) : 'Default workspace'} · native board view backed by `/api/kanban`.</p>
+          <p>{activeSpacePath ? workspaceLabel(activeSpacePath) : 'Default workspace'} · Beta · {locale === 'de' ? 'unfertig / ungetestet' : 'unfinished / untested'}</p>
         </div>
         <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
           {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
           <span>Refresh</span>
         </button>
-        <button type="button" className="secondary-action compact" onClick={() => void runDispatcher()} disabled={!ready}>
+        <button type="button" className="secondary-action compact" onClick={() => void runDispatcher()} disabled={!ready || !mayEdit}>
           <Sparkles size={15} />
           <span>Run dispatcher</span>
         </button>
       </header>
+      {!mayEdit && <p role="status">{locale === 'de' ? 'Board deaktiviert. Gespeicherte Aufgaben bleiben lesbar. Zum Bearbeiten im Extension & Skill Hub aktivieren.' : 'Board disabled. Saved tasks remain readable. Enable it in the Extension & Skill Hub to edit.'}</p>}
       <div className="native-card-actions insights-tabs">
         {['Board', 'Triage', 'Running', 'Done'].map((item) => (
           <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
@@ -422,25 +456,24 @@ export function NativeKanbanMain({
       <form className="native-work-card kanban-task-form" onSubmit={(event) => void createTask(event)}>
         <label>
           <span>Title</span>
-          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="New task" />
+          <input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="New task" disabled={!mayEdit} />
         </label>
         <label>
           <span>Status</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value)}>
+          <select value={status} onChange={(event) => setStatus(event.target.value)} disabled={!mayEdit}>
             {columns.map((column) => <option key={column.name} value={column.name}>{kanbanColumnLabel(column.name)}</option>)}
           </select>
         </label>
         <label className="wide">
           <span>Description</span>
-          <textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Task details" rows={2} />
+          <textarea value={body} onChange={(event) => setBody(event.target.value)} placeholder="Task details" rows={2} disabled={!mayEdit} />
         </label>
-        <button type="submit" className="primary-action compact" disabled={!ready || !title.trim()}>
+        <button type="submit" className="primary-action compact" disabled={!ready || !title.trim() || !mayEdit}>
           <Plus size={15} />
           <span>Add task</span>
         </button>
       </form>
       {error && <div className="workspace-error">{error}</div>}
-      <AdvancedWebUiTools panel="kanban" serviceStatus={serviceStatus} compact />
       <section className="native-work-card detail-json-card">
         <header><strong>Dispatcher</strong></header>
         <pre>{jsonPreview(dispatchState || { active: [] })}</pre>
@@ -463,7 +496,7 @@ export function NativeKanbanMain({
                     {task.tenant && <span>{task.tenant}</span>}
                     {task.priority !== undefined && <span>P{String(task.priority)}</span>}
                   </div>
-                  <select value={task.status || column.name} onChange={(event) => void moveTask(task, event.target.value)}>
+                  <select value={task.status || column.name} onChange={(event) => void moveTask(task, event.target.value)} disabled={!mayEdit}>
                     {columns.map((target) => <option key={target.name} value={target.name}>{kanbanColumnLabel(target.name)}</option>)}
                   </select>
                 </article>

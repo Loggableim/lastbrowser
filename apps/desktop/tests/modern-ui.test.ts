@@ -54,7 +54,7 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
 
     expect(source).toContain('<ModernTitlebar');
     expect(source).toContain('<SidekickSidebar');
-    expect(source).toContain('<SpaceAssistantPanel');
+    expect(source).toContain('<NativeAssistantsMain');
     expect(source).toContain('browser-zen-workspace');
     expect(source).toContain('with-copilot-split');
     expect(source).toContain('browser-canvas-pane');
@@ -235,13 +235,13 @@ describe('Phase 9: Modern UI Redesign (Sidekick + Zen Browser Synthese)', () => 
   it('implements CopilotSplitView with formatting, code copy, and page-aware chat input', () => {
     const copilotSource = readRendererFile('components/CopilotSplitView.tsx');
 
-    expect(copilotSource).toContain("{botName} · {t('copilot.quickChat')}");
+    expect(copilotSource).toContain("{companionName} · {t('copilot.quickChat')}");
     expect(copilotSource).toContain('copilot-split-panel');
     expect(copilotSource).toContain('copilot-code-block');
     expect(copilotSource).toContain('copilot-code-copy-btn');
     expect(copilotSource).toContain('copilot-model-pill');
     expect(copilotSource).toContain('copilot-input-field');
-    expect(copilotSource).toContain('Ask about this page...');
+    expect(copilotSource).toContain("t('chat.composerPlaceholder')");
     expect(copilotSource).toContain('onSendMessage');
   });
 });

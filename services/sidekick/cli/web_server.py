@@ -1420,7 +1420,8 @@ async def host_header_middleware(request: Request, call_next):
     """
     # Store the bound host on app.state so this middleware can read it Ã¢â‚¬â€
     # set by start_server() at listen time.
-    bound_host = getattr(app.state, "bound_host", None)
+    # Integrated uvicorn startup can bypass start_server; stay loopback-only.
+    bound_host = getattr(app.state, "bound_host", "127.0.0.1")
     if bound_host:
         host_header = request.headers.get("host", "")
         if not _is_accepted_host(host_header, bound_host):
@@ -2573,17 +2574,28 @@ def _is_private_quickchat_session(row: Any) -> bool:
 def _bound_workspace_spaces(workspace_path: Path):
     from web.api import independent
     from web.api.profiles import get_active_profile_name
-    from runtime.independent.scope import same_path
+    from runtime.independent.scope import ScopeError, same_path
     if independent._hub is None:
         return []
     actor = str(get_active_profile_name() or "default")
-    store = independent._hub.get(actor)
+    try:
+        store = independent._hub.get(actor)
+    except ScopeError:
+        # A removed/unconfigured profile has no eligible native bindings. Do
+        # not turn an ordinary scoped session read into an internal error or
+        # substitute a different profile's bindings.
+        return []
     result = []
     for binding in store.list_bindings():
-        if not binding.workspace_locator or not same_path(binding.workspace_locator, workspace_path):
+        try:
+            if not binding.workspace_locator or not same_path(binding.workspace_locator, workspace_path):
+                continue
+            _, resolver = independent._hub.by_scope(binding.scope, actor)
+            resolved = resolver.resolve(binding.scope, authenticated_profile_name=actor)
+        except ScopeError:
+            # A stale locator or revoked binding is unavailable, not authority
+            # to inspect an alternative Space.
             continue
-        _, resolver = independent._hub.by_scope(binding.scope, actor)
-        resolved = resolver.resolve(binding.scope, authenticated_profile_name=actor)
         result.append((binding, resolved.space_root, actor))
     return result
 

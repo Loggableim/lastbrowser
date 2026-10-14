@@ -15,7 +15,7 @@ describe('AgentPanels localization wiring', () => {
       expect(start, `${component} exists`).toBeGreaterThanOrEqual(0);
       const nextComponent = source.indexOf('\nexport function ', start + 1);
       const body = source.slice(start, nextComponent < 0 ? undefined : nextComponent);
-      expect(body, `${component} uses translated copy`).toMatch(/const \{ t \} = useDesktopI18n\(\);/);
+      expect(body, `${component} uses translated copy`).toMatch(/const \{[^}]*\bt\b[^}]*\} = useDesktopI18n\(\);/);
     }
   });
 

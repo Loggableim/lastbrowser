@@ -40,7 +40,7 @@ def test_late_provider_return_respects_cancel_before_persistence(cancelled):
         posonlyargs=[], args=[ast.arg(arg="cancel_event")], kwonlyargs=[],
         kw_defaults=[], defaults=[]), body=[*segment, sentinel], decorator_list=[])
     module = ast.fix_missing_locations(ast.Module(body=[probe], type_ignores=[]))
-    namespace = {}
+    namespace = {"_turn_companion": None, "agent": SimpleNamespace(_scoped_memory_injected=False)}
     exec(compile(module, str(source), "exec"), namespace)
     flag = Event()
     if cancelled:

@@ -85,6 +85,7 @@ include-package-data = true
 py-modules = ["run_agent", "sidekick_constants", "bootstrap", "model_tools", "toolsets"]
 
 [tool.setuptools.package-data]
+"runtime.local_ai" = ["*.json"]
 web = ["static/*", "static/**/*"]
 providers = ["bundled/*", "bundled/**/*"]
 nova = ["*.json"]

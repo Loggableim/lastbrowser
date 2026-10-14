@@ -105,13 +105,17 @@ describe('A-027 release model choices', () => {
 
     const app = readFileSync(path.resolve(process.cwd(), 'src/renderer/App.tsx'), 'utf8');
     expect(app).toContain('context.backendProfileName ?? activeBackendProfileNameRef.current ?? undefined');
-    expect(app).toContain('backendProfileName });');
+    expect(app).toContain('const context = { profileId: activeProfileIdRef.current, spacePath: activeSpacePathRef.current || \'\', backendProfileName: activeBackendProfileNameRef.current };');
+    expect(app).toContain('const promise = readCapturedSpaceModelSelection(context).then(selection => {');
+    expect(app).toContain("key !== quickChatPreparationKey()) throw new Error('Quickchat scope changed during preparation.')");
     expect(app).not.toContain("reason === 'model_inactive') setChatError(t('settings.panels.providers.activeModelFallback'))");
     expect(app).toContain("reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'))");
     const composer = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8');
-    expect(composer).toContain('await submitQuickChatDraft({ gate: draftGateRef.current, draft: inputText,');
-    expect(composer).toContain('current: () => ({ revision: draftRevisionRef.current, scope: draftScopeRef.current })');
-    expect(composer).toContain('setDraft: setInputText, send: () => onSendMessage(trimmed, effectiveReasoningEffort || undefined)');
+    expect(composer).toContain('const submission = gate.begin(inputText, draftRevisionRef.current, draftScope)');
+    expect(composer).toContain('if (!submission) return;');
+    expect(composer).toContain('const accepted = await onSendMessage(trimmed, effectiveReasoningEffort || undefined)');
+    expect(composer).toContain("accepted !== false && epoch === submissionEpoch.current && submission.revision === draftRevisionRef.current && submission.contextKey === draftScopeRef.current) setInputText('')");
+    expect(composer).toContain('gate.finish(submission)');
   });
 
   it('refuses a model disabled in Settings at the native send guard', () => {

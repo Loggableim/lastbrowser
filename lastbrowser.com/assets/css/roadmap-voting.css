@@ -1,0 +1,14 @@
+.roadmap-votable { position: relative; padding-inline-end: 82px !important; min-height: 42px; }
+.roadmap-votable li { margin-block: 12px; }
+.roadmap-upvote { position: absolute; inset-inline-end: 10px; top: 12px; min-width: 58px; min-height: 36px;
+  padding: 6px 10px; border: 1px solid currentColor; border-radius: 10px; background: transparent;
+  color: var(--accent, #7865d8); font: inherit; font-weight: 700; cursor: pointer; }
+li.roadmap-votable > .roadmap-upvote { top: 0; inset-inline-end: 0; }
+.roadmap-upvote[aria-pressed="true"] { background: #7160d8; color: #fff; }
+.roadmap-upvote:hover:not(:disabled) { box-shadow: 0 0 0 2px #8978e544; }
+.roadmap-upvote:focus-visible { outline: 3px solid #00a5c8; outline-offset: 3px; }
+.roadmap-upvote:disabled { opacity: .55; cursor: default; }
+.roadmap-voting-info { margin-block: 24px; padding: 18px; border: 1px solid #8978e555; border-radius: 14px; }
+.roadmap-voting-info p { margin-block: 6px; }
+[data-vote-status] { min-height: 1.5em; }
+@media (max-width: 480px) { .roadmap-votable { padding-inline-end: 70px !important; } }

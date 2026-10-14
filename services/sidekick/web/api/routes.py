@@ -3674,31 +3674,10 @@ def _build_insights_from_index(days: int) -> dict:
 
 
 def _handle_insights(handler, parsed) -> bool:
-    """Return usage analytics â€” prefers state.db, falls back to _index.json.
-
-    Payload shape matches what _renderInsights() expects in panels.js, with
-    extra metadata fields (data_source, window_type, cutoff_ts, warnings).
-    """
-    days = _normalize_insights_days(parsed)
-
-    # 1. Try state.db (primary data source)
-    try:
-        result = _build_insights_from_state_db(days)
-        if result is not None:
-            return j(handler, result)
-    except Exception:
-        logger.exception("_build_insights_from_state_db raised; falling back to _index.json")
-
-    # 2. Fallback to _index.json
-    try:
-        result = _build_insights_from_index(days)
-        return j(handler, result)
-    except Exception:
-        logger.exception("_build_insights_from_index also failed")
-        # Safe fallback â€” empty payload with error source flag.
-        payload = _empty_insights_payload(days, "error_fallback")
-        payload["warnings"] = ["Both analytics data sources failed. See logs for details."]
-        return j(handler, payload)
+    """Read observed analytics only from this authenticated backend profile."""
+    from runtime.memory_policy import profile_home
+    from web.api.insights_analytics import build_profile_insights
+    return j(handler, build_profile_insights(profile_home(), _normalize_insights_days(parsed)))
 
 
 # â”€â”€ GET routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -4552,6 +4531,11 @@ def _handle_analytics_usage(handler, parsed):
 
 def handle_get(handler, parsed) -> bool:
     """Handle all GET routes. Returns True if handled, False for 404."""
+    if parsed.path.startswith(("/api/mail/", "/api/gmail/", "/api/discord/")):
+        from runtime.memory_policy import read_policy
+        field = "discord_agents_enabled" if parsed.path.startswith("/api/discord/") else "gmail_ai_enabled"
+        if not read_policy()[field]:
+            return j(handler, {"error": "optional_integration_disabled_enable_in_hub"}, status=403)
 
     if parsed.path.startswith("/session/static/"):
         # Strip the leading "/session" so _serve_static() sees a path that
@@ -5985,8 +5969,11 @@ def handle_get(handler, parsed) -> bool:
         return j(handler, data)
 
     # â”€â”€ Memory API (GET) â”€â”€
+    if parsed.path == "/api/memory/policy":
+        from runtime.memory_policy import read_policy
+        return j(handler, read_policy())
     if parsed.path == "/api/memory":
-        return _handle_memory_read(handler)
+        return _handle_memory_read(handler, parsed)
     if parsed.path == "/api/memory/supermemory/status":
         return _handle_supermemory_status(handler)
     if parsed.path == "/api/memory/supermemory/list":
@@ -6707,6 +6694,11 @@ def _handle_cast_proxy(handler, endpoint: str, method: str = "GET"):
 
 def handle_post(handler, parsed) -> bool:
     """Handle all POST routes. Returns True if handled, False for 404."""
+    if parsed.path.startswith(("/api/mail/", "/api/gmail/", "/api/discord/")):
+        from runtime.memory_policy import read_policy
+        field = "discord_agents_enabled" if parsed.path.startswith("/api/discord/") else "gmail_ai_enabled"
+        if not read_policy()[field]:
+            return j(handler, {"error": "optional_integration_disabled_enable_in_hub"}, status=403)
     # DEBUG: echo header info at the start
     if parsed.path == '/debug/headers':
         import json as _j
@@ -8401,6 +8393,12 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
         return _handle_skill_disable(handler, body)
 
     # â”€â”€ Memory (POST) â”€â”€
+    if parsed.path == "/api/memory/policy":
+        from runtime.memory_policy import update_policy
+        try:
+            return j(handler, update_policy(body))
+        except (ValueError, PermissionError) as exc:
+            return bad(handler, str(exc))
     if parsed.path == "/api/memory/write":
         return _handle_memory_write(handler, body)
     if parsed.path == "/api/memory/supermemory/search":
@@ -8822,9 +8820,10 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             s.save(touch_updated_at=False)
         # Background: facts extrahieren wenn archiviert (nicht beim Ent-archivieren)
         if s.archived and s.messages:
+            from web.api.profiles import get_active_profile_name
             threading.Thread(
                 target=_async_extract_facts,
-                args=(sid,),
+                args=(sid, str(get_active_profile_name() or "default"), str(get_session_dir())),
                 daemon=True,
             ).start()
         return j(handler, {"ok": True, "session": s.compact(), **_worktree_retained_payload(s)})
@@ -9463,12 +9462,20 @@ def _handle_agents_get(handler, parsed):
 
 def _handle_agents_post(handler, parsed, body):
     """Handle POST /api/agents/... routes."""
+    from web.api.helpers import require, j, bad
+    from runtime.memory_policy import require_assistants
+    # Inspection, edits and stopping remain available; executions need opt-in.
+    route = parsed.path.rstrip("/")
+    if route.endswith(("/chat", "/process", "/command", "/activate")) or route == "/api/agents/splash/question":
+        try:
+            require_assistants()
+        except PermissionError as exc:
+            return j(handler, {"error": str(exc)}, status=403)
     from web.api.agents import (
         create_agent, activate_from_template, mark_splash_completed,
         set_agent_memory,
         get_agent, update_agent,
     )
-    from web.api.helpers import require, j, bad
 
     path = parsed.path.rstrip("/")
 
@@ -11586,19 +11593,38 @@ def _handle_cron_recent(handler, parsed):
         return j(handler, {"completions": [], "since": since})
 
 
-def _handle_memory_read(handler):
+def _memory_directory_for_request(handler, parsed=None, body=None):
+    """Use an explicit existing Space of this request profile; never last-used UI state."""
+    from runtime.memory_policy import profile_home
+    from web.api.space_engine import get_space, get_all_spaces
+    query = parse_qs(parsed.query or "") if parsed is not None else {}
+    raw = (query.get("workspace") or query.get("space") or [None])[0]
+    raw = raw or handler.headers.get("X-Sidekick-Workspace") or (body or {}).get("workspace")
+    if not raw:
+        return profile_home() / "memories"
+    if not isinstance(raw, str) or not raw.strip():
+        raise ValueError("invalid_memory_space")
+    raw = raw.strip()
+    if "/" not in raw and "\\" not in raw and ":" not in raw:
+        space = get_space(raw)
+        if space is not None:
+            return space.memory_dir
+    else:
+        target = os.path.normcase(os.path.realpath(raw))
+        matches = [space for space in get_all_spaces() if target in {
+            os.path.normcase(os.path.realpath(str(space.root))),
+            os.path.normcase(os.path.realpath(space.get_project_dir())) if space.get_project_dir() else None,
+        }]
+        if len(matches) == 1:
+            return matches[0].memory_dir
+    raise ValueError("memory_space_not_found_or_ambiguous")
+
+
+def _handle_memory_read(handler, parsed=None):
     try:
-        from web.api.space_engine import resolve_active_space
-
-        space = resolve_active_space()
-        mem_dir = space.memory_dir
-    except Exception:
-        try:
-            from web.api.profiles import get_active_profile_home
-
-            mem_dir = get_active_profile_home() / "memories"
-        except Exception:
-            mem_dir = get_webui_home() / "memories"
+        mem_dir = _memory_directory_for_request(handler, parsed)
+    except ValueError as exc:
+        return bad(handler, str(exc))
     mem_file = mem_dir / "MEMORY.md"
     user_file = mem_dir / "USER.md"
     memory = (
@@ -11664,6 +11690,9 @@ def _handle_supermemory_status(handler):
 
 def _handle_supermemory_search(handler, body):
     """POST /api/memory/supermemory/search"""
+    from runtime.memory_policy import memory_enabled
+    if not memory_enabled():
+        return j(handler, {"ok": False, "error": "memory_disabled_enable_in_hub", "results": [], "hits": []}, status=403)
     q = (body.get("q") or body.get("query") or "").strip()
     limit = int(body.get("limit", 10))
     container_tag = body.get("container_tag") or None
@@ -11711,6 +11740,9 @@ def _handle_supermemory_forget(handler, body):
 
 def _handle_supermemory_index(handler, body):
     """POST /api/memory/supermemory/index"""
+    from runtime.memory_policy import memory_enabled
+    if not memory_enabled():
+        return j(handler, {"ok": False, "error": "memory_disabled_enable_in_hub"}, status=403)
     try:
         from runtime.supermemory_engine import get_supermemory_engine
         engine = get_supermemory_engine()
@@ -11831,6 +11863,9 @@ def _handle_mcp_tool_call(handler, body):
 
 def _handle_hybrid_search(handler, body):
     """Search active local notes and documents in the local memory engine."""
+    from runtime.memory_policy import memory_enabled
+    if not memory_enabled():
+        return j(handler, {"ok": False, "error": "memory_disabled_enable_in_hub", "results": [], "hits": []}, status=403)
     if not isinstance(body, dict):
         return bad(handler, "Memory search request must be an object")
     query = body.get("query", body.get("q"))
@@ -11849,14 +11884,9 @@ def _handle_hybrid_search(handler, body):
         return bad(handler, "Limit must be a positive integer")
 
     try:
-        from web.api.space_engine import resolve_active_space
-        memory_dir = resolve_active_space().memory_dir
-    except Exception:
-        try:
-            from web.api.profiles import get_active_profile_home
-            memory_dir = get_active_profile_home() / "memories"
-        except Exception:
-            memory_dir = get_webui_home() / "memories"
+        memory_dir = _memory_directory_for_request(handler, body=body)
+    except ValueError as exc:
+        return bad(handler, str(exc))
 
     try:
         from runtime.supermemory_engine import get_supermemory_engine
@@ -12320,6 +12350,12 @@ def _start_chat_stream_for_session(
     confirmed_chat_profile=None,
 ):
     """Persist pending state, register an SSE channel, and start an agent turn."""
+    if getattr(s, "agent_slug", None) not in {None, "", "default"}:
+        from runtime.memory_policy import require_assistants
+        try:
+            require_assistants()
+        except PermissionError as exc:
+            return {"error": str(exc), "error_code": "assistants_disabled", "_status": 403}
     attachments = attachments or []
     quickchat = getattr(s, "session_kind", None) == "quickchat"
     if quickchat and goal_related:
@@ -13789,6 +13825,8 @@ def _handle_chat_sync(handler, body):
 
 
 def _handle_chat_sync_admitted(handler, body, s, msg, workspace, captured_space_profile):
+    from runtime.gateway.session_context import clear_session_vars, set_session_vars
+
     with _get_session_agent_lock(s.session_id):
         s.workspace = workspace
         from runtime.independent.chat_binding import mark_legacy_writer
@@ -13818,6 +13856,7 @@ def _handle_chat_sync_admitted(handler, body, s, msg, workspace, captured_space_
         os.environ["SIDEKICK_EXEC_ASK"] = "1"
         os.environ["SIDEKICK_SESSION_KEY"] = s.session_id
         os.environ["SIDEKICK_SESSION_KEY"] = s.session_id
+    _session_context_tokens = set_session_vars(platform="webui", session_key=s.session_id)
     try:
         from run_agent import AIAgent
 
@@ -13930,6 +13969,7 @@ def _handle_chat_sync_admitted(handler, body, s, msg, workspace, captured_space_
                 persist_user_message=msg,
             )
     finally:
+        clear_session_vars(_session_context_tokens)
         with _ENV_LOCK:
             if old_cwd is None:
                 os.environ.pop("TERMINAL_CWD", None)
@@ -14136,7 +14176,7 @@ def _game_mode_remote_extract_facts(messages, session_id: str, title: str = "") 
         return None
 
 
-def _async_extract_facts(sid: str) -> None:
+def _async_extract_facts(sid: str, profile_name: str, session_dir: str) -> None:
     """Background: extract facts from an archived session.
 
     Reads session messages, calls the local llama.cpp path or the
@@ -14147,9 +14187,20 @@ def _async_extract_facts(sid: str) -> None:
     try:
         from web.api.models import Session as _Session
         from web.api.space_engine import get_or_create_space as _get_or_create_space
-
+        from runtime.memory_policy import memory_enabled, cloud_enabled
+        from web.api.profiles import get_profile_home, set_request_profile
+        from web.api.config import set_session_dir
+        # Bind captured authority before session lookup; ambient global defaults
+        # can belong to a different profile by the time this worker starts.
+        set_request_profile(profile_name)
+        set_session_dir(session_dir)
+        owner_home = Path(get_profile_home(profile_name)).resolve()
+        if not memory_enabled(owner_home):
+            return
         s = _Session.load(sid)
         if not s or not s.messages:
+            return
+        if getattr(s, "profile", None) not in {None, profile_name}:
             return
 
         # Nur archivierte Sessions verarbeiten
@@ -14163,6 +14214,8 @@ def _async_extract_facts(sid: str) -> None:
             return
 
         if is_game_mode_enabled():
+            if not cloud_enabled(owner_home):
+                return
             block = _game_mode_remote_extract_facts(s.messages, sid, s.title or "")
             if not block:
                 logger.debug("_async_extract_facts: no remote facts extracted for %s", sid)
@@ -14192,6 +14245,8 @@ def _async_extract_facts(sid: str) -> None:
         if existing and not existing.endswith("\n"):
             existing += "\n"
         existing += block
+        if not memory_enabled(owner_home):
+            return
         mem_file.write_text(existing, encoding="utf-8")
         logger.info("_async_extract_facts: appended facts for session %s to MEMORY.md", sid)
 
@@ -14199,7 +14254,18 @@ def _async_extract_facts(sid: str) -> None:
         logger.debug("_async_extract_facts failed for %s: %s", sid, exc)
 
 
+def _tasks_mutation_allowed(handler):
+    """Tasks Hub consent is profile-owned; reads and saved jobs stay intact."""
+    from runtime.memory_policy import read_policy
+    if read_policy()["tasks_enabled"]:
+        return True
+    j(handler, {"ok": False, "error": "tasks_disabled_enable_in_hub"}, status=403)
+    return False
+
+
 def _handle_cron_create(handler, body):
+    if not _tasks_mutation_allowed(handler):
+        return
     try:
         require(body, "prompt", "schedule")
     except ValueError as e:
@@ -14230,6 +14296,8 @@ def _handle_cron_create(handler, body):
 
 
 def _handle_cron_update(handler, body):
+    if not _tasks_mutation_allowed(handler):
+        return
     try:
         require(body, "job_id")
     except ValueError as e:
@@ -14254,6 +14322,8 @@ def _handle_cron_update(handler, body):
 
 
 def _handle_cron_delete(handler, body):
+    if not _tasks_mutation_allowed(handler):
+        return
     try:
         require(body, "job_id")
     except ValueError as e:
@@ -14267,6 +14337,8 @@ def _handle_cron_delete(handler, body):
 
 
 def _handle_cron_run(handler, body):
+    if not _tasks_mutation_allowed(handler):
+        return
     job_id = body.get("job_id", "")
     if not job_id:
         return bad(handler, "job_id required")
@@ -14304,6 +14376,8 @@ def _handle_cron_run(handler, body):
 
 
 def _handle_cron_pause(handler, body):
+    if not _tasks_mutation_allowed(handler):
+        return
     job_id = body.get("job_id", "")
     if not job_id:
         return bad(handler, "job_id required")
@@ -14316,6 +14390,8 @@ def _handle_cron_pause(handler, body):
 
 
 def _handle_cron_resume(handler, body):
+    if not _tasks_mutation_allowed(handler):
+        return
     job_id = body.get("job_id", "")
     if not job_id:
         return bad(handler, "job_id required")
@@ -16003,14 +16079,9 @@ def _handle_memory_write(handler, body):
         return bad(handler, "content must be a string")
 
     try:
-        from web.api.space_engine import resolve_active_space
-        mem_dir = resolve_active_space().memory_dir
-    except Exception:
-        try:
-            from web.api.profiles import get_active_profile_home
-            mem_dir = get_active_profile_home() / "memories"
-        except Exception:
-            mem_dir = get_webui_home() / "memories"
+        mem_dir = _memory_directory_for_request(handler, body=body)
+    except ValueError as exc:
+        return bad(handler, str(exc))
     mem_dir.mkdir(parents=True, exist_ok=True)
     target = mem_dir / ("MEMORY.md" if section == "memory" else "USER.md")
     target.write_text(content, encoding="utf-8")

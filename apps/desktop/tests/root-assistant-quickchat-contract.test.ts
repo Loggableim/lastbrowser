@@ -153,7 +153,7 @@ describe('Assistant and Quickchat identity boundary', () => {
     const source = await import('node:fs/promises');
     const appSource = await source.readFile(new URL('../src/renderer/App.tsx', import.meta.url), 'utf8');
     expect(appSource).toContain('onToggleCopilot={handleQuickChatToolbarToggle}');
-    expect(appSource).toContain('toggleQuickChatFromToolbar({');
+    expect(appSource).toMatch(/const handleQuickChatToolbarToggle = \(\): void => \{\s*setQuickChatMode\(true\);\s*toggleCopilot\(\);\s*\}/);
   });
 
   it('keeps the Quickchat binding until acknowledged cleanup and prevents cross-scope transcript reuse', async () => {

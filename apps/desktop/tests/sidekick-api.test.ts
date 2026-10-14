@@ -57,6 +57,7 @@ import {
   getSettings,
   loginAccessPassword,
   clearAccessAuthCookie,
+  getAccessAuthCookie,
   setAccessAuthRequiredHandler,
   getSkillContent,
   getSupermemoryStatus,
@@ -690,7 +691,7 @@ describe('sidekick api client', () => {
     expect(JSON.parse(String(calls[2].init?.body))).toEqual({ status: 'done' });
   });
 
-  it('falls back to canonical columns when getKanbanBoard encounters an error', async () => {
+  it('reports the actual backend failure rather than fabricating a Kanban board', async () => {
     const fetchImpl = async () => {
       return new Response(JSON.stringify({ error: 'Internal server error' }), {
         status: 500,
@@ -698,15 +699,8 @@ describe('sidekick api client', () => {
       });
     };
 
-    const board = await getKanbanBoard('http://127.0.0.1:8787', { workspace: 'invalid' }, fetchImpl);
-    expect(board.columns.map((c) => c.name)).toEqual([
-      'triage',
-      'todo',
-      'ready',
-      'running',
-      'blocked',
-      'done'
-    ]);
+    await expect(getKanbanBoard('http://127.0.0.1:8787', { workspace: 'invalid' }, fetchImpl))
+      .rejects.toThrow('Internal server error');
   });
 
   it('renames, deletes, and duplicates sessions through native session commands', async () => {
@@ -1316,6 +1310,106 @@ describe('sidekick api client', () => {
 });
 
 describe('desktop access password bridge', () => {
+  it('aborts a hung login fetch at the total deadline without exposing request details', async () => {
+    vi.useFakeTimers();
+    clearAccessAuthCookie();
+    let signal: AbortSignal | undefined;
+    const fetchImpl = vi.fn(async (_url: string | URL, init?: RequestInit): Promise<Response> => {
+      signal = init?.signal as AbortSignal;
+      return new Promise(() => {});
+    });
+    try {
+      const request = loginAccessPassword('http://127.0.0.1:8787', 'private-password-value', fetchImpl);
+      const rejected = expect(request).rejects.toThrow(`Sidekick API request timed out after ${WEBUI_REQUEST_TIMEOUT_MS} ms.`);
+      await vi.advanceTimersByTimeAsync(WEBUI_REQUEST_TIMEOUT_MS);
+      await rejected;
+      expect(signal?.aborted).toBe(true);
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(getAccessAuthCookie()).toBeNull();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { clearAccessAuthCookie(); vi.useRealTimers(); }
+  });
+
+  it('includes a hung response body in the same login deadline and rejects a late cookie', async () => {
+    vi.useFakeTimers();
+    clearAccessAuthCookie();
+    let resolveBody!: (value: string) => void;
+    let signal: AbortSignal | undefined;
+    const response = new Response('', { status: 200, headers: { 'set-cookie': 'sidekick_session=late-body-session; HttpOnly' } });
+    vi.spyOn(response, 'text').mockImplementation(() => new Promise(resolve => { resolveBody = resolve; }));
+    try {
+      const request = loginAccessPassword('http://127.0.0.1:8787', 'private-password-value', async (_url, init) => {
+        signal = init?.signal as AbortSignal;
+        await new Promise(resolve => setTimeout(resolve, 12_000));
+        return response;
+      });
+      const rejected = expect(request).rejects.toThrow(`Sidekick API request timed out after ${WEBUI_REQUEST_TIMEOUT_MS} ms.`);
+      await vi.advanceTimersByTimeAsync(12_000);
+      expect(response.text).toHaveBeenCalledTimes(1);
+      expect(getAccessAuthCookie()).toBeNull();
+      await vi.advanceTimersByTimeAsync(WEBUI_REQUEST_TIMEOUT_MS - 12_000);
+      await rejected;
+      expect(signal?.aborted).toBe(true);
+      resolveBody('{"ok":true}');
+      await vi.advanceTimersByTimeAsync(0);
+      expect(getAccessAuthCookie()).toBeNull();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { clearAccessAuthCookie(); vi.useRealTimers(); }
+  });
+
+  it('ignores a fetch resolving after timeout without reading its body or replacing a newer session', async () => {
+    vi.useFakeTimers();
+    clearAccessAuthCookie();
+    let resolveFetch!: (response: Response) => void;
+    const late = new Response('{"ok":true}', { headers: { 'set-cookie': 'sidekick_session=late-fetch-session; HttpOnly' } });
+    const readLateBody = vi.spyOn(late, 'text');
+    try {
+      const request = loginAccessPassword('http://127.0.0.1:8787', 'private-password-value', async () => new Promise(resolve => { resolveFetch = resolve; }));
+      const rejected = expect(request).rejects.toThrow('timed out');
+      await vi.advanceTimersByTimeAsync(WEBUI_REQUEST_TIMEOUT_MS);
+      await rejected;
+      await loginAccessPassword('http://127.0.0.1:8787', 'private-password-value', async () => new Response('{"ok":true}', {
+        headers: { 'set-cookie': 'sidekick_session=newer-session; HttpOnly' }
+      }));
+      resolveFetch(late);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(readLateBody).not.toHaveBeenCalled();
+      expect(getAccessAuthCookie()).toBe('sidekick_session=newer-session');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { clearAccessAuthCookie(); vi.useRealTimers(); }
+  });
+
+  it('cleans up the login timer on success and captures the completed cookie', async () => {
+    vi.useFakeTimers();
+    clearAccessAuthCookie();
+    try {
+      await expect(loginAccessPassword('http://127.0.0.1:8787', 'test-password', async () => new Response('{"ok":true}', {
+        headers: { 'set-cookie': 'sidekick_session=completed-session; HttpOnly' }
+      }))).resolves.toEqual({ ok: true });
+      expect(getAccessAuthCookie()).toBe('sidekick_session=completed-session');
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { clearAccessAuthCookie(); vi.useRealTimers(); }
+  });
+
+  it.each(['fetch', 'body', 'http'] as const)('cleans up the login timer after a %s failure and redacts transport errors', async (failure) => {
+    vi.useFakeTimers();
+    clearAccessAuthCookie();
+    try {
+      const fetchImpl = vi.fn(async (): Promise<Response> => {
+        if (failure === 'fetch') throw new Error('http://private.invalid/?password=private-password-value');
+        const response = new Response('{"error":"Invalid password"}', { status: failure === 'http' ? 401 : 200 });
+        if (failure === 'body') vi.spyOn(response, 'text').mockRejectedValue(new Error('private-password-value http://private.invalid/'));
+        return response;
+      });
+      await expect(loginAccessPassword('http://127.0.0.1:8787', 'private-password-value', fetchImpl)).rejects.toThrow(
+        failure === 'http' ? 'Invalid password' : 'Sidekick API request failed.'
+      );
+      expect(fetchImpl).toHaveBeenCalledTimes(1);
+      expect(getAccessAuthCookie()).toBeNull();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { clearAccessAuthCookie(); vi.useRealTimers(); }
+  });
+
   it('keeps the HttpOnly login cookie in the main process for authenticated API calls', async () => {
     clearAccessAuthCookie();
     const calls: Array<{ url: string; init?: RequestInit }> = [];

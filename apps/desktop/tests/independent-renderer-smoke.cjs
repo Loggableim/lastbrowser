@@ -37,7 +37,9 @@ const models = {A:{model:'model-a',provider:'controlled-provider',revision:1,con
 const modelGroups=[{provider:'Controlled provider',provider_id:'controlled-provider',configured:true,models:['model-a','model-b'].map(id=>({id,label:id,supportsIndependent:true,contextLength:8192}))},{provider:'Local',provider_id:'custom:local',configured:true,models:[{id:'gemma4:31b',label:'Literal local model',supportsIndependent:true,contextLength:8192,reasoning_efforts:['low','high']}],extra_models:[{id:'extra-local-model',label:'Extra local model',supportsIndependent:true,contextLength:8192,reasoning_efforts:['medium']}]},{provider:'Offline provider',provider_id:'offline-provider',configured:false,models:[{id:'offline-model',label:'Unavailable model',supportsIndependent:true,contextLength:8192}]},{provider:'Orchestration',provider_id:'',configured:true,models:[{id:'teamwork',label:'Teamwork',supportsIndependent:false},{id:'smart-track',label:'Smart Track',supportsIndependent:false},{id:'smart-track-low',label:'Smart Track Low',supportsIndependent:false},{id:'smart-track-medium',label:'Smart Track Medium',supportsIndependent:false},{id:'smart-track-high',label:'Smart Track High',supportsIndependent:false}]}];
 const scopedModelGroups=name=>modelGroups.map(group=>({...group,models:group.models.map(entry=>({...entry,...(group.provider_id?{nativeAvailability:{schemaVersion:1,supported:true,available:true,reasonCode:null,provider:group.provider_id,model:entry.id,scope:scopes[name],selectionRevision:models[name].revision}}:{})})),...(group.extra_models?{extra_models:group.extra_models.map(entry=>({...entry,nativeAvailability:{schemaVersion:1,supported:true,available:true,reasonCode:null,provider:group.provider_id,model:entry.id,scope:scopes[name],selectionRevision:models[name].revision}}))}:{})}));
 const queues = { A:[], B:[] }, sequences={A:0,B:0}, calls=[];
-const modelFaults={getDelay:0,setDelay:0,failGet:false,failNextSet:false};
+const heldModelGets=[];
+const modelFaults={getDelay:0,holdGet:false,setDelay:0,failGet:false,failNextSet:false,
+ releaseGet(){this.holdGet=false;for(const release of heldModelGets.splice(0))release();}};
 const question = revision => ({schemaVersion:1,kind:'question',basedOnRevision:revision,topic:'purpose',prompt:'What should this Space help with?',options:[{id:'research',label:'Research'},{id:'work',label:'Work'},{id:'personal',label:'Personal'}],allowFreeText:true,selection:'single',understood:[],profilePatch:{}});
 const permissions = {revision:1,browserOrigins:[],networkOrigins:[],connectorBindings:[],allowedWorkspaceRoots:[],allowedEffects:[],rawCdp:false,terminal:false,desktop:false};
 const permissionStates={A:{...permissions,networkOrigins:['https://network.controlled.invalid'],allowedWorkspaceRoots:['C:\\controlled\\a'],allowedEffects:['send']},B:structuredClone(permissions)},delays={preview:0,permission:0};
@@ -68,6 +70,7 @@ const transport={request:async request=>{
     case 'resolveScope': {const label=request.payload.workspacePath.endsWith('a')?'A':'B';return {ok:true,value:{schemaVersion:1,scope:scopes[label],spaceName:'Space '+label,workspacePath:request.payload.workspacePath,bindingRevision:1,setupStatus:'confirmed'}};}
     case 'modelSelection': {
       if(payload.action==='get'){
+        if(modelFaults.holdGet)await new Promise(resolve=>heldModelGets.push(resolve));
         if(modelFaults.getDelay)await new Promise(resolve=>setTimeout(resolve,modelFaults.getDelay));
         if(modelFaults.failGet)return {ok:false,error:{message:'Controlled model discovery failed'}};
       }
@@ -312,7 +315,11 @@ async function parent() {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-independent-renderer-'));
   try {
     require('esbuild').buildSync({ stdin: { contents: fixture, loader: 'tsx', resolveDir: path.join(root, 'apps/desktop') },
-      bundle: true, platform: 'browser', format: 'iife', target: 'chrome130', define:{'import.meta.env.VITE_ENABLE_AI_ORCHESTRATION':'"false"'}, loader:{'.woff2':'dataurl'}, outfile: path.join(temp, 'fixture.js') });
+      bundle: true, platform: 'browser', format: 'iife', target: 'chrome130', define:{'import.meta.env.VITE_ENABLE_AI_ORCHESTRATION':'"false"','import.meta.url':JSON.stringify(require('node:url').pathToFileURL(path.join(temp,'fixture.js')).href)}, loader:{'.woff2':'dataurl','.woff':'dataurl','.ttf':'dataurl'}, outfile: path.join(temp, 'fixture.js') });
+    // The IIFE fixture has no module URL. Supply its real file URL above and
+    // preserve the relative avatar paths used by the shared renderer module.
+    fs.mkdirSync(path.join(temp,'startup/assets'),{recursive:true});
+    for(const file of fs.readdirSync(path.join(root,'apps/desktop/src/renderer/startup/assets')).filter(name=>/^sidekick-\d\d\.png$/.test(name)))fs.copyFileSync(path.join(root,'apps/desktop/src/renderer/startup/assets',file),path.join(temp,'startup/assets',file));
     for(const file of ['lastbrowser-logo.png','sidekick-avatar.png'])fs.copyFileSync(path.join(root,'brand/assets',file),path.join(temp,file));
     fs.writeFileSync(path.join(temp, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:"><link rel="stylesheet" href="fixture.css"><style>:root{--bg:#10141b;--bg-primary:#10141b;--bg-secondary:#18212d;--bg-tertiary:#202c3a;--text:#edf3fa;--text-primary:#edf3fa;--text-secondary:#b8c5d5;--border:#35445a;--border-color:#35445a;--accent:#82b6ff;--accent-color:#82b6ff}body{margin:0;background:#10141b;color:#edf3fa;font:15px system-ui}main{padding:24px}main>.space-assistant{position:absolute;right:24px;top:24px;height:calc(100vh - 48px);width:520px}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}</style></head><body><div id="root"></div><script src="fixture.js"></script></body></html>');
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
@@ -384,9 +391,10 @@ async function electronChild(temp, mode='') {
       if(mode==='--chatux-only'){
         await run(`window.__independentSmoke.select('A')`);
         await until(`document.querySelector('.space-assistant-space-name')?.textContent==='Space A'`, 'Fixture did not return to A before chat entry');
-        await run(`window.__independentSmoke.modelFaults.getDelay=300;window.__independentSmoke.showNative()`);
+        await run(`window.__independentSmoke.modelFaults.holdGet=true;window.__independentSmoke.showNative()`);
         await until(`!!document.querySelector('.chat-composer .composer-model-notice[role=status]')`, 'New chat did not show catalog loading before picker interaction');
         assert.equal(await run(`document.querySelector('.chat-composer').textContent.includes('No provider and model pair has a current successful chat qualification')`),false);
+        await run(`window.__independentSmoke.modelFaults.releaseGet()`);
         await until(`document.querySelector('.composer-model select')?.value==='@controlled-provider:model-a'`, 'New chat did not discover its scoped models without opening picker');
         assert.equal(await run(`!!document.querySelector('.composer-beta-catalog-opt-in')`),true,'Only a loaded, genuinely unqualified catalog shows beta opt-in');
         assert.equal(await run(`window.__independentSmoke.calls.some(c=>c.operation==='modelSelection'&&c.payload.action==='get'&&c.payload.includeCatalog===true&&c.scope.spaceId===window.__independentSmoke.scopes.A.spaceId)`),true);

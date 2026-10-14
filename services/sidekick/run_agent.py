@@ -2024,6 +2024,11 @@ class AIAgent:
         self._aux_compression_context_length_config = None
 
         # Persistent memory (MEMORY.md + USER.md) -- loaded from disk
+        from runtime.memory_policy import profile_home as _memory_home, memory_enabled as _memory_allowed, cloud_enabled as _memory_cloud
+        self._memory_policy_home = _memory_home()
+        self._memory_policy_allowed = lambda: _memory_allowed(self._memory_policy_home)
+        self._memory_cloud_allowed = lambda: _memory_cloud(self._memory_policy_home)
+        skip_memory = skip_memory or not self._memory_policy_allowed()
         self._memory_store = None
         self._memory_enabled = False
         self._user_profile_enabled = False
@@ -2033,8 +2038,8 @@ class AIAgent:
         if not skip_memory:
             try:
                 mem_config = _agent_cfg.get("memory", {})
-                self._memory_enabled = mem_config.get("memory_enabled", False)
-                self._user_profile_enabled = mem_config.get("user_profile_enabled", False)
+                self._memory_enabled = self._memory_policy_allowed()
+                self._user_profile_enabled = self._memory_policy_allowed()
                 self._memory_nudge_interval = int(mem_config.get("nudge_interval", 10))
                 if self._memory_enabled or self._user_profile_enabled:
                     from tools.memory_tool import MemoryStore
@@ -2051,7 +2056,7 @@ class AIAgent:
         # Memory provider plugin (external — one at a time, alongside built-in)
         # Reads memory.provider from config to select which plugin to activate.
         self._memory_manager = None
-        if not skip_memory:
+        if not skip_memory and self._memory_cloud_allowed():
             try:
                 _mem_provider_name = mem_config.get("provider", "") if mem_config else ""
 
@@ -5601,7 +5606,7 @@ class AIAgent:
         NOT called per-turn — only at CLI exit, /reset, gateway
         session expiry, etc.
         """
-        if self._memory_manager:
+        if self._memory_manager and self._memory_cloud_allowed():
             try:
                 self._memory_manager.on_session_end(messages or [])
             except Exception:
@@ -5625,7 +5630,7 @@ class AIAgent:
         Called when session_id rotates (e.g. /new, context compression);
         providers keep their state and continue running under the old
         session_id — they just flush pending extraction now."""
-        if self._memory_manager:
+        if self._memory_manager and self._memory_cloud_allowed():
             try:
                 self._memory_manager.on_session_end(messages or [])
             except Exception:
@@ -5678,7 +5683,7 @@ class AIAgent:
         providers are strictly best-effort — a misconfigured or offline
         backend must not block the user from seeing their response.
         """
-        if interrupted:
+        if interrupted or not self._memory_cloud_allowed():
             return
         if not (self._memory_manager and final_response and original_user_message):
             return
@@ -5861,6 +5866,12 @@ class AIAgent:
         session — that's the only way to keep upstream prompt caches
         warm across turns.
         """
+        if getattr(self, "_quick_chat_mode", False):
+            # Page-local assistance has no agent playbook, skills, environment,
+            # memory snapshot, project files, or timestamp in its initial prompt.
+            return {"stable": "You are a browser companion in tool-free Quickchat.",
+                    "context": str(system_message or "")[:800], "volatile": ""}
+
         # ── Stable tier ────────────────────────────────────────────────
         stable_parts: List[str] = []
 
@@ -6029,7 +6040,7 @@ class AIAgent:
         # ── Volatile tier (changes per session/turn — never cached) ───
         volatile_parts: List[str] = []
 
-        if self._memory_store:
+        if self._memory_store and self._memory_policy_allowed():
             if self._memory_enabled:
                 mem_block = self._memory_store.format_for_system_prompt("memory")
                 if mem_block:
@@ -6041,7 +6052,7 @@ class AIAgent:
                     volatile_parts.append(user_block)
 
         # External memory provider system prompt block (additive to built-in)
-        if self._memory_manager:
+        if self._memory_manager and self._memory_cloud_allowed():
             try:
                 _ext_mem_block = self._memory_manager.build_system_prompt()
                 if _ext_mem_block:
@@ -6454,7 +6465,7 @@ class AIAgent:
         so the rebuilt prompt captures any writes from this session.
         """
         self._cached_system_prompt = None
-        if self._memory_store:
+        if self._memory_store and self._memory_policy_allowed():
             self._memory_store.load_from_disk()
 
     @staticmethod
@@ -6560,7 +6571,9 @@ class AIAgent:
         if auto_bridge is not None:
             auto_bridge.validate_selection(self.model, self.provider, api_mode=self.api_mode)
             client_kwargs = {**client_kwargs, "max_retries": 0}
-            client = OpenAI(**client_kwargs)
+            from runtime.provider_client_pool import create_pooled_sdk
+            client = create_pooled_sdk(OpenAI, client_kwargs, context=auto_bridge.context,
+                provider=self.provider, api_mode=self.api_mode)
             return auto_bridge.wrap(client, agent=self)
         from runtime.auxiliary_client import _validate_base_url, _validate_proxy_env_urls
         # Treat client_kwargs as read-only. Callers pass self._client_kwargs (or shallow
@@ -10496,7 +10509,7 @@ class AIAgent:
         )
 
         # Notify external memory provider before compression discards context
-        if self._memory_manager:
+        if self._memory_manager and self._memory_cloud_allowed():
             try:
                 self._memory_manager.on_pre_compress(messages)
             except Exception:
@@ -10605,7 +10618,7 @@ class AIAgent:
         # over. See #6672.
         try:
             _old_sid = locals().get("old_session_id")
-            if _old_sid and self._memory_manager:
+            if _old_sid and self._memory_manager and self._memory_cloud_allowed():
                 self._memory_manager.on_session_switch(
                     self.session_id or "",
                     parent_session_id=_old_sid,
@@ -10802,7 +10815,7 @@ class AIAgent:
                 store=self._memory_store,
             )
             # Bridge: notify external memory provider of built-in memory writes
-            if self._memory_manager and function_args.get("action") in {"add", "replace"}:
+            if self._memory_manager and self._memory_cloud_allowed() and function_args.get("action") in {"add", "replace"}:
                 try:
                     self._memory_manager.on_memory_write(
                         function_args.get("action", ""),
@@ -10816,7 +10829,7 @@ class AIAgent:
                 except Exception:
                     pass
             return result
-        elif self._memory_manager and self._memory_manager.has_tool(function_name):
+        elif self._memory_manager and self._memory_cloud_allowed() and self._memory_manager.has_tool(function_name):
             return self._memory_manager.handle_tool_call(function_name, function_args)
         elif function_name == "clarify":
             from tools.clarify_tool import clarify_tool as _clarify_tool
@@ -11479,7 +11492,7 @@ class AIAgent:
                     store=self._memory_store,
                 )
                 # Bridge: notify external memory provider of built-in memory writes
-                if self._memory_manager and function_args.get("action") in {"add", "replace"}:
+                if self._memory_manager and self._memory_cloud_allowed() and function_args.get("action") in {"add", "replace"}:
                     try:
                         self._memory_manager.on_memory_write(
                             function_args.get("action", ""),
@@ -11553,7 +11566,7 @@ class AIAgent:
                         spinner.stop(cute_msg)
                     elif self._should_emit_quiet_tool_messages():
                         self._vprint(f"  {cute_msg}")
-            elif self._memory_manager and self._memory_manager.has_tool(function_name):
+            elif self._memory_manager and self._memory_cloud_allowed() and self._memory_manager.has_tool(function_name):
                 # Memory provider tools (hindsight_retain, honcho_search, etc.)
                 # These are not in the tool registry — route through MemoryManager.
                 spinner = None
@@ -11774,6 +11787,10 @@ class AIAgent:
             effective_system = self._cached_system_prompt or ""
             if self.ephemeral_system_prompt:
                 effective_system = (effective_system + "\n\n" + self.ephemeral_system_prompt).strip()
+            scoped_memory = getattr(self, "_scoped_memory_context", "")
+            if scoped_memory and self._memory_policy_allowed():
+                effective_system += scoped_memory
+                self._scoped_memory_injected = True
             if effective_system:
                 api_messages = [{"role": "system", "content": effective_system}] + api_messages
             if self.prefill_messages:
@@ -12166,7 +12183,7 @@ class AIAgent:
         _should_review_memory = False
         if (self._memory_nudge_interval > 0
                 and "memory" in self.valid_tool_names
-                and self._memory_store):
+                and self._memory_store and self._memory_policy_allowed()):
             self._turns_since_memory += 1
             if self._turns_since_memory >= self._memory_nudge_interval:
                 _should_review_memory = True
@@ -12193,6 +12210,10 @@ class AIAgent:
         # from disk that the model already knows about (it wrote them!),
         # producing a different system prompt and breaking the Anthropic
         # prefix cache.
+        if not self._memory_cloud_allowed():
+            # Previously persisted/cached prompts may contain memories. Rebuild
+            # without them on opt-out; old visible conversation stays intact.
+            self._cached_system_prompt = self._build_system_prompt(system_message)
         if self._cached_system_prompt is None:
             stored_prompt = None
             if conversation_history and self._session_db:
@@ -12366,7 +12387,7 @@ class AIAgent:
         # Notify memory providers of the new turn so cadence tracking works.
         # Must happen BEFORE prefetch_all() so providers know which turn it is
         # and can gate context/dialectic refresh via contextCadence/dialecticCadence.
-        if self._memory_manager:
+        if self._memory_manager and self._memory_cloud_allowed():
             try:
                 _turn_msg = original_user_message if isinstance(original_user_message, str) else ""
                 self._memory_manager.on_turn_start(self._user_turn_count, _turn_msg)
@@ -12379,7 +12400,7 @@ class AIAgent:
         # Use original_user_message (clean input) — user_message may contain
         # injected skill content that bloats / breaks provider queries.
         _ext_prefetch_cache = ""
-        if self._memory_manager:
+        if self._memory_manager and self._memory_cloud_allowed():
             try:
                 _query = original_user_message if isinstance(original_user_message, str) else ""
                 _ext_prefetch_cache = self._memory_manager.prefetch_all(_query) or ""
@@ -12533,7 +12554,7 @@ class AIAgent:
                 # never mutated, so nothing leaks into session persistence.
                 if idx == current_turn_user_idx and msg.get("role") == "user":
                     _injections = []
-                    if _ext_prefetch_cache:
+                    if _ext_prefetch_cache and self._memory_cloud_allowed():
                         _fenced = build_memory_context_block(_ext_prefetch_cache)
                         if _fenced:
                             _injections.append(_fenced)
@@ -12596,6 +12617,10 @@ class AIAgent:
             effective_system = active_system_prompt or ""
             if self.ephemeral_system_prompt:
                 effective_system = (effective_system + "\n\n" + self.ephemeral_system_prompt).strip()
+            scoped_memory = getattr(self, "_scoped_memory_context", "")
+            if scoped_memory and self._memory_policy_allowed():
+                effective_system += scoped_memory
+                self._scoped_memory_injected = True
             if effective_system:
                 api_messages = [{"role": "system", "content": effective_system}] + api_messages
 
@@ -13336,6 +13361,7 @@ class AIAgent:
                                     if cost_result.status == "included" else None,
                                     model=self.model,
                                     api_call_count=1,
+                                    observed_model=getattr(response, "model", None) if isinstance(getattr(response, "model", None), str) else None,
                                 )
                             except Exception as e:
                                 # Log token persistence failures so they're
@@ -13371,6 +13397,15 @@ class AIAgent:
                                 f"({hit_pct:.0f}% hit, {written:,} written)"
                             )
                     
+                    if not getattr(response, "usage", None) and self._session_db and self.session_id:
+                        try:
+                            self._ensure_db_session()
+                            self._session_db.update_token_counts(self.session_id, model=self.model,
+                                billing_provider=self.provider, cost_status="unknown", api_call_count=1,
+                                usage_known=False, observed_model=getattr(response, "model", None)
+                                if isinstance(getattr(response, "model", None), str) else None)
+                        except Exception:
+                            logger.debug("Missing-usage observation could not be persisted", exc_info=True)
                     has_retried_429 = False  # Reset on success
                     self._touch_activity(f"API call #{api_call_count} completed")
                     break  # Success, exit retry loop

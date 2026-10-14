@@ -369,6 +369,9 @@ const isResetResult: Guard<AssistantResetResult> = (v): v is AssistantResetResul
   && ref(v.conversationId) && nullable(v.confirmedProfileId, uuid) && typeof v.previewDigest === 'string' && /^[a-f0-9]{64}$/.test(v.previewDigest);
 const decoders: { [K in IndependentOperation]: (value: unknown) => IndependentOperations[K]['response'] } = {
   resolveScope: decode(isResolvedScope),
+  companion: decode((v): v is IndependentOperations['companion']['response'] => versioned(v) && isIndependentScope(v.scope) && v.purpose === 'quickchat'
+    && oneOf(v.personality, ['nova','analytical','developer','creative','mentor']) && text(v.botName) && v.botName.trim().length > 0 && v.botName.length <= 80
+    && v.avatarKey === v.personality && integer(v.revision)),
   backendProfiles: decode(isBackendProfilesResponse),
   profileBindings: decode(isProfileBindingsResponse),
   assistantSnapshot: decodeSnapshot, assistantTurn: decodeSnapshot,
@@ -387,6 +390,10 @@ const decoders: { [K in IndependentOperation]: (value: unknown) => IndependentOp
     if (!versioned(v) || !isIndependentScope(v.scope) || !revision(v.revision) || !text(v.model) || !text(v.provider)
       || !boolean(v.configured) || !boolean(v.supportsIndependent) || !optional(v.reasonCode, ref)
       || !optional(v.groups, values => list(values, isModelGroup)) || !optional(v.providers, values => list(values, isModelProvider))
+      || !optional(v.quickchatLatency, value => isIndependentRecord(value) && value.schemaVersion === 1
+        && list(value.models, row => isIndependentRecord(row) && text(row.provider) && text(row.model)
+          && integer(row.samples) && number(row.median_ttft_ms) && number(row.median_provider_ttft_ms)
+          && number(row.median_preflight_ms) && number(row.median_total_ms) && number(row.last_measured_at)))
       || !optional(v.providerModelCatalog, value => isIndependentRecord(value) && value.schemaVersion === 1
         && isIndependentScope(value.scope) && Array.isArray(value.providers) && value.providers.every(provider => isIndependentRecord(provider)
           && text(provider.providerId) && text(provider.label) && boolean(provider.configured) && isIndependentRecord(provider.discovery)

@@ -817,7 +817,8 @@ def _enrich_403(action: str, body: str) -> str:
 
 def check_discord_tool_requirements() -> bool:
     """Tool is available only when a Discord bot token is configured."""
-    return bool(_get_bot_token())
+    from runtime.memory_policy import read_policy
+    return read_policy()["discord_agents_enabled"] and bool(_get_bot_token())
 
 
 # ---------------------------------------------------------------------------
@@ -841,6 +842,9 @@ def _run_discord_action(
     auto_archive_duration: int = 1440,
 ) -> str:
     """Shared handler logic for both discord tools."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["discord_agents_enabled"]:
+        return json.dumps({"error": "discord_agents_disabled_enable_in_hub"})
     token = _get_bot_token()
     if not token:
         return json.dumps({"error": "DISCORD_BOT_TOKEN not configured."})

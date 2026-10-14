@@ -127,7 +127,7 @@ def test_chat_start_bootstrap_exception_returns_error_instead_of_header_timeout(
 def _headers(web_server):
     return {
         web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN,
-        "Origin": "http://testserver",
+        "Origin": "http://127.0.0.1",
     }
 
 
@@ -137,7 +137,7 @@ def test_unmatched_api_route_runs_in_fastapi_without_http_proxy(monkeypatch):
 
     def fake_get(handler, parsed):
         assert parsed.path == "/api/bridge-regression"
-        assert handler.headers.get("Host") == "testserver"
+        assert handler.headers.get("Host") == "127.0.0.1"
         handler.send_response(200)
         handler.send_header("Content-Type", "application/json")
         handler.send_header("Set-Cookie", "profile=default; Path=/; SameSite=Lax")

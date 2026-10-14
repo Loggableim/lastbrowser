@@ -16,12 +16,14 @@ from web.api.subagent_history import scoped_child_history
 def setup_parent(tmp_path, monkeypatch, mode='action', iterations=8):
     import run_agent
     from tools import delegate_tool as d
+    from runtime.memory_policy import update_policy
+    update_policy({'assistants_enabled': True}, tmp_path)
     (tmp_path/'config.yaml').write_text('delegation:\n  max_iterations: 4\n  max_concurrent_children: 3\n')
     binding = ChildParentContext(Scope(backend_profile_id='a'*32, space_id='b'*32, browser_profile_id='default'), tmp_path, 'A', tmp_path/'sessions', 'parent', 'turn')
     db = SessionDB(tmp_path/'state.db')
     db.create_session('parent')
     events, parent_text = [], []
-    parent = SimpleNamespace(_child_parent_context=binding, _delegate_depth=0,
+    parent = SimpleNamespace(_child_parent_context=binding, _memory_policy_home=tmp_path, _delegate_depth=0,
         _credential_pool=None, _session_db=db, session_id='parent', platform='webui',
         provider='own-provider', model='own-model', base_url='https://example.invalid/v1',
         api_key='fixture', api_mode='chat_completions', enabled_toolsets=['terminal'],

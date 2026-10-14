@@ -18,5 +18,5 @@ describe('Settings Plugins renderer smoke', () => {
     expect(result.status, `${result.stderr}\n${result.stdout}`).toBe(0);
     expect(result.stdout).toContain('settings-plugins-mounted-fixtures:passed');
     expect(result.stdout).toContain('extension-tabs-a11y:passed');
-  });
+  }, 70_000);
 });

@@ -104,8 +104,8 @@ describe('Phase 13 In-App UI Polish: Top-64 Pinned Apps & Universal Model Picker
       expect(source).toContain('Lokale Modelle');
 
       // Reactive selection
-      expect(source).toContain('useChatStore');
-      expect(source).toContain('setSelectedModel');
+      expect(source).toContain('readQuickchatFavoriteState');
+      expect(source).toContain('setQuickchatFavorite');
       expect(source).toContain('onSelectModel');
     });
 

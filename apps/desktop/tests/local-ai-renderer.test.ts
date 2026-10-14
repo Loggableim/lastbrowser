@@ -17,16 +17,10 @@ const hardware={schemaVersion:1,scanId:'scan-a',observedAt:time,os:'win32',arch:
 const scan={schemaVersion:1,scope,scan:{schemaVersion:1,scope,hardware,gpuFeatureStatus:{cuda:'unknown'},probeIssues:[]},runtimes:[{buildRef:'in-tree:inference-unavailable',state:'unavailable',managed:'in_tree',os:'win32',arch:'x64'}],availableComputeSlots:0,skipAvailable:true,existingProviderAvailable:true};
 const preferences={schemaVersion:1,scope,revision:0,decision:'undecided',preset:null,artifactIds:[],updatedAt:null};
 describe('Local AI purpose UI contract',()=>{
-  it('renders only a localized unavailable notice with no bundled-store or inference controls',()=>{
+  it('waits for real profile binding before mounting the read-only catalog',()=>{
     const markup=renderToStaticMarkup(React.createElement(DesktopI18nProvider,null,
       React.createElement(LocalAiSetupPane,{workspacePath:'C:/test',browserProfileId:'test',ready:true})));
-    const text=markup.replaceAll('&amp;','&').replaceAll('&quot;','"').replaceAll('&#x27;',"'");
-    const locales=['en','de','it','es','fr','pt-BR','ru','ja'] as const;
-    const notices=locales.map(locale=>localAiCopy(locale));
-    expect(markup).toContain('data-local-ai-status="unavailable"');
-    expect(notices.some(copy=>text.includes(copy.testBuildUnavailable))).toBe(true);
-    expect(notices.some(copy=>text.includes(copy.externalProvidersUnaffected))).toBe(true);
-    expect(markup).not.toMatch(/<(?:button|input|textarea|select)\b/i);
+    expect(markup).toContain('data-local-ai-status="pending"');
     expect(markup).not.toContain('local-model-store');
     expect(markup).not.toContain('LocalAiRuntimeControls');
   });

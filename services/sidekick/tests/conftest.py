@@ -87,6 +87,26 @@ def _clear_launcher_env_overrides(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _dashboard_testclient_uses_bound_loopback(monkeypatch):
+    """Match integrated dashboard startup without disabling Host validation.
+
+    Starlette's invented `testserver` hostname is not a production loopback
+    hostname. Only supply a default URL for the actual dashboard app; preserve
+    explicit URLs/Host headers so hostile-host tests still exercise rejection.
+    """
+    from starlette.testclient import TestClient
+    original = TestClient.__init__
+
+    def initialize(client, app, *args, **kwargs):
+        server = sys.modules.get("cli.web_server")
+        if server is not None and app is getattr(server, "app", None) and not args and "base_url" not in kwargs:
+            kwargs["base_url"] = "http://127.0.0.1"
+        original(client, app, *args, **kwargs)
+
+    monkeypatch.setattr(TestClient, "__init__", initialize)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_test_session_dir():
     """Ensure thread-local session directory overrides do not leak between tests."""
     def _clear():

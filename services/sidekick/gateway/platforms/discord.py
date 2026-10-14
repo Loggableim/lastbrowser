@@ -73,6 +73,11 @@ class DiscordAdapter(BasePlatformAdapter):
         await self.stop()
 
     async def start(self) -> bool:
+        from runtime.memory_policy import read_policy, profile_home
+        self._policy_home = profile_home()
+        if not read_policy(self._policy_home)["discord_agents_enabled"]:
+            self._set_fatal("Disabled", "Enable Discord Agents in the Extension & Skill Hub")
+            return False
         if not self._token:
             self._set_fatal("MissingToken", "Discord bot token is not configured")
             return False
@@ -132,6 +137,9 @@ class DiscordAdapter(BasePlatformAdapter):
                 logger.debug("Discord client task failed during stop", exc_info=True)
 
     async def send(self, chat_id: str, message: str = "", **kwargs) -> dict:
+        from runtime.memory_policy import read_policy
+        if not read_policy(getattr(self, "_policy_home", None))["discord_agents_enabled"]:
+            return _SendResult(success=False, error="discord_agents_disabled_enable_in_hub")
         content = kwargs.pop("content", None)
         if content is not None:
             message = content
@@ -161,6 +169,9 @@ class DiscordAdapter(BasePlatformAdapter):
         )
 
     async def _on_message(self, message: Any) -> None:
+        from runtime.memory_policy import read_policy
+        if not read_policy(getattr(self, "_policy_home", None))["discord_agents_enabled"]:
+            return
         if self._msg_handler is None:
             return
         author = getattr(message, "author", None)

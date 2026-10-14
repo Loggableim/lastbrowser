@@ -1,3 +1,7 @@
+import { PasswordVaultPanel } from '../components/PasswordVaultPanel.js';
+import { StartupPreferencesPanel } from '../startup/StartupPreferencesPanel.js';
+import { OptionalAiProfileContext } from '../optional-ai-policy.js';
+import { ProfileResolutionPending } from '../profile-resolution.js';
 import { isRetiredProvider } from '../retired-providers.js';
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../appearance.css';
@@ -45,10 +49,11 @@ import { providerPresentation } from '../provider-presentation.js';
 import { isOpenCodeLoginBusyInScope, isProviderSettingsScopeCurrent, isXiaomiProviderSaveAck, readXiaomiProviderStatus, requestProviderModelCatalog, requestProviderSettingsInScope, safeXiaomiErrorCode, saveAndLoadXiaomiModels, testXiaomiConnection, validateXiaomiBaseUrl, type ProviderSettingsRequest } from '../provider-settings.js';
 import { startOpenCodeDeviceLogin, cancelOpenCodeDeviceLogin, validatedOpenCodeVerificationUrl, isOpenCodeDeviceFlowCurrent, readOpenCodeDeviceStatus, readOpenCodeFailure, type OpenCodeFailureKey } from '../opencode-device-login.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
-import { providerVerification } from '../provider-verification.js';
+import { isStableProvider, providerVerification } from '../provider-verification.js';
 import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
 import { ProviderBetaCatalogToggle } from '../components/ProviderBetaCatalogToggle.js';
 import { ProviderWorkspace, type ProviderWorkspaceItem } from '../components/ProviderWorkspace.js';
+import { SettingsPageDeck } from '../components/SettingsPageDeck.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { clearBrowserDataWithFeedback } from '../utils/clear-browser-data.js';
 import { copyDoctorOutput, runDoctorExclusively } from '../utils/doctor-dashboard.js';
@@ -325,6 +330,40 @@ export function SettingsCard({
   );
 }
 
+/** Split settings at field/model-row boundaries, never by clipping a long panel. */
+function providerPageUnits(content: React.ReactNode): React.ReactNode[] {
+  function flatten(nodes: React.ReactNode): React.ReactNode[] {
+    return React.Children.toArray(nodes).flatMap(node => React.isValidElement<{ children?: React.ReactNode }>(node) && node.type === React.Fragment
+      ? flatten(node.props.children) : [node]);
+  }
+  return flatten(content).flatMap((node, cardIndex) => {
+    if (!React.isValidElement<{ children: React.ReactNode; title: string }>(node) || node.type !== SettingsCard) return [node];
+    const pieces = flatten(node.props.children).flatMap(child => {
+      if (!React.isValidElement<{ children?: React.ReactNode; className?: string }>(child)) return [child];
+      if (child.props.className === 'provider-status-list') {
+        return flatten(child.props.children).flatMap(row => {
+          if (!React.isValidElement<{ children?: React.ReactNode; className?: string }>(row) || !row.props.className?.includes('provider-status-row')) return [row];
+          const entries = flatten(row.props.children);
+          const identity = entries.filter(entry => React.isValidElement<{ className?: string }>(entry) && ['provider-mark', 'provider-copy', 'provider-badge'].includes(entry.props.className || ''));
+          const actions = entries.filter(entry => !identity.includes(entry));
+          return [React.cloneElement(row, { key: 'identity' }, identity), ...actions.map((action, index) => React.cloneElement(row, { key: `action:${index}` }, action))];
+        });
+      }
+      if (child.props.className === 'settings-field-grid') {
+        return flatten(child.props.children).map(field => React.cloneElement(child, {}, field));
+      }
+      if (child.type === 'fieldset') {
+        const entries = flatten(child.props.children);
+        const legend = entries.find(entry => React.isValidElement(entry) && entry.type === 'legend');
+        return entries.filter(entry => entry !== legend).map(row => React.cloneElement(child, {}, legend, row));
+      }
+      return [child];
+    });
+    return (pieces.length ? pieces : [null]).map((piece, pieceIndex) => React.cloneElement(node,
+      { key: `${cardIndex}:${node.props.title}:${pieceIndex}` }, piece));
+  });
+}
+
 export function SettingsField({
   label,
   description,
@@ -496,38 +535,52 @@ export function NativeInsightsMain({
   serviceStatus: ServiceStatus | null;
   activeContextItem: string;
 }): JSX.Element {
-  const { t } = useDesktopI18n();
+  const profile = React.useContext(OptionalAiProfileContext);
+  if (!profile) return <ProfileResolutionPending />;
+  return <ScopedInsightsMain key={profile} profile={profile} serviceStatus={serviceStatus} activeContextItem={activeContextItem} />;
+}
+
+function ScopedInsightsMain({ profile, serviceStatus, activeContextItem }: { profile: string; serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
+  const { t, locale } = useDesktopI18n();
+  const de = locale === 'de';
+  const unknown = de ? 'Nicht erfasst' : 'Not recorded';
+  const count = (value: unknown): string => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? formatCompactNumber(value) : unknown;
+  const cost = (row: AnyRecord): string => {
+    if (row.subscription_included === true || row.billing_mode === 'subscription_included') return de ? 'Im Abo enthalten · kein Einzelpreis' : 'Included in subscription · no itemized price';
+    const amount = row.total_cost ?? row.cost;
+    if (typeof amount !== 'number' || !Number.isFinite(amount) || !['actual', 'estimated', 'mixed'].includes(String(row.cost_kind))) return unknown;
+    const suffix = row.cost_kind === 'estimated' ? (de ? ' · geschätzt' : ' · estimated') : row.cost_kind === 'mixed' ? (de ? ' · teilweise geschätzt' : ' · partly estimated') : '';
+    return `${new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(amount)}${suffix}`;
+  };
   const ready = isReady(serviceStatus);
   const [days, setDays] = useState(14);
   const [section, setSection] = useState(activeContextItem || 'Usage');
-  const insights = useApiState(() => window.lastbrowser.sidekick.getInsights({ days }), [ready, days], ready);
+  const insights = useApiState(() => window.lastbrowser.sidekick.getInsights({ days, profile }), [ready, days, profile], ready);
   const wiki = useApiState(() => window.lastbrowser.sidekick.getWikiStatus(), [ready], ready);
   const normalizedSection = section.toLowerCase();
   const insightData = isRecord(insights.data) ? insights.data : {};
   const wikiData = isRecord(wiki.data) ? wiki.data : {};
-  const metricEntries = Object.entries(insightData)
-    .filter(([key, value]) => {
-      if (typeof value !== 'number' && typeof value !== 'string') return false;
-      if (normalizedSection === 'models') return /model|provider/i.test(key);
-      if (normalizedSection === 'cost') return /cost|token|usage|bill/i.test(key);
-      return true;
-    })
-    .slice(0, 10);
-  const dailyRows = arrayFrom(insightData, ['daily', 'daily_rows', 'daily_usage', 'activity_by_day', 'by_day']);
+  const metricLabels: Record<string, string> = {
+    total_sessions: t('insights.sessions'), total_messages: t('insights.messages'),
+    total_tokens: t('insights.tokens'), total_input_tokens: t('insights.input'), total_output_tokens: t('insights.output')
+  };
+  const metricEntries = Object.entries(metricLabels).map(([key, label]) => [label, count(insightData[key])]);
+  const dailyRows = arrayFrom(insightData, ['daily_tokens']);
+  const dailyMaximum = dailyRows.reduce((maximum, row) => Math.max(maximum, toNumber(row.total_tokens ?? row.tokens ?? (toNumber(row.input_tokens) + toNumber(row.output_tokens)))), 0);
   const modelRows = arrayFrom(insightData, ['models', 'model_stats', 'provider_models']);
   const hourRows = arrayFrom(insightData, ['hours', 'by_hour', 'hourly', 'activity_by_hour']);
   const systemHealth = isRecord(insightData.system) ? insightData.system : isRecord(insightData.health) ? insightData.health : null;
   const overviewCards = [
-    { label: t('insights.sessions'), value: formatCompactNumber(insightData.total_sessions || insightData.sessions)},
-    { label: t('insights.messages'), value: formatCompactNumber(insightData.total_messages || insightData.messages)},
-    { label: t('insights.tokens'), value: formatCompactNumber(insightData.total_tokens || insightData.tokens)},
-    { label: t('insights.cost'), value: formatMoney(insightData.total_cost || insightData.cost)}
+    { label: t('insights.sessions'), value: count(insightData.total_sessions)},
+    { label: t('insights.messages'), value: count(insightData.total_messages)},
+    { label: t('insights.tokens'), value: count(insightData.token_usage_known === false ? null : insightData.total_tokens)},
+    { label: t('insights.cost'), value: cost(insightData)}
   ];
   const tokenBreakdown = [
-    { label: t('insights.input'), value: formatCompactNumber(insightData.total_input_tokens || insightData.input_tokens)},
-    { label: t('insights.output'), value: formatCompactNumber(insightData.total_output_tokens || insightData.output_tokens)},
-    { label: t('insights.averagePerSession'), value: formatCompactNumber(insightData.average_tokens_per_session || insightData.avg_tokens_per_session)},
-    { label: t('insights.weeklyTotal'), value: formatCompactNumber(insightData.weekly_tokens || insightData.period_tokens)}
+    { label: t('insights.input'), value: count(insightData.total_input_tokens)},
+    { label: t('insights.output'), value: count(insightData.total_output_tokens)},
+    { label: t('insights.averagePerSession'), value: count(typeof insightData.total_tokens === 'number' && typeof insightData.total_sessions === 'number' && insightData.total_sessions > 0 ? insightData.total_tokens / insightData.total_sessions : null)},
+    { label: de ? 'Gewählter Zeitraum' : 'Selected period', value: count(insightData.total_tokens)}
   ];
   const sections = [
     { id: 'Usage', label: t('insights.usage') },
@@ -553,7 +606,9 @@ export function NativeInsightsMain({
       <div className="native-card-actions">
         <select value={days} aria-label={t('insights.daysCount', { count: days })} onChange={(event) => setDays(Number(event.target.value))}>{[7, 14, 30, 90].map((value) => <option key={value} value={value}>{t('insights.daysCount', { count: value })}</option>)}</select>
       </div>
-      <ErrorLine error={insights.error || wiki.error} />
+      <ErrorLine error={insights.error || (normalizedSection === 'llm wiki' ? wiki.error : '')} />
+      {Array.isArray(insightData.warnings) && insightData.warnings.length > 0 && <div className="workspace-error" role="status">{insightData.warnings.filter(value => typeof value === 'string').map((warning, index) => <p key={index}>{String(warning)}</p>)}</div>}
+      <p className="settings-hint">{de ? 'Datenquelle' : 'Data source'}: {text(insightData.data_source) || unknown} · {de ? 'Preise in USD; fehlende Verbrauchswerte werden nicht als null dargestellt.' : 'Prices in USD; missing usage is not shown as zero.'}</p>
       <div className="insights-panel-grid">
         <aside className="insights-panel-column">
           <section className="native-work-card detail-json-card">
@@ -618,18 +673,18 @@ export function NativeInsightsMain({
               <header><strong>{t('insights.dailyTokens')}</strong></header>
               {dailyRows.length ? (
                 <div className="insights-bar-list">
-                  {dailyRows.slice(0, 8).map((row, index) => {
-                    const input = toNumber(row.input_tokens || row.input || row.tokens_in || row.tokens_input);
-                    const output = toNumber(row.output_tokens || row.output || row.tokens_out || row.tokens_output);
-                    const total = Math.max(input + output, toNumber(row.total_tokens || row.tokens || 0));
+                  {dailyRows.map((row, index) => {
+                    const input = toNumber(row.input_tokens ?? row.input);
+                    const output = toNumber(row.output_tokens ?? row.output);
+                    const total = Math.max(input + output, toNumber(row.total_tokens ?? row.tokens));
                     return (
                       <article key={idOf(row) || `${index}`} className="insights-bar-row">
                         <span className="insights-bar-label">{text(row.date || row.day || row.label || t('insights.day', { day: index + 1 }))}</span>
                         <div className="insights-bar-track">
-                          <div className="insights-bar-fill insights-bar-output" style={{ width: percentValue(output, total)}} />
-                          <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(input, total)}} />
+                          <div className="insights-bar-fill insights-bar-output" style={{ width: percentValue(output, dailyMaximum)}} />
+                          <div className="insights-bar-fill insights-bar-input" style={{ width: percentValue(input, dailyMaximum)}} />
                         </div>
-                        <span className="insights-bar-value">{formatCompactNumber(total)}</span>
+                        <span className="insights-bar-value">{row.token_usage_known === false ? unknown : count(total)}</span>
                       </article>
                     );
                   })}
@@ -642,12 +697,12 @@ export function NativeInsightsMain({
               <header><strong>{t('insights.models')}</strong></header>
               {modelRows.length ? (
                 <div className="insights-model-list">
-                  {modelRows.slice(0, 8).map((row) => (
-                    <article key={idOf(row)} className="insights-model-row">
-                      <strong>{titleOf(row, t('insights.model'))}</strong>
-                      <span>{t('insights.sessionsCount', { count: formatCompactNumber(row.sessions || row.usage || row.requests) })}</span>
-                      <span>{t('insights.tokensCount', { count: formatCompactNumber(row.total_tokens || row.tokens || row.input_tokens || row.output_tokens) })}</span>
-                      <span>{formatMoney(row.cost || row.total_cost || row.usage_cost)}</span>
+                  {modelRows.map((row, index) => (
+                    <article key={`${String(row.provider || '')}:${String(row.model || row.name || index)}`} className="insights-model-row">
+                      <strong>{text(row.model || row.name || row.id) || t('insights.model')}{row.provider ? ` · ${String(row.provider)}` : ''}</strong>
+                      <span>{t('insights.sessionsCount', { count: count(row.sessions) })}</span>
+                      <span>{t('insights.tokensCount', { count: count(row.token_usage_known === false ? null : row.total_tokens ?? row.tokens) })}</span>
+                      <span>{cost(row)}</span>
                     </article>
                   ))}
                 </div>
@@ -2171,7 +2226,7 @@ function VisionImpairedSettingsCard(): JSX.Element {
 export function normalizeSettingsSectionId(value: string): SettingsSectionId | null {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'extensions') return 'plugins';
-  if (normalized === 'advanced') return 'conversation';
+  if (normalized === 'advanced' || normalized === 'conversation') return 'preferences';
   if (normalized === 'local-ai') return 'providers';
   if (normalized === 'teamwork' && !AI_ORCHESTRATION_ENABLED) return null;
   return (Object.keys(SETTINGS_SECTIONS) as SettingsSectionId[]).find((key) => key === normalized) ?? null;
@@ -2179,7 +2234,7 @@ export function normalizeSettingsSectionId(value: string): SettingsSectionId | n
 
 export function visibleSettingsSections(orchestrationEnabled = AI_ORCHESTRATION_ENABLED): Array<[SettingsSectionId, SettingsSectionMeta]> {
   return (Object.entries(SETTINGS_SECTIONS) as Array<[SettingsSectionId, SettingsSectionMeta]>)
-    .filter(([key]) => key !== 'advanced' && key !== 'local-ai' && (key !== 'teamwork' || orchestrationEnabled));
+    .filter(([key]) => key !== 'advanced' && key !== 'conversation' && key !== 'local-ai' && (key !== 'teamwork' || orchestrationEnabled));
 }
 
 export function mergeAppearanceSettings(
@@ -2427,7 +2482,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null);
   const updateStatusRef = useRef<DesktopUpdateStatus | null>(null);
-  const [updateChannel, setUpdateChannel] = useState<'stable' | 'preview'>('stable');
+  const [updateChannel, setUpdateChannel] = useState<'stable' | 'beta'>('stable');
   const [updateChannelLoading, setUpdateChannelLoading] = useState(true);
   const updateInstallPendingRef = useRef(false);
   const [updateInstallPending, setUpdateInstallPending] = useState(false);
@@ -2443,7 +2498,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   useEffect(() => {
     let active = true;
     void window.lastbrowser?.updates?.preferences?.().then((preferences) => {
-      if (active) setUpdateChannel(preferences.channel === 'preview' ? 'preview' : 'stable');
+      if (active) setUpdateChannel(preferences.channel === 'beta' ? 'beta' : 'stable');
     }).catch((error) => {
       if (active) showToast(`Could not load update channel: ${error instanceof Error ? error.message : String(error)}`);
     }).finally(() => {
@@ -2451,7 +2506,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     });
     return () => { active = false; };
   }, []);
-  const [section, setSection] = useState<SettingsSectionId>('conversation');
+  const [section, setSection] = useState<SettingsSectionId>('preferences');
+  const [providerPage, setProviderPage] = useState<'working' | 'beta' | 'local'>('working');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});
   const [passwordDraft, setPasswordDraft] = useState('');
@@ -2776,6 +2832,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const sharedCatalogSelection = catalogState.key === providerCatalogKey ? catalogState.selection : null;
   const catalogMappedGroups = sharedCatalogSelection ? mapScopedModelPickerOptions(sharedCatalogSelection).map(group => ({
     provider_id: group.providerId, provider: group.provider, configured: group.configured,
+    deployment: group.deployment,
     models: group.models.map(model => ({ id: model.id, label: model.label, listingStatus: model.listingStatus, supportsIndependent: model.supportsIndependent })), extra_models: []
   })) as AnyRecord[] : null;
   const allModelGroups: AnyRecord[] = (catalogMappedGroups ?? rawModelGroups).filter((group) =>
@@ -2804,26 +2861,18 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const updateAvailableVersion = settingsText(updateStatus?.availableVersion, '');
   const updateMessage = settingsText(updateStatus?.message, '');
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
-  const providerOptions = useMemo(() => {
-    const options = cloudProviderOptions(onboardingStatus);
-    const expanded = options.some(option => option.id === 'xiaomi') ? options : [...options,
-      { id: 'xiaomi', label: 'Xiaomi MiMo', keyOptional: false, requiresBaseUrl: true }];
-    if (showUntestedBetas) return expanded;
-    return expanded.filter(option => allModelGroups.some(group => {
-      const providerId = settingsText(group.provider_id || group.provider_id_canonical, '');
-      if (providerId.trim().toLowerCase() !== option.id.trim().toLowerCase()) return false;
-      return (Array.isArray(group.models) ? group.models.filter(isRecord) : []).some(model =>
-        isProviderModelQualified(providerId, settingsText(model.id || model.name || model.label, ''), activeProfileId, activeBackendProfileName || 'default', window.localStorage));
-    }));
-  }, [onboardingStatus, showUntestedBetas, allModelGroups, activeProfileId]);
-  const workspaceProviders: ProviderWorkspaceItem[] = [
-    ...providerOptions.map((option) => {
-      const presentation = providerPresentation(option.id);
-      return { id: option.id, label: option.label, mark: presentation.mark, color: presentation.color,
-        detail: option.id === activeProvider ? t('settings.panels.providers.active') : undefined };
-    }),
-    { id: 'local-ai', label: t('settings.panels.providers.localAi'), mark: '⌂', color: '#596b8a' }
-  ];
+  // Pages classify release eligibility, independently of saved selection or chat evidence.
+  const providerOptions = useMemo(() => cloudProviderOptions(onboardingStatus).map(option => ({ ...option,
+    label: option.id === 'openai-codex' ? 'ChatGPT / Codex' : option.id === 'opencode-go' ? 'OpenCode Go' : option.label
+  })), [onboardingStatus]);
+  const workspaceProviders: ProviderWorkspaceItem[] = providerPage === 'local'
+    ? [{ id: 'local-ai', label: t('settings.panels.providers.localAi'), mark: '⌂', color: '#596b8a' }]
+    : providerOptions.filter(option => providerPage === 'working' ? isStableProvider(option.id) : !isStableProvider(option.id))
+      .map(option => {
+        const presentation = providerPresentation(option.id);
+        return { id: option.id, label: option.label, mark: presentation.mark, color: presentation.color,
+          detail: option.id === activeProvider ? t('settings.panels.providers.active') : undefined };
+      });
   const fallbackState = useApiState(() => window.lastbrowser.sidekick.getFallbackModel(), [ready], ready);
   const fallbackModelConfig = isRecord(fallbackState.data?.fallback_model) ? fallbackState.data.fallback_model : {};
   const fallbackModel = settingsText(fallbackModelConfig.model, '');
@@ -3582,7 +3631,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           ))}
         </nav>
 
-        <main className="native-work-card settings-editor settings-panel-scroll">
+        <main className={`native-work-card settings-editor${section === 'providers' ? ' settings-provider-editor' : ' settings-panel-scroll'}`}>
           <header className="settings-editor-head">
             <div>
               <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>
@@ -3607,7 +3656,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           <div className="settings-panel-stack">
             {section === 'advanced' && <AdvancedModelPolicySettings sessionId={activeSessionId} workspacePath={activeSpacePath}
               browserProfileId={activeProfileId} backendProfileName={activeBackendProfileName ?? null} ready={ready} locale={locale} />}
-            {section === 'conversation' && (
+            {section === 'preferences' && (
               <>
                 <SettingsCard
                   title={t('settings.panels.conversation.defaults')}
@@ -4261,6 +4310,18 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'preferences' && (
               <>
                 <SettingsCard
+                  title={locale === 'de' ? 'Startanimation & Sound' : 'Opening animation & sound'}
+                  description={locale === 'de' ? 'Übergang nach dem Entsperren, optionaler Startklang und Rainbow-Rahmen.' : 'Unlock transition, optional opening sound and rainbow border.'}
+                >
+                  <StartupPreferencesPanel />
+                </SettingsCard>
+                <SettingsCard
+                  title={locale === 'de' ? 'Gespeicherte Passwörter' : 'Saved passwords'}
+                  description={locale === 'de' ? 'Passwörter aus CSV importieren, lokal speichern und auf passenden Websites verwenden.' : 'Import passwords from CSV, store them locally and use them on matching websites.'}
+                >
+                  <PasswordVaultPanel key={activeProfileId} profileId={activeProfileId} />
+                </SettingsCard>
+                <SettingsCard
                   title={t('settings.panels.preferences.browserProfiles')}
                   description={t('settings.panels.preferences.browserProfilesDescription')}
                 >
@@ -4463,10 +4524,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     >
                       <select
                         value={updateChannel}
-                        disabled={updateChannelLoading || ['available', 'downloading', 'downloaded'].includes(updateStatus?.state || '')}
+                        disabled={updateChannelLoading || ['checking', 'available', 'downloading', 'downloaded'].includes(updateStatus?.state || '')}
                         onChange={(event) => {
                           const previous = updateChannel;
-                          const next = event.currentTarget.value === 'preview' ? 'preview' : 'stable';
+                          const next = event.currentTarget.value === 'beta' ? 'beta' : 'stable';
                           setUpdateChannel(next);
                           void window.lastbrowser.updates.setChannel(next).then((result) => {
                             if (result.persisted) return;
@@ -4479,7 +4540,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         }}
                       >
                         <option value="stable">{t('settings.panels.notifications.updateChannelStable')}</option>
-                        <option value="preview">{t('settings.panels.notifications.updateChannelPreview')}</option>
+                        <option value="beta">{t('settings.panels.notifications.updateChannelPreview')}</option>
                       </select>
                     </SettingsField>
                   </div>
@@ -4552,11 +4613,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
               backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible/>}
             {section === 'providers' && (
               <div className="provider-workspace-editor">
-                <ProviderBetaCatalogToggle />
                 <ProviderWorkspace
+                  navigation={<div className="provider-workspace-categories" aria-label={t('settings.sections.providers')}>
+                    <button type="button" aria-pressed={providerPage === 'local'} onClick={() => setProviderPage('local')}>{t('settings.panels.providers.localAi')}</button>
+                    <button type="button" aria-pressed={providerPage === 'working'} onClick={() => setProviderPage('working')}>{locale === 'de' ? 'Getestete Modelle' : 'Tested models'}</button>
+                    <button type="button" aria-pressed={providerPage === 'beta'} onClick={() => setProviderPage('beta')}>{locale === 'de' ? 'Ungetestete Modelle · Beta' : 'Untested models · Beta'}</button>
+                    {providerPage === 'beta' && <ProviderBetaCatalogToggle />}
+                  </div>}
                   providers={workspaceProviders}
-                  initialProviderId={activeProvider || workspaceProviders[0]?.id || 'local-ai'}
-                  scopeKey={JSON.stringify([activeProfileId, activeSpacePath, activeBackendProfileName || 'default'])}
+                  initialProviderId={workspaceProviders.some(provider => provider.id === activeProvider) ? activeProvider : workspaceProviders[0]?.id || ''}
+                  scopeKey={JSON.stringify([activeProfileId, activeSpacePath, activeBackendProfileName || 'default', providerPage])}
                   providerListLabel={t('settings.panels.providers.title')}
                   tabsAriaLabel={t('settings.panels.providers.workspaceTabsLabel')}
                   emptyMessage={t('settings.panels.providers.workspaceEmpty')}
@@ -4565,7 +4631,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     models: t('settings.panels.providers.workspaceModels'),
                     chat: t('settings.panels.providers.workspaceChatDefault')
                   }}
-                  panel={(selectedProvider, tab) => {
+                  panel={(selectedProvider, tab) => <SettingsPageDeck resetKey={`${activeProfileId}:${activeSpacePath}:${activeBackendProfileName}:${selectedProvider.id}:${tab}`} label={locale === 'de' ? 'Seite' : 'Page'}>{providerPageUnits((() => {
                     if (selectedProvider.id === 'local-ai' && tab === 'connection') return <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath} backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible />;
                     if (tab === 'connection') return <>                <SettingsCard
                   title={t('settings.panels.providers.title')}
@@ -4755,7 +4821,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   {sharedCatalogSelection && allModelGroups.map(group => {
                     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
                     if (selectedProvider.id === 'local-ai'
-                      ? providerPresentation(providerId).category !== 'local'
+                      ? providerPresentation(providerId, undefined, typeof group.deployment === 'string' ? group.deployment : undefined).category !== 'local'
                       : providerId !== selectedProvider.id) return null;
                     const scanned = [...(Array.isArray(group.models) ? group.models : []),
                       ...(Array.isArray(group.extra_models) ? group.extra_models : [])].filter(isRecord);
@@ -4830,7 +4896,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         <p className="settings-hint">{t('settings.panels.conversation.fallbackHint')}</p>
                       </SettingsCard>}
                     </>;
-                  }}
+                  })())}</SettingsPageDeck>}
                 />
                 {openRouterModalOpen && (
                   <div className="settings-modal-overlay" onClick={() => setOpenRouterModalOpen(false)}>

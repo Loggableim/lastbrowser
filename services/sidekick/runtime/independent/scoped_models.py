@@ -86,14 +86,31 @@ def _text(value, maximum=512):
     return value if isinstance(value, str) and len(value) <= maximum and not any(ord(c) < 32 for c in value) else ""
 
 
+def _catalog_provider_id(value):
+    from cli.providers import normalize_provider
+    original = _text(value, 128).strip().lower()
+    canonical = normalize_provider(original.replace("_", "-"))
+    return canonical if canonical in {"opencode-go", "opencode-zen"} else original
+
+
+def _catalog_model_id(value, provider):
+    model = _text(value)
+    if model.startswith("@") and ":" in model:
+        hinted, bare = model[1:].split(":", 1)
+        if _catalog_provider_id(hinted) == provider:
+            return bare
+    return model
+
+
 def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
     """Allowlist public fields; never return account emails, URLs or raw config."""
     providers = []
+    from runtime.provider_deployment import provider_deployment
     connections = {}
     for row in accounts.get("providers", []) if isinstance(accounts, dict) else []:
         if not isinstance(row, dict) or not _text(row.get("id"), 128):
             continue
-        pid = row["id"]
+        pid = _catalog_provider_id(row["id"])
         entry = {"id": pid, "display_name": _text(row.get("display_name"), 256) or pid,
                  "has_key": row.get("has_key") is True, "oauth_connected": row.get("oauth_connected") is True,
                  "auth_state": _text(row.get("auth_state"), 64) or "not_connected",
@@ -104,15 +121,22 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
             if mid and mid not in entry["models"]:
                 entry["models"].append(mid)
         providers.append(entry)
-        connections[pid] = entry["provider_available"] and (entry["has_key"] or entry["oauth_connected"])
+        connections[pid] = connections.get(pid, False) or (entry["provider_available"] and (entry["has_key"] or entry["oauth_connected"]))
     # Explicitly configured compatible endpoints may intentionally use no key
     # (e.g. a local server). Configuration is not an inference health proof.
     model_config = configuration.get("model") or {}
     if isinstance(model_config, dict):
-        active = _text(raw.get("active_provider"), 128) or _text(model_config.get("provider"), 128)
+        active = _catalog_provider_id(raw.get("active_provider")) or _catalog_provider_id(model_config.get("provider"))
         if active and model_config.get("base_url"):
             connections[active] = True
-    configured_providers = configuration.get("providers") or {}
+    raw_providers = configuration.get("providers") or {}
+    configured_providers = {}
+    if isinstance(raw_providers, dict):
+        for key, config in raw_providers.items():
+            if not isinstance(config, dict):
+                continue
+            pid = _catalog_provider_id(key)
+            configured_providers[pid] = {**configured_providers.get(pid, {}), **config}
     if isinstance(configured_providers, dict):
         for pid, config in configured_providers.items():
             if _text(pid, 128) and isinstance(config, dict) and (config.get("base_url") or config.get("api_key")):
@@ -129,29 +153,30 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
     for group in raw.get("groups", []) if isinstance(raw.get("groups"), list) else []:
         if not isinstance(group, dict):
             continue
-        pid = _text(group.get("provider_id"), 128)
+        pid = _catalog_provider_id(group.get("provider_id"))
         if not pid:
             continue
         clean = {"provider_id": pid, "provider": _text(group.get("provider"), 256) or pid,
-                 "configured": connections.get(pid, False), "models": []}
+                 "configured": connections.get(pid, False), "models": [],
+                 "deployment": provider_deployment(pid, configuration, active_provider=raw.get("active_provider"))}
         explicit_model_ids = set()
         provider_config = configured_providers.get(pid) if isinstance(configured_providers, dict) else None
         if isinstance(provider_config, dict):
             configured_models = provider_config.get("models")
             if isinstance(configured_models, dict):
-                explicit_model_ids.update(str(mid) for mid in configured_models if isinstance(mid, str) and mid)
+                explicit_model_ids.update(_catalog_model_id(mid, pid) for mid in configured_models if isinstance(mid, str) and mid)
             elif isinstance(configured_models, list):
-                explicit_model_ids.update(str(mid) for mid in configured_models if isinstance(mid, str) and mid)
-        if isinstance(model_config, dict) and _text(model_config.get("provider"), 128) == pid:
+                explicit_model_ids.update(_catalog_model_id(mid, pid) for mid in configured_models if isinstance(mid, str) and mid)
+        if isinstance(model_config, dict) and _catalog_provider_id(model_config.get("provider")) == pid:
             configured_default = _text(model_config.get("default"), 256)
             if configured_default:
-                explicit_model_ids.add(configured_default)
+                explicit_model_ids.add(_catalog_model_id(configured_default, pid))
         for bucket in ("models", "extra_models"):
             models = []
             for model in group.get(bucket, []) if isinstance(group.get(bucket), list) else []:
                 if not isinstance(model, dict) or not _text(model.get("id")):
                     continue
-                model_id = model["id"]
+                model_id = _catalog_model_id(model["id"], pid)
                 # The ordinary provider picker qualifies same-name models
                 # from non-active providers as `@<provider-id>:<model-id>`.
                 # Here the provider is already separate; strip only that
@@ -360,7 +385,7 @@ def _catalog_with_native_availability(scope, revision, catalog, *, profile_home=
 
 
 def _provider_model_catalog(scope, catalog, groups):
-    evidence = {row.get("providerId"): row for row in catalog.get("providerModelCatalog", {}).get("providers", [])
+    evidence = {_catalog_provider_id(row.get("providerId")): row for row in catalog.get("providerModelCatalog", {}).get("providers", [])
                 if isinstance(row, dict) and isinstance(row.get("providerId"), str)}
     providers = []
     for group in groups:
@@ -369,7 +394,7 @@ def _provider_model_catalog(scope, catalog, groups):
         provider_id = group["provider_id"]
         observed = evidence.get(provider_id, {})
         source = observed.get("source", "unknown")
-        current_ids = set(observed.get("modelIds", [])) if source == "provider_api" else set()
+        current_ids = {_catalog_model_id(value, provider_id) for value in observed.get("modelIds", []) if isinstance(value, str)} if source == "provider_api" else set()
         current_ids.update(value[len(f"@{provider_id}:"):] for value in tuple(current_ids)
                           if isinstance(value, str) and value.startswith(f"@{provider_id}:"))
         models = []
@@ -382,7 +407,7 @@ def _provider_model_catalog(scope, catalog, groups):
                 availability = entry.get("nativeAvailability") if isinstance(entry.get("nativeAvailability"), dict) else {}
                 is_explicitly_configured = entry.get("modelSource") == "explicit_config"
                 fallback_sources = {"curated_fallback", "metadata_registry", "local_catalog"}
-                is_fallback_candidate = not is_current and model_id in set(observed.get("modelIds", [])) and source in fallback_sources
+                is_fallback_candidate = not is_current and model_id in {_catalog_model_id(value, provider_id) for value in observed.get("modelIds", []) if isinstance(value, str)} and source in fallback_sources
                 is_explicit_only = is_explicitly_configured and not is_current
                 source_state = "current" if is_current else "configured" if is_explicit_only else "fallback" if is_fallback_candidate else "stale" if observed.get("status") == "stale" or source == "stale_provider_cache" else (
                     "unavailable" if observed.get("status") == "unavailable" else "unknown")
@@ -432,6 +457,7 @@ def _provider_model_catalog(scope, catalog, groups):
 
 
 def _response(scope, revision, model, provider, catalog, *, profile_home=None, account_id=None):
+    from runtime.quickchat_metrics import read_latency_summaries
     group, entry = _entry(catalog, model, provider)
     configured = bool(model and group and group.get("configured"))
     supported = configured and bool(entry and entry.get("supportsIndependent", True))
@@ -447,6 +473,7 @@ def _response(scope, revision, model, provider, catalog, *, profile_home=None, a
             **({"reasonCode": reason} if reason else {}),
             "groups": groups,
             "providerModelCatalog": _provider_model_catalog(scope, catalog, groups),
+            "quickchatLatency": read_latency_summaries(profile_home) if profile_home is not None else {"schemaVersion": 1, "models": []},
             "providers": catalog.get("providers", [])}
 
 
@@ -461,12 +488,14 @@ def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict
     if resolved.binding.scope != scope:
         raise PolicyDenied("scope_mismatch")
     if action == "get" and payload.get("includeCatalog") is False:
+        from runtime.quickchat_metrics import read_latency_summaries
         config = resolved.space.load_config()
         if config.get("_space_config_malformed"):
             raise ScopeError("Space configuration is malformed")
         model, provider = _choice(resolved, config)
         return {"schemaVersion": 1, "scope": scope.model_dump(mode="json", by_alias=True),
                 "revision": _revision(config, model, provider), "model": model, "provider": provider,
+                "quickchatLatency": read_latency_summaries(resolved.profile_home),
                 "configurationOnly": True, "configured": bool(model), "supportsIndependent": False,
                 "reasonCode": "independent_orchestration_not_supported" if model in _VIRTUAL else "catalog_not_checked"}
     if action == "set":

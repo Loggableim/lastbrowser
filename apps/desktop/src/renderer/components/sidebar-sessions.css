@@ -1,0 +1,12 @@
+.sidebar-session-list .sidebar-session-item { gap: 2px; padding: 0 4px; }
+.sidebar-session-open { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; padding: 7px 4px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.sidebar-session-actions { display: flex; flex-shrink: 0; width: 0; overflow: hidden; opacity: 0; pointer-events: none; }
+.sidebar-session-item:hover .sidebar-session-actions, .sidebar-session-item:focus-within .sidebar-session-actions { width: 72px; opacity: 1; pointer-events: auto; }
+.sidebar-session-action { display: grid; place-items: center; width: 24px; flex-shrink: 0; height: 26px; border: 0; border-radius: 4px; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.sidebar-session-action:hover { background: var(--bg-hover, rgba(255,255,255,.1)); color: var(--text-primary); }
+.sidebar-session-action.is-delete:hover { color: var(--danger, #f87171); }
+.sidebar-session-action.is-delete.is-armed { color: var(--danger, #f87171); background: var(--bg-hover, rgba(255,255,255,.1)); font-size: 15px; font-weight: 800; }
+.sidebar-session-list .sidebar-session-item.is-selected { outline: 1px solid var(--accent-primary, currentColor); outline-offset: -1px; background: var(--bg-hover, rgba(255,255,255,.1)); }
+.sidebar-chat-selection { display: flex; align-items: center; justify-content: space-between; min-height: 28px; padding-inline: 8px; font-size: 11px; color: var(--text-secondary); }
+.sidebar-session-action:focus-visible, .sidebar-session-open:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
+@media (hover: none) { .sidebar-session-actions { width: 72px; opacity: 1; pointer-events: auto; } }

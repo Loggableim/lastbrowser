@@ -23,6 +23,7 @@ export type QuickChatStartRequest = Readonly<{
   context?: QuickChatContext;
   model?: string;
   modelProvider?: string | null;
+  reasoningEffort?: string;
 }>;
 export type QuickChatCancelRequest = Readonly<{
   quickChatId: string;
@@ -66,7 +67,7 @@ function boundedContext(value: unknown): QuickChatContext | undefined {
 function validateStart(value: unknown): QuickChatStartRequest {
   const request = object(value);
   if (!request || Object.keys(request).some(key => ![
-    'quickChatId', 'browserProfileId', 'workspacePath', 'backendProfileName', 'prompt', 'context', 'model', 'modelProvider'
+    'quickChatId', 'browserProfileId', 'workspacePath', 'backendProfileName', 'prompt', 'context', 'model', 'modelProvider', 'reasoningEffort'
   ].includes(key))) throw new Error('Invalid Quickchat request');
   if (typeof request.quickChatId !== 'string' || !ID.test(request.quickChatId)
     || typeof request.browserProfileId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(request.browserProfileId)
@@ -74,12 +75,15 @@ function validateStart(value: unknown): QuickChatStartRequest {
     || typeof request.prompt !== 'string' || !request.prompt.trim() || request.prompt.length > MAX_PROMPT
     || request.backendProfileName !== undefined && (typeof request.backendProfileName !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,63}$/.test(request.backendProfileName))
     || request.model !== undefined && (typeof request.model !== 'string' || request.model.length > 160)
-    || request.modelProvider !== undefined && request.modelProvider !== null && (typeof request.modelProvider !== 'string' || request.modelProvider.length > 80))
+    || request.modelProvider !== undefined && request.modelProvider !== null && (typeof request.modelProvider !== 'string' || request.modelProvider.length > 80)
+    || request.reasoningEffort !== undefined && (typeof request.reasoningEffort !== 'string'
+      || !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(request.reasoningEffort)))
     throw new Error('Invalid Quickchat request');
   return { quickChatId: request.quickChatId, browserProfileId: request.browserProfileId, workspacePath: request.workspacePath as string | null,
     ...(request.backendProfileName ? { backendProfileName: request.backendProfileName as string } : {}), prompt: request.prompt,
     ...(request.context === undefined ? {} : { context: boundedContext(request.context) }),
     ...(typeof request.model === 'string' ? { model: request.model } : {}),
+    ...(typeof request.reasoningEffort === 'string' ? { reasoningEffort: request.reasoningEffort } : {}),
     ...(typeof request.modelProvider === 'string' || request.modelProvider === null ? { modelProvider: request.modelProvider as string | null } : {}) };
 }
 function sanitizeEventData(value: unknown, depth = 0): unknown {

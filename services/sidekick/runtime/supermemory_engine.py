@@ -1,13 +1,4 @@
-"""Turnkey Local Supermemory Vector Engine with Automatic 3-Tier Fallback.
-
-Provides persistent vector embedding, semantic search, and document memory without
-manual API key barriers or cloud vendor lock-in.
-
-3-Tier Automatic Fallback Pipeline:
-1. Primary: Google Gemini CLI Embedding (`text-embedding-004`) when Google login is active.
-2. Secondary: Local Ollama Embedding (`nomic-embed-text` / `all-minilm`) if Ollama is reachable.
-3. Tertiary: Turnkey local BM25 & SQLite vector scoring (100% offline, zero setup, pure Python).
-"""
+"""Profile-owned knowledge store with local search and explicit cloud consent."""
 
 from __future__ import annotations
 
@@ -22,7 +13,7 @@ import threading
 import uuid
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -92,6 +83,7 @@ class SupermemoryEngine:
             self.db_path = Path(db_path).resolve()
         else:
             self.db_path = self._resolve_default_db_path()
+        self.policy_home = self.db_path.parent
 
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_db()
@@ -147,9 +139,12 @@ class SupermemoryEngine:
     def get_embedding(self, text: str) -> EmbeddingResult:
         """Compute embedding with automatic 3-tier fallback."""
         tokens = tokenize_text(text)
+        from runtime.memory_policy import memory_enabled, cloud_enabled
+        if not memory_enabled(self.policy_home):
+            return EmbeddingResult(None, TIER_LOCAL_BM25, MODEL_BM25, tokens)
 
         # Tier 1: Google Gemini CLI
-        gemini_res = self._try_gemini_embedding(text, tokens)
+        gemini_res = self._try_gemini_embedding(text, tokens) if cloud_enabled(self.policy_home) else None
         if gemini_res is not None:
             return gemini_res
 
@@ -168,6 +163,9 @@ class SupermemoryEngine:
 
     def _try_gemini_embedding(self, text: str, tokens: List[str]) -> Optional[EmbeddingResult]:
         """Tier 1: Request embedding from Google Gemini API (text-embedding-004)."""
+        from runtime.memory_policy import cloud_enabled
+        if not cloud_enabled(self.policy_home):
+            return None
         api_key = (
             os.environ.get("GEMINI_API_KEY")
             or os.environ.get("GOOGLE_API_KEY")
@@ -223,6 +221,11 @@ class SupermemoryEngine:
     def _try_ollama_embedding(self, text: str, tokens: List[str]) -> Optional[EmbeddingResult]:
         """Tier 2: Request embedding from local Ollama daemon (nomic-embed-text or all-minilm)."""
         ollama_host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11434").rstrip("/")
+        from urllib.parse import urlsplit
+        from runtime.memory_policy import cloud_enabled
+        endpoint = urlsplit(ollama_host)
+        if endpoint.hostname not in {"127.0.0.1", "localhost", "::1"} and not cloud_enabled(self.policy_home):
+            return None
         ollama_url = f"{ollama_host}/api/embeddings"
 
         for model in [MODEL_OLLAMA, "all-minilm"]:
@@ -261,7 +264,8 @@ class SupermemoryEngine:
 
     def status(self) -> Dict[str, Any]:
         """Get status of Supermemory, active tier, and document count."""
-        probe = self.get_embedding("probe connection status")
+        # Opening management UI must not probe networks or send sample text.
+        probe = EmbeddingResult(None, TIER_LOCAL_BM25, MODEL_BM25)
         with self.lock:
             conn = sqlite3.connect(str(self.db_path))
             try:
@@ -348,6 +352,9 @@ class SupermemoryEngine:
         container_tag: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Semantic search with cosine similarity (dense) and BM25 ranking (fallback)."""
+        from runtime.memory_policy import memory_enabled
+        if not memory_enabled(self.policy_home):
+            return []
         q = query.strip()
         if not q:
             return []
@@ -501,6 +508,9 @@ class SupermemoryEngine:
 
     def reindex(self) -> Dict[str, Any]:
         """Re-embed all stored documents with the currently active tier."""
+        from runtime.memory_policy import memory_enabled
+        if not memory_enabled(self.policy_home):
+            raise PermissionError("memory_disabled_enable_in_hub")
         docs = self.list_documents(limit=10000)
         updated_count = 0
         current_probe = self.get_embedding("probe active tier")
@@ -572,14 +582,16 @@ class SupermemoryEngine:
 
 
 # Global singleton instance accessor
-_ENGINE_INSTANCE: Optional[SupermemoryEngine] = None
+_ENGINE_INSTANCES: Dict[str, SupermemoryEngine] = {}
 _ENGINE_LOCK = threading.Lock()
 
 
 def get_supermemory_engine() -> SupermemoryEngine:
-    """Get or instantiate the global Supermemory engine singleton."""
-    global _ENGINE_INSTANCE
+    """Request-profile-owned engines; never reuse another profile's singleton."""
+    from runtime.memory_policy import profile_home
+    home = profile_home()
+    key = str(home)
     with _ENGINE_LOCK:
-        if _ENGINE_INSTANCE is None:
-            _ENGINE_INSTANCE = SupermemoryEngine()
-        return _ENGINE_INSTANCE
+        if key not in _ENGINE_INSTANCES:
+            _ENGINE_INSTANCES[key] = SupermemoryEngine(home / "supermemory.db")
+        return _ENGINE_INSTANCES[key]

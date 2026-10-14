@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { providerVerification } from '../src/renderer/provider-verification.js';
+import { providerVerification, isStableProvider } from '../src/renderer/provider-verification.js';
 import { createDesktopI18n, desktopLocaleIds } from '../src/renderer/i18n.js';
 
 // Mirrors the stable provider IDs returned by Sidekick onboarding. A newly
@@ -20,7 +20,7 @@ describe('provider verification claims', () => {
     for (const providerId of ONBOARDING_PROVIDER_IDS) {
       const result = providerVerification(providerId);
       expect(result.verified, providerId).toBe(false);
-      expect(result.statusKey, providerId).toBe('settings.panels.providers.betaUntested');
+      expect(result.statusKey, providerId).toBe(isStableProvider(providerId) ? 'settings.panels.providers.stableRelease' : 'settings.panels.providers.betaUntested');
     }
   });
 
@@ -52,7 +52,7 @@ describe('provider verification claims', () => {
 
   it('does not treat a historical Codex backend probe as current in-app chat evidence', () => {
     const backend = providerVerification('openai-codex');
-    expect(backend.statusKey).toBe('settings.panels.providers.betaUntested');
+    expect(backend.statusKey).toBe('settings.panels.providers.stableRelease');
     expect(backend.verified).toBe(false);
     expect(providerVerification('openai-codex', { successfulChat: true }).verified).toBe(false);
     expect(providerVerification('openai-codex', { successfulChat: true, modelId: 'gpt-6-luna' }).statusKey)

@@ -91,7 +91,10 @@ def test_start_creates_private_scoped_stream_with_no_goal_or_tool_authority(monk
     assert request["goal_related"] is False and request["mode"] == ""
     assert request["confirmed_chat_profile"].scope == Scope.model_validate(SCOPE)
     assert request["confirmed_chat_profile"].prompt == "bound space profile"
-    assert "untrusted" in request["msg"]
+    # Page data stays separate from the persisted user prompt so the direct
+    # Quickchat path can apply its bounded, untrusted-context treatment.
+    assert request["msg"] == body["prompt"]
+    assert "untrusted" in request["grounding_context"]
 
 
 def test_quickchat_start_does_not_create_a_state_db_session(monkeypatch, tmp_path):

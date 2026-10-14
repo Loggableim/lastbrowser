@@ -427,15 +427,16 @@ class NativeAutoBridge:
             "context_length": self.decision.context.provider.context_length}
         return configuration
 
-    def wrap(self, client, *, agent, purpose=None):
+    def wrap(self, client, *, agent, purpose=None, allow_subscription_fallback=True):
         try:
-            return self._wrap_proven(client, agent=agent, purpose=purpose)
+            return self._wrap_proven(client, agent=agent, purpose=purpose,
+                                     allow_subscription_fallback=allow_subscription_fallback)
         except BaseException:
             with self._lock: self._builders.pop(id(client), None)
             client.close()
             raise
 
-    def _wrap_proven(self, client, *, agent, purpose=None):
+    def _wrap_proven(self, client, *, agent, purpose=None, allow_subscription_fallback=True):
         from openai import OpenAI
         from anthropic import Anthropic
         from runtime.gemini_native_adapter import GeminiNativeClient
@@ -535,7 +536,7 @@ class NativeAutoBridge:
             client_binding_validator=validate, call_authorizer=lambda *_: True,
             compute_acquire=self._compute_acquire, compute_release=self._compute_release,
             request_metadata=request_metadata,
-            subscription_fallback=subscription_fallback,
+            subscription_fallback=subscription_fallback if allow_subscription_fallback else None,
             stream_complete=agent._flush_stream_delivery_tails if purpose != "goal_judge" else None)
         proxy._native_delivery_owner = agent
         proxy._native_delivery_purpose = purpose
@@ -612,7 +613,9 @@ class NativeAutoBridge:
             kwargs.update(api_key=source.api_key, auth_token=source.auth_token)
         else:
             raise PolicyDenied("native_auto_goal_sdk_adapter_unavailable")
-        client = type(source)(**kwargs)
+        from runtime.provider_client_pool import create_pooled_sdk
+        client = create_pooled_sdk(type(source), kwargs, context=self.context,
+            provider=agent.provider, api_mode=agent.api_mode)
         proxy = None
         try:
             proxy = self.wrap(client, agent=agent, purpose="goal_judge")

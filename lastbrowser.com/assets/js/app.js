@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   // --- 9. Smart OS Detection on Download Page ---
-  var winDownloadBtn = document.getElementById('hero-win-download');
+  var winDownloadBtn = document.getElementById('hero-win-download') || document.getElementById('main-download-btn');
   var osNotice = document.getElementById('hero-os-notice');
   if (winDownloadBtn) {
     var ua = navigator.userAgent || '';
@@ -171,11 +171,35 @@ document.addEventListener('DOMContentLoaded', function() {
     var isMac = /Macintosh|Mac OS X/i.test(ua);
     var isLinux = /Linux/i.test(ua) && !/Android/i.test(ua);
 
-    if (isMac || isLinux) {
+    if (isLinux) {
+      if (osNotice) {
+        osNotice.replaceChildren();
+        var linuxNotice = document.createElement('a');
+        linuxNotice.href = '#linux-downloads';
+        linuxNotice.textContent = 'Linux x64 · v0.1.56 · AppImage / tar.gz';
+        osNotice.append(linuxNotice);
+      }
+    } else if (isMac) {
       if (osNotice) {
         osNotice.innerHTML = 'Hinweis: Du besuchst uns von ' + (isMac ? 'macOS' : 'Linux') + '. Lastbrowser ist aktuell nativ optimiert für <strong>Windows 10 & 11 (64-Bit)</strong>.';
       }
     }
+  }
+
+  // Keep Linux discoverable from every localized homepage without changing
+  // the Windows installer CTA or selecting a download without user action.
+  var heroActions = document.querySelector('.hero .cta-group');
+  if (heroActions && !document.getElementById('linux-hero-link')) {
+    var lang = (document.documentElement.lang || 'en').split('-')[0];
+    var linuxLabels = { de: 'Für Linux herunterladen', en: 'Download for Linux', fr: 'Télécharger pour Linux',
+      es: 'Descargar para Linux', it: 'Scarica per Linux', pt: 'Transferir para Linux', ja: 'Linux 版をダウンロード' };
+    var linuxLink = document.createElement('a');
+    linuxLink.id = 'linux-hero-link';
+    linuxLink.className = 'btn btn-ghost btn-lg';
+    linuxLink.href = document.getElementById('linux-downloads') ? '#linux-downloads'
+      : (lang === 'de' ? '/download/' : '/' + (linuxLabels[lang] ? lang : 'en') + '/download/') + '#linux-downloads';
+    linuxLink.textContent = linuxLabels[lang] || linuxLabels.en;
+    heroActions.append(linuxLink);
   }
 
   // --- 10. Filterable Feature Matrix ---

@@ -5,6 +5,68 @@
   min-height: 0;
 }
 
+/* AI settings use the available editor height: navigation left, pages right. */
+.settings-provider-editor { overflow: hidden !important; }
+.settings-main:has(.settings-provider-editor) > .settings-native-grid { flex: 1 1 auto; }
+.settings-provider-editor > .settings-editor-head { flex: 0 0 auto; }
+.settings-provider-editor > .settings-panel-stack {
+  flex: 1 1 auto; display: flex; min-height: 0; overflow: hidden;
+}
+.settings-provider-editor .provider-workspace-editor {
+  display: flex; flex: 1 1 auto; min-height: 0; width: 100%;
+}
+.settings-provider-editor .provider-workspace {
+  flex: 1 1 auto; height: 100%; min-height: 0;
+  grid-template-columns: minmax(132px, 210px) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.settings-provider-editor .provider-workspace-list {
+  display: grid; max-height: none; overflow: auto; padding: 6px;
+}
+.provider-workspace-categories { display: grid; gap: 5px; padding-bottom: 9px; border-bottom: 1px solid var(--border-subtle); }
+.provider-workspace-categories > button { text-align: left; justify-content: flex-start; min-height: 36px !important; font-size: 12px; }
+.provider-workspace-categories > button[aria-pressed="true"] { color: var(--accent-primary, #00d9ff); border-color: currentColor; }
+.settings-provider-editor .provider-workspace-tabs {
+  display: grid; gap: 3px; overflow: visible; padding-top: 8px; border: 0; border-top: 1px solid var(--border-subtle);
+}
+.settings-provider-editor .provider-workspace-tabs button {
+  text-align: left; justify-content: flex-start; white-space: normal; min-height: 34px !important; border: 0 !important;
+  border-inline-start: 2px solid transparent !important; padding: 6px 10px !important;
+}
+.settings-provider-editor .provider-workspace-tabs button[aria-selected="true"] { border-inline-start-color: currentColor !important; }
+.settings-provider-editor .provider-workspace-panel {
+  display: flex; padding: 0; max-height: none; overflow: hidden; scrollbar-gutter: auto;
+}
+.settings-page-deck { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-width: 0; min-height: 0; }
+.settings-page-viewport { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: hidden; }
+/* A single indivisible control must remain reachable under extreme zoom/height. */
+.settings-page-viewport.settings-page-emergency-overflow { overflow: auto; }
+.settings-page-unit { position: absolute; inset-inline: 0; top: 0; visibility: hidden; pointer-events: none; }
+.settings-page-unit.visible { position: relative; visibility: visible; pointer-events: auto; }
+.settings-page-unit.visible + .settings-page-unit.visible { margin-top: 10px; }
+.settings-page-unit .settings-card { gap: 8px; padding: 12px; }
+.settings-page-unit .settings-card-header p { margin-bottom: 0; }
+.settings-page-unit .settings-field-grid { grid-template-columns: minmax(0, 1fr); }
+.settings-page-unit .settings-active-model-group { margin: 0; }
+.settings-page-unit .settings-active-model-row { overflow-wrap: anywhere; }
+.settings-page-navigation { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: center; gap: 4px; }
+.settings-page-navigation button { min-height: 30px !important; min-width: 30px; padding: 4px 8px !important; }
+.settings-page-navigation button[aria-current="page"] { color: var(--accent-primary, #00d9ff); border-color: currentColor; }
+.settings-page-number { display: inline-flex; align-items: center; gap: 3px; }
+.settings-page-count { font-size: 11px; color: var(--lb-muted); padding-inline: 5px; }
+.settings-page-viewport:focus-visible { outline: 2px solid var(--accent-primary, #00d9ff); outline-offset: -2px; }
+
+@container settings-layout (max-width: 760px) {
+  .settings-provider-editor .provider-workspace { grid-template-columns: minmax(112px, 155px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100%; gap: 8px; }
+  .settings-provider-editor .provider-workspace-list { display: grid; overflow: auto; max-width: none; max-height: none; }
+  .settings-provider-editor .provider-workspace-item { width: 100%; min-width: 0; padding: 6px !important; }
+  .settings-provider-editor .provider-workspace-item-copy strong { white-space: normal; overflow-wrap: anywhere; }
+  .settings-provider-editor .provider-workspace-item-copy small { white-space: normal; font-size: 11px; }
+  .settings-provider-editor .provider-workspace-mark { flex-basis: 22px; width: 22px; height: 22px; }
+  .settings-provider-editor .provider-workspace-heading { min-height: 28px; margin-bottom: 5px; }
+  .settings-provider-editor .provider-workspace-heading h2 { font-size: 14px; }
+}
+
 .provider-workspace {
   display: grid;
   grid-template-columns: minmax(180px, 230px) minmax(0, 1fr);

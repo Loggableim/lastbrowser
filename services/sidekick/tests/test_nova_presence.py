@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 from hashlib import sha256
 import json
+import os
 import sqlite3
 from pathlib import Path
 from urllib.parse import urlparse
@@ -1355,7 +1356,8 @@ def _allow_synthetic_test_roots(monkeypatch: pytest.MonkeyPatch) -> None:
     import web.api.workspace as workspace
 
     original = workspace.resolve_enrollment_trusted_workspace_read_only
-    fixture_root = (Path(__file__).resolve().parent.parent / ".test-tmp").resolve()
+    fixture_root = Path(os.environ.get("SIDEKICK_TEST_TMP_ROOT") or
+                        Path(__file__).resolve().parent.parent / ".test-tmp").resolve()
     def resolve(value: object) -> Path:
         try:
             return original(value)

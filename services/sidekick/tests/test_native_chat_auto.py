@@ -31,6 +31,9 @@ def setup_auto(tmp_path, server, *, name="a", toolsets=None, max_concurrent=1):
     broker = None
     try:
         home = Path(context.profile_home)
+        if toolsets and "delegation" in toolsets:
+            from runtime.memory_policy import update_policy
+            update_policy({"assistants_enabled": True}, home)
         path = home / "config.yaml"
         config = yaml.safe_load(path.read_text("utf-8"))
         config["model"]["context_length"] = 65536

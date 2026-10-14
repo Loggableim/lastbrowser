@@ -21,9 +21,11 @@ from .runtime_bundle import private_cpu_manifest
 from .runtime_probe import hash_contained_file
 from .store_benchmark import CASES, SUITE_VERSION, SUITE_HASH, VALIDATOR_VERSION, evaluate
 from .store_inference import stream_answer, MemorySampler
+from .store_curation import load_curation, browse_entry
 
 GIB = 1024 ** 3
 CATALOG = json.loads((Path(__file__).parent/'store_catalog.json').read_text(encoding='utf-8'))
+CURATION_REVISION, CURATION = load_curation()
 _LOCK = threading.RLock()
 _STORES = {}
 _EXECUTION = threading.Lock()
@@ -109,7 +111,18 @@ def catalog_entries():
             'installQualified':bool(supported and parameters and model.get('license_sha256') and chosen.get('sha256')),
             'commercialRequired':False,
             'tasks':['chat','summary'] if supported else ['research']})
-    return entries
+    by_identity = {entry['id']: entry for entry in entries}
+    for identity, metadata in CURATION.items():
+        if identity not in by_identity:
+            by_identity[identity] = browse_entry(metadata)
+        else:
+            # Curated labels cannot promote a metadata record into an executable model.
+            by_identity[identity].update(curated=True, curation=metadata,
+                name=metadata['name'], publisher=metadata['publisher'])
+    for identity, entry in by_identity.items():
+        if identity not in CURATION:
+            entry['curated'] = False
+    return list(by_identity.values())
 
 class ModelStore:
     def __init__(self, cache, scope, repository, *, entitlements=None):
@@ -130,6 +143,8 @@ class ModelStore:
 
     def _entry(self, identity):
         if identity not in self.entries: raise ValueError('model_not_curated')
+        if not self.entries[identity].get('curated') and identity not in self.state['installed']:
+            raise ValueError('model_not_curated')
         return self.entries[identity]
 
     def _license(self, entry):
@@ -175,12 +190,16 @@ class ModelStore:
         with self.lock:
             models=[]
             for item in self.entries.values():
+                # Keep installed legacy models manageable, without presenting old
+                # bootstrap/catalog entries as newly approved recommendations.
+                if not item.get('curated') and item['id'] not in self.state['installed']:
+                    continue
                 eligibility=self.eligibility(item)
                 installed=self.state['installed'].get(item['id'])
                 models.append({**item,'eligibility':eligibility,'installed':installed,
                     'active':self.state['active']==item['id'],
                     'deviceConfirmed':any(r.get('modelId')==item['id'] and r.get('artifactSha256')==(item.get('artifact')or{}).get('sha256') and r.get('technicalPass') and r.get('origin')=='local' and r.get('deviceFingerprint')==_device_identity(self.device) for r in self.history)})
-            return {'catalogRevision':CATALOG['revision'],'models':models,'hardware':self.device,
+            return {'catalogRevision':CURATION_REVISION,'models':models,'hardware':self.device,
                 'jobs':[self._job_view(j) for j in self.jobs.values()],
                 'history':[self._summary(r) for r in self.history],
                 'entitlement':{'largeModelsAllowed':self.entitlements.permits_large_local_models(self.scope),

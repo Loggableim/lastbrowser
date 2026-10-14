@@ -52,6 +52,9 @@ def _webui_kanban_orchestrated() -> bool:
 
 
 def _profile_has_kanban_toolset() -> bool:
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        return False
     # Uses load_config() which has mtime-based caching, so this adds
     # negligible overhead. The check_fn results are further TTL-cached
     # (~30s) by the tool registry.
@@ -576,6 +579,9 @@ def _handle_create(args: dict, **kw) -> str:
     ``parents`` can be a list of task ids; dependency-gated promotion
     works as usual.
     """
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        return tool_error("kanban_disabled_enable_in_hub")
     title = args.get("title")
     if not title or not str(title).strip():
         return tool_error("title is required")
@@ -648,6 +654,9 @@ def _handle_create(args: dict, **kw) -> str:
 
 def _handle_unblock(args: dict, **kw) -> str:
     """Transition a blocked task back to ready."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        return tool_error("kanban_disabled_enable_in_hub")
     guard = _require_orchestrator_tool("kanban_unblock")
     if guard:
         return guard
@@ -673,6 +682,9 @@ def _handle_unblock(args: dict, **kw) -> str:
 
 def _handle_link(args: dict, **kw) -> str:
     """Add a parent→child dependency edge after the fact."""
+    from runtime.memory_policy import read_policy
+    if not read_policy()["kanban_enabled"]:
+        return tool_error("kanban_disabled_enable_in_hub")
     parent_id = args.get("parent_id")
     child_id = args.get("child_id")
     if not parent_id or not child_id:

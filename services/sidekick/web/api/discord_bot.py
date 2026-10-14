@@ -66,6 +66,9 @@ def _active_bot_token():
 
 
 def _api(method, path, data=None):
+    from runtime.memory_policy import read_policy
+    if not read_policy()["discord_agents_enabled"]:
+        return {"error": True, "message": "discord_agents_disabled_enable_in_hub"}
     """Make Discord API call via urllib (stdlib, no requests dep)"""
     import urllib.request, urllib.error
     url = f'https://discord.com/api/v10{path}'

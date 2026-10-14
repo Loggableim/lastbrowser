@@ -382,7 +382,10 @@ def test_run_smart_track_turn_medium():
         on_content("für Medium Effort.")
         return "Hier ist die Antwort für Medium Effort."
 
-    with patch("runtime.auxiliary_client.stream_llm", side_effect=mock_stream_llm):
+    wall = {"medium": {"default": "fixture-model", "models": [
+        {"id": "fixture-model", "provider": "fixture-provider", "name": "Fixture"}]}}
+    with patch("runtime.auxiliary_client.stream_llm", side_effect=mock_stream_llm), \
+         patch("runtime.smart_track_orchestrator.build_model_wall", return_value=wall):
         result = run_smart_track_turn(
             session=session,
             prompt="Erkläre kurz DNS",
@@ -464,7 +467,10 @@ def test_smart_track_main_response_streams_content_and_reasoning_incrementally()
         on_content(" world")
         return "Hello world"
 
-    with patch("runtime.auxiliary_client.stream_llm", side_effect=stream_response):
+    wall = {"medium": {"default": "fixture-model", "models": [
+        {"id": "fixture-model", "provider": "fixture-provider", "name": "Fixture"}]}}
+    with patch("runtime.auxiliary_client.stream_llm", side_effect=stream_response), \
+         patch("runtime.smart_track_orchestrator.build_model_wall", return_value=wall):
         result = run_smart_track_turn(
             session,
             "Hello",

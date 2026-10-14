@@ -23,6 +23,8 @@ def test_three_space_api_and_readiness_contract_stays_read_only(monkeypatch, tmp
     from web.api import space_engine, workspace
 
     spaces_root = tmp_path / "spaces"
+    monkeypatch.setenv("SIDEKICK_WEBUI_SPACES_DIR", str(spaces_root))
+    monkeypatch.setenv("SIDEKICK_WEBUI_WORKSPACES_DIR", str(tmp_path / "legacy-spaces"))
     monkeypatch.setattr(space_engine, "SPACES_ROOT", spaces_root)
     monkeypatch.setattr(space_engine, "_OLD_ROOT", tmp_path / "legacy-spaces")
     monkeypatch.setattr(space_engine, "_SPACE_CACHE", None)

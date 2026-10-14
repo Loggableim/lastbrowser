@@ -575,7 +575,13 @@ def test_sqlite_connect_race_cannot_write_a_database_outside_the_project(
 
     monkeypatch.setattr(store_module.sqlite3, "connect", swap_swarm_before_connect)
     try:
-        store.create_run(run_id="must-stay-inside")
+        try:
+            store.create_run(run_id="must-stay-inside")
+        except config_module.SwarmProjectPathError:
+            # Windows may reject the injected reparse point on a later lease
+            # instead of retaining the original directory handle. Both safe
+            # outcomes must still leave the outside database untouched below.
+            assert swapped
     finally:
         if (project / ".swarm").is_symlink():
             (project / ".swarm").unlink()

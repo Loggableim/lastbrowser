@@ -24,6 +24,35 @@ const setupData: SpaceSetupData = {
 };
 
 describe('Space setup validation and model defaults', () => {
+  it('allows browser-only creation without a model, provider or API key', async () => {
+    let saved: SpaceSetupData | undefined;
+    const result = await submitSpaceSetup({ ...setupData, model: '', companion: { personality: 'nova', botName: 'Nova' } },
+      async data => { saved = data; return true; }, () => undefined);
+    expect(result).toBeNull();
+    expect(saved?.model).toBe('');
+    expect(saved?.modelProvider).toBeUndefined();
+    expect(saved?.companion?.personality).toBe('nova');
+    const app = readFileSync(resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    const handler = app.slice(app.indexOf('const handleCreateSpaceFromModal'), app.indexOf('const handleCreateSpaceFromModal') + 6000);
+    expect(handler).not.toContain('setMemoryPolicy');
+    expect(handler).not.toContain('completeSetup(');
+    expect(handler).not.toContain('api_key');
+  });
+
+  it('preserves Home creation name and path without creating anything before confirmation', () => {
+    const defaults = createSpaceSetupDefaults('Coding & Dev', { name: '  My Research  ', path: '  spaces/my-research  ' });
+    expect(defaults.name).toBe('My Research');
+    expect(defaults.customPath).toBe('spaces/my-research');
+    expect(defaults.step).toBe(1);
+    const app = readFileSync(resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
+    expect(app.match(/onAddSpace=\{\(path, name\) => \{ setSpaceSetupPrefill\(\{ path, name \}\); setSpaceSetupModalOpen\(true\); \}\}/g)).toHaveLength(2);
+    expect(app).toContain('initialName={spaceSetupPrefill?.name}');
+    expect(app).toContain('initialPath={spaceSetupPrefill?.path}');
+    const modal = readFileSync(resolve(__dirname, '../src/renderer/components/SpaceSetupModal.tsx'), 'utf8');
+    expect(modal).toContain('if (!initialName?.trim()) setName(t(presetNameKeys[preset.id]))');
+    expect(modal).toContain('<CompanionPicker value={companion}');
+  });
+
   it('reinitializes the wizard when it is opened for another Space', () => {
     const defaults = createSpaceSetupDefaults('Coding & Dev');
     expect(defaults.step).toBe(1);

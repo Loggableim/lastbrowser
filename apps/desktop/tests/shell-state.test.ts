@@ -29,6 +29,7 @@ describe('Lastbrowser shell state', () => {
     expect(lastbrowserPanels.map((panel) => panel.id)).toEqual([
       'chat',
       'tasks',
+      'task-center',
       'kanban',
       'skills',
       'agents',

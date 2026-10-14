@@ -1,0 +1,7 @@
+.setup-browser-import-section .import-checkboxes-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 14px 20px; }
+.setup-browser-import-section .import-check-label { display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 4px 8px; min-width: 0; }
+.setup-browser-import-section .import-check-label small { grid-column: 2; font-size: 11px; line-height: 1.45; color: var(--text-secondary); }
+.setup-browser-import-section .import-check-label input { margin: 2px 0 0; }
+.setup-browser-import-section .import-check-label:has(input:disabled) { cursor: default; opacity: .65; }
+.setup-browser-import-section .browser-card-info small { white-space: normal; }
+@media (max-width: 650px) { .setup-browser-import-section .import-checkboxes-row { grid-template-columns: minmax(0, 1fr); } }

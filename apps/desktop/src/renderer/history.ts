@@ -8,38 +8,82 @@ export type BrowserVisit = {
 };
 
 export const visitedSitesStorageKey = 'lastbrowser.visitedSites.v1';
-/**
- * The start page only needs a handful of recent sites, but a history panel
- * needs the full log. Keeping one list with a generous cap serves both: the
- * start page slices what it shows, the panel reads everything.
- */
-const visitLimit = 500;
+/** LocalStorage is only a bounded startup cache; native storage owns full history. */
+const startupCacheLimit = 1000;
 /** How many entries the start page surfaces. */
 export const startPageVisitLimit = 24;
 
 type VisitStorage = Pick<Storage, 'getItem' | 'setItem'>;
+export type VisitCacheResult = { cachePersisted: boolean; cached: number; total: number; cacheError?: string };
+export type FullHistoryMergeResult = { persisted: true; added: number; updated: number; invalid: number; total: number };
+type HistoryBridge = {
+  load: (request: { profileId: string }) => Promise<BrowserVisit[]>;
+  merge: (request: { profileId: string; entries: BrowserVisit[] }) => Promise<FullHistoryMergeResult>;
+  replace: (request: { profileId: string; entries: BrowserVisit[] }) => Promise<{ persisted: true; total: number }>;
+};
+
+function nativeHistory(profileId: string): HistoryBridge {
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(profileId)) throw new Error('A concrete browser profile is required for history.');
+  const bridge = (window.lastbrowser as unknown as { history?: HistoryBridge }).history;
+  if (!bridge?.load || !bridge.merge || !bridge.replace) throw new Error('Full browser history storage is unavailable. The import was not saved.');
+  return bridge;
+}
+
+/** Full native history, never inferred from another profile's cache. */
+export async function loadFullVisitedSites(profileId: string): Promise<BrowserVisit[]> {
+  const entries = await nativeHistory(profileId).load({ profileId });
+  const visits = entries.map(normalizeVisit);
+  if (visits.some((entry) => !entry || entry.profileId !== profileId)) throw new Error('Full history contains invalid profile data.');
+  return (visits as BrowserVisit[]).sort(compareVisits);
+}
+
+/** Native persistence is required before reporting a successful import. */
+export async function saveImportedVisitedSites(profileId: string, visits: BrowserVisit[]): Promise<FullHistoryMergeResult & Pick<VisitCacheResult, 'cachePersisted' | 'cacheError'>> {
+  const result = await nativeHistory(profileId).merge({ profileId, entries: visits });
+  if (result.persisted !== true) throw new Error('Full browser history import was not persisted.');
+  const full = await loadFullVisitedSites(profileId);
+  let cache: VisitCacheResult;
+  try {
+    const otherProfiles = loadVisitedSites().filter((entry) => entry.profileId !== profileId);
+    cache = saveVisitedSites(window.localStorage, [...full, ...otherProfiles]);
+  } catch (error) {
+    cache = { cachePersisted: false, cached: 0, total: full.length,
+      cacheError: error instanceof Error ? error.message : 'The startup cache is unavailable; full native history was saved.' };
+  }
+  window.dispatchEvent(new CustomEvent('lastbrowser:history-imported', { detail: { profileId, visits: full } }));
+  return { ...result, cachePersisted: cache.cachePersisted, ...(cache.cacheError ? { cacheError: cache.cacheError } : {}) };
+}
+
+/** Intentional full-snapshot save, including deletion or clearing a profile. */
+export async function saveFullVisitedSites(profileId: string, visits: BrowserVisit[]): Promise<{ persisted: true; total: number }> {
+  const result = await nativeHistory(profileId).replace({ profileId, entries: visits });
+  if (result.persisted !== true) throw new Error('Full browser history was not persisted.');
+  return result;
+}
 
 export function loadVisitedSites(storage: VisitStorage = window.localStorage): BrowserVisit[] {
   try {
     const raw = storage.getItem(visitedSitesStorageKey);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
+    const entries = Array.isArray(parsed) ? parsed : parsed && typeof parsed === 'object' && 'visits' in parsed && Array.isArray(parsed.visits) ? parsed.visits : [];
+    return entries
       .map((entry) => normalizeVisit(entry))
       .filter((entry): entry is BrowserVisit => Boolean(entry))
-      .sort(compareVisits)
-      .slice(0, visitLimit);
+      .sort(compareVisits);
   } catch {
     return [];
   }
 }
 
-export function saveVisitedSites(storage: VisitStorage = window.localStorage, visits: BrowserVisit[]): void {
+export function saveVisitedSites(storage: VisitStorage = window.localStorage, visits: BrowserVisit[]): VisitCacheResult {
+  const cached = [...visits].sort(compareVisits).slice(0, startupCacheLimit);
   try {
-    storage.setItem(visitedSitesStorageKey, JSON.stringify(visits.slice(0, visitLimit)));
-  } catch {
-    // Ignore storage failures in restricted renderer contexts.
+    storage.setItem(visitedSitesStorageKey, JSON.stringify({ schemaVersion: 2, fullHistory: false, total: visits.length, visits: cached }));
+    return { cachePersisted: true, cached: cached.length, total: visits.length };
+  } catch (error) {
+    return { cachePersisted: false, cached: 0, total: visits.length,
+      cacheError: error instanceof Error ? error.message : 'The startup history cache could not be saved. Full native history is separate.' };
   }
 }
 
@@ -65,7 +109,7 @@ export function recordVisit(
   };
 
   if (existingIndex < 0) {
-    return [nextVisit, ...visits].sort(compareVisits).slice(0, visitLimit);
+    return [nextVisit, ...visits].sort(compareVisits);
   }
 
   const next = [...visits];
@@ -74,7 +118,7 @@ export function recordVisit(
     count: Math.max(1, nextVisit.count),
     title: betterVisitTitle(nextVisit.title, visits[existingIndex].title)
   };
-  return next.sort(compareVisits).slice(0, visitLimit);
+  return next.sort(compareVisits);
 }
 
 export function trackableVisitLabel(url: string): string {
@@ -95,9 +139,9 @@ export function searchVisits(visits: BrowserVisit[], query: string): BrowserVisi
 }
 
 /** Remove a single entry by URL. */
-export function removeVisit(visits: BrowserVisit[], url: string): BrowserVisit[] {
+export function removeVisit(visits: BrowserVisit[], url: string, profileId?: string): BrowserVisit[] {
   const target = normalizeVisitUrl(url);
-  return visits.filter((visit) => normalizeVisitUrl(visit.url) !== target);
+  return visits.filter((visit) => normalizeVisitUrl(visit.url) !== target || profileId !== undefined && visit.profileId !== profileId);
 }
 
 /** Group visits by calendar day, newest day first. */
@@ -111,7 +155,9 @@ export function groupVisitsByDay(
 
   for (const visit of visits) {
     const key = dayKey(new Date(visit.lastVisited));
-    groups.set(key, [...(groups.get(key) || []), visit]);
+    const entries = groups.get(key);
+    if (entries) entries.push(visit);
+    else groups.set(key, [visit]);
   }
 
   return Array.from(groups.entries())
@@ -156,7 +202,7 @@ function isTrackableVisitUrl(url: string): boolean {
   if (!value || value.startsWith('about:') || value.startsWith('lastbrowser://')) return false;
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && !parsed.username && !parsed.password;
   } catch {
     return false;
   }
@@ -165,7 +211,6 @@ function isTrackableVisitUrl(url: string): boolean {
 function normalizeVisitUrl(url: string): string {
   try {
     const parsed = new URL(url);
-    parsed.hash = '';
     return parsed.toString().replace(/\/$/, '');
   } catch {
     return url.trim().replace(/\/$/, '');

@@ -100,10 +100,23 @@ def test_update_check_uses_origin_default_branch_master(monkeypatch, tmp_path, c
 
     install = _make_git_install(tmp_path, branch="master")
     monkeypatch.setattr(main, "PROJECT_ROOT", install)
+    # This fixture exercises the standalone CLI, not LastBrowser's in-tree updater.
+    monkeypatch.setattr("shared.constants.is_lastbrowser_integrated", lambda _root: False)
 
     main._cmd_update_check()
 
     assert "Already up to date" in capsys.readouterr().out
+
+
+def test_integrated_backend_update_check_does_not_fetch(monkeypatch, capsys):
+    import cli.main as main
+
+    monkeypatch.setattr("shared.constants.is_lastbrowser_integrated", lambda _root: True)
+    def reject_fetch(*args, **kwargs):
+        raise AssertionError("The integrated backend must not fetch an external repository")
+    monkeypatch.setattr(main.subprocess, "run", reject_fetch)
+    main._cmd_update_check()
+    assert "Independent backend updates are disabled" in capsys.readouterr().out
 
 
 def test_windows_zip_update_fallback_uses_sidekick_master_archive():

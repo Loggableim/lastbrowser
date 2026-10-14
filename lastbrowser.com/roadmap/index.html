@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="de">
 <head>
 <meta charset="UTF-8">
@@ -22,6 +22,7 @@
 <link rel="stylesheet" href="/assets/css/components.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <link rel="stylesheet" href="/assets/css/docs.css">
+<link rel="stylesheet" href="/assets/css/roadmap-voting.css?v=1">
 <script src="/assets/js/theme.js"></script>
 </head>
 <body>
@@ -80,12 +81,20 @@
     <p>Verfolgen Sie anstehende Meilensteine, Features in Entwicklung und bereits veröffentlichte Neuerungen.</p>
   </div>
 
+  <section class="roadmap-voting-info" aria-label="Für Roadmap-Favoriten abstimmen">
+    <strong>Welche Funktionen wünschst du dir?</strong>
+    <p>Mit ↑ kannst du mehrere Favoriten unterstützen und deine Stimmen jederzeit zurücknehmen. Die Zähler zeigen die gemeinsam gespeicherten Stimmen aller Besucher.</p>
+    <p>Ohne Anmeldung: Beim ersten Abstimmen wird ein funktionales Cookie für bis zu ein Jahr gesetzt. Pro Browser ist eine Stimme je Eintrag möglich. Keine E-Mail-Adresse und kein Tracking; ein Gerätewechsel oder gelöschte Cookies werden nicht als dieselbe Person erkannt.</p>
+    <p>Die Abstimmung hilft uns bei der Priorisierung und ist keine Release-Zusage.</p>
+    <p data-vote-status role="status" aria-live="polite"></p>
+    <button type="button" data-vote-retry hidden>Erneut laden</button>
+  </section>
   <div class="kanban-board">
     <!-- Col 1: Geplant -->
     <div class="kanban-col">
       <div class="kanban-header">
-        <h3>📋 Geplant</h3>
-        <span class="badge badge-purple">Q4 2026 / Q1 2027</span>
+        <h3>📋 Danach</h3>
+        <span class="badge badge-purple">Langfristige Ziele</span>
       </div>
       <div class="kanban-items">
         <div class="kanban-card">
@@ -106,8 +115,8 @@
     <!-- Col 2: In Arbeit -->
     <div class="kanban-col">
       <div class="kanban-header">
-        <h3>⚡ In Arbeit</h3>
-        <span class="badge badge-yellow">v0.1.35</span>
+        <h3>🔎 In Prüfung</h3>
+        <span class="badge badge-yellow">Ohne Release-Zusage</span>
       </div>
       <div class="kanban-items">
         <div class="kanban-card">
@@ -128,29 +137,90 @@
     <!-- Col 3: Fertiggestellt -->
     <div class="kanban-col">
       <div class="kanban-header">
-        <h3>✅ Abgeschlossen</h3>
-        <span class="badge badge-green">v0.1.38 Beta</span>
+        <h3>⚡ Nächstes Release</h3>
+        <span class="badge badge-green">0.1.57 · Vorbereitung</span>
       </div>
       <div class="kanban-items">
         <div class="kanban-card">
-          <h4>Castlabs Widevine DRM L3</h4>
-          <p>Zertifizierter CDM-Support für Spotify, Netflix, Disney+ und Apple Music HD-Streaming.</p>
-        </div>
-        <div class="kanban-card">
-          <h4>ConPTY PowerShell Integration</h4>
-          <p>Natives Windows Pseudo-Terminal in der Seitenleiste mit voller ANSI-Unterstützung.</p>
-        </div>
-        <div class="kanban-card">
-          <h4>Multi-Account Spaces</h4>
-          <p>Vollständige Cookie- und Storage-Isolation via <code>persist:profile:space</code>.</p>
-        </div>
-        <div class="kanban-card">
-          <h4>48 Agentic Workflows</h4>
-          <p>Kuratierte Skills für Recherche, Code, Content und Tabellen in der Sidekick-Engine.</p>
+          <h4>Composio MCP-Anbindung</h4>
+          <p>Optionale Anbindung im Extension &amp; Skills Hub. Standardmäßig deaktiviert; externe Konten werden vom Nutzer verbunden. In Vorbereitung, noch nicht als fertige Kontointegration freigegeben.</p>
         </div>
       </div>
     </div>
   </div>
+  <section aria-labelledby="planned-integrations" style="margin-top:40px;">
+    <h2 id="planned-integrations">Geplante Anbindungen</h2>
+    <p>Diese 24 Anbindungen stehen auf unserer Roadmap. Sie werden schrittweise vorbereitet; daraus folgt keine Zusage für Version 0.1.57. Verfügbarkeit, Kontoeinrichtung und mögliche Anbietergebühren hängen vom jeweiligen Dienst ab.</p>
+    <div class="kanban-board">
+      <div class="kanban-col"><div class="kanban-header"><h3>Kommunikation &amp; Planung</h3></div><div class="kanban-items">
+        <div class="kanban-card"><ul>
+          <li><strong>Gmail:</strong> Nachrichten zusammenfassen und Antworten entwerfen.</li>
+          <li><strong>Google Calendar:</strong> Termine und freie Zeitfenster planen.</li>
+          <li><strong>Slack:</strong> Diskussionen, Entscheidungen und Arbeitsaufträge verbinden.</li>
+          <li><strong>Outlook:</strong> E-Mails im Microsoft-Umfeld bearbeiten.</li>
+          <li><strong>Todoist:</strong> Aufgaben aus Chats und Webseiten erstellen.</li>
+          <li><strong>Discord:</strong> Community-Fragen und Feedback bündeln.</li>
+        </ul></div>
+      </div></div>
+      <div class="kanban-col"><div class="kanban-header"><h3>Wissen &amp; Inhalte</h3></div><div class="kanban-items">
+        <div class="kanban-card"><ul>
+          <li><strong>Google Drive:</strong> Projektunterlagen finden und verwenden.</li>
+          <li><strong>Notion:</strong> Recherche und strukturiertes Wissen ablegen.</li>
+          <li><strong>OneDrive:</strong> Dateien und Dokumente einbeziehen.</li>
+          <li><strong>Google Docs:</strong> Recherche in Dokumente überführen.</li>
+          <li><strong>Google Sheets:</strong> Daten sammeln und vergleichen.</li>
+          <li><strong>Canva:</strong> Inhalte für visuelle Entwürfe nutzen.</li>
+          <li><strong>MarkItDown:</strong> Dokumente für die KI lesbar aufbereiten.</li>
+          <li><strong>YouTube-Transkripte:</strong> verfügbare Untertitel auswerten und Videos zusammenfassen.</li>
+          <li><strong>Excalidraw:</strong> bearbeitbare Diagramme aus Gesprächen erstellen.</li>
+          <li><strong>Zotero:</strong> Literatur, Quellen und Forschungsunterlagen einbeziehen.</li>
+          <li><strong>Nextcloud:</strong> selbst gehostete Dateien und Wissen anbinden.</li>
+          <li><strong>CoDesign:</strong> visuelle Entwürfe mit KI bearbeiten.</li>
+        </ul></div>
+      </div></div>
+      <div class="kanban-col"><div class="kanban-header"><h3>Recherche &amp; Automatisierung</h3></div><div class="kanban-items">
+        <div class="kanban-card"><ul>
+          <li><strong>GitHub:</strong> Issues, Pull Requests und Releases einbeziehen.</li>
+          <li><strong>Firecrawl:</strong> Webseiten strukturiert auslesen.</li>
+          <li><strong>Brave Search:</strong> aktuelle Websuche mit Quellen.</li>
+          <li><strong>n8n:</strong> wiederkehrende Abläufe verbinden.</li>
+          <li><strong>Lokales Dateisystem:</strong> ausdrücklich freigegebene Ordner verwenden.</li>
+          <li><strong>Home Assistant:</strong> freigegebene Smart-Home-Geräte und deren Zustände einbeziehen.</li>
+        </ul></div>
+      </div></div>
+    </div>
+  </section>
+  <section id="planned-features" aria-labelledby="planned-features-title" style="margin-top:40px;">
+    <h2 id="planned-features-title">Weitere geplante Funktionen</h2>
+    <p>Diese Ziele werden schrittweise vorbereitet. Die Abstimmung hilft bei der Priorisierung; die Aufnahme ist keine Zusage für ein bestimmtes Release.</p>
+    <div class="kanban-board">
+      <article class="kanban-card"><h4 data-roadmap-id="sidekick-vm">Virtuelle Arbeitsplätze für Sidekicks</h4><p>Isolierte virtuelle Maschinen mit Browser, Dateien und Werkzeugen für Aufträge im Hintergrund; Ergebnisse und Arbeitsprotokoll bleiben einsehbar.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="resume-jobs">Aufträge nach Neustart fortsetzen</h4><p>Unterbrochene Aufträge mit gespeichertem Arbeitsstand wieder aufnehmen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="job-templates">Wiederverwendbare Auftragsvorlagen</h4><p>Häufige Aufgaben als Vorlagen mit passenden Eingabefeldern speichern.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="semantic-history">Semantische Verlaufssuche</h4><p>Besuchte Seiten anhand ihres Inhalts wiederfinden.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="research-folders">Recherche-Mappen</h4><p>Quellen, Auszüge, Notizen und Ergebnisse zu einem Thema bündeln.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="page-change-monitor">Webseiten-Änderungsmonitor</h4><p>Ausgewählte Seiten beobachten und relevante Änderungen melden.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="product-comparison">Automatischer Produktvergleich</h4><p>Produkte aus mehreren Tabs anhand gleicher Kriterien vergleichen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="source-comparison">Quellenvergleich</h4><p>Übereinstimmungen und Widersprüche zwischen Quellen sichtbar machen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="space-templates">Space-Vorlagen</h4><p>Arbeitsbereiche für Studium, Entwicklung, Reiseplanung und Recherche vorbereiten.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="space-timeline">Space-Zeitleiste</h4><p>Entscheidungen, Aufgaben und Ergebnisse chronologisch darstellen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="project-resume">Projekt-Wiedereinstieg</h4><p>Beim Öffnen zusammenfassen, wo die Arbeit aufgehört hat und was noch offen ist.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="smart-tab-groups">Tab-Gruppierung nach Inhalt</h4><p>Zusammengehörige Tabs automatisch vorschlagen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="space-context-transfer">Kontextübergabe zwischen Spaces</h4><p>Ausgewählte Informationen bewusst in einen anderen Space übertragen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="space-rules">Space-Regeln</h4><p>Sprache, Arbeitsweise, erlaubte Werkzeuge und Ausgabeformate pro Space festlegen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="canva-presentations">Präsentationen über Canva MCP</h4><p>Aus Recherche-Mappen bearbeitbare Präsentationen über die Canva-MCP-Anbindung vorbereiten; abhängig von verfügbaren Canva-Werkzeugen und Kontoberechtigungen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="space-media-library">Medienbibliothek pro Space</h4><p>Bilder, Audio und Dokumente gemeinsam organisieren und durchsuchen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="accessible-content">Barrierefreie Webseiten und Inhalte</h4><p>Auch besuchte Webseiten vereinfachen, vorlesen und durch Bildbeschreibungen zugänglicher machen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="sidekick-permissions">Berechtigungsübersicht pro Sidekick</h4><p>Zugriffe auf Konten, Ordner und Funktionen verständlich anzeigen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="temporary-permissions">Werkzeugzugriff auf Zeit</h4><p>Berechtigungen nur für einen Auftrag oder begrenzten Zeitraum vergeben.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="undo-ai-changes">KI-Änderungen rückgängig machen</h4><p>Unterstützte Änderungen anhand des vorherigen Zustands zurücknehmen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="action-preview">Vorschau vor Ausführung</h4><p>Geplante Änderungen an Dateien und Diensten vorab verständlich darstellen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="automatic-model-routing">Modellwahl nach Aufgabe</h4><p>Passende Modelle nach Geschwindigkeit, Kosten und Fähigkeiten vorschlagen oder auswählen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="cost-estimates">Kostenprognose pro Auftrag</h4><p>Vor größeren Aufträgen eine Schätzung mit Unsicherheitsbereich anzeigen.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="extension-health">Erweiterungs-Gesundheitsanzeige</h4><p>Verbindungsprobleme, fehlende Berechtigungen und veraltete Erweiterungen erklären.</p></article>
+      <article class="kanban-card"><h4 data-roadmap-id="custom-shortcuts">Eigene Schnellbefehle und Tastenkürzel</h4><p>Persönliche Aktionen über Tastatur und Befehlspalette auslösen.</p></article>
+    </div>
+  </section>
 </main>
 
 <footer>
@@ -219,6 +289,7 @@
   </div>
 </footer>
 
-<script src="/assets/js/app.js"></script>
+<script src="/assets/js/app.js?v=linux56-20261014"></script>
+<script type="module" src="/assets/js/roadmap-voting.js?v=1"></script>
 </body>
 </html>

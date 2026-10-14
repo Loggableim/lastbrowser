@@ -79,21 +79,21 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       const source = readRendererFile('components/UnifiedExtensionHub.tsx');
 
       // Pillar 1 header & showcase
-      expect(source).toContain('Web-Erweiterungen (Chrome MV3)');
-      expect(source).toContain('Kuratierter 1-Klick Showcase');
+      expect(source).toContain('eh-tab-${id}');
+      expect(source).toContain('visiblePresets.map');
       expect(source).toContain('handleInstallPreset');
 
       // Chrome Web Store direct install & Unpacked
       expect(source).toContain('handleInstallCws');
-      expect(source).toContain('cws-url-form');
+      expect(source).toContain('eh-install-form');
       expect(source).toContain('handleInstallUnpacked');
-      expect(source).toContain('Entpackte Erweiterung laden...');
+      expect(source).toContain('Aus Ordner');
 
       // Management switches
       expect(source).toContain('handleToggleExtension');
       expect(source).toContain('handleToggleIncognito');
       expect(source).toContain('handleRemoveExtension');
-      expect(source).toContain('ext-workspace-select');
+      expect(source).toContain('handleUpdateExtensionScope(ext.id');
     });
   });
 
@@ -140,20 +140,20 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
     it('keeps skill cards and workspace/activation controls visible without exposing unsupported auto-approval', () => {
       const source = readRendererFile('components/UnifiedExtensionHub.tsx');
 
-      expect(source).toContain('Nova AI Skills & Tools (MCP)');
-      expect(source).toContain('mcp_servers.json');
-      expect(source).toContain('mcp-json-editor');
-      expect(source).toContain('Granulares Sandboxing & Berechtigungsmanagement');
-      expect(source).toContain('skills-scope-chips');
-      expect(source).toContain('filteredSkills.map((skill)');
+      expect(source).toContain('Optionale Funktionen');
+      expect(source).toContain('mcpModel.setEditor');
+      expect(source).toContain('value={mcp.editor}');
+      expect(source).toContain('Berechtigungen');
+      expect(source).toContain('eh-toolbar');
+      expect(source).toContain('visibleSkills.map(renderSkill)');
       expect(source).toContain('skill.name');
-      expect(source).toContain('skill-main-switch');
-      expect(source).toContain('skill-workspace-picker');
+      expect(source).toContain('mcpModel.toggle');
+      expect(source).toContain('updateSkill(skill.id');
       expect(source).not.toContain('auto-approve-toggle');
       expect(source).not.toContain('Interaktiv bestätigen');
       expect(source).not.toContain('Immer vertrauen (Auto-Approve)');
       expect(source).not.toContain('trust switch unavailable');
-      expect(source).toContain("localStorage.setItem('lastbrowser.mcp_skills.v1', JSON.stringify(next))");
+      expect(source).toContain('localStorage.setItem(BUILTIN_SKILLS_STORAGE_KEY, JSON.stringify(next))');
       expect(source).toContain('(s.id === id ? { ...s, ...updates } : s)');
     });
 
@@ -168,7 +168,7 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
       const source = readRendererFile('components/UnifiedExtensionHub.tsx');
       expect(source).toContain('const handleApplyMcpConfig = () => { void mcpModel.save(); }');
       expect(source).toContain('onClick={handleApplyMcpConfig}');
-      expect(source).toContain('mcpModel.setEditor(e.target.value)');
+      expect(source).toContain('mcpModel.setEditor(event.target.value)');
       expect(source).toContain('mcpModel.toggle');
     });
   });

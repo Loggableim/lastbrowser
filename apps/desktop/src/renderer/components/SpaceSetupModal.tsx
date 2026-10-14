@@ -4,6 +4,7 @@ import type { DesktopTranslationKey } from '../i18n/keys.js';
 import type { BackendProfileEntry, BackendProfilesResponse, ProfilePatch } from '../independent-contracts.js';
 import { isBackendProfilesResponse } from '../independent-assistant-client.js';
 import { backendProfileCopy } from '../i18n/backend-profile-copy.js';
+import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
 import {
   X,
   Sparkles,
@@ -31,6 +32,7 @@ export interface SpaceSetupData {
   startUrl: string;
   assistantSeed?: ProfilePatch;
   backendProfileName?: string;
+  companion?: CompanionSelection;
 }
 
 export interface SpaceSetupModalProps {
@@ -38,6 +40,8 @@ export interface SpaceSetupModalProps {
   onClose: () => void;
   onCreateSpace: (data: SpaceSetupData) => Promise<boolean | string>;
   existingSpaceNames?: string[];
+  initialName?: string;
+  initialPath?: string;
 }
 
 interface SpacePreset {
@@ -104,13 +108,13 @@ const PRESETS: SpacePreset[] = [
   }
 ];
 
-export function createSpaceSetupDefaults(defaultName: string) {
+export function createSpaceSetupDefaults(defaultName: string, prefill?: { name?: string; path?: string }) {
   return {
     step: 1 as const,
     preset: PRESETS[0],
-    name: defaultName,
+    name: prefill?.name?.trim() || defaultName,
     color: PRESETS[0].color,
-    customPath: '',
+    customPath: prefill?.path?.trim() || '',
     model: 'smart-track',
     startUrl: PRESETS[0].startUrl,
     selectedApps: PRESETS[0].pinnedApps.map((app) => ({ ...app })),
@@ -200,11 +204,13 @@ export function SpaceSetupModal({
   isOpen,
   onClose,
   onCreateSpace,
-  existingSpaceNames = []
+  existingSpaceNames = [],
+  initialName,
+  initialPath
 }: SpaceSetupModalProps): React.JSX.Element | null {
   const { t, locale } = useDesktopI18n();
   const profileCopy = backendProfileCopy(locale || 'en');
-  const initialDefaults = createSpaceSetupDefaults(t('spaceSetup.preset.coding'));
+  const initialDefaults = createSpaceSetupDefaults(t('spaceSetup.preset.coding'), { name: initialName, path: initialPath });
   const [step, setStep] = useState<1 | 2 | 3>(initialDefaults.step);
   const [selectedPreset, setSelectedPreset] = useState<SpacePreset>(initialDefaults.preset);
   const [name, setName] = useState(initialDefaults.name);
@@ -220,10 +226,11 @@ export function SpaceSetupModal({
   const [backendProfileName, setBackendProfileName] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [companion, setCompanion] = useState<CompanionSelection>({ personality: 'nova', botName: 'Nova' });
 
   useEffect(() => {
     if (!isOpen) return;
-    const defaults = createSpaceSetupDefaults(t('spaceSetup.preset.coding'));
+    const defaults = createSpaceSetupDefaults(t('spaceSetup.preset.coding'), { name: initialName, path: initialPath });
     setStep(defaults.step);
     setSelectedPreset(defaults.preset);
     setName(defaults.name);
@@ -239,6 +246,7 @@ export function SpaceSetupModal({
     setIsSubmitting(false);
     setBackendProfiles([]);
     setBackendProfileName('');
+    setCompanion({ personality: 'nova', botName: 'Nova' });
     let active = true;
     if (window?.lastbrowser?.independent?.request) {
       window.lastbrowser.independent.request({
@@ -257,7 +265,7 @@ export function SpaceSetupModal({
     }
 
     return () => { active = false; };
-  }, [isOpen]);
+  }, [isOpen, initialName, initialPath]);
 
   const handleSelectPreset = (preset: SpacePreset) => {
     setSelectedPreset(preset);
@@ -267,7 +275,7 @@ export function SpaceSetupModal({
       'media-creative': 'spaceSetup.preset.media',
       'custom-blank': 'spaceSetup.preset.blank'
     };
-    setName(t(presetNameKeys[preset.id]));
+    if (!initialName?.trim()) setName(t(presetNameKeys[preset.id]));
     setColor(preset.color);
     setModel((current) => resolvePresetModel(current, []));
     setStartUrl(preset.startUrl);
@@ -319,6 +327,7 @@ export function SpaceSetupModal({
       pinnedApps: selectedApps,
       startUrl: startUrl.trim() || 'app://browser-home',
       backendProfileName: backendProfileName.trim() || undefined,
+      companion,
       assistantSeed: selectedPreset.id === 'custom-blank' ? undefined : { purpose: t(({
         'coding-dev': 'spaceSetup.preset.codingDescription',
         'research-writing': 'spaceSetup.preset.researchDescription',
@@ -482,6 +491,9 @@ export function SpaceSetupModal({
           {/* STEP 2: AI Model Selection */}
           {step === 2 && (
             <div className="space-step-content">
+              <h3>Space-Persönlichkeit</h3>
+              <p>Prägt Schnellchat und Antwortstil. Basis-Profil und Werkzeuge bleiben erhalten.</p>
+              <CompanionPicker value={companion} onChange={setCompanion} disabled={isSubmitting} />
               <label className="space-setup-label">{t('spaceSetup.modelLabel')}</label>
               <p className="space-step-description">
                 {t('spaceSetup.modelDescription')}

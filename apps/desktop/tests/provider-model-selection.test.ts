@@ -64,9 +64,9 @@ describe('provider-aware model selection', () => {
     const component = readFileSync(path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx'), 'utf8').replace(/\r\n/g, '\n');
     expect(component).toContain('const hasCachedCatalogForScope = isModelCatalogCacheCurrent(modelCatalogCacheScopeKeyRef.current, orchestrationScopeKey);');
     expect(component).toContain('if (!hasCachedCatalogForScope) {');
-    expect(component).toContain('if (!trimmed || busy || sendPendingRef.current || modelGateReason !== null) return;');
-    expect(component).toContain('disabled={!inputText.trim() || modelGateReason !== null}');
-    expect(component.indexOf('modelGateReason !== null) return;')).toBeLessThan(component.indexOf('onSendMessage(trimmed'));
+    expect(component).toContain('if (!trimmed || sendPendingRef.current || (!busy && modelGateReason !== null)) return;');
+    expect(component).toContain('disabled={submissionPending || !inputText.trim() || (!busy && modelGateReason !== null)}');
+    expect(component.indexOf('if (!trimmed || sendPendingRef.current')).toBeLessThan(component.indexOf('onSendMessage(trimmed'));
     expect(isModelCatalogResponseCurrent(scopeA, scopeB)).toBe(false);
   });
   it('marks provider/model/scope/revision-mismatched native availability as a binding mismatch', () => {
@@ -405,8 +405,8 @@ describe('provider-aware model selection', () => {
     expect(chat).toContain('modelProvider={modelProvider}');
     expect(app).toContain('chatModelSelection = await readCapturedSpaceModelSelection({ ...turnContext, backendProfileName: turnBackendProfileName })');
     expect(app).toContain("includeCatalog: true");
-    expect(app).toContain('const copilotModelSelection = resolvePreferredChatModelSelection({');
-    expect(copilot).toContain('const activeModelId = modelName || selectedModel;');
+    expect(app).toContain('const copilotModelSelection = useMemo(() => {');
+    expect(copilot).toContain("const activeModelId = modelName || '';");
     expect(chat).toContain("setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] })");
     expect(chat).toContain("t('chat.retryModels')");
   });

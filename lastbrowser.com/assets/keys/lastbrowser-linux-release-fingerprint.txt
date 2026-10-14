@@ -1,0 +1,14 @@
+LastBrowser Linux Package Signing <linux-packages@lastbrowser>
+Release: Linux 0.1.56
+Primary fingerprint: 0546B4B0840C0A86D62B54A79DC2502686684B33
+Signing subkey fingerprint: 676481D83532BBC76F3E82F83FE43AD08D08AEE7
+Algorithm: Ed25519
+Created: 2026-10-13
+Primary key expires: no expiry
+Signing subkey expires: no expiry
+
+Public key: https://lastbrowser.com/assets/keys/lastbrowser-linux-0.1.56-signing.pub.asc
+Checksum signature: https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/SHA256SUMS.asc
+The earlier Windows-owner-held Linux key BD10C633483A9B1159964F11762E4029184C95F4
+was not used to sign this release. Its public export is retained as
+lastbrowser-linux-release-20261013-owner.asc for historical comparison.

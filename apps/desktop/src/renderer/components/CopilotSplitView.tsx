@@ -19,7 +19,6 @@ import {
   Send,
   Settings,
   ShieldAlert,
-  Smile,
   Sparkles,
   StopCircle,
   Table,
@@ -41,11 +40,15 @@ import {
   formatWorkflowPrompt,
   type AgenticWorkflowTemplate
 } from '../workflow-templates.js';
-import { useChatStore } from '../stores/useChatStore.js';
-import { brandAssets } from '../brand.js';
+import type { ScopedModelSelection } from '../independent-contracts.js';
+import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
+import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
-import { chooseActiveModel, isModelActive, useActiveModelRevision } from '../active-model-selection.js';
+import { isModelActive, useActiveModelRevision } from '../active-model-selection.js';
+import { QUICKCHAT_FAVORITE_CHANGED_EVENT, readQuickchatFavoriteState, setQuickchatFavorite } from '../quickchat-preferences.js';
+import { isProviderModelQualified } from '../provider-chat-evidence.js';
+import { isDirectQuickchatProvider } from '../quickchat-automatic.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { isModelCatalogCacheCurrent, isModelCatalogResponseCurrent } from '../model-picker-options.js';
@@ -53,14 +56,14 @@ import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 import { ChatDraftSubmissionGate } from '../chat-draft-submission.js';
-import { submitQuickChatDraft } from '../quick-chat-draft.js';
+import { providerDeployment, providerHostingLabel } from '../provider-presentation.js';
 
 export interface AvailableModelItem {
   id: string;
   providerId?: string;
   label: string;
   provider: string;
-  category: 'gemini' | 'claude' | 'openai' | 'local' | 'teamwork' | 'other';
+  category: 'gemini' | 'claude' | 'openai' | 'local' | 'cloud' | 'teamwork' | 'other';
   badge: string;
   badgeClass: string;
   reasoningEfforts?: string[];
@@ -123,7 +126,6 @@ export interface CopilotSplitViewProps {
   error?: string;
   status?: string;
   allowWorkflows?: boolean;
-  onSwitchToSpaceAssistant?: () => void;
   onSendMessage: (text: string, reasoningEffort?: string) => void | boolean | Promise<void | boolean>;
   onStopChat?: () => void;
   activeUrl?: string;
@@ -131,6 +133,8 @@ export interface CopilotSplitViewProps {
   quickActions?: QuickActionChip[];
   onExecuteQuickAction?: (chip: QuickActionChip) => void;
   onSelectModel?: (modelId: string, providerId?: string) => void;
+  preparedModelSelection?: ScopedModelSelection;
+  preparedModelSelectionScopeKey?: string;
   onNewChat?: () => void;
   sessions?: DesktopSessionSummary[];
   activeSessionId?: string | null;
@@ -146,7 +150,7 @@ export function CopilotSplitView({
   onClose,
   onMinimize,
   botName = 'Nova',
-  modelName = 'Google Gemini',
+  modelName = '',
   modelProvider,
   messages,
   busy,
@@ -160,6 +164,8 @@ export function CopilotSplitView({
   quickActions,
   onExecuteQuickAction,
   onSelectModel,
+  preparedModelSelection,
+  preparedModelSelectionScopeKey,
   onNewChat,
   sessions = [],
   activeSessionId = null,
@@ -170,14 +176,33 @@ export function CopilotSplitView({
   onOpenSettings
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const { t, locale } = useDesktopI18n();
+  const companion = useCompanionAppearance();
+  const companionName = companion.botName;
+  const [companionPickerOpen, setCompanionPickerOpen] = useState(false);
+  const [companionDraft, setCompanionDraft] = useState<CompanionSelection>({ personality: 'nova', botName: 'Nova' });
+  const companionPickerRef = useRef<HTMLDivElement>(null);
+  const companionTriggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => { setCompanionPickerOpen(false); }, [browserProfileId, workspacePath, backendProfileName, isOpen]);
+  useEffect(() => {
+    if (!companionPickerOpen) return;
+    const outside = (event: PointerEvent) => { if (!companionPickerRef.current?.contains(event.target as Node)) setCompanionPickerOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } };
+    window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape);
+    return () => { window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
+  }, [companionPickerOpen]);
   const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
   const sendPendingRef = useRef(false);
+  const [submissionPending, setSubmissionPending] = useState(false);
+  const submissionEpoch = useRef(0);
   const draftRevisionRef = useRef(0);
   const draftGateRef = useRef(new ChatDraftSubmissionGate());
-  const draftScope = JSON.stringify([browserProfileId, workspacePath, backendProfileName, activeSessionId]);
+  const draftScope = JSON.stringify([browserProfileId, workspacePath, backendProfileName]);
   const draftScopeRef = useRef(draftScope); draftScopeRef.current = draftScope;
+  useEffect(() => {
+    submissionEpoch.current++; sendPendingRef.current = false; setSubmissionPending(false); draftGateRef.current = new ChatDraftSubmissionGate();
+  }, [draftScope]);
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [workflowsMenuOpen, setWorkflowsMenuOpen] = useState(false);
   const [modelPickerOpen, setModelPickerOpen] = useState(false);
@@ -189,7 +214,19 @@ export function CopilotSplitView({
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [upvotedIndices, setUpvotedIndices] = useState<Set<number>>(new Set());
 
-  const { selectedModel, selectedModelProvider, setSelectedModel, setSelectedModelProvider } = useChatStore();
+  const favoriteScope = useMemo(() => ({ browserProfileId: browserProfileId || '', workspacePath: workspacePath || '', backendProfileName: backendProfileName || '' }), [browserProfileId, workspacePath, backendProfileName]);
+  const favoriteScopeKey = JSON.stringify(favoriteScope);
+  const [favoriteState, setFavoriteState] = useState(() => ({ key: favoriteScopeKey, ...readQuickchatFavoriteState(favoriteScope) }));
+  const [favoriteError, setFavoriteError] = useState('');
+  const displayedFavorite = favoriteState.key === favoriteScopeKey ? favoriteState : readQuickchatFavoriteState(favoriteScope);
+  const favorite = displayedFavorite.favorite;
+  const favoriteInvalid = displayedFavorite.invalid;
+  useEffect(() => {
+    const refresh = () => setFavoriteState({ key: favoriteScopeKey, ...readQuickchatFavoriteState(favoriteScope) });
+    refresh(); setFavoriteError('');
+    window.addEventListener(QUICKCHAT_FAVORITE_CHANGED_EVENT, refresh); window.addEventListener('storage', refresh);
+    return () => { window.removeEventListener(QUICKCHAT_FAVORITE_CHANGED_EVENT, refresh); window.removeEventListener('storage', refresh); };
+  }, [favoriteScopeKey, favoriteScope]);
 
   // Provider models are selectable only after the live backend catalog returns them.
   const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
@@ -256,17 +293,19 @@ export function CopilotSplitView({
     setModelCatalogFailureScopeKey(null);
     async function loadLiveModels() {
       try {
-        if (!window?.lastbrowser?.sidekick?.requestWebui) {
+        const preparedCurrent = preparedModelSelection && preparedModelSelectionScopeKey === JSON.stringify([browserProfileId, workspacePath || null, backendProfileName || null])
+          && preparedModelSelection.scope.browserProfileId === browserProfileId && Array.isArray(preparedModelSelection.groups);
+        if (!preparedCurrent && !window?.lastbrowser?.sidekick?.requestWebui) {
           if (!hasCachedCatalogForScope) setModelList(AVAILABLE_MODELS);
           modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
           setModelCatalogFailureScopeKey(orchestrationScopeKey);
           return;
         }
-        const res = (await window.lastbrowser.sidekick.requestWebui({
+        const res = (preparedCurrent ? preparedModelSelection : await window.lastbrowser.sidekick.requestWebui({
           method: 'GET',
           path: '/api/models',
           scopeSelection: orchestrationScope
-        })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; configured?: boolean; models?: Array<any>; extra_models?: Array<any> }> } | null;
+        })) as { groups?: ReadonlyArray<{ provider_id?: string; provider?: string; deployment?: string; account?: string; configured?: boolean; models?: ReadonlyArray<any>; extra_models?: ReadonlyArray<any> }> } | null;
         if (!alive || generation !== orchestrationScopeGenerationRef.current || orchestrationScopeKeyRef.current !== orchestrationScopeKey) return;
         if (!res || !Array.isArray(res.groups)) {
           if (!hasCachedCatalogForScope) {
@@ -294,7 +333,7 @@ export function CopilotSplitView({
           if (isRetiredProvider(pid)) continue;
           const gAccount = g.account;
 
-          let category: 'gemini' | 'claude' | 'openai' | 'local' | 'other' = 'other';
+          let category: 'gemini' | 'claude' | 'openai' | 'local' | 'cloud' | 'other' = 'other';
           let providerLabel = g.provider || pid;
           let badgeClass = 'other';
 
@@ -302,9 +341,10 @@ export function CopilotSplitView({
             category = 'gemini';
             providerLabel = pid.includes('antigravity') ? 'Antigravity' : 'Google Gemini (AI Studio)';
             badgeClass = 'gemini';
-          } else if (pid.includes('ollama')) {
-            category = 'local';
-            providerLabel = pid.includes('cloud') ? 'Ollama Cloud' : 'Ollama';
+          } else if (pid.includes('ollama') || ['localai', 'local-ai', 'lmstudio', 'lm-studio', 'custom'].includes(pid) || pid.startsWith('custom:')) {
+            const deployment = providerDeployment(pid, undefined, g.deployment);
+            category = deployment === 'local' ? 'local' : deployment === 'unknown' ? 'other' : 'cloud';
+            providerLabel = providerHostingLabel(pid, g.provider || pid, deployment);
             badgeClass = 'ollama';
           } else if (pid.includes('claude') || pid.includes('anthropic')) {
             category = 'claude';
@@ -329,7 +369,7 @@ export function CopilotSplitView({
             const account = m.account || gAccount;
             const badge = pct !== undefined
               ? `${pct}% Kontingent verfügbar`
-              : (pid.includes('cloud') ? 'Ollama Cloud' : (category === 'gemini' ? 'Live Quota Discovery' : providerLabel));
+              : (category === 'gemini' ? 'Live Quota Discovery' : providerLabel);
 
             if (dynamicModels.some(model => model.id === cleanId && model.providerId === identity.provider)) continue;
             dynamicModels.push({
@@ -377,9 +417,10 @@ export function CopilotSplitView({
     return () => {
       alive = false;
     };
-  }, [modelProvider, setSelectedModel, setSelectedModelProvider, orchestrationScope, orchestrationScopeKey, modelPickerOpen]);
+  }, [orchestrationScope, orchestrationScopeKey, modelPickerOpen, preparedModelSelection, preparedModelSelectionScopeKey, browserProfileId, workspacePath, backendProfileName]);
 
   const visibleModelList = useMemo(() => modelList.filter((model) => {
+    if (!model.providerId || !isDirectQuickchatProvider(model.providerId)) return false;
     const multiAgent = model.category === 'teamwork' || isMultiAgentModelSelection({ model: model.id, provider: model.providerId });
     if (multiAgent) {
       if (!AI_ORCHESTRATION_ENABLED) return false;
@@ -388,8 +429,10 @@ export function CopilotSplitView({
       if (model.id.startsWith('smart-track') && !smartTrackEnabled) return false;
       return true;
     }
-    return Boolean(model.providerId && isModelActive(window.localStorage,
-      { browserProfileId, backendProfileName: backendProfileName || 'default' }, model.providerId, model.id));
+    const identity = parseProviderModelId(model.id, model.providerId);
+    return Boolean(browserProfileId && backendProfileName && model.providerId && isModelActive(window.localStorage,
+      { browserProfileId, backendProfileName }, model.providerId, identity.model)
+      && (showUntestedBetas || isProviderModelQualified(model.providerId, identity.model, browserProfileId, backendProfileName, window.localStorage)));
   }), [modelList, smartTrackEnabled, teamworkEnabled, showUntestedBetas, browserProfileId, backendProfileName, activeModelRevision]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -398,18 +441,18 @@ export function CopilotSplitView({
   const footerModelRef = useRef<HTMLDivElement | null>(null);
   const historyDropdownRef = useRef<HTMLDivElement | null>(null);
 
-  const activeModelId = modelName || selectedModel;
-  const activeModelProvider = modelProvider || selectedModelProvider;
-  const [singleModelMigrationNotice, setSingleModelMigrationNotice] = useState(false);
-  const [activeModelFallbackNotice, setActiveModelFallbackNotice] = useState(false);
-  const modelGateReason = quickChatModelGateReason({ selectedModel: activeModelId, selectedProvider: activeModelProvider,
+  const activeModelId = modelName || '';
+  const activeModelProvider = modelProvider || '';
+  const automaticCandidate = !favorite && !favoriteInvalid ? visibleModelList.find(model => model.providerId && !isMultiAgentModelSelection({ model: model.id, provider: model.providerId })) : undefined;
+  const modelGateReason = favoriteInvalid ? 'model-unavailable' : quickChatModelGateReason({ selectedModel: automaticCandidate?.id || activeModelId, selectedProvider: automaticCandidate?.providerId || activeModelProvider,
     activeScopeKey: orchestrationScopeKey, loadedCatalogScopeKey: modelCatalogLoadedScopeKeyRef.current,
     failedCatalogScopeKey: modelCatalogFailureScopeKey, availableModels: visibleModelList });
-  const reasoningPreferenceKey = activeSessionId || `draft:${activeModelProvider}:${activeModelId}`;
-  const [reasoningEffort, setReasoningEffort] = useState(() => loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage));
+  const reasoningPreferenceKey = `quickchat:${JSON.stringify([browserProfileId, workspacePath || null, backendProfileName || null, activeModelProvider, activeModelId])}`;
+  const [reasoningState, setReasoningState] = useState(() => ({ key: reasoningPreferenceKey, effort: loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage) }));
+  const reasoningEffort = reasoningState.key === reasoningPreferenceKey ? reasoningState.effort : loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage);
   useEffect(() => {
-    setReasoningEffort(loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage));
-  }, [activeSessionId, reasoningPreferenceKey]);
+    setReasoningState({ key: reasoningPreferenceKey, effort: loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage) });
+  }, [reasoningPreferenceKey]);
   const activeModelItem = useMemo(() => {
     return (
       visibleModelList.find(
@@ -427,39 +470,26 @@ export function CopilotSplitView({
       }
     );
   }, [activeModelId, activeModelProvider, visibleModelList]);
+  const automaticModelLabel = locale === 'de' ? 'Automatisch · schnellstes Modell' : 'Automatic · fastest model';
+  const favoriteLabel = favorite ? visibleModelList.find(model => isProviderModelSelected(model, favorite.model, favorite.provider))?.label || favorite.model : '';
+  const pickerModelLabel = favoriteInvalid ? (locale === 'de' ? 'Favorit prüfen' : 'Check favorite') : favorite ? `${favoriteLabel} ★` : automaticModelLabel;
   const reasoningModel = resolveReasoningModel(activeModelId, activeModelProvider,
     visibleModelList.map(item => ({ providerId: item.providerId || '', models: [item] })));
   const reasoningEfforts = reasoningModel?.reasoningEfforts || [];
-  const effectiveReasoningEffort = modelCapabilitiesLoaded && reasoningEfforts.includes(reasoningEffort) ? reasoningEffort : '';
+  const confirmedReasoning = modelCapabilitiesLoaded && modelCatalogLoadedScopeKeyRef.current === orchestrationScopeKey;
+  const minimumReasoningEffort = ['none', 'minimal', 'low'].find(effort => reasoningEfforts.includes(effort)) || '';
+  const effectiveReasoningEffort = confirmedReasoning ? reasoningEfforts.includes(reasoningEffort) ? reasoningEffort : minimumReasoningEffort : '';
   useEffect(() => {
-    if (modelCapabilitiesLoaded && reasoningEfforts.length && reasoningEffort && !reasoningEfforts.includes(reasoningEffort)) {
-      setReasoningEffort('');
+    if (confirmedReasoning && reasoningEfforts.length && reasoningEffort && !reasoningEfforts.includes(reasoningEffort)) {
+      setReasoningState({ key: reasoningPreferenceKey, effort: '' });
       saveChatReasoningEffort(reasoningPreferenceKey, '', window.localStorage);
     }
-  }, [modelCapabilitiesLoaded, reasoningEffort, reasoningEfforts, reasoningPreferenceKey]);
+  }, [confirmedReasoning, reasoningEffort, reasoningEfforts, reasoningPreferenceKey]);
 
   function handleReasoningEffortChange(effort: string): void {
-    setReasoningEffort(effort);
+    setReasoningState({ key: reasoningPreferenceKey, effort });
     saveChatReasoningEffort(reasoningPreferenceKey, effort, window.localStorage);
   }
-
-  useEffect(() => {
-    if (!modelCapabilitiesLoaded) return;
-    if (AI_ORCHESTRATION_ENABLED && showUntestedBetas
-      && isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider })) return;
-    const choice = chooseActiveModel(visibleModelList.filter(model => Boolean(model.providerId))
-      .map(model => ({ id: model.id, providerId: model.providerId! })),
-      { model: activeModelId, provider: activeModelProvider }, window.localStorage,
-      { browserProfileId, backendProfileName: backendProfileName || 'default' });
-    if (!choice.changed || !choice.choice) return;
-    const wasMultiAgent = isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider });
-    setSelectedModel(choice.choice.id);
-    setSelectedModelProvider(choice.choice.providerId);
-    onSelectModel?.(choice.choice.id, choice.choice.providerId);
-    if (wasMultiAgent) setSingleModelMigrationNotice(true);
-    else setActiveModelFallbackNotice(true);
-  }, [activeModelId, activeModelProvider, modelCapabilitiesLoaded, onSelectModel, setSelectedModel,
-    setSelectedModelProvider, visibleModelList, browserProfileId, backendProfileName, showUntestedBetas]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -534,14 +564,24 @@ export function CopilotSplitView({
   }
 
   function handlePickModel(model: AvailableModelItem) {
+    const identity = parseProviderModelId(model.id, model.providerId);
+    try {
+      if (!identity.provider) throw new Error('Provider unresolved');
+      setQuickchatFavorite(favoriteScope, { provider: identity.provider, model: identity.model });
+      setFavoriteState({ key: favoriteScopeKey, ...readQuickchatFavoriteState(favoriteScope) }); setFavoriteError('');
+    } catch { setFavoriteError(locale === 'de' ? 'Favorit konnte nicht gespeichert werden. Prüfe das aktive Profil.' : 'Could not save favorite. Check the active profile.'); return; }
     setModelPickerOpen(false);
-    setSelectedModel(model.id);
-    setSelectedModelProvider(model.providerId || '');
-    onSelectModel?.(model.id, model.providerId);
+    onSelectModel?.(identity.model, identity.provider);
+  }
+  function handleAutomaticModel() {
+    try {
+      setQuickchatFavorite(favoriteScope, null);
+      setFavoriteState({ key: favoriteScopeKey, favorite: null, invalid: false }); setFavoriteError(''); setModelPickerOpen(false);
+    } catch { setFavoriteError(locale === 'de' ? 'Automatische Auswahl konnte nicht gespeichert werden.' : 'Could not save automatic selection.'); }
   }
 
   function renderModelItem(m: AvailableModelItem) {
-    const isSelected = isProviderModelSelected(m, activeModelItem?.id || '', activeModelProvider);
+    const isSelected = Boolean(favorite && isProviderModelSelected(m, favorite.model, favorite.provider));
 
     const quotaBadge =
       m.remainingPercent !== undefined ? (
@@ -555,7 +595,7 @@ export function CopilotSplitView({
         key={`${m.providerId || m.provider}:${m.id}`}
         type="button"
         className={`model-option-item ${isSelected ? 'selected' : ''}`}
-        role="menuitem"
+        role="menuitemradio" aria-checked={isSelected}
         onClick={() => handlePickModel(m)}
       >
         <div className="model-option-left">
@@ -575,6 +615,7 @@ export function CopilotSplitView({
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
           {(m.id === 'teamwork' || m.id.startsWith('smart-track')) && onOpenSettings && (
             <span
+              onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setModelPickerOpen(false); onOpenSettings('teamwork'); } }}
               role="button"
               tabIndex={0}
               title="Orchestrierungs-Einstellungen öffnen"
@@ -612,6 +653,13 @@ export function CopilotSplitView({
         </div>
 
         <div className="model-dropdown-list">
+          <button type="button" role="menuitemradio" aria-checked={!favorite && !favoriteInvalid} className={`model-option-item ${!favorite && !favoriteInvalid ? 'selected' : ''}`} onClick={handleAutomaticModel}>
+            <div className="model-option-left"><Sparkles size={16} /><div className="model-option-text"><span className="model-option-name">{automaticModelLabel}</span>
+              <span className="model-option-desc">{locale === 'de' ? 'Verfügbare Modelle automatisch wählen. Eine manuelle Auswahl wird dein Favorit für diesen Space.' : 'Choose automatically from available models. A manual selection becomes this Space’s favorite.'}</span></div></div>
+            {!favorite && !favoriteInvalid && <Check size={15} />}
+          </button>
+          {favoriteError && <p role="alert">{favoriteError}</p>}
+          {favoriteInvalid && <p role="alert">{locale === 'de' ? 'Der gespeicherte Favorit ist ungültig. Wähle ein Modell oder ausdrücklich Automatisch.' : 'The saved favorite is invalid. Choose a model or explicitly select Automatic.'}</p>}
           {/* 0. Multi-Agent Teamwork */}
           {visibleModelList.some((m) => m.category === 'teamwork') && (
             <>
@@ -628,16 +676,19 @@ export function CopilotSplitView({
           {visibleModelList.filter((m) => m.category === 'gemini').map(renderModelItem)}
 
           {/* 2. Anthropic */}
-          <div className="model-group-title">Anthropic</div>
+          {visibleModelList.some((m) => m.category === 'claude') && <div className="model-group-title">Anthropic</div>}
           {visibleModelList.filter((m) => m.category === 'claude').map(renderModelItem)}
 
           {/* 3. OpenAI */}
-          <div className="model-group-title">OpenAI</div>
+          {visibleModelList.some((m) => m.category === 'openai') && <div className="model-group-title">OpenAI</div>}
           {visibleModelList.filter((m) => m.category === 'openai').map(renderModelItem)}
 
           {/* 4. Lokale Modelle */}
-          <div className="model-group-title">Lokale Modelle (Ollama / LocalAI)</div>
+          {visibleModelList.some((m) => m.category === 'local') && <div className="model-group-title">{locale === 'de' ? 'Auf diesem Computer' : 'On this computer'}</div>}
           {visibleModelList.filter((m) => m.category === 'local').map(renderModelItem)}
+
+          {visibleModelList.some((m) => m.category === 'cloud') && <div className="model-group-title">{locale === 'de' ? 'Cloud & entfernte Endpunkte' : 'Cloud & remote endpoints'}</div>}
+          {visibleModelList.filter((m) => m.category === 'cloud').map(renderModelItem)}
 
           {/* 5. Weitere Engines */}
           {visibleModelList.some((m) => m.category === 'other') && (
@@ -656,15 +707,22 @@ export function CopilotSplitView({
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     const trimmed = inputText.trim();
-    if (!trimmed || busy || sendPendingRef.current || modelGateReason !== null) return;
+    if (!trimmed || sendPendingRef.current || (!busy && modelGateReason !== null)) return;
+    const gate = draftGateRef.current;
+    const submission = gate.begin(inputText, draftRevisionRef.current, draftScope);
+    if (!submission) return;
+    const epoch = submissionEpoch.current;
     sendPendingRef.current = true;
+    setSubmissionPending(true);
     try {
-      await submitQuickChatDraft({ gate: draftGateRef.current, draft: inputText,
-        revision: draftRevisionRef.current, scope: draftScope,
-        current: () => ({ revision: draftRevisionRef.current, scope: draftScopeRef.current }),
-        setDraft: setInputText, send: () => onSendMessage(trimmed, effectiveReasoningEffort || undefined) });
+      // The callback resolves on start/steer acceptance, independently of the answer stream.
+      const accepted = await onSendMessage(trimmed, effectiveReasoningEffort || undefined);
+      if (accepted !== false && epoch === submissionEpoch.current && submission.revision === draftRevisionRef.current && submission.contextKey === draftScopeRef.current) setInputText('');
+    } catch {
+      // Keep the draft available for correction when the caller reports a failure.
     } finally {
-      sendPendingRef.current = false;
+      gate.finish(submission);
+      if (epoch === submissionEpoch.current) { sendPendingRef.current = false; setSubmissionPending(false); }
     }
   }
 
@@ -727,14 +785,29 @@ export function CopilotSplitView({
   }
 
   return (
-    <aside className="copilot-split-panel" aria-label={`${botName} AI Workspace`}>
+    <aside className="copilot-split-panel" aria-label={`${companionName} AI Workspace`}>
       {/* Top Header */}
       <div className="copilot-header">
-        <div className="copilot-header-brand">
+        <div ref={companionPickerRef} style={{ position: 'relative' }}>
+        <button type="button" className="copilot-header-brand" ref={companionTriggerRef} aria-label="Space-Persönlichkeit wechseln" aria-haspopup="dialog" aria-expanded={companionPickerOpen}
+          style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}
+          onClick={() => { setCompanionDraft({ personality: companion.personality, botName: companion.botName }); setCompanionPickerOpen(current => !current); }}>
           <div className="copilot-logo-circle">
-            <img src={brandAssets.sidekickAvatar} alt="" className="copilot-header-avatar" draggable={false} />
+            <img src={companion.avatar} alt="" className="copilot-header-avatar" draggable={false} />
           </div>
-          <span className="copilot-header-title">{botName} AI</span>
+          <span className="copilot-header-title">{companionName} AI</span>
+        </button>
+        {companionPickerOpen && <section role="dialog" aria-label="Space-Persönlichkeit" style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300, boxSizing: 'border-box', maxWidth: 'calc(100vw - 32px)', padding: 16, borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-primary, #101522)', color: 'var(--text-primary)', zIndex: 1000, boxShadow: '0 12px 32px rgba(0,0,0,.4)' }}>
+          <strong>Persönlichkeit für diesen Space</strong>
+          <CompanionPicker value={companionDraft} onChange={setCompanionDraft} disabled={!companion.loaded || companion.busy} />
+          {companion.error && <p role="alert">{companion.error}</p>}
+          {companion.error && <button type="button" onClick={companion.retry}>{locale.startsWith('de') ? 'Erneut laden' : 'Reload'}</button>}
+          {!companion.loaded && !companion.error && <p role="status">Wird geladen …</p>}
+          <div className="native-card-actions">
+            <button type="button" disabled={!companion.loaded || companion.busy} onClick={async () => { if (await companion.setSelection(companionDraft.personality, companionDraft.botName)) { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } }}>Speichern</button>
+            <button type="button" onClick={() => { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); }}>Abbrechen</button>
+          </div>
+        </section>}
         </div>
         <div className="copilot-header-actions">
           {/* Universal Model Picker in Header */}
@@ -749,7 +822,7 @@ export function CopilotSplitView({
               aria-expanded={modelPickerOpen}
             >
               <Cpu size={12} className="copilot-model-icon" />
-              <span className="copilot-header-model-name">{activeModelItem.label}</span>
+              <span className="copilot-header-model-name">{pickerModelLabel}</span>
               <ChevronDown size={11} className={`copilot-chevron-icon ${modelPickerOpen ? 'open' : ''}`} />
             </button>
 
@@ -879,11 +952,12 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn copilot-new-chat-btn"
-              title={t('sidebar.drawer.newChat')}
+              title="Reset Chat"
+              aria-label="Reset Chat"
               onClick={onNewChat}
             >
               <Plus size={13} />
-              <span>{t('common.add')}</span>
+              <span>Reset Chat</span>
             </button>
           )}
 
@@ -1002,12 +1076,12 @@ export function CopilotSplitView({
             {error && <div className="copilot-stream-error" role="alert">{error}</div>}
             {status && <div className="copilot-reset-status" role="status">{status}</div>}
             <div className="copilot-empty-icon">
-              <img src={brandAssets.sidekickAvatar} alt={botName} className="copilot-empty-avatar" draggable={false} />
+              <img src={companion.avatar} alt={companionName} className="copilot-empty-avatar" draggable={false} />
             </div>
-            <h4>{t('copilot.emptyTitle', { botName })}</h4>
+            <h4>{t('copilot.emptyTitle', { botName: companionName })}</h4>
             <p>{t('copilot.emptyDescription')}</p>
             <p>{t('copilot.quickChatDescription')}</p>
-            <span className="copilot-quick-chat-label">{botName} · {t('copilot.quickChat')}</span>
+            <span className="copilot-quick-chat-label">{companionName} · {t('copilot.quickChat')}</span>
 
             {quickActions && quickActions.length > 0 && (
               <div className="copilot-starter-chips">
@@ -1030,6 +1104,7 @@ export function CopilotSplitView({
             {error && <div className="copilot-stream-error" role="alert">{error}</div>}
             {status && <div className="copilot-reset-status" role="status">{status}</div>}
             {messages.map((msg, index) => {
+              const messageAppearance = messageCompanionAppearance(msg.companion, companion);
               const isUser = msg.role === 'user';
               const isAssistant = msg.role === 'assistant';
 
@@ -1039,8 +1114,8 @@ export function CopilotSplitView({
                   className={`copilot-message-row ${isUser ? 'user-row' : 'assistant-row'}`}
                 >
                   {!isUser && (
-                    <div className="copilot-avatar-circle" title={botName}>
-                      <img src={brandAssets.sidekickAvatar} alt="" className="copilot-msg-avatar" draggable={false} />
+                    <div className="copilot-avatar-circle" title={messageAppearance.botName}>
+                      <img src={messageAppearance.avatar} alt="" className="copilot-msg-avatar" draggable={false} />
                     </div>
                   )}
 
@@ -1141,12 +1216,15 @@ export function CopilotSplitView({
       <div className="copilot-footer">
         {!AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider })
           && <div className="copilot-model-gate-notice" role="status">{t('settings.panels.providers.multiAgentBetaRequired')}</div>}
-        {singleModelMigrationNotice && <div className="copilot-model-gate-notice" role="status">{t('settings.panels.providers.singleModelMigration')}</div>}
-        {activeModelFallbackNotice && <div className="copilot-model-gate-notice" role="status">{t('settings.panels.providers.activeModelFallback')}</div>}
         {modelCapabilitiesLoaded && visibleModelList.length === 0 && <div className="copilot-model-gate-notice" role="status">
           {t('settings.panels.providers.noActiveModels')} {onOpenSettings && <button type="button" onClick={() => onOpenSettings('providers')}>{t('settings.panels.providers.openActiveModels')}</button>}
         </div>}
-        {modelGateReason && <div className="copilot-model-gate-notice" role={modelGateReason === 'loading' ? 'status' : 'alert'}>
+        {favoriteInvalid && <div className="copilot-model-gate-notice" role="alert">
+          {locale === 'de' ? 'Der gespeicherte Quickchat-Favorit ist ungültig. Es wird kein anderes Modell stillschweigend gewählt.' : 'The saved Quickchat favorite is invalid. Another model will not be selected silently.'}
+          <button type="button" onClick={handleAutomaticModel}>{locale === 'de' ? 'Automatisch wählen' : 'Choose Automatic'}</button>
+          {favoriteError && <span>{favoriteError}</span>}
+        </div>}
+        {modelGateReason && !favoriteInvalid && <div className="copilot-model-gate-notice" role={modelGateReason === 'loading' ? 'status' : 'alert'}>
           {quickChatModelGateCopy[locale][modelGateReason]}
         </div>}
         <div className="copilot-model-row" ref={footerModelRef} style={{ position: 'relative' }}>
@@ -1155,11 +1233,12 @@ export function CopilotSplitView({
             className={`copilot-model-pill ${modelPickerOpen ? 'open' : ''}`}
             title={`Aktive KI-Engine: ${activeModelItem.label} • Klicken zum Wechseln`}
             onClick={() => setModelPickerOpen((prev) => !prev)}
+            onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setModelPickerOpen(previous => !previous); } }}
             role="button"
             tabIndex={0}
             aria-label="KI-Modell auswählen"
           >
-            <span className="model-pill-text">{activeModelItem.label}</span>
+            <span className="model-pill-text">{pickerModelLabel}</span>
             <ChevronDown size={12} className={`model-chevron ${modelPickerOpen ? 'open' : ''}`} />
           </div>
 
@@ -1175,22 +1254,14 @@ export function CopilotSplitView({
         </div>
 
         <form className="copilot-input-container" onSubmit={handleSubmit}>
-          <button
-            type="button"
-            className="copilot-input-extra-btn"
-            title="Tonalität & Prompts"
-          >
-            <Smile size={16} />
-          </button>
           <input
             type="text"
             className="copilot-input-field"
             value={inputText}
             onChange={(e) => { draftRevisionRef.current += 1; setInputText(e.target.value); }}
-            placeholder={t('chat.composerPlaceholder')} /* Ask about this page... */
-            disabled={busy}
+            placeholder={busy ? (locale === 'de' ? 'Änderung oder Ergänzung eingeben …' : 'Add a correction or change …') : t('chat.composerPlaceholder')}
           />
-          {busy && onStopChat ? (
+          {busy && onStopChat && (
             <button
               type="button"
               className="copilot-send-btn stop"
@@ -1199,17 +1270,17 @@ export function CopilotSplitView({
             >
               <StopCircle size={15} />
             </button>
-          ) : (
+          )}
             <button
               type="submit"
               className={`copilot-send-btn ${inputText.trim() ? 'active' : ''}`}
-              title={t('chat.send')}
-              disabled={!inputText.trim() || modelGateReason !== null}
+              title={busy ? (locale === 'de' ? 'Antwort steuern' : 'Steer response') : t('chat.send')}
+              aria-label={busy ? (locale === 'de' ? 'Antwort steuern' : 'Steer response') : t('chat.send')}
+              disabled={submissionPending || !inputText.trim() || (!busy && modelGateReason !== null)}
             >
-              <span>{t('chat.send')}</span>
+              <span>{busy ? (locale === 'de' ? 'Steuern' : 'Steer') : t('chat.send')}</span>
               <Send size={13} />
             </button>
-          )}
         </form>
       </div>
 

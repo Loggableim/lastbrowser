@@ -45,7 +45,14 @@ describe('Space Session & Partition Isolation', () => {
     expect(appTsx).toContain('sidekick.listSessions(requestedScope)');
     expect(appTsx).toContain('}, [activeProfileId, activeSpacePath, activeBackendProfileName, sidekickApiReady]);');
     expect(appTsx).toContain('!sessionId || activeSessionIdRef.current !== sessionId');
-    expect(appTsx).toMatch(/sidekick\.getSession\(\{[\s\S]*?profile:\s*activeProfileIdRef\.current,[\s\S]*?workspacePath:\s*activeSpacePathRef\.current\s*\}\)/);
+    const refreshStart = appTsx.indexOf('const loadActiveSession = useCallback');
+    expect(refreshStart).toBeGreaterThanOrEqual(0);
+    const refresh = appTsx.slice(refreshStart, refreshStart + 7000);
+    expect(refresh).toMatch(/const sessionScope: SessionListScope = \{\s*profile: activeProfileIdRef\.current,\s*workspacePath: activeSpacePathRef\.current,\s*backendProfileName: activeBackendProfileNameRef\.current\s*\}/);
+    expect(refresh).toMatch(/sidekick\.getSession\(\{\s*sessionId,\s*messages: true,\s*msgLimit: 80,\s*\.\.\.sessionScope\s*\}\)/);
+    expect(refresh).toContain('sidekick.getDraft({ sessionId, ...sessionScope })');
+    expect(refresh).toContain('activeSessionIdRef.current !== sessionId || !isSessionScopeCurrent()');
+    expect(refresh).toContain('sessionListResponseMatchesScope(sessionScope, {');
     expect(appTsx).toContain('const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };');
     expect(appTsx).toContain('workspacePath: turnContext.spacePath');
     expect(appTsx).toContain('window.lastbrowser.sidekick.renameSession({');

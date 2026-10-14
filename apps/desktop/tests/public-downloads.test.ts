@@ -24,12 +24,16 @@ describe('public release download references', () => {
         '4AB50EA0DCD2B4215A831F2F3D09A707420AA999E9541D377309BB99BB998335',
         '9821B152B3AE3248C9E3990D833AE047D711DE5391960D92FED02CC654A27663',
       ],
+      '0.1.56': [
+        'BA114390205DC4588EEC5029BE32ABF340A9439DCA8A8B36525C8D827433775F',
+        'FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3',
+      ],
     } as const;
 
     for (const relativePath of expected) {
       const source = readFileSync(path.join(repoRoot, 'lastbrowser.com', relativePath), 'utf8');
-      const version = source.match(/"softwareVersion": "(0\.1\.\d+) Beta"/)?.[1];
-      expect(version).toMatch(/^0\.1\.(52|53)$/);
+      const version = source.match(/"softwareVersion": "(0\.1\.\d+)(?: Beta)?"/)?.[1];
+      expect(version).toBe('0.1.56');
       expect(source).toContain(`/releases/download/v${version}/Lastbrowser-${version}-x64-setup.exe`);
       expect(source).toContain(`/releases/download/v${version}/Lastbrowser-${version}-x64-portable.exe`);
       for (const digest of digests[version as keyof typeof digests]) expect(source).toContain(digest);
@@ -41,23 +45,23 @@ describe('public release download references', () => {
 
   it('proxies the current release or the known pre-A-004b legacy tag', () => {
     const source = readFileSync(path.join(repoRoot, 'lastbrowser.com/functions/downloads/[file].js'), 'utf8');
-    expect(source).toMatch(/const RELEASE_TAG = 'v0\.1\.(45|53)';/);
-    expect(source).toMatch(/\/\$\{RELEASE_TAG\}\/Lastbrowser-0\.1\.(45|53)-x64-setup\.exe/);
-    expect(source).toMatch(/\/\$\{RELEASE_TAG\}\/Lastbrowser-0\.1\.(45|53)-x64-portable\.exe/);
+    expect(source).toContain("const RELEASE_TAG = 'v0.1.56';");
+    expect(source).toContain('/${RELEASE_TAG}/Lastbrowser-0.1.56-x64-setup.exe');
+    expect(source).toContain('/${RELEASE_TAG}/Lastbrowser-0.1.56-x64-portable.exe');
     expect(source).toContain('/${RELEASE_TAG}/latest.yml');
     expect(source).not.toContain('v0.1.34');
   });
 
-  it('shows v0.1.52 or the published v0.1.53 hotfix across localized site entry points', () => {
+  it('pins localized home pages to v0.1.56 and retains published changelog history', () => {
     const locales = ['', 'en/', 'es/', 'fr/', 'it/', 'ja/', 'pt/'];
 
     for (const locale of locales) {
       const home = readFileSync(path.join(repoRoot, 'lastbrowser.com', `${locale}index.html`), 'utf8');
       const changelog = readFileSync(path.join(repoRoot, 'lastbrowser.com', `${locale}changelog/index.html`), 'utf8');
 
-      expect(home).toMatch(/v0\.1\.(52|53)/);
+      expect(home).toContain('v0.1.56');
       expect(home).not.toContain('v0.1.32 Beta');
-      expect(changelog).toMatch(/v0\.1\.(52|53)/);
+      expect(changelog).toMatch(/v0\.1\.(52|53|56)/);
       expect(changelog).toContain('published release');
       expect(changelog).not.toContain('v0.1.35');
       expect(changelog).not.toMatch(/not yet published|not published|nicht veröffentlicht|no publicado|non publié|未公開/i);

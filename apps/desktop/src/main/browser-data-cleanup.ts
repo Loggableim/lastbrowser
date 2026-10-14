@@ -9,7 +9,7 @@ export type BrowserDataSession = {
   clearStorageData?: (options?: { storages?: BrowserStorageType[] }) => Promise<void>;
 };
 
-type BrowserStorageType = 'cookies' | 'localstorage' | 'cachestorage' | 'indexdb' | 'websql' | 'serviceworkers';
+type BrowserStorageType = 'cookies' | 'localstorage' | 'cachestorage' | 'indexdb' | 'serviceworkers';
 
 export type BrowserDataCleanupResult = {
   ok: boolean;
@@ -39,7 +39,7 @@ export async function clearBrowserData(
   };
   const storages: BrowserStorageType[] = [];
   if (options.cookies) storages.push('cookies');
-  if (options.storage) storages.push('localstorage', 'cachestorage', 'indexdb', 'websql', 'serviceworkers');
+  if (options.storage) storages.push('localstorage', 'cachestorage', 'indexdb', 'serviceworkers');
   if (!options.cache && storages.length === 0) {
     return { ok: true, clearedSessions: 0, failedSessions: 0 };
   }

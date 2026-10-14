@@ -3,7 +3,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(new URL('../src/renderer/App.tsx', import.meta.url), 'utf8');
-const boundary = source.slice(source.indexOf('  async function sendQuickChat('), source.indexOf('  async function stopQuickChat('));
+const boundary = source.slice(source.indexOf('  async function startQuickChatTurn('), source.indexOf('  async function stopQuickChat('));
 const js = ts.transpileModule(boundary, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
 const stopBoundary = source.slice(source.indexOf('  async function stopQuickChat('), source.indexOf('  async function runSidekickAction('));
 const stopJs = ts.transpileModule(stopBoundary, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
@@ -23,9 +23,9 @@ function harness() {
     activeProfileIdRef: ref('p'), activeSpacePathRef: ref('w'), activeBackendProfileNameRef: ref('b'),
     updateQuickChatMessagesForScope: (scope: string, update: any) => transcripts.set(scope, update(transcripts.get(scope) ?? [])),
     setQuickChatErrorForScope: () => {},
-    readCapturedSpaceModelSelection: () => { requests++; return new Promise((done, fail) => { resolve = done; reject = fail; }); },
+    prepareQuickChatModelSelection: () => { requests++; return new Promise((done, fail) => { resolve = done; reject = fail; }); },
   };
-  const send = new Function(...Object.keys(context), `${js}; return sendQuickChat;`)(...Object.values(context));
+  const send = new Function(...Object.keys(context), `${js}; return startQuickChatTurn;`)(...Object.values(context));
   const stop = new Function(...Object.keys(context), `${stopJs}; return stopQuickChat;`)(...Object.values(context));
   return { send, stop, context, transcripts, requests: () => requests,
     resolve: () => resolve({}), reject: () => reject(new Error('catalog unavailable')) };

@@ -15,7 +15,7 @@ describe('desktop access password lock', () => {
     const authGate = source.indexOf('const startupAuthAllowsShell = canRenderBrowserForAccessAuth(');
     const startupGate = source.indexOf("if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged)", authGate);
     const startupScreen = source.indexOf('<StartupScreen', startupGate);
-    const browserShell = source.indexOf('className={`app-shell panel-', startupGate);
+    const browserShell = source.indexOf('className={`app-shell', startupGate);
     expect(authGate).toBeGreaterThanOrEqual(0);
     expect(startupGate).toBeGreaterThan(authGate);
     expect(startupScreen).toBeGreaterThan(startupGate);

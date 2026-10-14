@@ -84,7 +84,9 @@ describe('A-007 navigation clicks through the real controls', () => {
       configFile: false,
       root: process.cwd(),
       cacheDir: path.join(directory, 'vite-cache'),
-      optimizeDeps: { entries: ['tests/fixtures/nav-smoke.html'], include: ['dompurify', 'marked'] },
+      // Shared rich text now imports these locally. Discovering them after the
+      // first navigation triggers a Vite reload and destroys the probed frame.
+      optimizeDeps: { entries: ['tests/fixtures/nav-smoke.html'], include: ['dompurify', 'marked', 'mermaid', 'katex'] },
       server: { host: '127.0.0.1', port: 0, watch: null }
     });
     await server.listen();

@@ -134,6 +134,9 @@ def memory_recall(host,manager,context,query,target):
     _validate_owner(manager,context)
     filename={'memory':'MEMORY.md','user':'USER.md'}[target]
     resolved=manager.resolver.validate_context(context,authenticated_profile_name=context.backend_profile_name)
+    from runtime.memory_policy import memory_enabled
+    if not memory_enabled(resolved.profile_home):
+        raise PermissionError('memory_disabled_enable_in_hub')
     memory_root=resolved.space.memory_dir
     path=memory_root/filename
     profile=profiles_for_host(host).read(context.scope,actor=context.backend_profile_name)

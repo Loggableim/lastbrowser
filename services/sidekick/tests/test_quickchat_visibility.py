@@ -42,7 +42,7 @@ def test_normal_session_list_hides_explicit_quickchat_for_all_route_scopes(monke
     monkeypatch.setattr(web_server, "_bound_workspace_sessions", lambda _path: [])
     monkeypatch.setattr(web_server, "_workspace_path_from_request",
         lambda request: tmp_path if request.query_params.get("workspace_path") else None)
-    client = TestClient(web_server.app)
+    client = TestClient(web_server.app, base_url="http://127.0.0.1")
     headers = {web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN,
         "Cookie": "sidekick_profile=default"}
 
@@ -78,7 +78,7 @@ def test_default_space_index_source_is_private_filtered_in_slug_and_path_routes(
     monkeypatch.setattr(web_server, "_bound_workspace_sessions", lambda _path: [])
     monkeypatch.setattr(web_server, "_workspace_path_from_request", lambda request:
         tmp_path if request.query_params.get("workspace_path") else None)
-    client = TestClient(web_server.app)
+    client = TestClient(web_server.app, base_url="http://127.0.0.1")
     headers = {web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN,
         "Cookie": "sidekick_profile=default"}
 
@@ -113,7 +113,7 @@ def test_bound_workspace_scan_filters_before_projection_but_keeps_quickchat_deta
             "messages": [], **markers,
         }), encoding="utf-8")
 
-    client = TestClient(web_server.app)
+    client = TestClient(web_server.app, base_url="http://127.0.0.1")
     headers = {web_server._SESSION_HEADER_NAME: web_server._SESSION_TOKEN,
         "Cookie": "sidekick_profile=default"}
     listed = client.get("/api/sessions?workspace_path=ignored&limit=1&offset=0", headers=headers)

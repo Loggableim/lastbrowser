@@ -30,7 +30,7 @@ const clickScript = `(async () => {
     const wrapEvents = wrap ? getComputedStyle(wrap).pointerEvents : null;
     if (!chosen) {
       const mid = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      return { ok: false, selector, reason: 'covered', wrapEvents, hit: mid ? (mid.className || mid.tagName) : null, rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height } };
+      return { ok: false, selector, reason: 'covered', wrapEvents, hit: mid ? (mid.className || mid.tagName) : null, hitHTML: mid?.outerHTML.slice(0,1000), pointerEvents:getComputedStyle(el).pointerEvents, rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height } };
     }
     const target = document.elementFromPoint(chosen.x, chosen.y);
     target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: chosen.x, clientY: chosen.y, view: window }));
@@ -73,7 +73,9 @@ app.whenReady().then(async () => {
   });
   const contents = window.webContents;
   const logs = [];
-  contents.on('console-message', (_event, _level, message) => logs.push(message));
+  contents.on('console-message', event => logs.push(`console ${event.level}: ${event.message}`));
+  contents.on('render-process-gone', (_event, details) => logs.push(`renderer-gone ${JSON.stringify(details)}`));
+  contents.on('did-start-navigation', (_event, url, _inPlace, mainFrame) => { if (mainFrame) logs.push(`main-navigation ${url}`); });
   contents.on('did-fail-load', (_event, code, description, url) => logs.push(`fail-load ${code} ${description} ${url}`));
   try {
     await window.loadURL(process.env.LASTBROWSER_NAV_PROOF_URL);
@@ -86,13 +88,42 @@ app.whenReady().then(async () => {
       const html = await contents.executeJavaScript('document.body ? document.body.innerText.slice(0, 1500) : "no-body"').catch((error) => String(error));
       throw new Error(`navigation fixture did not render sidebar drawer tabs\n${html}\n${logs.join('\n')}`);
     }
+    // React's mount effect precedes font loading and finite CSS transitions.
+    // Wait for real hit-test readiness; never hide or bypass an obstruction.
+    const readiness = await contents.executeJavaScript(`(async () => {
+      await document.fonts.ready;
+      const selectors = ['.sidebar-drawer-tabs button[role="tab"]:nth-of-type(2)', '.sidebar-collapse-icon-btn'];
+      const inspect = selector => {
+        const el = document.querySelector(selector);
+        if (!el) return {selector, ready:false, reason:'missing'};
+        const rect = el.getBoundingClientRect(), style = getComputedStyle(el);
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        const parents = []; for(let p=el;p&&parents.length<5;p=p.parentElement) {
+          const css=getComputedStyle(p); parents.push({tag:p.tagName,classes:p.className,visibility:css.visibility,pointerEvents:css.pointerEvents,opacity:css.opacity});
+        }
+        return {selector,ready:rect.width>0&&rect.height>0&&!!hit&&(hit===el||el.contains(hit)),
+          rect:{x:rect.x,y:rect.y,w:rect.width,h:rect.height},pointerEvents:style.pointerEvents,
+          hit:hit?.outerHTML.slice(0,1000),parents};
+      };
+      const initial=selectors.map(inspect), started=performance.now();
+      let previous='', stable=0, current=initial;
+      while(performance.now()-started<5000) {
+        current=selectors.map(inspect);
+        const geometry=JSON.stringify(current.map(item=>item.rect));
+        stable=current.every(item=>item.ready)&&geometry===previous?stable+1:0;
+        if(stable>=2)return {initial,final:current,waitedMs:performance.now()-started};
+        previous=geometry;
+        await new Promise(resolve=>requestAnimationFrame(resolve));
+      }
+      throw Error('Navigation controls remained obstructed after layout settled: '+JSON.stringify({initial,final:current}));
+    })()`);
     window.focus();
     contents.focus();
     const clicked = await contents.executeJavaScript(clickScript);
-    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ ready: true, clicked }, null, 2));
+    fs.writeFileSync(path.join(output, 'result.json'), JSON.stringify({ ready: true, clicked, rendering: 'default', readiness, logs }, null, 2));
     app.exit(0);
   } catch (error) {
-    fs.writeFileSync(path.join(output, 'error.txt'), String(error && error.stack || error));
+    fs.writeFileSync(path.join(output, 'error.txt'), String(error && error.stack || error) + '\n' + logs.join('\n'));
     app.exit(1);
   }
 });

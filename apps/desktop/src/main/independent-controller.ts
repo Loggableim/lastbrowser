@@ -15,7 +15,7 @@ import { LocalAiController } from './local-ai-controller.js';
 import type { scanLocalAiHardware, scanLocalAiHardwareInventory } from './local-ai-hardware.js';
 import { browserOwnerFields, isNativeBrowserOwner, sameBrowserOwner, type BrowserOwnerFields, type NativeBrowserOwner } from './browser-lease-owner.js';
 
-const publicOperations = new Set(['assistantSnapshot', 'assistantTurn', 'cancelAssistantTurn', 'assistantReset', 'assistantControl', 'interviewStart', 'interviewAnswer',
+const publicOperations = new Set(['companion', 'assistantSnapshot', 'assistantTurn', 'cancelAssistantTurn', 'assistantReset', 'assistantControl', 'interviewStart', 'interviewAnswer',
   'interviewReview', 'interviewContinue', 'interviewConfirm', 'interviewSkip', 'activity', 'dispatch', 'runControl',
   'permissions', 'approve', 'capabilities', 'bindings', 'events', 'globalActivity', 'modelSelection',
   'definitions', 'connectionSetup', 'connectionConfigure']);
@@ -187,6 +187,17 @@ export class IndependentController {
       try { this.assertCapture(capture, binding, renderer, rendererFrame); }
       catch (error) { this.selectedCaptures.delete(ref); this.pruneCaptures(); throw error; }
     }
+  }
+  /** Resolve only human browser sessions from Main-owned bindings; never agent execution sessions. */
+  async browserProfileForSession(targetSession: Session): Promise<string | null> {
+    await this.loadPromise;
+    if (this.executionSessions.has(targetSession) || this.quarantinedExecutionSessions.has(targetSession)) return null;
+    const matches = new Set<string>();
+    for (const binding of this.bindings.values()) {
+      if (binding.partitionKey.startsWith('persist:space_') && session.fromPartition(binding.partitionKey) === targetSession)
+        matches.add(binding.scope.browserProfileId);
+    }
+    return matches.size === 1 ? [...matches][0] : null;
   }
   async lookupBinding(browserProfileId: string, workspacePath: string | null | undefined, backendProfileName?: string): Promise<{
     scope: BrowserScope; backendProfileName: string;
@@ -552,7 +563,12 @@ export class IndependentController {
     const binding = this.binding(request.scope);
     if (request.backendProfileName && request.backendProfileName !== binding.backendProfileName) throw new Error('Profile differs from the saved Space binding');
     if (request.operation === 'localAi') {
-      if (bundledLocalAiUnavailableActions.has(String(payload.action)))
+      // Catalog browsing and a user-requested hardware scan do not enable
+      // bundled model installation, inference or bootstrap in this build.
+      const storeBrowseOnly = payload.action === 'store' && payload.request !== null
+        && typeof payload.request === 'object' && !Array.isArray(payload.request)
+        && ['view', 'scan'].includes(String((payload.request as { operation?: unknown }).operation));
+      if (bundledLocalAiUnavailableActions.has(String(payload.action)) && !storeBrowseOnly)
         throw new BrowserHostError('local_ai_unavailable_in_test_build', 'Bundled local model setup and inference are unavailable in this test build');
       return this.localAi.request(binding, payload, recheck);
     }
@@ -722,6 +738,15 @@ export class IndependentController {
       // candidate, then checks live CAS, permission revision and control epoch.
       // The renderer cannot supply a command, actor or provenance claim.
     }
+    if (request.operation === 'companion') {
+      const allowed = payload.action === 'get' ? ['action'] : ['action', 'personality', 'botName', 'expectedRevision', 'clientRequestId'];
+      if (!['get', 'set'].includes(payload.action) || Object.keys(payload).some(key => !allowed.includes(key))
+        || payload.action === 'set' && (!['nova', 'analytical', 'developer', 'creative', 'mentor'].includes(payload.personality)
+          || payload.botName !== undefined && (typeof payload.botName !== 'string' || payload.botName.length > 80)
+          || payload.expectedRevision !== undefined && (!Number.isSafeInteger(payload.expectedRevision) || payload.expectedRevision < 0)
+          || payload.clientRequestId !== undefined && (typeof payload.clientRequestId !== 'string' || payload.clientRequestId.length > 128)))
+        throw new Error('Invalid Quickchat companion preference');
+    }
     if (!publicOperations.has(request.operation)) throw new Error('Independent operation is not exposed to the renderer');
     if (request.operation === 'permissions' && payload.action === 'revoke') {
       await this.accounts.closeSetupScope(binding.scope, 'permission_revoked'); recheck();
@@ -736,7 +761,7 @@ export class IndependentController {
     }
     const result = await this.options.apiRequest(request.operation, binding.scope, payload, binding.backendProfileName);
     recheck();
-    if (['definitions', 'connectionSetup', 'connectionConfigure', 'assistantReset', 'assistantControl'].includes(request.operation)) {
+    if (['companion', 'definitions', 'connectionSetup', 'connectionConfigure', 'assistantReset', 'assistantControl'].includes(request.operation)) {
       const response = object(result);
       if (response.schemaVersion !== 1 || !sameBrowserScope(validateScope(response.scope), binding.scope))
         throw new Error('Invalid bound independent operation response');

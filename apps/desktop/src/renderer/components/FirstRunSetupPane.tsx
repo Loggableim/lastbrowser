@@ -1,3 +1,10 @@
+import { PasswordVaultPanel } from './PasswordVaultPanel.js';
+import { IndependentAssistantClient } from '../independent-assistant-client.js';
+import { parseProviderModelId } from '../provider-model-selection.js';
+import { browserImportCopy } from '../i18n/browser-import.js';
+import './browser-import-options.css';
+import './first-run-pages.css';
+import { firstRunWizardPages, type FirstRunWizardPage } from './first-run-flow.js';
 /**
  * First-run setup assistant for Lastbrowser.
  *
@@ -12,6 +19,7 @@
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowRight,
+  ArrowLeft,
   Bookmark,
   Bot,
   Check,
@@ -34,15 +42,17 @@ import {
   X
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
+import { companionDefaultNames, personalityAvatar, type CompanionPersonality } from '../personality-avatar.js';
 import { importBookmarksFromHtml, importBookmarksFromJson, mergeBookmarks } from '../bookmark-io.js';
 import { loadBookmarks, saveBookmarks } from '../bookmarks.js';
-import { loadVisitedSites, saveVisitedSites, recordVisit } from '../history.js';
+import { saveImportedVisitedSites } from '../history.js';
 import { usePinnedAppStore, PRESET_PINNED_APPS } from '../stores/usePinnedAppStore.js';
 import {
   modelNote,
   providerPresentation,
   tierLabels,
   PROVIDER_RECOMMENDATIONS,
+  RECOMMENDED_PROVIDER_IDS,
   PERSONALITY_PROFILES,
   BOT_NAME_PRESETS,
   type PersonalityProfile
@@ -52,7 +62,7 @@ import { recommendedSearchEngines, moreSearchEngines } from '../../main/browser-
 import { useTabStore } from '../stores/useTabStore.js';
 import { localizedProviderRecommendation } from '../i18n/provider-recommendations.js';
 import { localizedProviderDescription } from '../i18n/provider-descriptions.js';
-import { providerVerification } from '../provider-verification.js';
+import { providerVerification, isStableProvider } from '../provider-verification.js';
 import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQualified } from '../provider-chat-evidence.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { ProviderBetaCatalogToggle } from './ProviderBetaCatalogToggle.js';
@@ -80,14 +90,32 @@ export type SetupForm = {
   personality: string;
   defaultBrowser?: boolean;
   importedBookmarksCount?: number;
+  firstSpaceName?: string;
 };
 
 export const BROWSER_CHOICES = [
   { id: 'chrome', name: 'Google Chrome', color: '#4285F4', icon: '🌐', hint: 'Lesezeichen, Verlauf & Favoriten' },
   { id: 'edge', name: 'Microsoft Edge', color: '#0078D7', icon: '🌊', hint: 'Favoriten & Browser-Chronik' },
   { id: 'firefox', name: 'Mozilla Firefox', color: '#FF7139', icon: '🦊', hint: 'Lesezeichen & Chronik' },
-  { id: 'brave', name: 'Brave Browser', color: '#FB542B', icon: '🦁', hint: 'Shields & Bookmarks' }
+  { id: 'zen', name: 'Zen Browser', color: '#F0C9A0', icon: '🌅', hint: 'Firefox · Lesezeichen & Chronik' },
+  { id: 'brave', name: 'Brave Browser', color: '#FB542B', icon: '🦁', hint: 'Chromium' },
+  { id: 'opera', name: 'Opera', color: '#ff2d55', icon: 'O', hint: 'Chromium' },
+  { id: 'opera-gx', name: 'Opera GX', color: '#fa1e4e', icon: 'GX', hint: 'Chromium' },
+  { id: 'vivaldi', name: 'Vivaldi', color: '#ef3939', icon: 'V', hint: 'Chromium' },
+  { id: 'chromium', name: 'Chromium', color: '#66aaff', icon: '🌐', hint: 'Chromium' },
+  { id: 'arc', name: 'Arc', color: '#ca9bff', icon: 'A', hint: 'Chromium' },
+  { id: 'yandex', name: 'Yandex Browser', color: '#ffcc00', icon: 'Y', hint: 'Chromium' },
+  { id: 'waterfox', name: 'Waterfox', color: '#389bde', icon: 'W', hint: 'Firefox' },
+  { id: 'librewolf', name: 'LibreWolf', color: '#35b6c7', icon: '🐺', hint: 'Firefox' },
+  { id: 'floorp', name: 'Floorp', color: '#8756ce', icon: 'F', hint: 'Firefox' }
 ];
+type ImportCapability = { supported: boolean; available: boolean; method: 'native' | 'csv' | 'unsupported'; reason?: string };
+type ImportDataType = 'bookmarks' | 'history' | 'homepages' | 'openTabs' | 'passwords' | 'cookies' | 'extensions';
+type BrowserDiscoveryView = {
+  defaultBrowser: string | null; defaultBrowserId: string | null;
+  profiles: Array<{ id: string; browser: string; name: string; preferred: boolean; family?: string; capabilities?: Partial<Record<ImportDataType, ImportCapability>> }>;
+  browsers?: Array<{ id: string; label: string; family: string; installed: boolean; profileCount: number; capabilities: Partial<Record<ImportDataType, ImportCapability>> }>;
+};
 
 type CodexOAuthState = {
   status: 'idle' | 'starting' | 'pending' | 'success' | 'expired' | 'cancelled' | 'error';
@@ -100,6 +128,7 @@ type CodexOAuthState = {
 };
 
 export type FirstRunSetupPaneProps = {
+  initialSpaceName?: string;
   browserProfileId?:string;
   workspacePath?:string;
   backendProfileName?:string|null;
@@ -111,14 +140,16 @@ export type FirstRunSetupPaneProps = {
   saving: boolean;
   onRefreshOnboarding: () => Promise<void>;
   onChooseAi: (choice:FirstRunAiChoice) => Promise<boolean>;
-  onCompleteBrowserSetup: () => Promise<boolean>;
+  onCompleteBrowserSetup: (firstSpaceName?: string) => Promise<boolean>;
   onSubmit: (form: SetupForm) => Promise<void>;
   onDismiss: () => void;
+  onImportedPages?: (request: { openTabs: Array<{ url: string; title: string; pinned?: boolean }>; homepages: string[] }) => Promise<{ openedTabs: number; savedHomepages: number }>;
 };
 
 const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
 
 export function FirstRunSetupPane({
+  initialSpaceName = 'Home',
   browserProfileId,
   workspacePath='',
   backendProfileName,
@@ -132,7 +163,8 @@ export function FirstRunSetupPane({
   onChooseAi,
   onCompleteBrowserSetup,
   onSubmit,
-  onDismiss
+  onDismiss,
+  onImportedPages
 }: FirstRunSetupPaneProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
   const searchEngineId = useTabStore((state) => state.searchEngineId);
@@ -140,37 +172,55 @@ export function FirstRunSetupPane({
   const [showMoreSearchEngines, setShowMoreSearchEngines] = useState(false);
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [flowError, setFlowError] = useState('');
+  type WizardPage = FirstRunWizardPage;
+  const [page, setPage] = useState<WizardPage>('search');
+  const [firstSpaceName, setFirstSpaceName] = useState(initialSpaceName.slice(0, 80));
+  const [choicePending, setChoicePending] = useState(false);
+  const [detectionReady, setDetectionReady] = useState(false);
+  const pageContentRef = useRef<HTMLDivElement>(null);
+  const pageHeadingRef = useRef<HTMLHeadingElement>(null);
   const providers = cloudProviderOptions(onboardingStatus);
   const [liveProviderModels, setLiveProviderModels] = useState<Record<string, Array<{ id: string; label: string }>>>({});
   const [modelProbeLoading, setModelProbeLoading] = useState(false);
   const [modelProbeError, setModelProbeError] = useState('');
-  // A provider is a default only after an exact successful chat in this profile
-  // and the current app session. Otherwise the empty choice is intentional.
+  // Stable providers are available immediately. Experimental providers still
+  // require explicit beta visibility or successful chat evidence in this scope.
   const evidenceStorage = typeof window === 'undefined' ? undefined : window.localStorage;
-  const qualifiedProviders = providers.filter(item => Boolean(browserProfileId && evidenceStorage
+  const qualifiedProviders = providers.filter(item => isStableProvider(item.id) || Boolean(browserProfileId && evidenceStorage
     && getProviderChatEvidence(item.id, browserProfileId, backendProfileName || 'default', evidenceStorage)));
   const defaultProviderId = qualifiedProviders.some((p) => p.id === 'openai-codex')
     ? 'openai-codex'
     : (qualifiedProviders[0]?.id || '');
 
   const [provider, setProvider] = useState<string>(defaultProviderId);
+  const [apiKey, setApiKey] = useState('');
+  const [baseUrl, setBaseUrl] = useState<string>('');
+  const modelRequestKey = JSON.stringify([browserProfileId, workspacePath, backendProfileName, provider, apiKey, baseUrl]);
+  const activeModelRequestKey = useRef(modelRequestKey);
+  activeModelRequestKey.current = modelRequestKey;
+  const modelRequestSerial = useRef(0);
+  const [modelCatalogKey, setModelCatalogKey] = useState('');
+  const [providerAuth, setProviderAuth] = useState({ key: '', configured: false });
+  const savedProviderCredentials = providerAuth.key === modelRequestKey && providerAuth.configured;
   const providerModelOptions = useMemo(() => {
-    const catalog = liveProviderModels[provider] ?? [];
+    const catalog = modelCatalogKey === modelRequestKey ? liveProviderModels[provider] ?? [] : [];
     return showUntestedBetas || !browserProfileId ? catalog
       : catalog.filter(item => isProviderModelQualified(provider, item.id, browserProfileId, backendProfileName || 'default', window.localStorage));
-  }, [liveProviderModels, provider, showUntestedBetas, browserProfileId]);
+  }, [liveProviderModels, provider, showUntestedBetas, browserProfileId, backendProfileName, modelCatalogKey, modelRequestKey]);
   const models = providerModelOptions;
   const [model, setModel] = useState('');
-  const [apiKey, setApiKey] = useState('');
   const [oauthState, setOAuthState] = useState<CodexOAuthState>(idleCodexOAuth);
 
   // Identity & Personality state
-  const [botName, setBotName] = useState<string>('Nova');
+  const [selectedBotPreset, setSelectedBotPreset] = useState<string>('Nova');
+  const [customBotNames, setCustomBotNames] = useState<Record<string, string>>({});
+  const botName = customBotNames[selectedBotPreset] ?? selectedBotPreset;
+  const effectiveBotName = botName.trim() || selectedBotPreset;
+  const setBotName = (name: string) => setCustomBotNames(current => ({ ...current, [selectedBotPreset]: name }));
   const [personality, setPersonality] = useState<string>('nova');
 
   // Setup mode tab: featured recommendations vs API-key providers.
   const [activeTab, setActiveTab] = useState<'featured' | 'custom'>('featured');
-  const [baseUrl, setBaseUrl] = useState<string>('');
 
   // Standalone Sidekick install migration (first-run assistant).
   const [standaloneReport, setStandaloneReport] = useState<{
@@ -191,35 +241,30 @@ export function FirstRunSetupPane({
   const oauthAlreadyReady = Boolean(oauthProviderId)
     && onboardingStatus?.system?.chat_ready === true
     && String(onboardingStatus.system.current_provider || '').toLowerCase() === oauthProviderId;
-  const oauthNeedsLogin = Boolean(oauthProviderId) && oauthState.status !== 'success' && !oauthAlreadyReady;
+  const oauthNeedsLogin = Boolean(oauthProviderId) && oauthState.status !== 'success' && !oauthAlreadyReady && !savedProviderCredentials;
   // Anthropic supports both linking an existing Claude Code session and
   // entering a regular Anthropic API key. Either credential path is valid.
   const oauthLoginReady = !oauthNeedsLogin || (provider === 'anthropic' && Boolean(apiKey.trim()));
   const providerModelsReady = !['google-gemini-cli', 'openai-codex'].includes(provider) || models.length > 0;
   const keyRequired = Boolean(activeProviderOption && !activeProviderOption.oauthProvider && !activeProviderOption.keyOptional);
-  const credentialsReady = !keyRequired || Boolean(apiKey.trim());
+  const credentialsReady = !keyRequired || Boolean(apiKey.trim()) || savedProviderCredentials;
   const canSubmitForm = canSubmit && oauthLoginReady && providerModelsReady && credentialsReady && Boolean(model);
 
   const chooseAi = async (choice: FirstRunAiChoice) => {
     setFlowError('');
-    if (!await onChooseAi(choice)) setFlowError(t('firstRun.aiChoiceSaveError'));
+    setChoicePending(true);
+    try {
+      if (!await onChooseAi(choice)) setFlowError(t('firstRun.aiChoiceSaveError'));
+    } catch (cause) { setFlowError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { setChoicePending(false); }
   };
   const completeBrowserSetup = async () => {
     setFlowError('');
-    if (!await onCompleteBrowserSetup()) setFlowError(t('firstRun.browserSetupSaveError'));
+    if (!firstSpaceName.trim()) return;
+    try {
+      if (!await onCompleteBrowserSetup(firstSpaceName.trim())) setFlowError(t('firstRun.browserSetupSaveError'));
+    } catch (cause) { setFlowError(cause instanceof Error ? cause.message : String(cause)); }
   };
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || saving) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (aiChoice === 'disabled') void completeBrowserSetup();
-      else void chooseAi('disabled');
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [aiChoice, saving]);
 
   useEffect(() => {
     if (!providers.some((item) => item.id === provider) && providers[0]) {
@@ -240,16 +285,20 @@ export function FirstRunSetupPane({
   // Detect an existing standalone Sidekick installation once on mount.
   useEffect(() => {
     let cancelled = false;
+    const timeout = window.setTimeout(() => { if (!cancelled) setDetectionReady(true); }, 5000);
     const detect = async () => {
       try {
         const report = await window.lastbrowser?.sidekick?.detectExistingInstall?.();
         if (!cancelled && report?.found) setStandaloneReport(report);
       } catch {
-        // Detection is best-effort; the wizard works fine without migration.
+        // Only a positively detected installation adds the optional import page.
+      } finally {
+        if (!cancelled) setDetectionReady(true);
+        window.clearTimeout(timeout);
       }
     };
     void detect();
-    return () => { cancelled = true; };
+    return () => { cancelled = true; window.clearTimeout(timeout); };
   }, []);
 
   const runStandaloneMigration = useCallback(async () => {
@@ -283,37 +332,74 @@ export function FirstRunSetupPane({
     }
   }, []);
 
-  const loadLiveModels = useCallback(async () => {
-    if (aiChoice !== 'enabled') return;
-    if (!['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek', 'gemini'].includes(provider)) return;
-    if (!apiKey.trim()) return;
+  const loadLiveModels = useCallback(async (): Promise<Array<{ id: string; label: string }>> => {
+    const capturedKey = modelRequestKey;
+    const serial = ++modelRequestSerial.current;
+    const current = () => activeModelRequestKey.current === capturedKey && modelRequestSerial.current === serial;
+    if (aiChoice !== 'enabled' || !provider || !canSubmit) { setModelProbeLoading(false); return []; }
     setModelProbeLoading(true);
     setModelProbeError('');
+    let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
-      const response = await window.lastbrowser.sidekick.requestWebui({
-        method: 'POST',
-        path: '/api/models/probe',
-        body: { provider, api_key: apiKey.trim(), ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) }
-      }) as { models?: Array<Record<string, unknown>>; error?: string };
-      const models = (response?.models || []).map((item) => {
-        const id = String(item.id || item.name || '').trim();
-        return id ? { id, label: String(item.label || item.name || id) } : null;
-      }).filter((item): item is { id: string; label: string } => Boolean(item));
-      if (models.length) {
-        setLiveProviderModels((current) => ({ ...current, [provider]: models }));
-        setModel((current) => models.some((item) => item.id === current) ? current : models[0].id);
-      } else {
-        setModelProbeError(response?.error || 'Dieser Schlüssel hat keine verfügbaren Modelle zurückgegeben.');
+      const readCatalog = async () => {
+        if (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider)) {
+          const response = await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/models/probe',
+            body: { provider, api_key: apiKey.trim(), ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) }
+          }) as { models?: Array<{ id?: string; name?: string; label?: string }>; error?: string };
+          if (response.error) throw new Error(response.error);
+          return { models: response.models || [], configured: false };
+        }
+        if (!browserProfileId || !backendProfileName) throw new Error('Das aktive Browserprofil wird noch vorbereitet. Bitte erneut laden.');
+        const scopeSelection = { browserProfileId, workspacePath: workspacePath || null, backendProfileName };
+        const client = new IndependentAssistantClient(window.lastbrowser.independent);
+        const resolved = await client.request({ schemaVersion: 1, operation: 'resolveScope',
+          payload: { browserProfileId, workspacePath: workspacePath || null }, backendProfileName });
+        if (!resolved.ok) throw new Error(resolved.error.message);
+        if (resolved.value.scope.browserProfileId !== browserProfileId) throw new Error('Modellkatalog gehört zu einem anderen Profil.');
+        const [catalog, auth] = await Promise.all([
+          client.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get', includeCatalog: true } }),
+          window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection }) as Promise<{ providers?: Array<{ id: string; has_key?: boolean; oauth_connected?: boolean; provider_available?: boolean }> }>
+        ]);
+        if (!catalog.ok) throw new Error(catalog.error.message);
+        if (catalog.value.scope.browserProfileId !== resolved.value.scope.browserProfileId
+          || catalog.value.scope.backendProfileId !== resolved.value.scope.backendProfileId
+          || catalog.value.scope.spaceId !== resolved.value.scope.spaceId) throw new Error('Modellkatalog-Profil hat sich geändert.');
+        const group = catalog.value.groups?.find(item => item.provider_id === provider);
+        const credentials = auth.providers?.find(item => item.id === provider);
+        const configured = credentials?.provider_available !== false && Boolean(credentials?.has_key || credentials?.oauth_connected || (group?.configured && activeProviderOption?.keyOptional));
+        return { models: group ? [...group.models, ...(group.extra_models || [])] : [], configured };
+      };
+      const result = await Promise.race([readCatalog(), new Promise<never>((_, reject) => {
+        deadline = setTimeout(() => reject(new Error('Modellliste antwortet nicht. Bitte erneut laden oder den Browser ohne KI starten.')), 20000);
+      })]);
+      if (!current()) return [];
+      const available = [...new Map(result.models.map(item => {
+        const raw = String(item.id || ('name' in item ? item.name : '') || '').trim();
+        const id = parseProviderModelId(raw, provider).model;
+        return [id, { id, label: String(item.label || id) }] as const;
+      }).filter(([id]) => id)).values()];
+      setProviderAuth({ key: capturedKey, configured: result.configured });
+      setModelCatalogKey(capturedKey);
+      setLiveProviderModels(previous => ({ ...previous, [provider]: available }));
+      setModel(previous => available.some(item => item.id === previous) ? previous : available[0]?.id || '');
+      if (!available.length) setModelProbeError(oauthProviderId ? 'Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.' : 'Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.');
+      return available;
+    } catch (cause) {
+      if (current()) {
+        setModelProbeError(cause instanceof Error ? cause.message : 'Modelle konnten nicht geladen werden.');
+        setModelCatalogKey('');
+        setModel('');
       }
-    } catch (error) {
-      setModelProbeError(error instanceof Error ? error.message : 'Modelle konnten nicht geladen werden.');
+      return [];
     } finally {
-      setModelProbeLoading(false);
+      if (deadline) clearTimeout(deadline);
+      if (current()) setModelProbeLoading(false);
     }
-  }, [aiChoice, apiKey, baseUrl, provider]);
+  }, [aiChoice, apiKey, baseUrl, provider, browserProfileId, workspacePath, backendProfileName, modelRequestKey, canSubmit, oauthProviderId, activeProviderOption?.keyOptional]);
 
   useEffect(() => {
     void loadLiveModels();
+    return () => { modelRequestSerial.current++; };
   }, [loadLiveModels]);
 
   // OAuth polling
@@ -322,10 +408,11 @@ export function FirstRunSetupPane({
     let cancelled = false;
     let timer = 0;
     let transientFailures = 0;
+    const capturedLoginKey = modelRequestKey;
     const poll = async (): Promise<void> => {
       try {
         const response = await window.lastbrowser.sidekick.pollOAuth(oauthState.flowId || '');
-        if (cancelled) return;
+        if (cancelled || activeModelRequestKey.current !== capturedLoginKey) return;
         const nextStatus = String(response.status || 'error') as CodexOAuthState['status'];
         if (nextStatus === 'pending') {
           transientFailures = 0;
@@ -382,9 +469,11 @@ export function FirstRunSetupPane({
     }
     clearProviderChatEvidence(provider, window.localStorage);
     const providerLabel = activeProviderOption?.label || 'Provider';
+    const capturedLoginKey = modelRequestKey;
     setOAuthState({ status: 'starting', message: t('firstRun.startingLogin', { provider: providerLabel }) });
     try {
       const response = await window.lastbrowser.sidekick.startOAuth({ provider: oauthProviderId });
+      if (activeModelRequestKey.current !== capturedLoginKey) return;
       if (response.error) throw new Error(response.error);
       const flowId = String(response.flow_id || '');
 
@@ -440,6 +529,7 @@ export function FirstRunSetupPane({
         }
       }
     } catch (loginError) {
+      if (activeModelRequestKey.current !== capturedLoginKey) return;
       setOAuthState({
         status: 'error',
         message: loginError instanceof Error ? loginError.message : String(loginError)
@@ -449,18 +539,21 @@ export function FirstRunSetupPane({
 
   async function activateProviderAfterLogin(): Promise<void> {
     if (!provider) return;
+    const capturedKey = modelRequestKey;
+    const freshModels = await loadLiveModels();
+    if (activeModelRequestKey.current !== capturedKey || !freshModels.length) return;
+    const modelToUse = freshModels.some(item => item.id === model) ? model : freshModels[0].id;
     try {
-      const modelToUse = model || models[0]?.id || '';
-      await window.lastbrowser.sidekick.applyCloudSetup({
-        provider,
-        model: modelToUse,
-        apiKey: apiKey.trim() || undefined,
-        baseUrl: baseUrl.trim() || undefined,
-        confirmOverwrite: true
-      });
+      const setupRequest = { provider, model: modelToUse,
+        apiKey: apiKey.trim() || undefined, baseUrl: baseUrl.trim() || undefined, confirmOverwrite: true,
+        scopeSelection: { browserProfileId, workspacePath: workspacePath || null, backendProfileName } };
+      const result = await window.lastbrowser.sidekick.applyCloudSetup(setupRequest);
+      if (activeModelRequestKey.current !== capturedKey) return;
+      if (result.error || result.ok === false) throw new Error(String(result.error || 'Provider konnte nicht aktiviert werden.'));
+      setModel(modelToUse);
       await onRefreshOnboarding();
-    } catch {
-      // Setup completion will retry or notify
+    } catch (cause) {
+      if (activeModelRequestKey.current === capturedKey) setModelProbeError(cause instanceof Error ? cause.message : 'Provider konnte nicht aktiviert werden.');
     }
   }
 
@@ -478,10 +571,45 @@ export function FirstRunSetupPane({
   }
 
   // Browser import state
-  const [selectedBrowser, setSelectedBrowser] = useState<string>('chrome');
+  const importCopy = browserImportCopy(locale);
+  const [selectedBrowser, setSelectedBrowser] = useState<string>('');
+  const manuallySelectedBrowser = useRef(false);
+  const [browserDiscovery, setBrowserDiscovery] = useState<BrowserDiscoveryView | null>(null);
+  const [browserDiscoveryError, setBrowserDiscoveryError] = useState('');
+  const [selectedProfile, setSelectedProfile] = useState('');
+  const [importRunning, setImportRunning] = useState(false);
+  const [importError, setImportError] = useState(false);
+  const [defaultBrowserMessage, setDefaultBrowserMessage] = useState('');
+  useEffect(() => {
+    let cancelled = false;
+    void window.lastbrowser.system.discoverBrowserImport().then(result => {
+      if (cancelled) return;
+      setBrowserDiscovery(result);
+      if (!manuallySelectedBrowser.current) setSelectedBrowser(result.defaultBrowserId || result.profiles[0]?.browser || 'chrome');
+    }).catch(() => { if (!cancelled) setBrowserDiscoveryError(importCopy.discoveryFailed); });
+    return () => { cancelled = true; };
+  }, []);
+  useEffect(() => {
+    const profiles = browserDiscovery?.profiles.filter(p => p.browser === selectedBrowser) || [];
+    setSelectedProfile(profiles.find(p => p.preferred)?.id || profiles[0]?.id || '');
+  }, [selectedBrowser, browserDiscovery]);
   const [importBookmarksChecked, setImportBookmarksChecked] = useState<boolean>(true);
   const [importHistoryChecked, setImportHistoryChecked] = useState<boolean>(true);
-  const [importSearchChecked, setImportSearchChecked] = useState<boolean>(false);
+  const [importHomepagesChecked, setImportHomepagesChecked] = useState(false);
+  const [importTabsChecked, setImportTabsChecked] = useState(false);
+  const [showPasswordImport, setShowPasswordImport] = useState(false);
+  const [importWarnings, setImportWarnings] = useState<string[]>([]);
+  const importTargetScope = JSON.stringify([browserProfileId, workspacePath, backendProfileName]);
+  const importTargetScopeRef = useRef(importTargetScope);
+  importTargetScopeRef.current = importTargetScope;
+  useEffect(() => { setImportRunning(false); setImportSuccessMsg(''); setImportWarnings([]); setImportError(false); }, [importTargetScope]);
+  const selectedImportProfile = browserDiscovery?.profiles.find(profile => profile.id === selectedProfile);
+  const selectedImportBrowser = browserDiscovery?.browsers?.find(browser => browser.id === selectedBrowser);
+  const importCapability = (dataType: ImportDataType): ImportCapability => selectedImportProfile?.capabilities?.[dataType]
+    || selectedImportBrowser?.capabilities?.[dataType]
+    || { supported: dataType === 'bookmarks' || dataType === 'history', available: Boolean(selectedImportProfile) && (dataType === 'bookmarks' || dataType === 'history'), method: dataType === 'passwords' ? 'csv' : 'native' };
+  const canImportNative = (dataType: ImportDataType) => !!selectedImportProfile && importCapability(dataType).supported && importCapability(dataType).available && importCapability(dataType).method === 'native'
+    && (!['homepages', 'openTabs'].includes(dataType) || !!onImportedPages);
   const [importedBookmarksCount, setImportedBookmarksCount] = useState<number>(0);
   const [importSuccessMsg, setImportSuccessMsg] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -497,20 +625,23 @@ export function FirstRunSetupPane({
 
   // Default browser state
   const [isDefaultBrowser, setIsDefaultBrowser] = useState<boolean | null>(null);
-  const [defaultBrowserDone, setDefaultBrowserDone] = useState(false);
   const [defaultBrowserLoading, setDefaultBrowserLoading] = useState(false);
 
   useEffect(() => {
-    void window.lastbrowser?.system?.isDefaultBrowser?.().then((isDef) => {
-      if (typeof isDef === 'boolean') {
-        setIsDefaultBrowser(isDef);
-      }
-    }).catch(() => null);
+    let cancelled = false;
+    const check = () => void window.lastbrowser.system.isDefaultBrowser().then(value => {
+      if (!cancelled) setIsDefaultBrowser(value);
+    }).catch(() => { if (!cancelled) setIsDefaultBrowser(null); });
+    check();
+    window.addEventListener('focus', check);
+    return () => { cancelled = true; window.removeEventListener('focus', check); };
   }, []);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setImportError(false);
+    setImportSuccessMsg('');
     try {
       const text = await file.text();
       const imported = file.name.endsWith('.json')
@@ -520,13 +651,16 @@ export function FirstRunSetupPane({
         const existing = loadBookmarks();
         const merged = mergeBookmarks(existing, imported);
         saveBookmarks(window.localStorage, merged);
+        const saved = loadBookmarks(window.localStorage);
+        if (merged.some(item => !saved.some(stored => stored.url === item.url))) throw new Error('Bookmark storage unavailable.');
+        window.dispatchEvent(new Event('lastbrowser:bookmarks-imported'));
         setImportedBookmarksCount(imported.length);
         setImportSuccessMsg(`${imported.length} Lesezeichen erfolgreich importiert!`);
       } else {
         setImportSuccessMsg('Keine gültigen Lesezeichen in der Datei gefunden.');
       }
     } catch (err) {
-      console.error('Failed to import bookmarks', err);
+      setImportError(true);
       setImportSuccessMsg('Fehler beim Einlesen der Lesezeichendatei.');
     }
     if (fileInputRef.current) {
@@ -534,23 +668,59 @@ export function FirstRunSetupPane({
     }
   };
 
-  const handleQuickImport = () => {
-    const browser = BROWSER_CHOICES.find((b) => b.id === selectedBrowser);
-    if (importHistoryChecked) {
-      const existingVisits = loadVisitedSites();
-      let updated = [...existingVisits];
-      const popularSites = [
-        { url: 'https://github.com', title: 'GitHub' },
-        { url: 'https://news.ycombinator.com', title: 'Hacker News' },
-        { url: 'https://wikipedia.org', title: 'Wikipedia' },
-        { url: 'https://youtube.com', title: 'YouTube' }
-      ];
-      for (const site of popularSites) {
-        updated = recordVisit(updated, site.url, site.title);
+  const handleQuickImport = async () => {
+    if (!browserProfileId || importRunning) return;
+    const capturedScope = importTargetScope;
+    const assertCurrent = () => { if (importTargetScopeRef.current !== capturedScope) throw new Error('Import target changed.'); };
+    const completed: string[] = [];
+    setImportRunning(true);
+    setImportError(false);
+    setImportSuccessMsg('');
+    setImportWarnings([]);
+    try {
+      const request = { profileId: selectedProfile, bookmarks: importBookmarksChecked && canImportNative('bookmarks'), history: importHistoryChecked && canImportNative('history'),
+        homepages: importHomepagesChecked && canImportNative('homepages'), openTabs: importTabsChecked && canImportNative('openTabs') };
+      const result = await window.lastbrowser.system.importBrowserData(request);
+      assertCurrent();
+      const extras = result as typeof result & { homepages?: string[]; openTabs?: Array<{ url: string; title: string; pinned?: boolean }>; warnings?: Array<{ message: string }>; truncated?: boolean };
+      const imported = result.bookmarks.map(item => ({ ...item, id: `bookmark-${crypto.randomUUID()}` }));
+      const existingBookmarks = loadBookmarks();
+      const merged = mergeBookmarks(existingBookmarks, imported);
+      if (imported.length) {
+        saveBookmarks(window.localStorage, merged);
+        const saved = loadBookmarks();
+        if (merged.some(item => !saved.some(stored => stored.url === item.url))) throw new Error('Bookmark storage unavailable.');
+        window.dispatchEvent(new Event('lastbrowser:bookmarks-imported'));
       }
-      saveVisitedSites(window.localStorage, updated);
-    }
-    setImportSuccessMsg(t('firstRun.importSuccess', { browser: browser?.name || 'Browser' }));
+      const addedBookmarks = merged.length - existingBookmarks.length;
+      if (imported.length) completed.push(importCopy.done(addedBookmarks, 0));
+      setImportedBookmarksCount(current => current + addedBookmarks);
+      let addedHistory = 0;
+      const warnings = (extras.warnings || []).map(warning => warning.message);
+      if (extras.truncated) warnings.push(importCopy.truncated);
+      if (result.history.length) {
+        const saved = await saveImportedVisitedSites(browserProfileId, result.history.map(visit => ({ ...visit, profileId: browserProfileId })));
+        assertCurrent();
+        addedHistory = saved.added + saved.updated;
+        completed.push(importCopy.done(0, addedHistory));
+        if (saved.invalid) warnings.push(locale.startsWith('de') ? `${saved.invalid} ungültige Verlaufseinträge ausgelassen.` : `Skipped ${saved.invalid} invalid history entries.`);
+        if (!saved.cachePersisted) warnings.push(saved.cacheError || (locale.startsWith('de') ? 'Verlauf vollständig gespeichert; Anzeige-Cache konnte nicht aktualisiert werden.' : 'History fully saved; display cache could not be updated.'));
+      }
+      let pageSummary = '';
+      if (onImportedPages && ((extras.homepages?.length || 0) + (extras.openTabs?.length || 0))) {
+        assertCurrent();
+        const pages = await onImportedPages({ homepages: request.homepages ? extras.homepages || [] : [], openTabs: request.openTabs ? extras.openTabs || [] : [] });
+        assertCurrent();
+        pageSummary = locale.startsWith('de') ? `${pages.savedHomepages} Startseiten als Lesezeichen gespeichert · ${pages.openedTabs} Tabs geöffnet.` : `Saved ${pages.savedHomepages} homepages as bookmarks · opened ${pages.openedTabs} tabs.`;
+        completed.push(pageSummary);
+      }
+      setImportWarnings(warnings);
+      setImportSuccessMsg(imported.length || result.history.length || pageSummary ? `${importCopy.done(addedBookmarks, addedHistory)} ${pageSummary}` : importCopy.empty);
+    } catch {
+      if (importTargetScopeRef.current !== capturedScope) return;
+      setImportError(true);
+      setImportSuccessMsg(`${importCopy.failed} ${completed.length ? `${locale.startsWith('de') ? 'Bereits gespeichert:' : 'Already saved:'} ${completed.join(' · ')}` : ''}`);
+    } finally { if (importTargetScopeRef.current === capturedScope) setImportRunning(false); }
   };
 
   const togglePinnedApp = (appId: string) => {
@@ -564,23 +734,19 @@ export function FirstRunSetupPane({
 
   async function handleSetDefaultBrowser(): Promise<void> {
     setDefaultBrowserLoading(true);
+    setDefaultBrowserMessage('');
     try {
-      await window.lastbrowser?.system?.setDefaultBrowser?.();
-      setDefaultBrowserDone(true);
-      const isDef = await window.lastbrowser?.system?.isDefaultBrowser?.().catch(() => null);
-      if (typeof isDef === 'boolean') {
-        setIsDefaultBrowser(isDef);
-      }
-    } catch {
-      setDefaultBrowserDone(true);
-    } finally {
-      setDefaultBrowserLoading(false);
-    }
+      const opened = await window.lastbrowser.system.setDefaultBrowser();
+      setDefaultBrowserMessage(opened ? importCopy.defaultPending : importCopy.defaultFailed);
+      setIsDefaultBrowser(await window.lastbrowser.system.isDefaultBrowser());
+    } catch { setDefaultBrowserMessage(importCopy.defaultFailed); }
+    finally { setDefaultBrowserLoading(false); }
   }
 
   function submit(event: FormEvent): void {
     event.preventDefault();
-    if (oauthNeedsLogin) {
+    if (page !== 'space' || aiChoice !== 'enabled' || saving || !firstSpaceName.trim() || !canSubmitForm) return;
+    if (!oauthLoginReady) {
       setOAuthState((current) => ({
         ...current,
         status: current.status === 'idle' ? 'error' : current.status,
@@ -593,50 +759,50 @@ export function FirstRunSetupPane({
       model,
       apiKey,
       baseUrl: baseUrl.trim() || undefined,
-      botName: botName.trim() || 'Nova',
+      botName: effectiveBotName,
       personality: personality || 'nova',
-      defaultBrowser: Boolean(isDefaultBrowser || defaultBrowserDone),
-      importedBookmarksCount: importedBookmarksCount || 0
+      defaultBrowser: isDefaultBrowser === true,
+      importedBookmarksCount: importedBookmarksCount || 0,
+      firstSpaceName: firstSpaceName.trim()
     });
   }
 
   // Identify top featured recommendation cards
-  const featuredIds = ['openai-codex', 'ollama', 'openrouter'] as const;
+  const featuredIds = RECOMMENDED_PROVIDER_IDS;
   const browserOnly = aiChoice === 'disabled';
 
-  if (aiChoice === null) {
-    return (
-      <div className="first-run-fullscreen-wrap" role="dialog" aria-modal="true" aria-label={t('firstRun.aiChoiceTitle')}>
-        <aside className="first-run-fullscreen first-run-ai-choice-screen">
-          <header className="first-run-topbar">
-            <div className="first-run-topbar-brand">
-              <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
-              <span className="first-run-badge">Willkommen</span>
-            </div>
-          </header>
-          <div className="first-run-ai-choice-card">
-            <div className="hero-avatar-wrap">
-              <img src={brandAssets.sidekickAvatar} alt="" className="hero-avatar" />
-              <span className="hero-glow" />
-            </div>
-            <h1>{t('firstRun.aiChoiceTitle')}</h1>
-            <p>{t('firstRun.aiChoiceDescription')}</p>
-            {(flowError || error) && <p role="alert" className="setup-error-banner">{flowError || error}</p>}
-            <div className="first-run-ai-choice-actions">
-              <button type="button" className="primary-btn" disabled={saving} onClick={() => void chooseAi('enabled')}>
-                <Sparkles size={16} />
-                <span>{t('firstRun.aiChoiceYes')}</span>
-              </button>
-              <button type="button" className="secondary-btn" disabled={saving} onClick={() => void chooseAi('disabled')}>
-                <Globe size={16} />
-                <span>{t('firstRun.aiChoiceNo')}</span>
-              </button>
-            </div>
-          </div>
-        </aside>
-      </div>
-    );
-  }
+  const de = locale.startsWith('de');
+  const pages = firstRunWizardPages(aiChoice, standaloneReport?.found === true);
+  const currentIndex = pages.indexOf(page);
+  const titles: Record<WizardPage, string> = {
+    search: de ? 'Deine Suchmaschine' : 'Your search engine',
+    migration: de ? 'Sidekick mitnehmen' : 'Bring your Sidekick data',
+    browser: de ? 'Browserdaten übernehmen' : 'Bring your browser data',
+    apps: de ? 'Dein Slim Dock' : 'Your Slim Dock',
+    ai: de ? 'Mit oder ohne KI?' : 'With or without AI?',
+    provider: de ? 'KI verbinden' : 'Connect your AI',
+    space: de ? 'Dein erster Space' : 'Your first Space'
+  };
+  const busy = saving || choicePending || importRunning || migrationState === 'running';
+  const mayAdvance = !busy && (page !== 'search' || detectionReady)
+    && (page !== 'ai' || aiChoice !== null)
+    && (page !== 'provider' || canSubmitForm);
+  const movePage = (next: WizardPage) => { setFlowError(''); setPage(next); };
+  useEffect(() => {
+    pageContentRef.current?.scrollTo({ top: 0 });
+    pageHeadingRef.current?.focus();
+  }, [page]);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || busy || currentIndex <= 0) return;
+      // Escape navigates back; it never finishes onboarding or changes the AI choice.
+      if ((event.target as HTMLElement)?.closest('[role="dialog"]')?.classList.contains('first-run-fullscreen-wrap') === false) return;
+      event.preventDefault();
+      movePage(pages[currentIndex - 1]);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [page, busy, currentIndex, pages.join('|')]);
 
   const saveSearchEngineChoice = (id: string) => {
     setSearchEngineId(id);
@@ -644,43 +810,29 @@ export function FirstRunSetupPane({
   };
 
   return (
-    <div className="first-run-fullscreen-wrap" role="dialog" aria-modal="true" aria-label="First-run setup">
+    <div className="first-run-fullscreen-wrap first-run-wizard" role="dialog" aria-modal="true" aria-labelledby="first-run-page-title">
       <aside className="first-run-fullscreen">
-        {/* Top bar with branding and a clear route to the browser-only setup. */}
         <header className="first-run-topbar">
           <div className="first-run-topbar-brand">
             <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
-            <span className="first-run-badge">Willkommen</span>
+            <span className="first-run-badge">{de ? 'Willkommen' : 'Welcome'}</span>
           </div>
-          <button
-            type="button"
-            className="first-run-skip-btn"
-            aria-label={browserOnly ? t('firstRun.startLastbrowser') : t('firstRun.skipWithoutAi')}
-            title={browserOnly ? t('firstRun.startLastbrowser') : t('firstRun.skipWithoutAiHint')}
-            disabled={saving}
-            onClick={() => void (browserOnly ? completeBrowserSetup() : chooseAi('disabled'))}
-          >
-            <span>{browserOnly ? t('firstRun.startLastbrowser') : t('firstRun.skipWithoutAi')}</span>
-            <X size={15} />
-          </button>
+          <span className="first-run-page-counter" aria-live="polite">{de ? 'Schritt' : 'Step'} {currentIndex + 1} / {pages.length}</span>
         </header>
-
-        {/* Hero title & introductory copy */}
-        <div className="first-run-hero-banner">
-          <div className="hero-avatar-wrap">
-            <img src={brandAssets.sidekickAvatar} alt="" className="hero-avatar" />
-            <span className="hero-glow" />
-          </div>
-          <div className="hero-content">
-            <span className="hero-eyebrow">
-              <Sparkles size={14} /> {browserOnly ? t('firstRun.aiChoiceNo') : t('firstRun.heroEyebrow')}
-            </span>
-            <h1>{browserOnly ? t('firstRun.noAiTitle') : t('firstRun.heroTitle')}</h1>
-            <p>{browserOnly ? t('firstRun.noAiDescription') : t('firstRun.heroSubtitle')}</p>
-          </div>
-        </div>
-
-        <section className="setup-section-block search-engine-setup" aria-labelledby="search-engine-setup-title">
+        <nav className="first-run-progress" aria-label={de ? 'Einrichtungsschritte' : 'Setup steps'}>
+          {pages.map((id, index) => <button key={id} type="button" aria-current={page === id ? 'step' : undefined}
+            className={index < currentIndex ? 'is-complete' : page === id ? 'is-current' : ''}
+            disabled={busy || index >= currentIndex} onClick={() => movePage(id)}>
+            <span>{index < currentIndex ? <Check size={12} /> : index + 1}</span><small>{titles[id]}</small>
+          </button>)}
+        </nav>
+        <form className="setup-fullscreen-form" onSubmit={submit}>
+          <div className="first-run-page-content" ref={pageContentRef}>
+            <div className="first-run-page-heading">
+              <h1 id="first-run-page-title" ref={pageHeadingRef} tabIndex={-1}>{titles[page]}</h1>
+              <p>{de ? 'Richte LastBrowser Schritt für Schritt ein. Deine Auswahl bleibt beim Zurückgehen erhalten.' : 'Set up LastBrowser one step at a time. Going back keeps your choices.'}</p>
+            </div>
+            {page === 'search' && <>        <section className="setup-section-block search-engine-setup" aria-labelledby="search-engine-setup-title">
           <div className="setup-section-header">
             <span className="setup-step-number"><Globe size={14} /></span>
             <div>
@@ -706,8 +858,8 @@ export function FirstRunSetupPane({
           {flowError && <p role="alert" className="setup-error-banner">{flowError}</p>}
         </section>
 
-        {/* Standalone Sidekick migration card (only when an install was found) */}
-        {standaloneReport?.found && (
+</>}
+            {page === 'migration' && <>        {standaloneReport?.found && (
           <div className="setup-section-block standalone-migration-card" data-testid="standalone-migration-card">
             <div className="setup-section-header">
               <span className="setup-step-number"><HardDrive size={14} /></span>
@@ -765,111 +917,243 @@ export function FirstRunSetupPane({
           </div>
         )}
 
-        {aiChoice === 'enabled' && browserProfileId&&<LocalAiSetupPane key={JSON.stringify([browserProfileId,workspacePath,backendProfileName||''])} browserProfileId={browserProfileId} workspacePath={workspacePath} backendProfileName={backendProfileName}
-          ready={status?.sidekick==='ready'&&Boolean(status.webuiUrl)}/>}
-        {/* Form container */}
-        <form className="setup-fullscreen-form" onSubmit={aiChoice === 'enabled' ? submit : event => event.preventDefault()}>
-          {aiChoice === 'enabled' && <>
-          {/* ── SECTION 1: IDENTITY & PERSONALITY ── */}
-          <div className="setup-section-block">
+</>}
+            {page === 'browser' && <>          {/* ── SECTION 3: BROWSER DATA & BOOKMARK IMPORT ── */}
+          <div className="setup-section-block setup-browser-import-section">
             <div className="setup-section-header">
-              <span className="setup-step-number">1</span>
+              <span className="setup-step-number">{browserOnly ? '1' : '3'}</span>
               <div>
-                <h2>{t('firstRun.section1Title')}</h2>
-                <p>{t('firstRun.section1Desc')}</p>
+                <h2>{t('firstRun.section3Title')}</h2>
+                <p>{t('firstRun.section3Desc')}</p>
               </div>
             </div>
 
-            {/* Assistant Name Selection */}
-            <div className="assistant-name-config">
-              <label htmlFor="assistant-name-input" className="assistant-name-label">
-                {t('firstRun.botNameLabel')}
-              </label>
-              <div className="assistant-name-input-row">
-                <input
-                  id="assistant-name-input"
-                  type="text"
-                  value={botName}
-                  onChange={(e) => setBotName(e.target.value)}
-                  placeholder={t('firstRun.botNamePlaceholder')}
-                  maxLength={32}
-                  className="assistant-name-input"
-                />
-                <div className="name-preset-chips" role="group" aria-label="Namensvorschläge">
-                  {BOT_NAME_PRESETS.map((preset) => {
-                    const isPresetActive = botName.trim().toLowerCase() === preset.name.toLowerCase();
-                    return (
-                      <button
-                        key={preset.name}
-                        type="button"
-                        className={`name-preset-pill ${isPresetActive ? 'active' : ''}`}
-                        onClick={() => setBotName(preset.name)}
-                        title={preset.desc}
-                      >
-                        <span className="preset-name">{preset.name}</span>
-                        <span className="preset-pill-hint">{preset.desc}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {/* Personality Cards Grid */}
-            <div className="personality-cards-grid" role="radiogroup" aria-label="Persönlichkeitsprofil auswählen">
-              {PERSONALITY_PROFILES.map((profile) => {
-                const isSelected = personality === profile.id;
+            <p>{importCopy.detected} <strong>{browserDiscovery?.defaultBrowser || importCopy.unknown}</strong></p>
+            {browserDiscoveryError && <p role="alert">{browserDiscoveryError}</p>}
+            <div className="setup-browser-grid" role="radiogroup" aria-label="Quell-Browser auswählen">
+              {BROWSER_CHOICES.map((b) => {
+                const isSelected = selectedBrowser === b.id;
+                const discovered = browserDiscovery?.browsers?.find(browser => browser.id === b.id);
+                const found = Boolean(discovered?.profileCount || browserDiscovery?.profiles.some(profile => profile.browser === b.id));
                 return (
-                  <div
-                    key={profile.id}
-                    className={`personality-card ${profile.badgeType} ${isSelected ? 'is-selected' : ''}`}
-                    onClick={() => setPersonality(profile.id)}
-                    role="radio"
-                    aria-checked={isSelected}
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        setPersonality(profile.id);
-                      }
-                    }}
+                  <button
+                    key={b.id}
+                    type="button"
+                    className={`browser-import-card ${isSelected ? 'active' : ''}`}
+                    role="radio" aria-checked={isSelected} disabled={importRunning}
+                    onClick={() => { manuallySelectedBrowser.current = true; setSelectedBrowser(b.id); }}
                   >
-                    <div className="persona-top">
-                      <span className={`persona-badge ${profile.badgeType}`}>{profile.badge}</span>
-                      <div className="select-radio">
-                        <span className={`radio-dot ${isSelected ? 'active' : ''}`} />
-                      </div>
+                    <span className="browser-card-icon" style={{ borderColor: b.color }}>
+                      {b.icon}
+                    </span>
+                    <div className="browser-card-info">
+                      <strong>{b.name}</strong>
+                      <small>{browserDiscoveryError ? importCopy.unknown : !browserDiscovery ? importCopy.discovering : found ? importCopy.installed : discovered?.installed ? importCopy.browserFoundNoProfile : importCopy.notInstalled}</small>
+                      {browserDiscovery?.defaultBrowserId === b.id && <small>{importCopy.defaultTag}</small>}
                     </div>
-
-                    <div className="persona-header">
-                      <span className="persona-icon">{profile.icon}</span>
-                      <div>
-                        <h3 className="persona-name">{profile.name}</h3>
-                        <span className="persona-tagline">{profile.tagline}</span>
-                      </div>
+                    <div className="select-radio">
+                      <span className={`radio-dot ${isSelected ? 'active' : ''}`} />
                     </div>
-
-                    <p className="persona-desc">{profile.description}</p>
-
-                    <div className="persona-footer">
-                      <span className="persona-tone-tag">
-                        <strong>Ton:</strong> {profile.tone}
-                      </span>
-                      <blockquote className="persona-sample-quote">
-                        {profile.samplePhrase}
-                      </blockquote>
-                    </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
+
+            <div className="import-options-panel">
+              <label>{importCopy.profile}
+                <select value={selectedProfile} onChange={e => setSelectedProfile(e.target.value)} disabled={importRunning}>
+                  {!selectedProfile && <option value="">{importCopy.noProfile}</option>}
+                  {(browserDiscovery?.profiles || []).filter(p => p.browser === selectedBrowser).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                </select>
+              </label>
+              <p>{importCopy.capabilities}</p>
+              <div className="import-checkboxes-row">
+                <label className="import-check-label">
+                  <input
+                    type="checkbox"
+                    checked={importBookmarksChecked && canImportNative('bookmarks')}
+                    disabled={importRunning || !canImportNative('bookmarks')}
+                    onChange={(e) => setImportBookmarksChecked(e.target.checked)}
+                  />
+                  <span>{t('firstRun.importBookmarks')}</span>
+                  {!canImportNative('bookmarks') && <small>{importCapability('bookmarks').reason || importCopy.noDirectData}</small>}
+                </label>
+                <label className="import-check-label">
+                  <input
+                    type="checkbox"
+                    checked={importHistoryChecked && canImportNative('history')}
+                    disabled={importRunning || !canImportNative('history')}
+                    onChange={(e) => setImportHistoryChecked(e.target.checked)}
+                  />
+                  <span>{t('firstRun.importHistory')}</span>
+                  {!canImportNative('history') && <small>{importCapability('history').reason || importCopy.noDirectData}</small>}
+                </label>
+                <label className="import-check-label"><input type="checkbox" checked={importHomepagesChecked && canImportNative('homepages')}
+                  disabled={importRunning || !canImportNative('homepages')} onChange={event => setImportHomepagesChecked(event.target.checked)} />
+                  <span>{locale.startsWith('de') ? 'Startseiten als Lesezeichen übernehmen' : 'Save homepages as bookmarks'}</span>
+                  {!canImportNative('homepages') && <small>{importCapability('homepages').reason || (locale.startsWith('de') ? 'Keine importierbaren Startseiten gefunden.' : 'No importable homepages found.')}</small>}
+                </label>
+                <label className="import-check-label"><input type="checkbox" checked={importTabsChecked && canImportNative('openTabs')}
+                  disabled={importRunning || !canImportNative('openTabs')} onChange={event => setImportTabsChecked(event.target.checked)} />
+                  <span>{locale.startsWith('de') ? 'Offene Tabs wieder öffnen' : 'Reopen open tabs'}</span>
+                  {!canImportNative('openTabs') && <small>{importCapability('openTabs').reason || (locale.startsWith('de') ? 'Keine unterstützte lokale Sitzungsdatei gefunden.' : 'No supported local session file found.')}</small>}
+                </label>
+                <label className="import-check-label"><input type="checkbox" checked={showPasswordImport} onChange={event => setShowPasswordImport(event.target.checked)} />
+                  <span>{importCopy.passwords}</span>
+                </label>
+                {(['cookies', 'extensions'] as const).map(dataType => <label key={dataType} className="import-check-label">
+                  <input type="checkbox" checked={false} disabled readOnly /><span>{dataType === 'cookies' ? (locale.startsWith('de') ? 'Cookies und Anmeldungen' : 'Cookies and logins') : (locale.startsWith('de') ? 'Erweiterungen und deren Daten' : 'Extensions and their data')}</span>
+                  <small>{importCapability(dataType).reason || importCopy.unsupported}</small>
+                </label>)}
+              </div>
+              <p><strong>{importCopy.unsupported}</strong> {importCopy.unsupportedTypes}</p>
+
+              <div className="import-actions-row">
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  accept=".html,.htm,.json"
+                  style={{ display: 'none' }}
+                  onChange={(e) => void handleFileChange(e)}
+                />
+                <button
+                  type="button"
+                  className="import-file-btn"
+                  onClick={() => fileInputRef.current?.click()}
+                  title={t('firstRun.selectFile')}
+                >
+                  <FileUp size={16} />
+                  <span>{t('firstRun.selectFile')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="import-execute-btn"
+                  onClick={() => void handleQuickImport()}
+                  disabled={importRunning || !browserProfileId || !selectedProfile || !(importBookmarksChecked && canImportNative('bookmarks') || importHistoryChecked && canImportNative('history') || importHomepagesChecked && canImportNative('homepages') || importTabsChecked && canImportNative('openTabs'))}
+                >
+                  <Download size={15} />
+                  <span>{importRunning ? importCopy.running : t('firstRun.importNow', { browser: BROWSER_CHOICES.find((b) => b.id === selectedBrowser)?.name || 'Browser' })}</span>
+                </button>
+              </div>
+
+              {importSuccessMsg && (
+                <div className="import-success-badge" role={importError ? 'alert' : 'status'}>
+                  {!importError && <CheckCircle2 size={16} />}
+                  <span>{importSuccessMsg}</span>
+                </div>
+              )}
+              {importWarnings.length > 0 && <div role="status"><strong>{importCopy.warnings}</strong><ul>{importWarnings.map((warning, index) => <li key={`${index}:${warning}`}>{warning}</li>)}</ul></div>}
+            </div>
           </div>
 
-          {/* ── SECTION 2: AI ENGINE & CONNECTION ── */}
+          {showPasswordImport && <div className="setup-section-block">
+            <h3>{locale.startsWith('de') ? 'Passwörter aus deinem Browser übernehmen' : 'Import passwords from your browser'}</h3>
+            <p>{importCopy.passwordHelp(selectedImportProfile?.family || selectedImportBrowser?.family || (['firefox', 'zen', 'waterfox', 'librewolf', 'floorp'].includes(selectedBrowser) ? 'gecko' : 'chromium'))}</p>
+            <p>{importCopy.passwordBoundary}</p>
+            <PasswordVaultPanel key={browserProfileId} profileId={browserProfileId} compact />
+          </div>}
+
+          {/* ── SECTION 5: WINDOWS STANDARD-BROWSER ── */}
+          <div className="setup-section-block default-browser-section">
+            <div className="setup-section-header">
+              <span className="setup-step-number">{browserOnly ? '3' : '5'}</span>
+              <div>
+                <h2>LastBrowser als Windows Standard-Browser</h2>
+                <p>Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit LastBrowser.</p>
+              </div>
+            </div>
+
+            <div className="default-browser-card-content">
+              <div className="default-browser-info">
+                <div className="default-browser-icon-wrap">
+                  <Monitor size={24} className="default-browser-icon" />
+                </div>
+                <div>
+                  <strong>{isDefaultBrowser ? t('firstRun.defaultBrowserCardTitleActive') : t('firstRun.defaultBrowserCardTitle')}</strong>
+                  <p>{isDefaultBrowser === true ? importCopy.defaultActive : importCopy.defaultRecommend}</p>
+                  {defaultBrowserMessage && isDefaultBrowser !== true && <p role="status">{defaultBrowserMessage}</p>}
+                </div>
+              </div>
+
+              <div className="default-browser-actions">
+                {isDefaultBrowser === true ? (
+                  <span className="default-browser-registered-badge">
+                    <CheckCircle2 size={16} />
+                    <span>{importCopy.defaultActive}</span>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="default-browser-set-btn"
+                    onClick={() => void handleSetDefaultBrowser()}
+                    disabled={defaultBrowserLoading}
+                  >
+                    {defaultBrowserLoading ? <Loader2 size={15} className="spin" /> : <Globe size={15} />}
+                    <span>{t('firstRun.defaultBrowserSetBtn')}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+</>}
+            {page === 'apps' && <>          {/* ── SECTION 4: PINNED APPS FAVORITEN-AUSWAHL ── */}
+          <div className="setup-section-block">
+            <div className="setup-section-header">
+              <span className="setup-step-number">{browserOnly ? '2' : '4'}</span>
+              <div>
+                <h2>{t('firstRun.section4Title')}</h2>
+                <p>{t('firstRun.section4Desc')}</p>
+              </div>
+            </div>
+
+            <div className="setup-pinned-grid" role="group" aria-label="Pinned Web Apps auswählen">
+              {PRESET_PINNED_APPS.map((app) => {
+                const isSelected = selectedAppIds.includes(app.id);
+                return (
+                  <button
+                    key={app.id}
+                    type="button"
+                    className={`setup-pinned-card ${isSelected ? 'active' : ''}`}
+                    onClick={() => togglePinnedApp(app.id)}
+                    style={{ '--app-color': app.color } as React.CSSProperties}
+                  >
+                    <div className="setup-pinned-avatar" style={{ background: app.bg || 'rgba(255,255,255,0.08)' }}>
+                      {app.faviconUrl ? (
+                        <img src={app.faviconUrl} alt="" className="setup-pinned-favicon" />
+                      ) : (
+                        <span style={{ color: app.color }}>{app.letter || app.name.charAt(0)}</span>
+                      )}
+                    </div>
+                    <span className="setup-pinned-name">{app.name}</span>
+                    <span className={`setup-pinned-check ${isSelected ? 'active' : ''}`}>
+                      {isSelected ? <Check size={13} /> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="setup-pinned-summary">
+              <small>{selectedAppIds.length} Apps im Slim Dock aktiv</small>
+            </div>
+          </div>
+
+</>}
+            {page === 'ai' && <section className="first-run-ai-page">
+              <img src={personalityAvatar('nova')} className="first-run-choice-avatar" alt="" />
+              <h2>{t('firstRun.aiChoiceTitle')}</h2>
+              <p>{t('firstRun.aiChoiceDescription')}</p>
+              <div className="first-run-ai-choice-actions">
+                <button type="button" className={aiChoice === 'enabled' ? 'primary-btn' : 'secondary-btn'} aria-pressed={aiChoice === 'enabled'} disabled={busy} onClick={() => void chooseAi('enabled')}><Sparkles size={18} />{t('firstRun.aiChoiceYes')}</button>
+                <button type="button" className={aiChoice === 'disabled' ? 'primary-btn' : 'secondary-btn'} aria-pressed={aiChoice === 'disabled'} disabled={busy} onClick={() => void chooseAi('disabled')}><Globe size={18} />{t('firstRun.aiChoiceNo')}</button>
+              </div>
+              {aiChoice === 'disabled' && <p role="status">{t('firstRun.noAiDescription')}</p>}
+            </section>}
+            {page === 'provider' && <>          {/* ── SECTION 2: AI ENGINE & CONNECTION ── */}
           <div className="setup-section-block">
             <div className="setup-section-header">
               <span className="setup-step-number">2</span>
               <div>
-                <h2>{t('firstRun.section2Title', { botName: botName.trim() || 'Nova' })}</h2>
+                <h2>{t('firstRun.section2Title', { botName: effectiveBotName })}</h2>
                 <p>{t('firstRun.section2Desc')}</p>
               </div>
             </div>
@@ -1117,7 +1401,7 @@ export function FirstRunSetupPane({
                         className="key-input"
                       />
                       <div className="field-hint" style={{ marginTop: '0.5rem' }}>
-                        <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={!apiKey.trim() || modelProbeLoading}>
+                        <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
                           {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
                         </button>
                         {modelProbeError && <p role="alert">{modelProbeError}</p>}
@@ -1161,7 +1445,7 @@ export function FirstRunSetupPane({
                   )}
                   {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
                     <div className="field-hint" style={{ marginTop: '0.5rem' }}>
-                      <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={!apiKey.trim() || modelProbeLoading}>
+                      <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
                         {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
                       </button>
                       {modelProbeError && <p role="alert">{modelProbeError}</p>}
@@ -1200,10 +1484,11 @@ export function FirstRunSetupPane({
             {/* Model picker within chosen provider */}
             <div className="model-selection-area">
               <label className="input-label">{t('firstRun.preferredModelLabel')}</label>
+              {modelProbeError && models.length > 0 && <p role="alert">{modelProbeError}</p>}
               {models.length === 0 ? (
                 <div className="field-hint">
-                  <p>Für diesen Anbieter sind aktuell keine Modelle verfügbar. API-Key eingeben und Modellliste erneut laden.</p>
-                  <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()}>Modelle neu laden</button>
+                  <p>{modelProbeLoading ? 'Modelle werden geladen …' : modelProbeError || (oauthProviderId ? 'Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.' : 'Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.')}</p>
+                  <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>Modelle neu laden</button>
                 </div>
               ) : <div className="models-pills-row">
                 {models.map((m) => {
@@ -1226,250 +1511,130 @@ export function FirstRunSetupPane({
             </div>
           </div>}
 
-          </>}
 
-          {/* ── SECTION 3: BROWSER DATA & BOOKMARK IMPORT ── */}
+              {browserProfileId && <details className="first-run-local-models"><summary>{de ? 'Lokale Modelle entdecken' : 'Explore local models'}</summary>
+                <LocalAiSetupPane browserProfileId={browserProfileId} workspacePath={workspacePath} backendProfileName={backendProfileName} ready={status?.sidekick === 'ready' && Boolean(status.webuiUrl)} />
+              </details>}
+              {!canSubmitForm && <p className="first-run-provider-status" role="status">{!canSubmit ? t('firstRun.runtimePreparing') : !oauthLoginReady ? t('firstRun.loginFirst') : modelProbeLoading ? (de ? 'Modelle werden geladen …' : 'Loading models …') : !credentialsReady ? (de ? 'Zugangsdaten eingeben' : 'Enter credentials') : (de ? 'Modell auswählen' : 'Choose a model')}</p>}
+            </>}
+            {page === 'space' && <>
+              <section className="setup-section-block first-run-space-name">
+                <label htmlFor="first-run-space-name"><strong>{de ? 'Name deines Spaces' : 'Space name'}</strong></label>
+                <p>{de ? 'Hier bleiben deine Tabs, Chats und Apps zusammen.' : 'Keep your tabs, chats and apps together here.'}</p>
+                <input id="first-run-space-name" value={firstSpaceName} maxLength={80} required autoComplete="off" onChange={event => setFirstSpaceName(event.target.value)} />
+                {!firstSpaceName.trim() && <p role="status">{de ? 'Bitte gib deinem Space einen Namen.' : 'Please give your Space a name.'}</p>}
+              </section>
+              {aiChoice === 'enabled' && <>          {/* ── SECTION 1: IDENTITY & PERSONALITY ── */}
           <div className="setup-section-block">
             <div className="setup-section-header">
-              <span className="setup-step-number">{browserOnly ? '1' : '3'}</span>
+              <span className="setup-step-number">1</span>
               <div>
-                <h2>{t('firstRun.section3Title')}</h2>
-                <p>{t('firstRun.section3Desc')}</p>
+                <h2>Persönlichkeit für diesen Space</h2>
+                <p>Dein Begleiter prägt den Schnellchat und den Antwortstil normaler Chats. Deren Basis-Profil und Werkzeuge bleiben erhalten.</p>
               </div>
             </div>
 
-            <div className="setup-browser-grid" role="radiogroup" aria-label="Quell-Browser auswählen">
-              {BROWSER_CHOICES.map((b) => {
-                const isSelected = selectedBrowser === b.id;
-                return (
-                  <button
-                    key={b.id}
-                    type="button"
-                    className={`browser-import-card ${isSelected ? 'active' : ''}`}
-                    onClick={() => setSelectedBrowser(b.id)}
-                  >
-                    <span className="browser-card-icon" style={{ borderColor: b.color }}>
-                      {b.icon}
-                    </span>
-                    <div className="browser-card-info">
-                      <strong>{b.name}</strong>
-                      <small>{b.hint}</small>
-                    </div>
-                    <div className="select-radio">
-                      <span className={`radio-dot ${isSelected ? 'active' : ''}`} />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="import-options-panel">
-              <div className="import-checkboxes-row">
-                <label className="import-check-label">
-                  <input
-                    type="checkbox"
-                    checked={importBookmarksChecked}
-                    onChange={(e) => setImportBookmarksChecked(e.target.checked)}
-                  />
-                  <span>{t('firstRun.importBookmarks')}</span>
-                </label>
-                <label className="import-check-label">
-                  <input
-                    type="checkbox"
-                    checked={importHistoryChecked}
-                    onChange={(e) => setImportHistoryChecked(e.target.checked)}
-                  />
-                  <span>{t('firstRun.importHistory')}</span>
-                </label>
-                <label className="import-check-label">
-                  <input
-                    type="checkbox"
-                    checked={importSearchChecked}
-                    onChange={(e) => setImportSearchChecked(e.target.checked)}
-                  />
-                  <span>{t('firstRun.importSearch')}</span>
-                </label>
-              </div>
-
-              <div className="import-actions-row">
+            {/* Assistant Name Selection */}
+            <div className="assistant-name-config">
+              <label htmlFor="assistant-name-input" className="assistant-name-label">
+                {t('firstRun.botNameLabel')}
+              </label>
+              <div className="assistant-name-input-row">
                 <input
-                  type="file"
-                  ref={fileInputRef}
-                  accept=".html,.htm,.json"
-                  style={{ display: 'none' }}
-                  onChange={(e) => void handleFileChange(e)}
+                  id="assistant-name-input"
+                  type="text"
+                  value={botName}
+                  onChange={(e) => setBotName(e.target.value)}
+                  placeholder={t('firstRun.botNamePlaceholder')}
+                  maxLength={32}
+                  className="assistant-name-input"
                 />
-                <button
-                  type="button"
-                  className="import-file-btn"
-                  onClick={() => fileInputRef.current?.click()}
-                  title={t('firstRun.selectFile')}
-                >
-                  <FileUp size={16} />
-                  <span>{t('firstRun.selectFile')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="import-execute-btn"
-                  onClick={handleQuickImport}
-                >
-                  <Download size={15} />
-                  <span>{t('firstRun.importNow', { browser: BROWSER_CHOICES.find((b) => b.id === selectedBrowser)?.name || 'Browser' })}</span>
-                </button>
-              </div>
-
-              {importSuccessMsg && (
-                <div className="import-success-badge">
-                  <CheckCircle2 size={16} />
-                  <span>{importSuccessMsg}</span>
+                <div className="name-preset-chips" role="group" aria-label="Namensvorschläge">
+                  {BOT_NAME_PRESETS.map((preset) => {
+                    const isPresetActive = selectedBotPreset === preset.name;
+                    return (
+                      <button
+                        key={preset.name}
+                        type="button"
+                        className={`name-preset-pill ${isPresetActive ? 'active' : ''}`}
+                        onClick={() => { setSelectedBotPreset(preset.name); setPersonality(Object.keys(companionDefaultNames).find(id => companionDefaultNames[id as CompanionPersonality] === preset.name) || 'nova'); }}
+                        title={preset.desc}
+                      >
+                        <span className="preset-name">{preset.name}</span>
+                        <span className="preset-pill-hint">{preset.desc}</span>
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* ── SECTION 4: PINNED APPS FAVORITEN-AUSWAHL ── */}
-          <div className="setup-section-block">
-            <div className="setup-section-header">
-              <span className="setup-step-number">{browserOnly ? '2' : '4'}</span>
-              <div>
-                <h2>{t('firstRun.section4Title')}</h2>
-                <p>{t('firstRun.section4Desc')}</p>
               </div>
             </div>
 
-            <div className="setup-pinned-grid" role="group" aria-label="Pinned Web Apps auswählen">
-              {PRESET_PINNED_APPS.map((app) => {
-                const isSelected = selectedAppIds.includes(app.id);
+            {/* Personality Cards Grid */}
+            <div className="personality-selected-preview" aria-live="polite" style={{ display: 'flex', alignItems: 'center', gap: 16, marginBlock: 16 }}>
+              <img src={personalityAvatar(personality)} alt="" style={{ width: 80, height: 80, objectFit: 'contain' }} />
+              <div><strong>{effectiveBotName}</strong><p>{PERSONALITY_PROFILES.find(profile => profile.id === personality)?.name}</p></div>
+            </div>
+            <div className="personality-cards-grid" role="radiogroup" aria-label="Persönlichkeitsprofil auswählen">
+              {PERSONALITY_PROFILES.map((profile) => {
+                const isSelected = personality === profile.id;
                 return (
-                  <button
-                    key={app.id}
-                    type="button"
-                    className={`setup-pinned-card ${isSelected ? 'active' : ''}`}
-                    onClick={() => togglePinnedApp(app.id)}
-                    style={{ '--app-color': app.color } as React.CSSProperties}
+                  <div
+                    key={profile.id}
+                    className={`personality-card ${profile.badgeType} ${isSelected ? 'is-selected' : ''}`}
+                    onClick={() => { setPersonality(profile.id); setSelectedBotPreset(companionDefaultNames[profile.id as CompanionPersonality]); }}
+                    role="radio"
+                    aria-checked={isSelected}
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setPersonality(profile.id);
+                        setSelectedBotPreset(companionDefaultNames[profile.id as CompanionPersonality]);
+                      }
+                    }}
                   >
-                    <div className="setup-pinned-avatar" style={{ background: app.bg || 'rgba(255,255,255,0.08)' }}>
-                      {app.faviconUrl ? (
-                        <img src={app.faviconUrl} alt="" className="setup-pinned-favicon" />
-                      ) : (
-                        <span style={{ color: app.color }}>{app.letter || app.name.charAt(0)}</span>
-                      )}
+                    <div className="persona-top">
+                      <span className={`persona-badge ${profile.badgeType}`}>{profile.badge}</span>
+                      <div className="select-radio">
+                        <span className={`radio-dot ${isSelected ? 'active' : ''}`} />
+                      </div>
                     </div>
-                    <span className="setup-pinned-name">{app.name}</span>
-                    <span className={`setup-pinned-check ${isSelected ? 'active' : ''}`}>
-                      {isSelected ? <Check size={13} /> : null}
-                    </span>
-                  </button>
+
+                    <div className="persona-header">
+                      <img className="persona-icon" src={personalityAvatar(profile.id)} alt="" style={{ width: 56, height: 56, objectFit: 'contain', flexShrink: 0 }} />
+                      <div>
+                        <h3 className="persona-name">{profile.id === 'nova' ? `${effectiveBotName} (Standard)` : profile.name}</h3>
+                        <span className="persona-tagline">{profile.tagline}</span>
+                      </div>
+                    </div>
+
+                    <p className="persona-desc">{profile.description}</p>
+
+                    <div className="persona-footer">
+                      <span className="persona-tone-tag">
+                        <strong>Ton:</strong> {profile.tone}
+                      </span>
+                      <blockquote className="persona-sample-quote">
+                        {profile.samplePhrase}
+                      </blockquote>
+                    </div>
+                  </div>
                 );
               })}
             </div>
-            <div className="setup-pinned-summary">
-              <small>{selectedAppIds.length} Apps im Slim Dock aktiv</small>
-            </div>
           </div>
 
-          {/* ── SECTION 5: WINDOWS STANDARD-BROWSER ── */}
-          <div className="setup-section-block default-browser-section">
-            <div className="setup-section-header">
-              <span className="setup-step-number">{browserOnly ? '3' : '5'}</span>
-              <div>
-                <h2>LastBrowser als Windows Standard-Browser</h2>
-                <p>Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit LastBrowser.</p>
-              </div>
-            </div>
-
-            <div className="default-browser-card-content">
-              <div className="default-browser-info">
-                <div className="default-browser-icon-wrap">
-                  <Monitor size={24} className="default-browser-icon" />
-                </div>
-                <div>
-                  <strong>{isDefaultBrowser ? t('firstRun.defaultBrowserCardTitleActive') : t('firstRun.defaultBrowserCardTitle')}</strong>
-                  <p>{browserOnly ? t('firstRun.defaultBrowserCardDescNoAi') : t('firstRun.defaultBrowserCardDesc')}</p>
-                </div>
-              </div>
-
-              <div className="default-browser-actions">
-                {isDefaultBrowser || defaultBrowserDone ? (
-                  <span className="default-browser-registered-badge">
-                    <CheckCircle2 size={16} />
-                    <span>{t('firstRun.defaultBrowserRegistered')}</span>
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    className="default-browser-set-btn"
-                    onClick={() => void handleSetDefaultBrowser()}
-                    disabled={defaultBrowserLoading}
-                  >
-                    {defaultBrowserLoading ? <Loader2 size={15} className="spin" /> : <Globe size={15} />}
-                    <span>{t('firstRun.defaultBrowserSetBtn')}</span>
-                  </button>
-                )}
-              </div>
-            </div>
+</>}
+            </>}
+            {(flowError || error) && <div role="alert" className="setup-error-banner">{flowError || error}</div>}
           </div>
-
-          {(flowError || error) && <div role="alert" className="setup-error-banner">{flowError || error}</div>}
-          {browserOnly && <p className="first-run-no-ai-note" role="status">{t('firstRun.noAiDescription')}</p>}
-
-          {/* ── ACTION FOOTER ── */}
-          <div className="setup-action-footer">
-            <div className="footer-left">
-              {!browserOnly && <span className={`runtime-status-indicator ${status?.sidekick === 'ready' ? 'ready' : 'starting'}`}>
-                <span className="dot" />
-                <span>{status?.sidekick === 'ready' ? t('firstRun.runtimeReady') : t('firstRun.runtimeStarting')}</span>
-              </span>}
-            </div>
-
-            <div className="footer-actions">
-              {browserOnly ? <>
-                <button
-                  type="button"
-                  className="secondary-btn"
-                  disabled={saving}
-                  onClick={() => void chooseAi('enabled')}
-                >
-                  <Sparkles size={16} />
-                  <span>{t('firstRun.aiChoiceYes')}</span>
-                </button>
-                <button
-                  type="button"
-                  className="primary-btn launch-btn"
-                  disabled={saving}
-                  onClick={() => void completeBrowserSetup()}
-                >
-                  {saving ? <Loader2 size={16} className="spin" /> : <Globe size={16} />}
-                  <span>{saving ? t('firstRun.configuring') : t('firstRun.startLastbrowser')}</span>
-                </button>
-              </> : <>
-              <button
-                type="button"
-                className="secondary-btn"
-                onClick={onDismiss}
-              >
-                {t('firstRun.decideLater')}
-              </button>
-              <button
-                type="submit"
-                className="primary-btn launch-btn"
-                disabled={saving || !provider || !model || !canSubmitForm}
-              >
-                {saving || !canSubmitForm ? <Loader2 size={16} className="spin" /> : <Sparkles size={16} />}
-                <span>
-                  {saving
-                    ? t('firstRun.configuring')
-                    : canSubmitForm
-                    ? t('firstRun.launchWithBot', { botName: botName.trim() || 'Nova' })
-                    : oauthNeedsLogin
-                    ? t('firstRun.loginFirst')
-                    : t('firstRun.runtimePreparing')}
-                </span>
-                {canSubmitForm && !saving && <ArrowRight size={15} />}
-              </button>
-              </>}
-            </div>
-          </div>
+          <footer className="setup-action-footer">
+            <button type="button" className="secondary-btn" disabled={busy || currentIndex === 0} onClick={() => movePage(pages[currentIndex - 1])}><ArrowLeft size={16} />{de ? 'Zurück' : 'Back'}</button>
+            {page !== 'space' ? <button type="button" className="primary-btn" disabled={!mayAdvance} onClick={() => movePage(pages[currentIndex + 1])}>{!detectionReady && page === 'search' ? <Loader2 size={16} className="spin" /> : null}{de ? 'Weiter' : 'Next'}<ArrowRight size={16} /></button>
+              : <button type={aiChoice === 'enabled' ? 'submit' : 'button'} className="primary-btn launch-btn" disabled={busy || !firstSpaceName.trim() || aiChoice === null || (aiChoice === 'enabled' && !canSubmitForm)} onClick={aiChoice === 'disabled' ? () => void completeBrowserSetup() : undefined}>
+                  {saving ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}{saving ? t('firstRun.configuring') : (de ? 'Einrichtung abschließen' : 'Finish setup')}
+                </button>}
+          </footer>
         </form>
       </aside>
     </div>

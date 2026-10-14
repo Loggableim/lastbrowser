@@ -63,7 +63,11 @@ def main(argv: list[str]) -> int:
 
     failures = check_files(paths, node)
     for path, error in failures:
-        rel = path.relative_to(REPO_ROOT) if path.is_absolute() else path
+        try:
+            rel = path.relative_to(REPO_ROOT) if path.is_absolute() else path
+        except ValueError:
+            # Explicit inputs may live outside the source tree (including CI fixtures).
+            rel = path
         print(f"SYNTAX FAIL: {rel}")
         print(error)
         print()

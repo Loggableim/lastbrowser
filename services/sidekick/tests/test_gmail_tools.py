@@ -70,6 +70,10 @@ def test_gmail_list_encodes_unicode_folder_for_imap_select(monkeypatch):
 def test_gmail_ai_stream_is_blocked_in_game_mode(monkeypatch, tmp_path):
     from web.api import config as cfg
     from web.api import gmail_tools
+    from runtime.memory_policy import update_policy
+
+    monkeypatch.setattr("web.api.profiles.get_active_profile_home", lambda: tmp_path)
+    update_policy({"gmail_ai_enabled": True}, tmp_path)
 
     monkeypatch.setattr(cfg, "SETTINGS_FILE", tmp_path / "settings.json")
     cfg.save_settings({"game_mode_enabled": True})
@@ -92,6 +96,10 @@ def test_gmail_ai_stream_is_blocked_in_game_mode(monkeypatch, tmp_path):
 def test_gmail_ai_call_is_blocked_in_game_mode(monkeypatch, tmp_path):
     from web.api import config as cfg
     from web.api import gmail_tools
+    from runtime.memory_policy import update_policy
+
+    monkeypatch.setattr("web.api.profiles.get_active_profile_home", lambda: tmp_path)
+    update_policy({"gmail_ai_enabled": True}, tmp_path)
 
     monkeypatch.setattr(cfg, "SETTINGS_FILE", tmp_path / "settings.json")
     cfg.save_settings({"game_mode_enabled": True})
@@ -104,6 +112,15 @@ def test_gmail_ai_call_is_blocked_in_game_mode(monkeypatch, tmp_path):
     result = gmail_tools._ai_call("Summarize this email")
 
     assert result == "Game Mode is active. Gmail AI is blocked so local GPU/VRAM stays free."
+
+
+def test_gmail_ai_requires_profile_opt_in_before_model_access(monkeypatch, tmp_path):
+    from web.api import gmail_tools
+
+    monkeypatch.setattr("web.api.profiles.get_active_profile_home", lambda: tmp_path)
+    monkeypatch.setattr(gmail_tools.urllib.request, "urlopen", lambda *args, **kwargs: pytest.fail("Disabled Gmail AI must not contact a model"))
+    assert list(gmail_tools._ai_call_stream("hello")) == [("gmail_ai_disabled_enable_in_hub", True)]
+    assert gmail_tools._ai_call("hello") is None
 
 
 @pytest.mark.parametrize("operation", ["send", "validate"])

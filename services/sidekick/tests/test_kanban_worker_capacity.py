@@ -5,7 +5,12 @@ import threading
 from contextlib import nullcontext
 
 
-def _kanban_conn(monkeypatch, tmp_path):
+def _kanban_conn(monkeypatch, tmp_path, *, enabled):
+    from runtime.memory_policy import update_policy
+
+    policy_home = tmp_path / "profile"
+    monkeypatch.setattr("web.api.profiles.get_active_profile_home", lambda: policy_home)
+    update_policy({"kanban_enabled": enabled}, policy_home)
     monkeypatch.setenv("SIDEKICK_KANBAN_HOME", str(tmp_path / "kanban-home"))
     monkeypatch.delenv("SIDEKICK_KANBAN_DB", raising=False)
     monkeypatch.delenv("SIDEKICK_KANBAN_BOARD", raising=False)
@@ -35,7 +40,7 @@ def test_kanban_max_spawn_is_clamped_to_hard_worker_limit():
 
 
 def test_dispatch_once_leaves_overflow_tasks_ready(monkeypatch, tmp_path):
-    kb, conn = _kanban_conn(monkeypatch, tmp_path)
+    kb, conn = _kanban_conn(monkeypatch, tmp_path, enabled=True)
     monkeypatch.setattr("cli.profiles.profile_exists", lambda _name: True)
     spawned = []
 
@@ -53,6 +58,17 @@ def test_dispatch_once_leaves_overflow_tasks_ready(monkeypatch, tmp_path):
         assert len(spawned) == 16
         states = dict(conn.execute("SELECT status, COUNT(*) FROM tasks GROUP BY status"))
         assert states == {"ready": 4, "running": 16}
+    finally:
+        conn.close()
+
+
+def test_dispatch_keeps_saved_tasks_without_spawning_when_disabled(monkeypatch, tmp_path):
+    kb, conn = _kanban_conn(monkeypatch, tmp_path, enabled=False)
+    try:
+        task_id = kb.create_task(conn, title="saved", assignee="worker")
+        result = kb.dispatch_once(conn, spawn_fn=lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("Disabled Kanban must not spawn")))
+        assert result.spawned == []
+        assert kb.get_task(conn, task_id).status == "ready"
     finally:
         conn.close()
 
@@ -130,7 +146,7 @@ def test_web_dispatch_cannot_exceed_configured_worker_cap(monkeypatch):
 
 
 def test_dead_worker_is_recovered_without_unbounded_respawn(monkeypatch, tmp_path):
-    kb, conn = _kanban_conn(monkeypatch, tmp_path)
+    kb, conn = _kanban_conn(monkeypatch, tmp_path, enabled=True)
     monkeypatch.setattr("cli.profiles.profile_exists", lambda _name: True)
 
     try:

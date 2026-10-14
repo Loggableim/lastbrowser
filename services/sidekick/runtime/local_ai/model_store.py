@@ -472,7 +472,9 @@ class ModelStore:
             for item in self.entries.values():
                 # Keep installed legacy models manageable, without presenting old
                 # bootstrap/catalog entries as newly approved recommendations.
-                if not item.get('curated') and item['id'] not in self.state['installed']:
+                if item['id'] not in self.state['installed'] and (
+                        not item.get('curated') or not item.get('installQualified')
+                        or not item.get('artifactManifest')):
                     continue
                 eligibility=self.eligibility(item)
                 installed=self.state['installed'].get(item['id'])

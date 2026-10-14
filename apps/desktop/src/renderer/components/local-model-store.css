@@ -185,6 +185,10 @@
   .local-model-category-tabs { gap:3px; }.local-model-store .local-model-category-tabs button { padding:7px 9px; }
 }
 .local-model-media-form { display:grid; gap:12px; margin-top:20px; padding-top:18px; border-top:1px solid var(--store-border); }
+.local-model-card-actions { display:grid; gap:8px; padding:0 16px 16px; }
+.local-model-card-actions > button { width:100%; }
+.local-model-card-actions small { color:var(--store-muted); font-size:11px; line-height:1.45; }
+.local-model-card-actions .local-model-license-link { display:inline; min-height:0; padding:0; border:0; background:none; color:var(--accent-color,#22d3ee); font:inherit; text-decoration:underline; }
 .local-model-media-form label,.local-model-media-result label { display:grid; gap:6px; font-size:12px; color:var(--store-muted); }
 .local-model-media-form textarea { min-height:110px; resize:vertical; width:100%; box-sizing:border-box; }
 .local-model-media-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:10px; }

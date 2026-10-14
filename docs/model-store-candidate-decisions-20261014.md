@@ -1,6 +1,7 @@
 # Model Store: Nutzervorschläge für die nächste private Beta
 
-Stand: 14. Oktober 2026. Quellbasis: `ff12244e8ed722c421724208b6e80ae792893e0f`.
+Stand: 14. Oktober 2026. Quellbasis der ersten Kandidatenauswahl: `ff12244e8ed722c421724208b6e80ae792893e0f`.
+Nachfolgende Nutzerentscheidung: ausschließlich installierbare Modelle im Store. Daher ist Nanbeige 4.2 aus der sichtbaren Curation entfernt; seine folgende Bewertung bleibt als historische Entscheidung dokumentiert. Aktuell maßgeblich ist `model-store-installable-selection-20261014.md`.
 Öffentliche Metadaten, Lizenzdeklarationen, Lizenztexte und gepinnte Loaderquellen wurden gelesen.
 Keine Gewichte heruntergeladen, kein Modell ausgeführt, keine Leistung gemessen.
 

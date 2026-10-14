@@ -112,6 +112,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   }
   function card(model:StoreModel){
     const curated=model.curation;
+    const actions=storeModelActions(model,!!view?.readOnly);
     const recommendation=storeHardwareRecommendation(model,view?.hardware),fit=recommendation.fit;
     return <article className="local-model-card" key={model.id} data-model-id={model.id}>
       <button className="local-model-card-open" type="button" data-open-model={model.id}
@@ -131,6 +132,17 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
           {fit==='within'&&<span className="local-model-fit">{recommendation.placement==='cpu'?'Für Prozessor und freien Speicher geprüft':'Speicherklasse passt · Schätzung'}</span>}
         </span>
       </button>
+      <div className="local-model-card-actions">
+        {model.installed ? <button type="button" disabled={!ready||busy||running||!!view?.readOnly}
+          onClick={()=>void request({operation:'remove',modelId:model.id})}>Deinstallieren</button>
+          : <>
+            <button type="button" className="local-model-primary" disabled={!ready||busy||running||!actions.download}
+              onClick={()=>void request({operation:'install',modelId:model.id,licenseDigest:model.licenseDigest!,requestId:newIndependentRequestId()})}>
+              Installieren · {bytes(model.downloadBytes)}</button>
+            <small>Mit der Installation akzeptierst du die Herausgeber-Lizenz {model.licenseLabel}.
+              {' '}<button type="button" className="local-model-license-link" onClick={()=>{openerRef.current=model.id;setDetail(model.id);setConsent('');}}>Lizenz ansehen</button></small>
+          </>}
+      </div>
     </article>;
   }
   return <section ref={storeRef} className={`local-model-store${selected?' local-model-store--detail':''}`} aria-labelledby={selected?detailTitleId:titleId}>
@@ -255,8 +267,8 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
               <label><input type="checkbox" checked={consent===storeConsentKey(selected)} onChange={event=>setConsent(event.target.checked?storeConsentKey(selected):'')}/>Herausgeber-Lizenz akzeptieren</label>
               <button className="local-model-primary" type="button" disabled={!ready||busy||running||consent!==storeConsentKey(selected)}
                 onClick={()=>void request({operation:'install',modelId:selected.id,licenseDigest:selected.licenseDigest!,requestId:newIndependentRequestId()})}>Installieren · {bytes(selected.downloadBytes)}</button>
-              <button type="button" disabled={!ready||busy||running||consent!==storeConsentKey(selected)}
-                onClick={()=>void request({operation:'importModel',modelId:selected.id,licenseDigest:selected.licenseDigest!,requestId:newIndependentRequestId()})}>Vorhandene gepinnte GGUF importieren</button>
+              {selectedActions.kind==='text'&&<button type="button" disabled={!ready||busy||running||consent!==storeConsentKey(selected)}
+                onClick={()=>void request({operation:'importModel',modelId:selected.id,licenseDigest:selected.licenseDigest!,requestId:newIndependentRequestId()})}>Vorhandene gepinnte GGUF importieren</button>}
             </>}
             {selected.installed&&<>
               <label>Gerätetest<select value={mode} onChange={event=>setMode(event.target.value as 'quick'|'standard')}><option value="quick">Kurztest</option><option value="standard">Ausführlicher Test</option></select></label>

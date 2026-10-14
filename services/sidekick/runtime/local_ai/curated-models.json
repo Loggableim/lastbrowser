@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "revision": "2026-10-14.2",
+  "revision": "2026-10-14.3",
   "licensePolicy": [
     "apache-2.0",
     "mit"
@@ -161,46 +161,6 @@
       "license": "apache-2.0",
       "sourceUrl": "https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512",
       "priority": false
-    },
-    {
-      "modelId": "prism-ml/Ternary-Bonsai-2-27B-gguf",
-      "name": "Bonsai 2 27B",
-      "publisher": "Prism ML",
-      "category": "text",
-      "vramClass": "8–16",
-      "quantization": "PQ2_0 ternär",
-      "estimatedVramGiB": [
-        8.0,
-        10.5
-      ],
-      "estimatedRamGiB": [
-        24.0,
-        32.0
-      ],
-      "estimatedDownloadGiB": [
-        6.7,
-        6.7
-      ],
-      "recommendedGpuGiB": 16,
-      "engine": "Prism llama.cpp (optional)",
-      "innovation": "Trainierte rotierte ternäre Gewichte bewahren große Modellkapazität bei wenig Gewichtsspeicher.",
-      "useCases": [
-        "Reasoning",
-        "Coding-Hilfe",
-        "Lokale Analyse"
-      ],
-      "strengths": [
-        "27B-Kapazität mit kompakten Gewichten",
-        "Eigene historische LastBrowser-Benchmarkkonfiguration vorhanden"
-      ],
-      "limitations": [
-        "Prism-Fork mit passenden Hadamard-Kernels erforderlich",
-        "Historische Ergebnisse gelten nicht automatisch für dieses Artefakt",
-        "Dateigröße ist kein VRAM-Peak"
-      ],
-      "license": "apache-2.0",
-      "sourceUrl": "https://huggingface.co/prism-ml/Ternary-Bonsai-2-27B-gguf",
-      "priority": true
     },
     {
       "modelId": "ibm-granite/granite-4.2-8b",
@@ -1102,84 +1062,6 @@
       "priority": false
     },
     {
-      "modelId": "deepseek-ai/DeepSeek-V4.1-Flash",
-      "name": "DeepSeek V4.1 Flash",
-      "publisher": "DeepSeek",
-      "category": "text",
-      "vramClass": "über 128",
-      "quantization": "Q4 Planung",
-      "estimatedVramGiB": [
-        470.0,
-        540.0
-      ],
-      "estimatedRamGiB": [
-        768.0,
-        1024.0
-      ],
-      "estimatedDownloadGiB": [
-        430.0,
-        470.0
-      ],
-      "recommendedGpuGiB": 768,
-      "engine": "Nicht qualifiziert",
-      "innovation": "Engram-Lookup-Speicher, Encoder–Decoder und neue Hyper-Connections.",
-      "useCases": [
-        "Serverforschung",
-        "Große Agenten",
-        "Architekturvergleich"
-      ],
-      "strengths": [
-        "Innovative Speicher- und Rechenarchitektur",
-        "Große sparse Kapazität"
-      ],
-      "limitations": [
-        "Kein hier belegter llama.cpp- oder Prism-Pfad",
-        "Aggregierter GPU-Speicher allein reicht nicht für Kompatibilität"
-      ],
-      "license": "mit",
-      "sourceUrl": "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash",
-      "priority": false
-    },
-    {
-      "modelId": "prism-ml/bonsai-image-ternary-4B-gemlite-2bit",
-      "name": "Bonsai Image Ternary 4B",
-      "publisher": "Prism ML",
-      "category": "image",
-      "vramClass": "8–16",
-      "quantization": "ternär Gemlite",
-      "estimatedVramGiB": [
-        6.8,
-        6.8
-      ],
-      "estimatedRamGiB": [
-        16.0,
-        24.0
-      ],
-      "estimatedDownloadGiB": [
-        4.24,
-        4.24
-      ],
-      "recommendedGpuGiB": 12,
-      "engine": "Gemlite/HQQ (separate integration)",
-      "innovation": "Ternäre Bildgewichte reduzieren den vollständigen Generator-Footprint.",
-      "useCases": [
-        "Bilder erzeugen",
-        "Kompakte lokale Bildfunktion"
-      ],
-      "strengths": [
-        "Publisher nennt 6.8 GiB Peak bei 1024² auf RTX 3080",
-        "Vollständiges Paket mit Encoder und VAE"
-      ],
-      "limitations": [
-        "Eigene Gemlite/HQQ-Laufzeit statt belegter SD.cpp-Unterstützung",
-        "Publisher-Messung nicht auf LastBrowser übertragen",
-        "WebGPU-Demo ist ein separater Integrationsweg"
-      ],
-      "license": "apache-2.0",
-      "sourceUrl": "https://huggingface.co/prism-ml/bonsai-image-ternary-4B-gemlite-2bit",
-      "priority": true
-    },
-    {
       "modelId": "black-forest-labs/FLUX.2-klein-4B",
       "name": "FLUX.2 klein 4B",
       "publisher": "Black Forest Labs",
@@ -1535,45 +1417,6 @@
       "priority": false
     },
     {
-      "modelId": "robbyant/lingbot-video-moe-30b-a3b",
-      "name": "LingBot Video MoE 30B A3B",
-      "publisher": "Robbyant",
-      "category": "video",
-      "vramClass": "16–32",
-      "quantization": "alle Experten Q4",
-      "estimatedVramGiB": [
-        12.0,
-        20.0
-      ],
-      "estimatedRamGiB": [
-        64.0,
-        96.0
-      ],
-      "estimatedDownloadGiB": [
-        20.0,
-        25.0
-      ],
-      "recommendedGpuGiB": 32,
-      "engine": "stable-diffusion.cpp",
-      "innovation": "Sparsamer Expertenpool für größere physikalische und verkörperte Videoszenen.",
-      "useCases": [
-        "Physikalische Szenen",
-        "Text- und Bildclips"
-      ],
-      "strengths": [
-        "Große Gesamtkapazität bei sparsamer Aktivierung",
-        "SD.cpp-Basispipeline dokumentiert"
-      ],
-      "limitations": [
-        "480p 33 Frames mit CPU-Offload",
-        "Alle Expertengewichte bleiben nötig",
-        "Optionaler großer Refiner und Prompt-Rewriter nicht enthalten"
-      ],
-      "license": "apache-2.0",
-      "sourceUrl": "https://huggingface.co/robbyant/lingbot-video-moe-30b-a3b",
-      "priority": false
-    },
-    {
       "modelId": "Nanbeige/Nanbeige4.1-3B",
       "name": "Nanbeige 4.1 3B",
       "publisher": "Nanbeige",
@@ -1612,47 +1455,6 @@
       ],
       "license": "apache-2.0",
       "sourceUrl": "https://huggingface.co/Nanbeige/Nanbeige4.1-3B",
-      "priority": true
-    },
-    {
-      "modelId": "Nanbeige/Nanbeige4.2-3B",
-      "name": "Nanbeige 4.2 3B",
-      "publisher": "Nanbeige",
-      "category": "text",
-      "vramClass": "4–8",
-      "quantization": "Q4_K_M (Schätzung)",
-      "estimatedVramGiB": [
-        4,
-        6
-      ],
-      "estimatedRamGiB": [
-        12,
-        20
-      ],
-      "estimatedDownloadGiB": [
-        2.4,
-        3.2
-      ],
-      "recommendedGpuGiB": 8,
-      "engine": "llama.cpp · nanbeige42-Fork erforderlich",
-      "innovation": "Looped Transformer für kompakte Agenten und Coding; nur entdecken, eigener nanbeige42-Engine-Fork erforderlich.",
-      "useCases": [
-        "Agentische Recherche",
-        "Code-Agenten",
-        "Lokale Assistenz"
-      ],
-      "strengths": [
-        "Layer-Wiederverwendung erweitert Rechenkapazität ohne proportional mehr Gewichte",
-        "Thinking abschaltbar; XML- oder JSON-Toolformat im Herausgeber-Template"
-      ],
-      "limitations": [
-        "Mit gebündeltem stock llama.cpp nicht qualifiziert; nicht installierbar",
-        "Quantisierte Größe geschätzt, kein gepinntes Downloadartefakt",
-        "Original-Card und Basis deklarieren Apache-2.0, keine separate LICENSE-Datei",
-        "FP8/GPTQ brauchen andere Loader; DSpark ist Zusatzgewicht, kein eigenständiger Chatbot"
-      ],
-      "license": "apache-2.0",
-      "sourceUrl": "https://huggingface.co/Nanbeige/Nanbeige4.2-3B",
       "priority": true
     },
     {

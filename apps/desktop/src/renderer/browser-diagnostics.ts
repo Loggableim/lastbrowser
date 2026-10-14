@@ -2,12 +2,35 @@ export const BROWSER_DIAGNOSTICS_ENABLED_KEY = '__lastbrowser_browser_diagnostic
 export const BROWSER_DIAGNOSTICS_EVENTS_KEY = '__lastbrowser_browser_diagnostics_events';
 export const BROWSER_DIAGNOSTICS_CHANGED_EVENT = 'lastbrowser:browser-diagnostics-changed';
 export const BROWSER_DIAGNOSTICS_MAX_EVENTS = 500;
+export const BROWSER_DIAGNOSTICS_MAX_SESSION_BYTES = 2 * 1024 * 1024;
+export const BROWSER_DIAGNOSTICS_SESSION_TTL_MS = 30 * 60 * 1000;
 
 export type BrowserDiagnosticEvent = {
   sequence: number;
   at: number;
   event: string;
   fields: Record<string, string | number | boolean | null>;
+  sessionId?: string;
+  windowId?: string;
+  mono?: number;
+  nameVersion?: 1 | 2;
+};
+
+export type BrowserDiagnosticBatch = {
+  sessionId: string;
+  windowId: string;
+  events: BrowserDiagnosticEvent[];
+};
+
+export type BrowserDiagnosticsSink = {
+  accept(batch: BrowserDiagnosticBatch): void;
+};
+
+/** Stored names stay stable so older exports still parse. Aliases only affect new writes. */
+export const BROWSER_DIAGNOSTIC_EVENT_ALIASES: Record<string, string> = {
+  'chat.started': 'chat-chat-started',
+  'chat.failed': 'chat-chat-failed',
+  'chat.finished': 'chat-chat-finished'
 };
 
 const safeDiagnosticEvents = new Set([
@@ -25,7 +48,8 @@ const safeFieldNames = new Set([
   'panel', 'viewportWidth', 'viewportHeight', 'devicePixelRatio', 'visibility', 'errorName', 'source',
   'ownsContext', 'streamMatches', 'hasStreamId', 'streamActive', 'snapshotPresent', 'pending',
   'sawStreamEnd', 'streamFailed', 'completed', 'cancelled', 'failed', 'messageCount',
-  'deltaLength', 'contentLength', 'errorKind', 'stage', 'path', 'elapsedMs', 'open', 'streaming', 'eventType'
+  'deltaLength', 'contentLength', 'errorKind', 'stage', 'path', 'elapsedMs', 'open', 'streaming', 'eventType',
+  'turnId', 'phase', 'nameVersion'
 ]);
 const numericFields = new Set(['webviewId', 'guestWebContentsId', 'errorCode', 'exitCode', 'viewportWidth', 'viewportHeight', 'devicePixelRatio', 'messageCount', 'deltaLength', 'contentLength', 'elapsedMs']);
 const booleanFields = new Set(['active', 'isMainFrame', 'isInPlace', 'ownsContext', 'streamMatches', 'hasStreamId', 'streamActive', 'snapshotPresent', 'pending', 'sawStreamEnd', 'streamFailed', 'completed', 'cancelled', 'failed', 'open', 'streaming']);
@@ -45,6 +69,9 @@ function sanitizeDiagnosticFields(fields: Record<string, string | number | boole
     else if (key === 'stage' && typeof value === 'string' && ['stream', 'fallback'].includes(value)) safe[key] = value;
     else if (key === 'path' && typeof value === 'string' && ['stream-event', 'stream-status', 'fallback-status'].includes(value)) safe[key] = value;
     else if (key === 'eventType' && typeof value === 'string' && ['token', 'delta', 'reasoning', 'companion', 'stream_end', 'done', 'cancel', 'error', 'apperror'].includes(value)) safe[key] = value;
+    else if (key === 'turnId' && typeof value === 'string' && /^[a-z0-9]{8,32}$/.test(value)) safe[key] = value;
+    else if (key === 'phase' && typeof value === 'string' && ['send', 'preflight', 'accepted', 'first-delta', 'completed', 'cancelled', 'error'].includes(value)) safe[key] = value;
+    else if (key === 'nameVersion' && typeof value === 'number' && (value === 1 || value === 2)) safe[key] = value;
     else if (booleanFields.has(key) && typeof value === 'boolean') safe[key] = value;
     else if (numericFields.has(key) && typeof value === 'number' && Number.isFinite(value)) safe[key] = value;
   }
@@ -64,6 +91,83 @@ function getStorage(storage?: Storage): Storage | null {
 // serialize the entire buffer synchronously on every streamed token.
 const buffers = new WeakMap<Storage, BrowserDiagnosticEvent[]>();
 const flushTimers = new WeakMap<Storage, ReturnType<typeof setTimeout>>();
+const sinks = new WeakMap<Storage, BrowserDiagnosticsSink>();
+
+type DiagnosticSession = {
+  sessionId: string;
+  windowId: string;
+  enabledAt: number;
+  mono: number;
+  truncated: boolean;
+  missingBatches: number;
+  sinkFailed: boolean;
+  publishedThrough: number;
+};
+const sessions = new WeakMap<Storage, DiagnosticSession>();
+
+function randomDiagnosticId(prefix: string): string {
+  const bytes = new Uint8Array(8);
+  const cryptoRef = globalThis.crypto;
+  if (cryptoRef?.getRandomValues) cryptoRef.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  return prefix + [...bytes].map(value => value.toString(16).padStart(2, '0')).join('');
+}
+
+function sessionFor(storage: Storage, now: number): DiagnosticSession {
+  const current = sessions.get(storage);
+  if (current) return current;
+  const created: DiagnosticSession = {
+    sessionId: randomDiagnosticId('s'),
+    windowId: randomDiagnosticId('w'),
+    enabledAt: now,
+    mono: 0,
+    truncated: false,
+    missingBatches: 0,
+    sinkFailed: false,
+    publishedThrough: 0
+  };
+  sessions.set(storage, created);
+  return created;
+}
+
+function canonicalDiagnosticEvent(event: string): { name: string; nameVersion: 1 | 2 } | null {
+  if (safeDiagnosticEvents.has(event)) return { name: event, nameVersion: 1 };
+  const alias = BROWSER_DIAGNOSTIC_EVENT_ALIASES[event];
+  if (alias && safeDiagnosticEvents.has(alias)) return { name: alias, nameVersion: 2 };
+  return null;
+}
+
+function jsonBytes(events: BrowserDiagnosticEvent[]): number {
+  return new TextEncoder().encode(JSON.stringify(events)).length;
+}
+
+function trimDiagnosticBudget(storage: Storage, events: BrowserDiagnosticEvent[]): void {
+  const session = sessions.get(storage);
+  while (events.length > BROWSER_DIAGNOSTICS_MAX_EVENTS || jsonBytes(events) > BROWSER_DIAGNOSTICS_MAX_SESSION_BYTES) {
+    events.shift();
+    if (session) session.truncated = true;
+    if (events.length === 0) break;
+  }
+}
+
+function publishUnsent(storage: Storage): void {
+  const sink = sinks.get(storage);
+  const session = sessions.get(storage);
+  const events = buffers.get(storage);
+  if (!sink || !session || !events) return;
+  const pending = events.filter(entry => entry.sequence > session.publishedThrough && entry.sessionId === session.sessionId);
+  if (pending.length === 0) return;
+  try {
+    sink.accept({
+      sessionId: session.sessionId,
+      windowId: session.windowId,
+      events: pending.map(entry => ({ ...entry, fields: { ...entry.fields } }))
+    });
+    session.publishedThrough = pending[pending.length - 1].sequence;
+  } catch {
+    session.sinkFailed = true;
+  }
+}
 
 export function flushBrowserDiagnostics(storage?: Storage): void {
   const target = getStorage(storage);
@@ -73,7 +177,21 @@ export function flushBrowserDiagnostics(storage?: Storage): void {
   flushTimers.delete(target);
   const events = buffers.get(target);
   if (!events) return;
+  if (sinks.has(target)) {
+    publishUnsent(target);
+    return;
+  }
   try { target.setItem(BROWSER_DIAGNOSTICS_EVENTS_KEY, JSON.stringify(events)); } catch {}
+}
+
+export function attachBrowserDiagnosticsSink(sink: BrowserDiagnosticsSink | null, storage?: Storage): void {
+  const target = getStorage(storage);
+  if (!target) return;
+  if (sink) sinks.set(target, sink);
+  else sinks.delete(target);
+  const timer = flushTimers.get(target);
+  if (timer !== undefined) clearTimeout(timer);
+  flushTimers.delete(target);
 }
 
 export function isBrowserDiagnosticsEnabled(storage?: Storage): boolean {
@@ -84,12 +202,16 @@ export function isBrowserDiagnosticsEnabled(storage?: Storage): boolean {
   }
 }
 
-export function setBrowserDiagnosticsEnabled(enabled: boolean, storage?: Storage): void {
+export function setBrowserDiagnosticsEnabled(enabled: boolean, storage?: Storage, now = Date.now()): void {
   try {
     const target = getStorage(storage);
     if (!target) return;
     if (!enabled) flushBrowserDiagnostics(target);
-    if (enabled) target.setItem(BROWSER_DIAGNOSTICS_ENABLED_KEY, '1');
+    if (enabled) {
+      sessions.delete(target);
+      sessionFor(target, now);
+      target.setItem(BROWSER_DIAGNOSTICS_ENABLED_KEY, '1');
+    }
     else target.removeItem(BROWSER_DIAGNOSTICS_ENABLED_KEY);
     if (enabled) target.setItem('__lastbrowser_chat_stream_debug', '1');
     else target.removeItem('__lastbrowser_chat_stream_debug');
@@ -109,15 +231,17 @@ export function readBrowserDiagnostics(storage?: Storage): BrowserDiagnosticEven
     if (!raw) { buffers.set(target, []); return []; }
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    const events = parsed.filter((entry): entry is BrowserDiagnosticEvent => (
-      Boolean(entry) && typeof entry === 'object'
-      && Number.isSafeInteger((entry as BrowserDiagnosticEvent).sequence)
-      && (entry as BrowserDiagnosticEvent).sequence > 0
-      && Number.isFinite((entry as BrowserDiagnosticEvent).at)
-      && safeDiagnosticEvents.has((entry as BrowserDiagnosticEvent).event)
-      && Boolean((entry as BrowserDiagnosticEvent).fields)
-      && typeof (entry as BrowserDiagnosticEvent).fields === 'object'
-    )).slice(-BROWSER_DIAGNOSTICS_MAX_EVENTS).map(entry => ({ ...entry, fields: sanitizeDiagnosticFields(entry.fields) }));
+    const events = parsed.filter((entry): entry is BrowserDiagnosticEvent => {
+      if (!entry || typeof entry !== 'object') return false;
+      const candidate = entry as BrowserDiagnosticEvent;
+      const identityOk = (value: string | undefined) => value === undefined || /^[a-z0-9]{8,40}$/.test(value);
+      return Number.isSafeInteger(candidate.sequence) && candidate.sequence > 0
+        && Number.isFinite(candidate.at)
+        && safeDiagnosticEvents.has(candidate.event)
+        && Boolean(candidate.fields) && typeof candidate.fields === 'object'
+        && identityOk(candidate.sessionId) && identityOk(candidate.windowId)
+        && (candidate.mono === undefined || (Number.isFinite(candidate.mono) && candidate.mono >= 0));
+    }).slice(-BROWSER_DIAGNOSTICS_MAX_EVENTS).map(entry => ({ ...entry, fields: sanitizeDiagnosticFields(entry.fields) }));
     buffers.set(target, events);
     return events.map(entry => ({ ...entry, fields: { ...entry.fields } }));
   } catch {
@@ -132,20 +256,32 @@ export function recordBrowserDiagnostic(
   now = Date.now()
 ): BrowserDiagnosticEvent | null {
   if (!isBrowserDiagnosticsEnabled(storage)) return null;
-  if (!safeDiagnosticEvents.has(event)) return null;
+  const canonical = canonicalDiagnosticEvent(event);
+  if (!canonical) return null;
   const target = getStorage(storage);
   if (!target) return null;
+  const session = sessionFor(target, now);
+  if (now - session.enabledAt > BROWSER_DIAGNOSTICS_SESSION_TTL_MS) {
+    flushBrowserDiagnostics(target);
+    setBrowserDiagnosticsEnabled(false, target, now);
+    return null;
+  }
   if (!buffers.has(target)) readBrowserDiagnostics(target);
   const events = buffers.get(target) ?? [];
   const next: BrowserDiagnosticEvent = {
     sequence: (events[events.length - 1]?.sequence ?? 0) + 1,
     at: now,
-    event,
-    fields: sanitizeDiagnosticFields(fields)
+    mono: session.mono + 1,
+    sessionId: session.sessionId,
+    windowId: session.windowId,
+    event: canonical.name,
+    fields: sanitizeDiagnosticFields(fields),
+    ...(canonical.nameVersion === 2 ? { nameVersion: 2 as const } : {})
   };
+  session.mono = next.mono ?? session.mono;
   events.push(next);
   try {
-    if (events.length > BROWSER_DIAGNOSTICS_MAX_EVENTS) events.splice(0, events.length - BROWSER_DIAGNOSTICS_MAX_EVENTS);
+    trimDiagnosticBudget(target, events);
     buffers.set(target, events);
     if (!flushTimers.has(target)) flushTimers.set(target, setTimeout(() => flushBrowserDiagnostics(target), 250));
     return { ...next, fields: { ...next.fields } };
@@ -163,6 +299,7 @@ export function clearBrowserDiagnostics(storage?: Storage): void {
     if (timer !== undefined) clearTimeout(timer);
     flushTimers.delete(target);
     buffers.set(target, []);
+    sessions.delete(target);
     target.removeItem(BROWSER_DIAGNOSTICS_EVENTS_KEY);
   } catch {
     // Ignore unavailable storage.
@@ -171,7 +308,38 @@ export function clearBrowserDiagnostics(storage?: Storage): void {
 
 export function exportBrowserDiagnostics(storage?: Storage): string {
   flushBrowserDiagnostics(storage);
-  return JSON.stringify({ schemaVersion: 1, events: readBrowserDiagnostics(storage) }, null, 2);
+  const target = getStorage(storage);
+  const session = target ? sessions.get(target) : undefined;
+  return JSON.stringify({
+    schemaVersion: 1,
+    truncated: session?.truncated ?? false,
+    missingBatches: session?.missingBatches ?? 0,
+    sinkFailed: session?.sinkFailed ?? false,
+    events: readBrowserDiagnostics(storage)
+  }, null, 2);
+}
+
+export function correlateQuickChatTurn(turnId: string, storage?: Storage): Array<{ phase: string | number | boolean | null; event: string; at: number; mono?: number; elapsedMs: string | number | boolean | null }> {
+  if (!/^[a-z0-9]{8,32}$/.test(turnId)) return [];
+  return readBrowserDiagnostics(storage).filter(entry => entry.fields.turnId === turnId).map(entry => ({
+    phase: entry.fields.phase ?? null,
+    event: entry.event,
+    at: entry.at,
+    mono: entry.mono,
+    elapsedMs: entry.fields.elapsedMs ?? null
+  }));
+}
+
+/** Session-wide reads are asynchronous. The v1 array helpers stay synchronous. */
+export function queryBrowserDiagnosticsV2(options: { afterSequence?: number; event?: string; tabId?: string } = {}, storage?: Storage): Promise<{ schemaVersion: 2; events: BrowserDiagnosticEvent[]; truncated: boolean; missingBatches: number }> {
+  const target = getStorage(storage);
+  const session = target ? sessions.get(target) : undefined;
+  return Promise.resolve({
+    schemaVersion: 2,
+    events: queryBrowserDiagnostics(options, storage),
+    truncated: session?.truncated ?? false,
+    missingBatches: session?.missingBatches ?? 0
+  });
 }
 
 /** A cursor lets an agent retrieve only new evidence instead of repeatedly dumping the buffer. */

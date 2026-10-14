@@ -2,6 +2,35 @@
 
 const { spawnSync } = require('node:child_process');
 const path = require('node:path');
+const fs = require('node:fs');
+const crypto = require('node:crypto');
+
+function preservePinnedLocalEngine(filePath) {
+  const normalized = path.resolve(filePath).replace(/\\/g, '/');
+  const marker = '/resources/apps/desktop/runtime/local-ai/';
+  const position = normalized.toLowerCase().lastIndexOf(marker);
+  if (position < 0) return false;
+  const relative = normalized.slice(position + '/resources/'.length);
+  const registryPath = path.resolve(__dirname, '../../../services/sidekick/runtime/local_ai/store-runtime-registry.json');
+  const registry = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
+  const matches = registry.engines.flatMap(engine => engine.manifest.files
+    .filter(file => `${engine.manifest.packageRelativeDir}/${file.relativePath}`.toLowerCase() === relative.toLowerCase()));
+  if (matches.length !== 1) {
+    throw new Error(`Pinned local engine signing target is not uniquely allowlisted: ${filePath}`);
+  }
+  const pinned = matches[0];
+  const stat = fs.lstatSync(filePath);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== pinned.bytes) {
+    throw new Error(`Pinned local engine file size or type changed: ${filePath}`);
+  }
+  const digest = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  if (digest !== pinned.sha256) {
+    throw new Error(`Pinned local engine file digest changed: ${filePath}`);
+  }
+  // Runtime verification and official archive recovery both require upstream
+  // bytes. Authenticode injection would invalidate this pinned inventory.
+  return true;
+}
 
 function inspectAuthenticode(filePath) {
   if (process.platform !== 'win32') {
@@ -83,6 +112,7 @@ function createWindowsSignaturePreserver(dependencies = {}) {
     }
 
     const filePath = path.resolve(configuration.path);
+    if (preservePinnedLocalEngine(filePath)) return;
     const key = process.platform === 'win32' ? filePath.toLowerCase() : filePath;
     let state = states.get(key);
 

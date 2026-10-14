@@ -23,6 +23,12 @@ Var LastBrowserInstallText
 Var LastBrowserInstallProgressBar
 Var LastBrowserInstallShowLogButton
 Var LastBrowserInstallLog
+Var LastBrowserInstallButtonNext
+Var LastBrowserInstallButtonCancel
+Var LastBrowserInstallButtonBack
+Var LastBrowserInstallBrandingText
+Var LastBrowserInstallHeaderText
+Var LastBrowserInstallHeaderSubText
 
 !macro LB_CREATE_CENTERED_LABEL ID TEXT FONT_VAR FONT_SIZE FONT_WEIGHT COLOR
   GetDlgItem $0 $LastBrowserInstallDialog ${ID}
@@ -78,6 +84,12 @@ Function LastBrowserInstallPageShow
   GetDlgItem $LastBrowserInstallProgressBar $LastBrowserInstallDialog 1004
   GetDlgItem $LastBrowserInstallShowLogButton $LastBrowserInstallDialog 1027
   GetDlgItem $LastBrowserInstallLog $LastBrowserInstallDialog 1016
+  GetDlgItem $LastBrowserInstallButtonNext $HWNDPARENT 1
+  GetDlgItem $LastBrowserInstallButtonCancel $HWNDPARENT 2
+  GetDlgItem $LastBrowserInstallButtonBack $HWNDPARENT 3
+  GetDlgItem $LastBrowserInstallBrandingText $HWNDPARENT 1256
+  GetDlgItem $LastBrowserInstallHeaderText $HWNDPARENT 1037
+  GetDlgItem $LastBrowserInstallHeaderSubText $HWNDPARENT 1038
 
   ; Read the actual page size and center the content within the native InstFiles dialog.
   System::Call 'user32::GetClientRect(p $LastBrowserInstallDialog, @r0)'
@@ -137,22 +149,22 @@ Function LastBrowserInstallPageShow
   !insertmacro LB_MOVE $LastBrowserInstallLog $R3 222 $R6 $R5
 
   ; Use the existing MUI footer buttons, with a concise localized action label.
-  SendMessage $mui.Button.Cancel ${WM_SETTEXT} 0 "STR:Abbrechen"
-  SendMessage $mui.Button.Next ${WM_SETTEXT} 0 "STR:Startklar"
-  ShowWindow $mui.Button.Back ${SW_HIDE}
+  SendMessage $LastBrowserInstallButtonCancel ${WM_SETTEXT} 0 "STR:Abbrechen"
+  SendMessage $LastBrowserInstallButtonNext ${WM_SETTEXT} 0 "STR:Startklar"
+  ShowWindow $LastBrowserInstallButtonBack ${SW_HIDE}
   System::Call 'user32::GetClientRect(p $HWNDPARENT, @r0)'
   System::Call '*$0(i, i, i.r1, i.r2)'
   System::Free $0
   IntOp $R4 $1 - 180
   IntOp $R5 $2 - 34
-  !insertmacro LB_MOVE $mui.Button.Cancel $R4 $R5 78 23
+  !insertmacro LB_MOVE $LastBrowserInstallButtonCancel $R4 $R5 78 23
   IntOp $R4 $R4 + 88
-  !insertmacro LB_MOVE $mui.Button.Next $R4 $R5 88 23
-  SendMessage $mui.Branding.Text ${WM_SETTEXT} 0 "STR:${VERSION} · Beta"
+  !insertmacro LB_MOVE $LastBrowserInstallButtonNext $R4 $R5 88 23
+  SendMessage $LastBrowserInstallBrandingText ${WM_SETTEXT} 0 "STR:${VERSION} · Beta"
   IntOp $R4 $R5 + 3
-  !insertmacro LB_MOVE $mui.Branding.Text 20 $R4 150 18
-  ShowWindow $mui.Header.Text ${SW_HIDE}
-  ShowWindow $mui.Header.SubText ${SW_HIDE}
+  !insertmacro LB_MOVE $LastBrowserInstallBrandingText 20 $R4 150 18
+  ShowWindow $LastBrowserInstallHeaderText ${SW_HIDE}
+  ShowWindow $LastBrowserInstallHeaderSubText ${SW_HIDE}
 
   Pop $R9
   Pop $R8

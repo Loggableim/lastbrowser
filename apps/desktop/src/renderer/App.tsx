@@ -290,7 +290,7 @@ import { AddressBar } from './components/AddressBar.js';
 import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
 import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepaliveEntry } from './space-audio-keepalive.js';
 import { isCurrentSpaceDirectorySnapshot, resolveCanonicalSpacePath, resolveExistingSpaceBackendProfile, resolveRefreshedActiveSpacePath } from './space-paths.js';
-import { mergeSessionListSnapshot, resolveSessionBackendProfile, resolveSessionListSelection, sessionListResponseMatchesScope, sameSessionListScope, type SessionListScope } from './session-list-scope.js';
+import { mergeSessionListSnapshot, resolveSessionBackendProfile, resolveSessionListSelection, sessionListResponseMatchesScope, sessionDeletionSucceeded, sameSessionListScope, type SessionListScope } from './session-list-scope.js';
 import { createAndLoadScopedSession } from './scoped-session-creation.js';
 import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
@@ -4650,6 +4650,10 @@ function AppContent(): JSX.Element {
     const streamId = activeStreamIdRef.current;
     const sessionId = activeSessionIdRef.current;
     const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };
+    const isCurrentStopSession = () => activeSessionIdRef.current === sessionId && sessionListResponseMatchesScope(sessionScope, {
+      profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current,
+      backendProfileName: activeBackendProfileNameRef.current
+    });
     const uiTurnOwner = chatUiOwnershipRef.current.ownerForStream(streamId);
     setChatRunState('cancelling');
     const savedScope=activeSession?.space_scope;
@@ -4661,27 +4665,27 @@ function AppContent(): JSX.Element {
       try{
         const ack=await requestNativeChatControl(window.lastbrowser.sidekick.controlChat,{sessionId,streamId,command:'cancel',
           workspacePath:acceptedBinding?.workspacePath??activeSpacePath,browserProfileId:scope.browserProfileId},scope);
-        if(!ack.accepted&&activeSessionIdRef.current===sessionId)setChatError(t('spaceAssistant.stale'));
-      }catch(error){if(activeSessionIdRef.current===sessionId&&activeProfileIdRef.current===scope.browserProfileId)setChatError(error instanceof Error?error.message:String(error));}
+        if(!ack.accepted&&isCurrentStopSession())setChatError(t('spaceAssistant.stale'));
+      }catch(error){if(isCurrentStopSession())setChatError(error instanceof Error?error.message:String(error));}
       // Only the original stream waiter can release this writer after actual
       // process exit. A dispatch ACK is not completion or a UI detach.
       return;
     }
     try {
       await window.lastbrowser.sidekick.cancelStream(streamId);
-      if (sessionId) await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
+      if (sessionId && isCurrentStopSession()) await loadActiveSession(sessionId, { loadDraft: false, showLoading: false });
     } catch (error) {
       if (sessionListResponseMatchesScope(sessionScope, {
         profile: activeProfileIdRef.current,
         workspacePath: activeSpacePathRef.current,
-        backendProfileName: activeBackendProfileName
+        backendProfileName: activeBackendProfileNameRef.current
       })) setChatError(error instanceof Error ? error.message : String(error));
     } finally {
       if (uiTurnOwner !== null && chatUiOwnershipRef.current.finish(uiTurnOwner)) setSidekickBusy(false);
       if (activeSessionIdRef.current === sessionId && sessionListResponseMatchesScope(sessionScope, {
         profile: activeProfileIdRef.current,
         workspacePath: activeSpacePathRef.current,
-        backendProfileName: activeBackendProfileName
+        backendProfileName: activeBackendProfileNameRef.current
       })) {
         updateActiveStreamId(null);
         setChatRunState('idle');
@@ -4716,15 +4720,19 @@ function AppContent(): JSX.Element {
       if (!sessionListResponseMatchesScope(sessionScope, {
         profile: activeProfileIdRef.current,
         workspacePath: activeSpacePathRef.current,
-        backendProfileName: activeBackendProfileName
+        backendProfileName: activeBackendProfileNameRef.current
       })) return;
       const updated = result.session || { ...session, title: nextTitle.trim() };
       setSessions((current) => current.map((item) => (item.session_id === session.session_id ? { ...item, ...updated } : item)));
-      if (activeSessionId === session.session_id) {
+      if (activeSessionIdRef.current === session.session_id) {
         setActiveSession((current) => (current ? { ...current, ...updated } : current));
       }
       setSessionError('');
     } catch (error) {
+      if (!sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current,
+        backendProfileName: activeBackendProfileNameRef.current
+      })) return;
       setSessionError(error instanceof Error ? error.message : String(error));
     }
   }
@@ -4733,23 +4741,26 @@ function AppContent(): JSX.Element {
     if (confirmation !== 'sidebar-inline-confirmed' && !window.confirm(`Delete "${sessionTitle(session)}"?`)) return;
     const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };
     try {
-      await window.lastbrowser.sidekick.deleteSession({ sessionId: session.session_id, ...sessionScope });
+      const result = await window.lastbrowser.sidekick.deleteSession({ sessionId: session.session_id, ...sessionScope });
       if (!sessionListResponseMatchesScope(sessionScope, {
         profile: activeProfileIdRef.current,
         workspacePath: activeSpacePathRef.current,
-        backendProfileName: activeBackendProfileName
+        backendProfileName: activeBackendProfileNameRef.current
       })) return;
-      setSessions((current) => {
-        const next = current.filter((item) => item.session_id !== session.session_id);
-        if (activeSessionId === session.session_id) {
-          const nextActiveId = next[0]?.session_id || null;
-          activeSessionIdRef.current = nextActiveId;
-          setActiveSessionId(nextActiveId);
-        }
-        return next;
-      });
+      if (!sessionDeletionSucceeded(result)) throw new Error(locale === 'de' ? 'Chat konnte nicht gelöscht werden.' : 'Chat could not be deleted.');
+      const remaining = sessionsRef.current.filter((item) => item.session_id !== session.session_id);
+      setSessions((current) => current.filter((item) => item.session_id !== session.session_id));
+      if (activeSessionIdRef.current === session.session_id) {
+        const nextActiveId = remaining[0]?.session_id || null;
+        activeSessionIdRef.current = nextActiveId;
+        setActiveSessionId(nextActiveId);
+      }
       setSessionError('');
     } catch (error) {
+      if (!sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current,
+        backendProfileName: activeBackendProfileNameRef.current
+      })) return;
       setSessionError(error instanceof Error ? error.message : String(error));
     }
   }
@@ -4766,7 +4777,7 @@ function AppContent(): JSX.Element {
       if (!currentScope()) { failedIds.push(...ids.filter(id => !deletedIds.includes(id) && !failedIds.includes(id))); break; }
       try {
         const result = await window.lastbrowser.sidekick.deleteSession({ sessionId, ...sessionScope });
-        if (result && typeof result === 'object' && ('error' in result && result.error || 'ok' in result && result.ok === false || 'deleted' in result && result.deleted === false)) failedIds.push(sessionId);
+        if (!sessionDeletionSucceeded(result)) failedIds.push(sessionId);
         else deletedIds.push(sessionId);
       } catch { failedIds.push(sessionId); }
     }
@@ -4791,7 +4802,7 @@ function AppContent(): JSX.Element {
       if (!sessionListResponseMatchesScope(sessionScope, {
         profile: activeProfileIdRef.current,
         workspacePath: activeSpacePathRef.current,
-        backendProfileName: activeBackendProfileName
+        backendProfileName: activeBackendProfileNameRef.current
       })) return;
       const duplicated = result.session;
       if (duplicated?.session_id) {
@@ -4804,6 +4815,10 @@ function AppContent(): JSX.Element {
       }
       setSessionError('');
     } catch (error) {
+      if (!sessionListResponseMatchesScope(sessionScope, {
+        profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current,
+        backendProfileName: activeBackendProfileNameRef.current
+      })) return;
       setSessionError(error instanceof Error ? error.message : String(error));
     }
   }

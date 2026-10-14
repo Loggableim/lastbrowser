@@ -4,6 +4,7 @@ import {
   resolveSessionBackendProfile,
   resolveSessionListSelection,
   sessionListResponseMatchesScope,
+  sessionDeletionSucceeded,
   type SessionListScope
 } from '../src/renderer/session-list-scope.js';
 
@@ -26,6 +27,17 @@ describe('profile and Space scoped session lists', () => {
     expect(sessionListResponseMatchesScope(workScope, workScope)).toBe(true);
     expect(sessionListResponseMatchesScope(workScope, personalScope)).toBe(false);
     expect(sessionListResponseMatchesScope(workScope, otherSpaceScope)).toBe(false);
+    expect(sessionListResponseMatchesScope({ ...workScope, backendProfileName: 'alpha' },
+      { ...workScope, backendProfileName: 'beta' })).toBe(false);
+  });
+
+  it('retains chats when deletion is explicitly refused by the backend', () => {
+    for (const response of [false, { error: 'not_deleted' }, { ok: false }, { deleted: false }]) {
+      expect(sessionDeletionSucceeded(response)).toBe(false);
+    }
+    for (const response of [undefined, null, { ok: true }, { deleted: true }]) {
+      expect(sessionDeletionSucceeded(response)).toBe(true);
+    }
   });
 
   it('retains an active session only for refreshes in the same scope', () => {

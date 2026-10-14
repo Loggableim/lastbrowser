@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import * as os from 'node:os';
 import { statfs } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
+import { probeWindowsGpuInventory, type WindowsGpuInventory } from './windows-gpu-probe.js';
 
 export type LocalAiScope = Readonly<{ backendProfileId: string; spaceId: string; browserProfileId: string }>;
 type Measurement = Readonly<{ value: number | null; status: 'measured' | 'unknown'; source: string; observedAt: string }>;
@@ -14,8 +15,10 @@ export interface LocalAiHardwareSnapshot {
   readonly ramTotalBytes: Measurement; readonly ramAvailableBytes: Measurement; readonly diskFreeBytes: Measurement;
   readonly adapters: readonly Readonly<{ adapterId: string; name: string; vendor: string | null;
     sharedSystemMemory: boolean | null; memoryPoolId: string; dedicatedBytes: Measurement;
-    processBudgetBytes: Measurement; processUsageBytes: Measurement; budgetOwnerRef: null;
-    backends: readonly never[] }>[];
+    processBudgetBytes: Measurement; processUsageBytes: Measurement; budgetOwnerRef: string | null;
+    backends: readonly Readonly<{ name: 'vulkan'; status: 'detected' }>[];
+    adapterLuid?: string | null; vulkanDeviceUuid?: string | null; vulkanPhysicalDeviceIndex?: number | null;
+    vulkanPciBusId?: string | null; vulkanDeviceNodeMask?: number | null; softwareAdapter?: boolean | null }>[];
 }
 export interface BoundHardwareScan {
   readonly schemaVersion: 1; readonly scope: LocalAiScope; readonly hardware: LocalAiHardwareSnapshot;
@@ -27,6 +30,7 @@ export interface LocalAiHardwareInventory {
 }
 export interface HardwareProbeDependencies {
   getGpuInfo(): Promise<unknown>; getGpuFeatureStatus(): Record<string, string>;
+  getWindowsGpuInventory?(): Promise<WindowsGpuInventory>;
   memory(): { total: number; available: number }; // bytes; production Electron KiB converted below
   cpus(): readonly { model: string }[]; platform(): string; arch(): string;
   disk(path: string): Promise<{ bsize: bigint; bavail: bigint }>;
@@ -44,7 +48,9 @@ async function bounded<T>(operation: () => Promise<T>, milliseconds: number): Pr
 }
 export async function defaultHardwareProbeDependencies(): Promise<HardwareProbeDependencies> {
   const { app } = await import('electron');
+  const { appResourcesDir } = await import('./services.js');
   return { getGpuInfo: () => app.getGPUInfo('basic'), getGpuFeatureStatus: () => ({ ...app.getGPUFeatureStatus() }),
+    getWindowsGpuInventory: () => probeWindowsGpuInventory(appResourcesDir()),
     memory: () => { const memory = process.getSystemMemoryInfo(); return { total: memory.total * 1024, available: memory.free * 1024 }; },
     cpus: os.cpus, platform: os.platform, arch: os.arch,
     disk: path => statfs(path, { bigint: true }), now: () => new Date(), id: randomUUID };
@@ -62,7 +68,8 @@ export async function scanLocalAiHardwareInventory(input: { cacheDirectory: stri
   try { const memory = deps.memory(); total = memory.total; available = memory.available; } catch { issues.push('memory_probe_failed'); }
   const label = (value: string) => value.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 240).trim();
   try { const cpus = deps.cpus(); logicalCores = cpus.length || null; cpuName = cpus[0]?.model ? label(cpus[0].model) || null : null; } catch { issues.push('cpu_probe_failed'); }
-  const [gpu, disk] = await Promise.allSettled([bounded(deps.getGpuInfo, timeout), bounded(() => deps.disk(input.cacheDirectory), timeout)]);
+  const nativeWindows = deps.platform() === 'win32' && deps.arch() === 'x64' && deps.getWindowsGpuInventory;
+  const [gpu, disk] = await Promise.allSettled([bounded(nativeWindows || deps.getGpuInfo, timeout), bounded(() => deps.disk(input.cacheDirectory), timeout)]);
   if (gpu.status === 'rejected') issues.push(gpu.reason?.message === 'probe_timeout' ? 'gpu_probe_timeout' : 'gpu_probe_failed');
   if (disk.status === 'rejected') issues.push(disk.reason?.message === 'probe_timeout' ? 'disk_probe_timeout' : 'disk_probe_failed');
   let diskBytes: number | null = null;
@@ -75,7 +82,7 @@ export async function scanLocalAiHardwareInventory(input: { cacheDirectory: stri
   try { gpuFeatureStatus = Object.fromEntries(Object.entries(deps.getGpuFeatureStatus()).filter(([key, value]) => key.length < 128 && typeof value === 'string' && value.length < 128)); } catch { issues.push('gpu_features_probe_failed'); }
   const raw = gpu.status === 'fulfilled' && gpu.value && typeof gpu.value === 'object' ? gpu.value as { gpuDevice?: unknown } : {};
   const devices = Array.isArray(raw.gpuDevice) ? raw.gpuDevice.slice(0, 16) : [];
-  const adapters = devices.map((device, index) => {
+  const fallbackAdapters = devices.map((device, index) => {
     const item = device && typeof device === 'object' ? device as Record<string, unknown> : {};
     const vendor = typeof item.vendorId === 'number' && Number.isSafeInteger(item.vendorId) ? 'pci:' + item.vendorId.toString(16) : null;
     return { adapterId: 'adapter-' + index, name: typeof item.deviceString === 'string' ? label(item.deviceString) || 'GPU ' + (index + 1) : 'GPU ' + (index + 1),
@@ -83,6 +90,12 @@ export async function scanLocalAiHardwareInventory(input: { cacheDirectory: stri
       dedicatedBytes: measurement(null, 'electron-gpu-basic-no-memory-proof'), processBudgetBytes: measurement(null, 'inference-process-budget-unavailable'),
       processUsageBytes: measurement(null, 'inference-process-usage-unavailable'), budgetOwnerRef: null, backends: [] as never[] };
   });
+  let adapters: LocalAiHardwareSnapshot['adapters'] = fallbackAdapters;
+  if (nativeWindows && gpu.status === 'fulfilled') {
+    const inventory = gpu.value as WindowsGpuInventory;
+    adapters = inventory.adapters;
+    issues.push(...inventory.probeIssues);
+  }
   return freeze({ schemaVersion: 1, hardware: { schemaVersion: 1, scanId: deps.id(), observedAt,
     os: deps.platform(), arch: deps.arch(), cpuName, physicalCores: null, logicalCores, cpuFeatures: [], cpuFeaturesVerified: false,
     ramTotalBytes: measurement(total, 'electron-system-memory'), ramAvailableBytes: measurement(available, 'electron-system-memory-free'),

@@ -15,10 +15,16 @@ from .runner import provider_configuration_digest
 from .scope import same_path
 
 
-def _local_store_capture(store, model, backend=None, compute_owner=None):
+def _local_store_capture(store, model, backend=None, compute_owner=None, prepared=None):
     if store is None:
         raise PolicyDenied('native_local_store_unavailable')
-    value = store.provider_capability(model, agentic=True, backend=backend, compute_owner=compute_owner)
+    # Only this parent broker's private, registered prepared session may refresh
+    # dynamic observations after artifact hashing or a tool round trip.
+    if prepared is not None:
+        value = store.prepared_provider_capability(prepared, model, agentic=True,
+                                                  backend=backend, compute_owner=compute_owner)
+    else:
+        value = store.provider_capability(model, agentic=True, backend=backend, compute_owner=compute_owner)
     if value.get('state') != 'ready' or value.get('toolCallingQualified') is not True:
         raise PolicyDenied('native_local_tool_quality_required')
     from runtime.local_ai.store_provider_host import capture_from_capability
@@ -227,7 +233,8 @@ class NativeSdkSessionBroker(NativeAutoSessionBroker):
             from runtime.local_ai.store_provider_host import scoped_store
             store = self._local_store or scoped_store(self.context.scope, self.context.profile_name)
             owner = 'auto-provider:' + next(iter(self._local_leases)) if self._local_leases else None
-            if _local_store_capture(store, self.capture.provider.model, self.capture.local_runtime.backend, owner) != self.capture.local_runtime:
+            if _local_store_capture(store, self.capture.provider.model, self.capture.local_runtime.backend, owner,
+                                    prepared=self._local_prepared) != self.capture.local_runtime:
                 raise PolicyDenied('native_local_runtime_changed')
         if getattr(self.context, "provider_capture", None) != self.capture:
             raise PolicyDenied("native_fixed_capture_changed")

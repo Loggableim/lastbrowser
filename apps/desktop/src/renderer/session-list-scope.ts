@@ -8,6 +8,14 @@ export type SessionListEntry = {
   session_id: string;
 };
 
+/** Legacy empty acknowledgements are accepted; explicit failure never removes a chat. */
+export function sessionDeletionSucceeded(result: unknown): boolean {
+  if (result === false) return false;
+  if (!result || typeof result !== 'object') return true;
+  const response = result as Record<string, unknown>;
+  return !response.error && response.ok !== false && response.deleted !== false;
+}
+
 /** A resolved profile belongs to its original UI selection, even before effects reset it. */
 export function resolveSessionBackendProfile(
   requestedScope: SessionListScope | null,

@@ -42,6 +42,7 @@ def test_parent_revalidates_exact_store_proof_and_running_compute_owner(monkeypa
     value._stopping = threading.Event()
     value._decision = None
     value._local_leases = {'claim-a': object()}
+    value._local_prepared = None
     calls = []
     current = [capability()]
     value._local_store = SimpleNamespace(provider_capability=lambda *a, **k: calls.append(k) or current[0])
@@ -56,6 +57,16 @@ def test_parent_revalidates_exact_store_proof_and_running_compute_owner(monkeypa
     current[0] = capability(toolCallingQualified=False)
     with pytest.raises(PolicyDenied, match='tool_quality_required'):
         value._validate()
+
+
+def test_only_explicit_parent_prepared_session_uses_private_refresh():
+    calls=[];prepared=object()
+    store=SimpleNamespace(
+        provider_capability=lambda *a,**k:pytest.fail('public stale scan used after prepare'),
+        prepared_provider_capability=lambda *a,**k:calls.append((a,k)) or capability())
+    captured=sdk._local_store_capture(store,'curated-model','cpu','owner',prepared=prepared)
+    assert captured.context_tokens==4096
+    assert calls==[((prepared,'curated-model'),{'agentic':True,'backend':'cpu','compute_owner':'owner'})]
 
 
 @pytest.fixture

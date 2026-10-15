@@ -594,6 +594,66 @@ export function ChatComposer({
               <span>{t('chat.plan')}</span>
             </button>
           </div>
+          <details className="composer-more" onKeyDown={event=>{
+            if(event.key==='Escape'){
+              event.currentTarget.open=false;
+              event.currentTarget.querySelector('summary')?.focus();
+            }
+          }}>
+            <summary aria-label={t('chat.chooseModelShort')}><MoreHorizontal size={16} aria-hidden="true" /><span>{t('chat.chooseModelShort')}</span></summary>
+            <div className="composer-more-content">
+              <button
+                type="button"
+                className="composer-tab-btn"
+                onClick={() => {
+                  if (isTabsActive) {
+                    onText(text.replace(/@tabs\s*/gi, '').trim());
+                  } else {
+                    onText(text ? `@tabs ${text}` : '@tabs ');
+                  }
+                }}
+                aria-pressed={isTabsActive}
+                title={`@tabs · ${t('browser.chrome.tabs')}`}
+              >
+                <Layers size={13} />
+                <span>{t('browser.chrome.tabs')}</span>
+              </button>
+          {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-beta-catalog-opt-in">
+              <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
+              <ProviderBetaCatalogToggle />
+          </div>}
+          <span className={`composer-model-qualification ${displayedModelQualified?'qualified':'untested'}`} role="status"
+            title={`${displayedQualificationLabel} · ${qualificationScope}`}>
+            {displayedQualificationLabel}
+          </span>
+          {antigravityCatalogRelevant&&(antigravityCatalogUnavailable||antigravityCatalogUnknown||antigravityCatalogReady)&&<span className={`composer-model-qualification ${antigravityCatalogReady?'qualified':'untested'}`} role="status">
+            {t(antigravityCatalogUnavailable?'settings.panels.providers.antigravityCatalogUnavailableShort'
+              :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknownShort'
+                :'settings.panels.providers.antigravityCatalogReadyShort')}
+          </span>}
+          <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
+            aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
+            aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
+            <ListFilter size={14} aria-hidden="true" />
+            <span>{t('chat.chooseModelShort')}</span>
+          </button>
+          <details className="composer-reasoning-disclosure">
+            <summary title={reasoningHelp} aria-label={t('chat.reasoningEffort')} data-testid="composer-reasoning-toggle">
+              {t('chat.reasoningEffort')}
+            </summary>
+            <ReasoningEffortPicker
+              value={reasoningEffort}
+              efforts={reasoningEfforts}
+              capabilityState={reasoningCapabilityState}
+              disabled={!ready || running}
+              onChange={onReasoningEffort}
+            />
+          </details>
+          <div className="composer-scope" aria-label={`${profile} · ${workspaceLabel(workspace)}`}>
+            <span>{profile}</span><span>{workspaceLabel(workspace)}</span>
+          </div>
+            </div>
+          </details>
         </div>
         <div className="composer-toolbar-group composer-model-group">
           <label className="composer-model composer-current-model" title={`${model || 'default'} · ${modelProvider || 'current'}`}>
@@ -668,7 +728,7 @@ export function ChatComposer({
           ref={composerInput}
           value={text}
           placeholder={ready ? t('chat.composerPlaceholder') : t('chat.runtimeStarting')}
-          rows={3}
+          rows={1}
           disabled={!ready}
           onChange={(event) => handleComposerChange(event.target.value)}
           onKeyDown={(event) => {
@@ -680,69 +740,6 @@ export function ChatComposer({
             if (event.key === 'Escape') setShowSlashDropdown(false);
           }}
         />
-      </div>
-        <div className="composer-toolbar-group composer-context-group">
-          <button
-            type="button"
-            className="composer-tab-btn"
-            onClick={() => {
-              if (isTabsActive) {
-                onText(text.replace(/@tabs\s*/gi, '').trim());
-              } else {
-                onText(text ? `@tabs ${text}` : '@tabs ');
-              }
-            }}
-            aria-pressed={isTabsActive}
-            title={`@tabs · ${t('browser.chrome.tabs')}`}
-          >
-            <Layers size={13} />
-            <span>{t('browser.chrome.tabs')}</span>
-          </button>
-        </div>
-          <details className="composer-more" onKeyDown={event=>{
-            if(event.key==='Escape'){
-              event.currentTarget.open=false;
-              event.currentTarget.querySelector('summary')?.focus();
-            }
-          }}>
-            <summary aria-label={t('chat.chooseModelShort')}><MoreHorizontal size={16} aria-hidden="true" /><span>{t('chat.chooseModelShort')}</span></summary>
-            <div className="composer-more-content">
-          {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-beta-catalog-opt-in">
-              <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
-              <ProviderBetaCatalogToggle />
-          </div>}
-          <span className={`composer-model-qualification ${displayedModelQualified?'qualified':'untested'}`} role="status"
-            title={`${displayedQualificationLabel} · ${qualificationScope}`}>
-            {displayedQualificationLabel}
-          </span>
-          {antigravityCatalogRelevant&&(antigravityCatalogUnavailable||antigravityCatalogUnknown||antigravityCatalogReady)&&<span className={`composer-model-qualification ${antigravityCatalogReady?'qualified':'untested'}`} role="status">
-            {t(antigravityCatalogUnavailable?'settings.panels.providers.antigravityCatalogUnavailableShort'
-              :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknownShort'
-                :'settings.panels.providers.antigravityCatalogReadyShort')}
-          </span>}
-          <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
-            aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
-            aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
-            <ListFilter size={14} aria-hidden="true" />
-            <span>{t('chat.chooseModelShort')}</span>
-          </button>
-          <details className="composer-reasoning-disclosure">
-            <summary title={reasoningHelp} aria-label={t('chat.reasoningEffort')} data-testid="composer-reasoning-toggle">
-              {t('chat.reasoningEffort')}
-            </summary>
-            <ReasoningEffortPicker
-              value={reasoningEffort}
-              efforts={reasoningEfforts}
-              capabilityState={reasoningCapabilityState}
-              disabled={!ready || running}
-              onChange={onReasoningEffort}
-            />
-          </details>
-          <div className="composer-scope" aria-label={`${profile} · ${workspaceLabel(workspace)}`}>
-            <span>{profile}</span><span>{workspaceLabel(workspace)}</span>
-          </div>
-            </div>
-          </details>
         {running ? (
           <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
             <StopCircle size={17} />
@@ -752,6 +749,7 @@ export function ChatComposer({
             <Send size={17} />
           </button>
         )}
+      </div>
     </form>
   );
 }

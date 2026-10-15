@@ -53,14 +53,24 @@ function escapeHtml(text: string): string {
   })[character]!);
 }
 
+function modelSelectBounds(markup: string, modelLabel: string): { start: number; end: number } {
+  const host = markup.indexOf('composer-current-model');
+  const start = host < 0 ? -1 : markup.indexOf('<select', host);
+  const end = start < 0 ? -1 : markup.indexOf('</select>', start);
+  const openEnd = start < 0 ? -1 : markup.indexOf('>', start);
+  const opening = start < 0 || openEnd < 0 ? '' : markup.slice(start, openEnd + 1);
+  expect(opening).toContain(`aria-label="${escapeHtml(modelLabel)}`);
+  return { start, end };
+}
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe('chat composer model guidance', () => {
   it.each(testLocales)('keeps the no-active-model hint in the selector for $locale without a persistent banner', ({ locale, catalogLocale }) => {
     const markup = renderComposer(locale, { noActiveModels: true });
-    const noActiveModels = escapeHtml(createDesktopI18n(catalogLocale).t('settings.panels.providers.noActiveModels'));
-    const modelSelectStart = markup.indexOf('<select');
-    const modelSelectEnd = markup.indexOf('</select>', modelSelectStart);
+    const translations = createDesktopI18n(catalogLocale);
+    const noActiveModels = escapeHtml(translations.t('settings.panels.providers.noActiveModels'));
+    const { start: modelSelectStart, end: modelSelectEnd } = modelSelectBounds(markup, translations.t('chat.model'));
     const noActiveModelsIndex = markup.indexOf(noActiveModels);
 
     expect(noActiveModelsIndex).toBeGreaterThan(modelSelectStart);
@@ -106,5 +116,24 @@ describe('chat composer model guidance', () => {
     expect(markup).toContain(blockedNotice);
     expect(markup).toContain('class="composer-model-notice" role="status"');
     expect(sendButton).toContain('disabled=""');
+  });
+
+  it.each(testLocales)('places browser tabs inside More, beside Action and Plan and left of the model, for $locale', ({ locale, catalogLocale }) => {
+    const markup = renderComposer(locale);
+    const translations = createDesktopI18n(catalogLocale);
+    const tabs = escapeHtml(translations.t('browser.chrome.tabs'));
+    const moreMenu = markup.indexOf('class="composer-more-content"');
+    const moreControl = markup.indexOf('class="composer-more"');
+    const modelSelect = modelSelectBounds(markup, translations.t('chat.model')).start;
+    const field = markup.indexOf('<textarea');
+    const send = markup.indexOf('class="composer-send"');
+
+    expect(moreControl).toBeGreaterThanOrEqual(0);
+    expect(moreControl).toBeLessThan(modelSelect);
+    expect(markup.indexOf(tabs)).toBeGreaterThan(moreMenu);
+    expect(field).toBeGreaterThan(modelSelect);
+    expect(send).toBeGreaterThan(field);
+    expect(markup).toContain('rows="1"');
+    expect(markup).not.toContain('composer-context-group');
   });
 });

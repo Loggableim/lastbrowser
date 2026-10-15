@@ -4,6 +4,7 @@ import path from 'node:path';
 import { canSelectNativeModel, isModelCatalogCacheCurrent, isModelCatalogResponseCurrent, manualModelPickerOptions, mapScopedModelPickerOptions } from '../src/renderer/model-picker-options.js';
 import { quickChatModelGateReason } from '../src/renderer/quick-chat-model-gate.js';
 import {
+  hasChosenChatModel,
   isProviderModelSelected,
   isMultiAgentModelSelection,
   parseProviderModelId,
@@ -452,5 +453,30 @@ describe('provider-aware model selection', () => {
       model: 'deepseek-v4.1-flash'
     });
     expect(resolveCatalogModelSelection(null, groups, 'missing-provider')).toEqual({ model: '' });
+  });
+
+  it('treats only empty and default values as no chosen chat model', () => {
+    expect(hasChosenChatModel('')).toBe(false);
+    expect(hasChosenChatModel(null)).toBe(false);
+    expect(hasChosenChatModel('default')).toBe(false);
+    expect(hasChosenChatModel(' deepseek-v4.1-flash ')).toBe(true);
+  });
+
+  it('lets a chosen Quickchat model send while the catalog loads or after it failed, and keeps the gate without a choice', () => {
+    const scopeKey = 'scope-current';
+    const unverified = { activeScopeKey: scopeKey, loadedCatalogScopeKey: null, availableModels: [] };
+    expect(quickChatModelGateReason({ ...unverified, selectedModel: 'deepseek-v4.1-flash', selectedProvider: 'ollama-cloud', failedCatalogScopeKey: null })).toBeNull();
+    expect(quickChatModelGateReason({ ...unverified, selectedModel: 'deepseek-v4.1-flash', selectedProvider: 'ollama-cloud', failedCatalogScopeKey: scopeKey })).toBeNull();
+    expect(quickChatModelGateReason({ ...unverified, selectedModel: '', failedCatalogScopeKey: null })).toBe('loading');
+    expect(quickChatModelGateReason({ ...unverified, selectedModel: '', failedCatalogScopeKey: scopeKey })).toBe('catalog-unavailable');
+    // Beta orchestrators still need a visible, available catalog entry.
+    expect(quickChatModelGateReason({ ...unverified, selectedModel: 'teamwork', failedCatalogScopeKey: null })).toBe('model-unavailable');
+  });
+
+  it('keeps the chat send gate on a chosen model until the catalog verifies it', () => {
+    const nativeChat = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8').replace(/\r\n/g, '\n');
+    expect(nativeChat).toContain('const modelChoiceMissing = !modelCatalogLoaded && !automaticSelected && !modelChosen;');
+    expect(nativeChat).toContain('betaSelectionBlocked||modelChoiceMissing||Boolean(connectionNotice)||Boolean(pendingChoice)');
+    expect(nativeChat).not.toContain('betaSelectionBlocked||modelCatalogLoading||modelCatalogError');
   });
 });

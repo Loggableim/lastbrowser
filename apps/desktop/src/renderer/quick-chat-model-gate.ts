@@ -1,4 +1,5 @@
 import type { DesktopLocaleId } from './i18n/keys.js';
+import { hasChosenChatModel } from './provider-model-selection.js';
 
 export type QuickChatModelGateReason = 'loading' | 'catalog-unavailable' | 'model-unavailable' | 'opencode-unreachable' | 'sign-in-expired' | null;
 export type QuickChatModelChoice = Readonly<{ id: string; providerId?: string; category?: string; remainingPercent?: number; remainingFraction?: number }>;
@@ -23,6 +24,8 @@ export function quickChatModelGateReason(options: {
     && (matches[0].remainingFraction === undefined || matches[0].remainingFraction > 0);
   if (orchestrationModelIds.has(modelId)) return available ? null : 'model-unavailable';
   if (options.loadedCatalogScopeKey !== options.activeScopeKey) {
+    // A chosen model may send while the catalog loads or after it failed; the send path still qualifies it on the backend.
+    if (hasChosenChatModel(modelId)) return null;
     return options.failedCatalogScopeKey === options.activeScopeKey ? 'catalog-unavailable' : 'loading';
   }
   return available ? null : 'model-unavailable';

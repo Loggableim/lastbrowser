@@ -127,6 +127,12 @@ export function resolvePreferredChatModel(...choices: unknown[]): string {
   return '';
 }
 
+/** `default` and empty values are placeholders that mean "no model chosen". */
+export function hasChosenChatModel(model: string | null | undefined): boolean {
+  const value = String(model || '').trim();
+  return value !== '' && value !== 'default';
+}
+
 /** Attach the provider namespace before persisting a bare model ID. */
 export function qualifyModelForProvider(model: string, provider?: string): string {
   const value = String(model || '').trim();

@@ -4,7 +4,8 @@ export type ConnectionNotice = 'opencode-unreachable' | 'sign-in-expired';
 
 const EXPIRED_STATE = /expired|reauth|invalid_grant|unauthorized/;
 const EXPIRED_TEXT = /sign-?in expired|login expired|reauth_required|invalid_grant|\b401\b|unauthorized/i;
-const UNREACHABLE_TEXT = /timed out|timeout|econnrefused|enotfound|eai_again|unreachable|failed to fetch|network error|opencode\.ai/i;
+// Transport-level failures only. Request timeouts and OpenCode URLs inside other errors do not prove that OpenCode is unreachable.
+const UNREACHABLE_TEXT = /econnrefused|enotfound|eai_again|unreachable|failed to fetch|network error/i;
 
 export function classifyConnectionNotice(input: {
   error?: unknown;

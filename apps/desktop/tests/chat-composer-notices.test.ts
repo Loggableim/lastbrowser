@@ -106,6 +106,19 @@ describe('chat composer model guidance', () => {
     expect(failure).toContain(escapeHtml(translations.t('chat.retryModels')));
   });
 
+  it.each(testLocales)('leaves the send button enabled during catalog loading or after a catalog error for $locale when the parent does not block', ({ locale }) => {
+    // The parent decides sendBlocked from the chosen model; the composer must not add its own catalog block.
+    const loading = renderComposer(locale, { modelCatalogLoading: true, text: 'Sent while the catalog loads' });
+    const failure = renderComposer(locale, { modelCatalogError: true, onRetryModelCatalog: () => undefined, text: 'Sent after a catalog error' });
+    const loadingSend = loading.match(/<button type="submit" class="composer-send"[^>]*>/)?.[0];
+    const failureSend = failure.match(/<button type="submit" class="composer-send"[^>]*>/)?.[0];
+
+    expect(loadingSend).toBeDefined();
+    expect(loadingSend).not.toContain('disabled=""');
+    expect(failureSend).toBeDefined();
+    expect(failureSend).not.toContain('disabled=""');
+  });
+
   it.each(testLocales)('retains the actionable explanation when a saved choice blocks sending for $locale', ({ locale, catalogLocale }) => {
     const markup = renderComposer(locale, {
       betaSelectionBlocked: true,

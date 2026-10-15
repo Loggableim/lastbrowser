@@ -296,9 +296,9 @@ export function CopilotSplitView({
       modelCatalogFailureScopeKeyRef.current = null;
       setModelCatalogFailureScopeKey(null);
     }
+    // Slow discovery is not a connection failure; it only marks the catalog as unverified.
     const loadingDeadline = window.setTimeout(() => {
       if (!alive || modelCatalogLoadedScopeKeyRef.current === orchestrationScopeKey) return;
-      setConnectionNotice('opencode-unreachable');
       modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
       setModelCatalogFailureScopeKey(orchestrationScopeKey);
     }, CATALOG_VISIBLE_WAIT_MS);
@@ -418,7 +418,7 @@ export function CopilotSplitView({
         // must not imply that a provider is configured or currently available.
         if (alive && generation === orchestrationScopeGenerationRef.current
           && isModelCatalogResponseCurrent(orchestrationScopeKey, orchestrationScopeKeyRef.current)) {
-          const notice = classifyConnectionNotice({ error }) || 'opencode-unreachable';
+          const notice = classifyConnectionNotice({ error });
           if (!hasCachedCatalogForScope && !persistedCatalog.length) {
             setModelList(AVAILABLE_MODELS);
             setModelCapabilitiesLoaded(false);
@@ -461,7 +461,9 @@ export function CopilotSplitView({
   const activeModelId = modelName || '';
   const activeModelProvider = modelProvider || '';
   const automaticCandidate = !favorite && !favoriteInvalid ? visibleModelList.find(model => model.providerId && !isMultiAgentModelSelection({ model: model.id, provider: model.providerId })) : undefined;
-  const modelGateReason = favoriteInvalid ? 'model-unavailable' : quickChatModelGateReason({ selectedModel: automaticCandidate?.id || activeModelId, selectedProvider: automaticCandidate?.providerId || activeModelProvider,
+  // 'AI' is the placeholder App passes when no model is chosen; it must not count as a selection.
+  const chosenModelId = activeModelId === 'AI' ? '' : activeModelId;
+  const modelGateReason = favoriteInvalid ? 'model-unavailable' : quickChatModelGateReason({ selectedModel: automaticCandidate?.id || chosenModelId, selectedProvider: automaticCandidate?.providerId || activeModelProvider,
     activeScopeKey: orchestrationScopeKey, loadedCatalogScopeKey: modelCatalogLoadedScopeKeyRef.current,
     failedCatalogScopeKey: modelCatalogFailureScopeKey, availableModels: visibleModelList, connectionNotice });
   const reasoningPreferenceKey = `quickchat:${JSON.stringify([browserProfileId, workspacePath || null, backendProfileName || null, activeModelProvider, activeModelId])}`;

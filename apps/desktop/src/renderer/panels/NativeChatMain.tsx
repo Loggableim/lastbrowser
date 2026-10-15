@@ -40,8 +40,8 @@ import {
 } from '../tab-intelligence.js';
 import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
-import { saveSpaceModel } from '../space-models.js';
-import { isMultiAgentModelSelection, parseProviderModelId, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
+import { loadSpaceModel, saveSpaceModel } from '../space-models.js';
+import { hasChosenChatModel, isMultiAgentModelSelection, parseProviderModelId, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
 import { getProviderModelEvidence, isProviderModelQualified, useProviderChatEvidenceRevision } from '../provider-chat-evidence.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
@@ -219,6 +219,8 @@ export function NativeChatMain({
   const modelCatalogLoaded = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'ready';
   const modelCatalogError = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'error';
   const modelCatalogLoading = ready && !modelCatalogLoaded && !modelCatalogError;
+  // Send gate only: a model chosen earlier (Space selection or the saved Space model) may send while the catalog is unverified.
+  const modelChosen = hasChosenChatModel(model) || (!spaceModelSelection && hasChosenChatModel(loadSpaceModel(activeSpacePath || '', window.localStorage)));
   const [catalogStatus, setCatalogStatus] = useState<Record<string, string>>({});
   const [connectionNotice, setConnectionNotice] = useState<ConnectionNotice | null>(null);
   const [modelCatalogRetry, setModelCatalogRetry] = useState(0);
@@ -249,7 +251,7 @@ export function NativeChatMain({
       loadingDeadline = window.setTimeout(() => {
         if (!alive || catalogSettled) return;
         catalogSettled = true;
-        setConnectionNotice('opencode-unreachable');
+        // Slow discovery is not a connection failure: the error phase only offers the retry action.
         setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] });
       }, CATALOG_VISIBLE_WAIT_MS);
     }
@@ -339,7 +341,7 @@ export function NativeChatMain({
         settleCatalog();
         if (alive) {
           setCatalogDefaultModel('');
-          const notice = classifyConnectionNotice({ error }) || (cachedGroups.length ? null : 'opencode-unreachable');
+          const notice = classifyConnectionNotice({ error });
           setConnectionNotice(notice);
           if (cachedGroups.length) setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: cachedGroups });
           else {
@@ -538,7 +540,8 @@ export function NativeChatMain({
   const multiAgentSelection = isMultiAgentModelSelection({ model, provider: modelProvider });
   const multiAgentBetaBlocked = (!AI_ORCHESTRATION_ENABLED || !showUntestedBetas)
     && (multiAgentSelection || Boolean(automaticSelected && currentPolicy?.response.policy.orchestrator));
-  const betaSelectionBlocked = modelCatalogLoaded && (automaticSelected
+  // Before the catalog answers, only the synchronous multi-agent beta gate applies; the rest needs the verified catalog.
+  const betaSelectionBlocked = !modelCatalogLoaded ? multiAgentBetaBlocked : (automaticSelected
     ? unqualifiedAutoModels || Boolean(currentPolicy?.response.policy.orchestrator && !showUntestedBetas)
     : multiAgentSelection ? multiAgentBetaBlocked : !modelPairAvailable
       || !isModelActive(window.localStorage, { browserProfileId: activeBrowserProfileId,
@@ -546,6 +549,8 @@ export function NativeChatMain({
       || (!showUntestedBetas && !modelQualified));
   const automaticAvailable=currentPolicy?canExecuteAutomaticPolicy(currentPolicy.response):false;
   const automaticBlocked=Boolean(automaticSelected&&!automaticAvailable);
+  // Unverified catalog: sending needs a chosen model unless the automatic policy supplies one.
+  const modelChoiceMissing = !modelCatalogLoaded && !automaticSelected && !modelChosen;
   const availableCommands=writerProtected?noCommandCapabilities:currentModeGate?.response.capabilities??commandCapabilities;
   const commandCopy=chatCommandCopy(locale);
   const [goalEditorToken,setGoalEditorToken]=useState(0),[goalEditorViewKey,setGoalEditorViewKey]=useState<string|null>(null);
@@ -695,9 +700,8 @@ export function NativeChatMain({
   const handleSend = async (text: string, queuedEffort?: string): Promise<void> => {
     if (writerProtected) { setStatusMessage(t('spaceAssistant.writerProtected')); return; }
     if (pendingChoice) { setStatusMessage(`${t('chat.model')}: ${pendingChoice.model} · ${t('common.loading')}`); return; }
-    if (modelCatalogLoading && !connectionNotice) { setStatusMessage(t('settings.panels.providers.loadingModels')); return; }
     if (connectionNotice) { setStatusMessage(connectionNoticeCopy[locale][connectionNotice]); return; }
-    if (modelCatalogError) { setStatusMessage(t('chat.modelCatalogUnavailable')); return; }
+    if (modelChoiceMissing) { setStatusMessage(modelCatalogError ? t('chat.modelCatalogUnavailable') : t('settings.panels.providers.loadingModels')); return; }
     if(automaticBlocked||policyPending===policyOperationKey){setStatusMessage(modelPolicyReason(locale,currentPolicy?.response.executionAvailability.reasonCode));return;}
     const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
     const sendEffort = modelReasoningEfforts.includes(requestedEffort) ? requestedEffort : '';
@@ -1021,7 +1025,7 @@ export function NativeChatMain({
         conversationCompanion={conversationCompanion}
         automaticPolicy={{active:automaticSelected,available:automaticAvailable,qualified:automaticModelsQualified,
           allowedModels:automaticAllowedModels}}
-        sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked||modelCatalogLoading||modelCatalogError||Boolean(connectionNotice)||Boolean(pendingChoice)}
+        sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked||modelChoiceMissing||Boolean(connectionNotice)||Boolean(pendingChoice)}
         betaSelectionBlocked={betaSelectionBlocked}
         multiAgentBetaBlocked={multiAgentBetaBlocked}
         modelQualified={automaticSelected?automaticModelsQualified:modelQualified}

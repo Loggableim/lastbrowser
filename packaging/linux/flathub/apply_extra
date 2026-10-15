@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+tar -xzf Lastbrowser-0.1.56-x64.tar.gz
+rm -f Lastbrowser-0.1.56-x64.tar.gz
+mv Lastbrowser-0.1.56-x64 lastbrowser
+chmod 755 lastbrowser/Lastbrowser

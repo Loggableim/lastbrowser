@@ -16,6 +16,7 @@ import {
 import type { SidekickActionId } from '../bridge.js';
 import type { ActionBarDock } from '../stores/usePanelStore.js';
 import { useDesktopI18n } from '../i18n.js';
+import { actionBarCopy } from '../i18n/action-bar-copy.js';
 import './research-sidebar.css';
 
 export interface InPageActionBarProps {
@@ -41,17 +42,6 @@ export interface InPageActionBarProps {
   dockMode?: ActionBarDock;
   onSetDockMode?: (dock: ActionBarDock) => void;
 }
-
-export const DOCK_LABELS: Record<ActionBarDock, string> = {
-  'topbar': 'Topleiste (Icon mit Ausklapp-Leiste)',
-  'sidebar': 'Seitenmenü (Links)',
-  'bottom': 'Unten (Zentriert)',
-  'bottom-center': 'Unten Zentriert',
-  'top-left': 'Oben Links',
-  'top-center': 'Oben Zentriert',
-  'top-right': 'Oben Rechts',
-  'free': 'Frei verschiebbar'
-};
 
 const DOCK_SELECTION_OPTIONS: ActionBarDock[] = [
   'topbar',
@@ -91,7 +81,8 @@ export function InPageActionBar({
   dockMode = 'topbar',
   onSetDockMode
 }: InPageActionBarProps): React.JSX.Element | null {
-  const { t } = useDesktopI18n();
+  const { t, locale } = useDesktopI18n();
+  const copy = actionBarCopy(locale);
   const flyoutId = useId();
   const [internalDock, setInternalDock] = useState<ActionBarDock>(() => {
     try {
@@ -318,7 +309,7 @@ export function InPageActionBar({
       {overlayTools && <div className="sidebar-research-actions">{overlayTools}</div>}
       <label className="sidebar-research-position"><Layout size={14} /><span>Position</span>
         <select value={normalizedDock} onChange={event => handleSelectDock(event.target.value as ActionBarDock)} aria-label="Nova Research Position">
-          {DOCK_SELECTION_OPTIONS.map(mode => <option key={mode} value={mode}>{DOCK_LABELS[mode]}</option>)}
+          {DOCK_SELECTION_OPTIONS.map(mode => <option key={mode} value={mode}>{copy.dock[mode]}</option>)}
         </select>
       </label>
     </details>;
@@ -348,7 +339,7 @@ export function InPageActionBar({
           <Sparkles size={14} className="research-sparkles-icon" />
         </button>
         <button type="button" className={`titlebar-tool-btn mute-trigger ${muted ? 'active' : ''}`} onClick={onToggleMute}
-          title={muted ? 'Tab entstummen (Ctrl+M)' : 'Tab stummschalten (Ctrl+M)'} aria-label={muted ? 'Tab entstummen' : 'Tab stummschalten'} aria-pressed={muted}>
+          title={muted ? copy.unmute : copy.mute} aria-label={muted ? copy.unmuteShort : copy.muteShort} aria-pressed={muted}>
           {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
         </button>
         {isFlyoutOpen && <div id={flyoutId} className="titlebar-research-flyout research-toolbar" role="toolbar" aria-label="Nova Research">
@@ -370,11 +361,11 @@ export function InPageActionBar({
                 <button type="button" className="research-action" title={t('browser.chrome.findInPage')} onClick={onFindOpen}><Search size={14} /><span>{t('browser.chrome.findInPage')}</span></button>
                 <button type="button" className={`research-action ${historyOpen ? 'active' : ''}`} title={t('sidebar.utilities.history.title')} aria-pressed={historyOpen} onClick={onToggleHistory}><Clock size={14} /><span>{t('sidebar.utilities.history.title')}</span></button>
                 <button type="button" className={`research-action ${downloadsOpen ? 'active' : ''}`} title={t('sidebar.utilities.downloads.title')} aria-pressed={downloadsOpen} onClick={onToggleDownloads}><Download size={14} /><span>{t('sidebar.utilities.downloads.title')}{hasActiveDownloads ? ' •' : ''}</span></button>
-                {Math.abs(zoomFactor - 1) > 0.001 && <button type="button" className="research-action" title="Zoom · Ctrl+0" onClick={onResetZoom}>{Math.round(zoomFactor * 100)}% → 100%</button>}
+                {Math.abs(zoomFactor - 1) > 0.001 && <button type="button" className="research-action" title={copy.zoomReset} onClick={onResetZoom}>{Math.round(zoomFactor * 100)}% → 100%</button>}
               </div>
-              <details className="research-dock-options"><summary><Layout size={14} />{DOCK_LABELS[normalizedDock] || DOCK_LABELS[activeDock]}</summary>
+              <details className="research-dock-options"><summary><Layout size={14} />{copy.dock[normalizedDock] || copy.dock[activeDock]}</summary>
                 {DOCK_SELECTION_OPTIONS.map(mode => <button key={mode} type="button" className="research-action" aria-pressed={normalizedDock === mode} onClick={() => handleSelectDock(mode)}>
-                  <span>{DOCK_LABELS[mode]}</span>{normalizedDock === mode && <span aria-hidden="true">✓</span>}
+                  <span>{copy.dock[mode]}</span>{normalizedDock === mode && <span aria-hidden="true">✓</span>}
                 </button>)}
               </details>
             </div>}
@@ -422,7 +413,7 @@ export function InPageActionBar({
       {/* Drag Grip Handle */}
       <div
         className="action-strip-drag-handle"
-        title="Gedrückt halten & frei verschieben"
+        title={copy.drag}
         onMouseDown={handleMouseDown}
       >
         <GripVertical size={13} />
@@ -434,10 +425,10 @@ export function InPageActionBar({
         className="action-strip-btn ai-action"
         onClick={() => void onAction('summarize-page')}
         disabled={busy}
-        title="Seite zusammenfassen (Nova AI)"
+        title={t('browser.actions.summarize')}
       >
         <Sparkles size={14} />
-        <span>Summarize</span>
+        <span>{t('browser.actions.summarize')}</span>
       </button>
 
       <button
@@ -445,10 +436,10 @@ export function InPageActionBar({
         className="action-strip-btn ai-action"
         onClick={() => void onAction('explain-selection')}
         disabled={busy}
-        title="Markierten Text oder Seite erklären"
+        title={t('browser.actions.explain')}
       >
         <MessageSquare size={14} />
-        <span>Explain</span>
+        <span>{t('browser.actions.explain')}</span>
       </button>
 
       <button
@@ -456,10 +447,10 @@ export function InPageActionBar({
         className="action-strip-btn ai-action"
         onClick={() => void onAction('research-page')}
         disabled={busy}
-        title="Tiefenrecherche & Quellenabgleich"
+        title={t('browser.actions.research')}
       >
         <Globe2 size={14} />
-        <span>Research</span>
+        <span>{t('browser.actions.research')}</span>
       </button>
 
       <div className="action-strip-divider" />
@@ -469,7 +460,7 @@ export function InPageActionBar({
         <button
           type="button"
           className="zoom-indicator"
-          title="Zoom auf 100% zurücksetzen (Ctrl+0)"
+          title={copy.zoomReset}
           onClick={onResetZoom}
         >
           {Math.round(zoomFactor * 100)}%
@@ -480,7 +471,7 @@ export function InPageActionBar({
       <button
         type="button"
         className="find-trigger"
-        title="Auf Seite suchen (Ctrl+F)"
+        title={`${t('browser.chrome.findInPage')} (Ctrl+F)`}
         onClick={onFindOpen}
       >
         <Search size={14} />
@@ -491,7 +482,7 @@ export function InPageActionBar({
       <button
         type="button"
         className={`history-trigger ${historyOpen ? 'active' : ''}`}
-        title="Verlauf / Chronik"
+        title={t('sidebar.utilities.history.title')}
         onClick={onToggleHistory}
       >
         <Clock size={14} />
@@ -501,7 +492,8 @@ export function InPageActionBar({
       <button
         type="button"
         className={`mute-trigger ${muted ? 'active' : ''}`}
-        title={muted ? 'Tab entstummen (Ctrl+M)' : 'Tab stummschalten (Ctrl+M)'}
+        title={muted ? copy.unmute : copy.mute}
+        aria-label={muted ? copy.unmuteShort : copy.muteShort}
         onClick={onToggleMute}
       >
         {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
@@ -512,7 +504,7 @@ export function InPageActionBar({
         <button
           type="button"
           className={`dock-menu-trigger-btn ${menuOpen ? 'open' : ''}`}
-          title={`Andock-Position ändern (${DOCK_LABELS[normalizedDock] || DOCK_LABELS[activeDock]})`}
+          title={copy.dockChange(copy.dock[normalizedDock] || copy.dock[activeDock])}
           onClick={() => setMenuOpen((prev) => !prev)}
         >
           <Layout size={13} />
@@ -520,7 +512,7 @@ export function InPageActionBar({
 
         {menuOpen && (
           <div className="action-strip-dock-dropdown" role="menu">
-            <div className="dock-dropdown-header">Andocken an Menüs:</div>
+            <div className="dock-dropdown-header">{copy.dockHeader}</div>
             {DOCK_SELECTION_OPTIONS.map((mode) => (
               <button
                 key={mode}
@@ -528,7 +520,7 @@ export function InPageActionBar({
                 className={`dock-dropdown-item ${normalizedDock === mode ? 'selected' : ''}`}
                 onClick={() => handleSelectDock(mode)}
               >
-                <span>{DOCK_LABELS[mode]}</span>
+                <span>{copy.dock[mode]}</span>
                 {normalizedDock === mode && <span className="dock-check-badge">✓</span>}
               </button>
             ))}

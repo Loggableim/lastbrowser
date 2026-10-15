@@ -330,6 +330,7 @@ export const desktopJaOverrides = {
   "copilot.personalityDialog": shellCopyJa["copilot.personalityDialog"],
   "copilot.personalityTitle": shellCopyJa["copilot.personalityTitle"],
   "copilot.loading": shellCopyJa["copilot.loading"],
+  "copilot.otherEngines": shellCopyJa["copilot.otherEngines"],
   "copilot.workflowsEmpty": shellCopyJa["copilot.workflowsEmpty"],
   "copilot.teamworkActive": shellCopyJa["copilot.teamworkActive"],
   "copilot.smartTrackActive": shellCopyJa["copilot.smartTrackActive"],

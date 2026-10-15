@@ -316,11 +316,11 @@ export function SidekickSidebar({
       document.removeEventListener('keydown', escape);
     };
   }, [personalityOpen]);
-  const choosePersonality = async (personality: CompanionPersonality) => {
+  const choosePersonality = (personality: CompanionPersonality) => {
     const botNameToSave = companionDefaultNames[personality];
-    if (companion.loaded) await companion.setSelection(personality, botNameToSave);
     window.localStorage.setItem('lastbrowser.standardChatCompanion.v1', JSON.stringify({ personality, botName: botNameToSave }));
     setPersonalityOpen(false);
+    if (companion.loaded) void companion.setSelection(personality, botNameToSave);
   };
 
   useEffect(() => {
@@ -1006,7 +1006,7 @@ export function SidekickSidebar({
                 creative: 'sidebar.companion.creative',
                 mentor: 'sidebar.companion.mentor'
               } as const;
-              return <button key={personality} type="button" aria-pressed={selected} disabled={companion.busy} onClick={() => void choosePersonality(personality)} style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: 10, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, border: selected ? '2px solid var(--accent-primary, #38bdf8)' : '2px solid transparent', background: 'var(--bg-hover, rgba(255,255,255,.04))', color: 'inherit', cursor: 'pointer' }}>
+              return <button key={personality} type="button" aria-pressed={selected} onClick={() => choosePersonality(personality)} style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: 10, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, border: selected ? '2px solid var(--accent-primary, #38bdf8)' : '2px solid transparent', background: 'var(--bg-hover, rgba(255,255,255,.04))', color: 'inherit', cursor: 'pointer' }}>
                 <img src={personalityAvatar(personality)} alt="" width={52} height={52} style={{ objectFit: 'contain' }} />
                 <span><strong>{companionDefaultNames[personality]}</strong><span style={{ display: 'block', fontSize: 12, lineHeight: 1.4 }}>{t(description[personality])}</span></span>
               </button>;

@@ -620,10 +620,6 @@ export function ChatComposer({
                 <Layers size={13} />
                 <span>{t('browser.chrome.tabs')}</span>
               </button>
-          {(emptyQualifiedCatalog || antigravityCatalogUnavailable) && <div className="composer-model-notice" role="status">
-            <span>{locale.startsWith('de') ? 'Keine wählbaren Modelle im Katalog.' : 'No selectable models in the catalog.'}</span>
-            {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
-          </div>}
           <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
             aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
             aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
@@ -681,8 +677,10 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {betaSelectionBlocked&&!modelCatalogLoading&&!modelCatalogError&&!emptyQualifiedCatalog&&!antigravityCatalogUnavailable&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
-        ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</div>}
+      {(betaSelectionBlocked||emptyQualifiedCatalog)&&!connectionNotice&&!modelCatalogLoading&&!modelCatalogError&&<div className="composer-model-notice" role="status">
+        <span>{multiAgentBetaBlocked ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</span>
+        {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
+      </div>}
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
         onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>
         <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>
@@ -707,7 +705,9 @@ export function ChatComposer({
         {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">
           {t('chat.noManualModels')}
           {' '}
-          {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
+          {manualModelSearch.trim()
+            ? <button type="button" className="secondary-action compact" onClick={()=>{setManualModelSearch('');manualModelSearchInput.current?.focus();}}>{locale.startsWith('de') ? 'Suche zurücksetzen' : 'Clear search'}</button>
+            : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
         </p>}
       </section>}
       <div className="composer-input-row">

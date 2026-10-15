@@ -310,6 +310,7 @@ export const desktopJaOverrides = {
   "copilot.quotaAvailable": shellCopyJa["copilot.quotaAvailable"],
   "copilot.modelMenuTitle": shellCopyJa["copilot.modelMenuTitle"],
   "copilot.modelLabel": shellCopyJa["copilot.modelLabel"],
+  "copilot.modelGroupOtherEngines": shellCopyJa["copilot.modelGroupOtherEngines"],
   "copilot.engineTooltip": shellCopyJa["copilot.engineTooltip"],
   "copilot.activeEngineTooltip": shellCopyJa["copilot.activeEngineTooltip"],
   "copilot.openOrchestrationSettings": shellCopyJa["copilot.openOrchestrationSettings"],

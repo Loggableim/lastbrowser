@@ -380,6 +380,11 @@ describe('independent assistant presentation boundaries', () => {
     const result = await client.request({ schemaVersion: 1, operation: 'modelSelection', scope: s, payload: { action: 'get' } });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.value.groups?.[1].models[0].id).toBe('gemma4:31b');
+    const catalogued = { schemaVersion: 1, scope: s, revision: 2, model: 'deepseek-v4.1-flash', provider: 'opencode-go', configured: true, supportsIndependent: true, groups: [
+      { provider: 'OpenCode Go', provider_id: 'opencode-go', configured: true, models: [{ id: 'deepseek-v4.1-flash', label: 'DeepSeek', supportsIndependent: true, contextLength: 128000, contextLengthSource: 'models_dev', nativeAvailability: { schemaVersion: 1, supported: true, available: true, reasonCode: null, provider: 'opencode-go', model: 'deepseek-v4.1-flash', scope: s, selectionRevision: 2 } }] }
+    ] };
+    const accepted = new IndependentAssistantClient({ request: async () => ({ ok: true, value: catalogued }) });
+    expect((await accepted.request({ schemaVersion: 1, operation: 'modelSelection', scope: s, payload: { action: 'get', includeCatalog: true } })).ok).toBe(true);
     const acknowledgement = { ...value, groups: undefined };
     const retry = new IndependentAssistantClient({ request: async () => ({ ok: true, value: acknowledgement }) });
     expect((await retry.request({ schemaVersion: 1, operation: 'modelSelection', scope: s, payload: {

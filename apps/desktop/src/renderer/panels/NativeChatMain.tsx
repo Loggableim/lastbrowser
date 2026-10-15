@@ -1,4 +1,5 @@
 import { isRetiredProvider } from '../retired-providers.js';
+import { MODEL_CATALOG_EVENT, readModelCatalogGroups } from '../model-catalog-prefetch.js';
 /**
  * Native chat panel for Lastbrowser.
  *
@@ -224,8 +225,15 @@ export function NativeChatMain({
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    setCatalogSnapshot({ viewKey: modelViewKey, phase: 'loading', groups: [] });
+    const cachedGroups = readModelCatalogGroups(modelViewKey) as CatalogGroup[];
+    setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: cachedGroups });
     setScopedModel(null); setCatalogDefaultModel('');
+    const onCatalog = (event: Event) => {
+      const detail = (event as CustomEvent<{ viewKey?: string; groups?: CatalogGroup[] }>).detail;
+      if (!detail || detail.viewKey !== modelViewKey || !Array.isArray(detail.groups)) return;
+      setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: detail.groups });
+    };
+    window.addEventListener(MODEL_CATALOG_EVENT, onCatalog);
     const load = async () => {
       try {
         const resolved = await modelClient.request({ schemaVersion: 1, operation: 'resolveScope', payload: {
@@ -233,11 +241,11 @@ export function NativeChatMain({
         }, backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || undefined });
         if (!resolved.ok) throw new Error(resolved.error.message);
         const result = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
-          payload: { action: 'get', includeCatalog: true } });
+          payload: { action: 'get', includeCatalog: false } });
         if (!result.ok) throw new Error(result.error.message);
         if (!alive) return;
         let data = result.value;
-        if (!data.groups) throw new Error('Model catalog is missing.');
+        if (!data.groups) data = { ...data, groups: [] };
         const statusMap: Record<string, string> = {
           ...((data as any).catalog_status || {})
         };
@@ -290,9 +298,10 @@ export function NativeChatMain({
               activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
         setCatalogDefaultModel((selectedModelQualified && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) ? selectionForView.model : '');
         if (selectedModelQualified && selectionForView.model && activeSpacePath && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) saveSpaceModel(activeSpacePath, selectionForView.model, window.localStorage, selectionForView.provider);
-        setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: isAntigravityCatalogUnverified
+        const discovered = isAntigravityCatalogUnverified
           ? rawParsed.filter(group => !isRetiredProvider(group.providerId))
-          : rawParsed });
+          : rawParsed;
+        setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: discovered.length ? discovered : cachedGroups });
       } catch {
         if (alive) {
           setCatalogDefaultModel('');
@@ -302,7 +311,7 @@ export function NativeChatMain({
       }
     };
     void load();
-    return () => { alive = false; };
+    return () => { alive = false; window.removeEventListener(MODEL_CATALOG_EVENT, onCatalog); };
   }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, activeSession?.model, requestedChatDefault, t, activeModelRevision]);
 
   /** Change only this bound Space preference; executing runs keep their captured model. */

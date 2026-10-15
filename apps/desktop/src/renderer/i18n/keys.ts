@@ -1576,6 +1576,12 @@ export const desktopTranslationKeys = [
   , 'downloads.drag'
   , 'settings.panels.appearance.viTestApply'
   , 'settings.panels.appearance.viTestPreview'
+  , 'sidebar.companion.menu'
+  , 'sidebar.companion.nova'
+  , 'sidebar.companion.analytical'
+  , 'sidebar.companion.developer'
+  , 'sidebar.companion.creative'
+  , 'sidebar.companion.mentor'
   , "shell.backToWeb"
   , "shell.backToWebTitle"
   , "firstRun.welcomeBadge"

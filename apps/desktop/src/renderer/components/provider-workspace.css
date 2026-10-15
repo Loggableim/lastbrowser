@@ -37,6 +37,16 @@
 .settings-provider-editor .provider-workspace-panel {
   display: flex; padding: 0; max-height: none; overflow: hidden; scrollbar-gutter: auto;
 }
+/* Local AI models fill this panel and scroll here. The settings page stays put. */
+.settings-provider-editor .local-ai-models-page {
+  flex: 1 1 auto; min-width: 0; min-height: 0; width: 100%; overflow: auto;
+}
+.settings-provider-editor .local-ai-models-page .local-ai-setup {
+  margin: 0; max-width: none; min-height: 100%;
+}
+.settings-provider-editor .local-ai-models-page .local-model-store {
+  margin: 0; min-height: 100%;
+}
 .settings-page-deck { display: flex; flex-direction: column; gap: 6px; flex: 1 1 auto; min-width: 0; min-height: 0; }
 .settings-page-viewport { position: relative; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: hidden; }
 /* A single indivisible control must remain reachable under extreme zoom/height. */

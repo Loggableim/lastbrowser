@@ -1,4 +1,5 @@
 /* Shared animated sidekick. Not mounted by the desktop app. */
+import { novaSvg } from './nova-markup.js';
 const STATES = ['idle', 'thinking', 'working', 'done', 'needs_input', 'error'];
 
 const FACES = {
@@ -36,9 +37,35 @@ function svg(kind) {
 
 export function createSidekick(el) {
   const kind = FACES[el.dataset.sidekick] ? el.dataset.sidekick : 'nova';
+  el.dataset.state = 'idle';
+  if (kind === 'nova') {
+    el.classList.add('nova-host');
+    el.innerHTML = novaSvg;
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const observer = new IntersectionObserver(entries => {
+      el.classList.toggle('is-offscreen', !entries.some(entry => entry.isIntersecting));
+    });
+    observer.observe(el);
+    return {
+      setState(state) {
+        el.dataset.state = STATES.includes(state) ? state : 'idle';
+        return this;
+      },
+      setMini(on) {
+        el.classList.toggle('nova-mini', Boolean(on));
+        const svg = el.querySelector('svg');
+        if (svg) {
+          const size = on ? '40' : '128';
+          svg.setAttribute('width', size);
+          svg.setAttribute('height', size);
+        }
+        return this;
+      },
+      destroy() { observer.disconnect(); reduced.matches; }
+    };
+  }
   el.classList.add('sidekick', `sidekick-${kind}`);
   el.innerHTML = svg(kind);
-  el.dataset.state = 'idle';
   let mini = false;
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)');
   const applyMotion = () => el.classList.toggle('sidekick-reduced', reduced.matches);

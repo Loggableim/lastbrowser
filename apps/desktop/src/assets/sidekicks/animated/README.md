@@ -18,4 +18,4 @@ Custom agents have no image file. The agents panel draws the Lucide `Bot` icon i
 
 `sidekick-05.png` is in the same folder and is not one of these five.
 
-Open `demo.html`. The shared API is `createSidekick(element).setState(state)` and `.setMini(on)`. States: idle, thinking, working, done, needs_input, error. Mini mode is 40px. Motion stops for `prefers-reduced-motion` and while the figure is outside the viewport.
+Open `demo.html`. Nova uses the Gemini state machine from `nova-sidekick-demo.html`. The others share `createSidekick(element).setState(state)` and `.setMini(on)`.

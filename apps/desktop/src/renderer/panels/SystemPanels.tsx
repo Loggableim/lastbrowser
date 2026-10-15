@@ -6,6 +6,8 @@ import { isRetiredProvider } from '../retired-providers.js';
 import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import '../appearance.css';
 import { LocalAiSetupPane } from '../components/LocalAiSetupPane.js';
+import { RouterSettingsPane } from '../components/RouterSettingsPane.js';
+import { opencodeAutoRouterEnabled } from '../opencode-auto-router.js';
 import { BackendProfileControls } from '../components/BackendProfileControls.js';
 import {
   AlertTriangle,
@@ -2507,6 +2509,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     return () => { active = false; };
   }, []);
   const [section, setSection] = useState<SettingsSectionId>('preferences');
+  const [routerPage, setRouterPage] = useState(false);
+  const routerFlag = opencodeAutoRouterEnabled({ flag: window.lastbrowser.opencodeAutoRouter ? '1' : null, stored: window.localStorage.getItem('lastbrowser.opencodeAutoRouter.v1') });
   const [providerPage, setProviderPage] = useState<'working' | 'beta' | 'local'>('working');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});
@@ -3621,7 +3625,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       <div className="settings-native-grid">
         <nav className="settings-section-nav native-work-card">
           {sectionList.map(([key, meta]) => (
-            <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
+            <button key={key} type="button" className={!routerPage && key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => { setRouterPage(false); setSection(key); }}>
               <span className="settings-section-button-icon">{meta.icon}</span>
               <span className="settings-section-button-text">
                   <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
@@ -3629,9 +3633,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
               </span>
             </button>
           ))}
+          {routerFlag && <button type="button" className={routerPage ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setRouterPage(true)}>
+            <span className="settings-section-button-text"><strong>Router</strong><small>OpenCode Go</small></span>
+          </button>}
         </nav>
 
-        <main className={`native-work-card settings-editor${section === 'providers' ? ' settings-provider-editor' : ' settings-panel-scroll'}`}>
+        {routerPage && <main className="native-work-card settings-editor"><RouterSettingsPane /></main>}
+        <main hidden={routerPage} className={`native-work-card settings-editor${section === 'providers' ? ' settings-provider-editor' : ' settings-panel-scroll'}`}>
           <header className="settings-editor-head">
             <div>
               <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>

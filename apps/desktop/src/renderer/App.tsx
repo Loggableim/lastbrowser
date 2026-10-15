@@ -304,6 +304,8 @@ import { isMultiAgentModelSelection, resolvePreferredChatModel, resolvePreferred
 import { readShowUntestedProviderBetas, useShowUntestedProviderBetas } from './provider-beta-preferences.js';
 import { useActiveModelRevision } from './active-model-selection.js';
 import { chooseQuickchatModel } from './quickchat-automatic.js';
+import { listFreeOpenCodeModels, logOpenCodeAutoRouter, opencodeAutoRouterEnabled, resolveAutoRouterSend } from './opencode-auto-router.js';
+import { ROUTER_SETTINGS_KEY, readRouterSettings } from './router-settings.js';
 import { readQuickchatFavorite, readQuickchatFavoriteState, setQuickchatFavorite, QUICKCHAT_FAVORITE_CHANGED_EVENT } from './quickchat-preferences.js';
 import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
@@ -1160,7 +1162,8 @@ function AppContent(): JSX.Element {
   const quickChatPreparedRef = useRef<{ key: string; epoch: number; updatedAt: number; selection: ScopedModelSelection } | null>(null);
   const [quickChatPrepared, setQuickChatPrepared] = useState<typeof quickChatPreparedRef.current>(null);
   const quickChatPreparationRef = useRef<{ key: string; epoch: number; promise: Promise<ScopedModelSelection> } | null>(null);
-  const quickChatTimingsRef = useRef(new Map<string, { submittedAt: number; firstVisible: boolean; provider: string; model: string }>());
+  const quickChatTimingsRef = useRef(new Map<string, { submittedAt: number; firstVisible: boolean; provider: string; model: string; auto?: { action: string; kind: string; reasons: readonly string[] } }>());
+  const standardAutoRouteRef = useRef<{ startedAt: number; model: string; provider: string; action: string; kind: string; reasons: readonly string[]; logged: boolean } | null>(null);
   const quickChatResetPromiseRef = useRef<Promise<boolean> | null>(null);
   const quickChatResetPendingRef = useRef(false);
   const quickChatAwaitingStartRef = useRef(false);
@@ -1411,7 +1414,9 @@ function AppContent(): JSX.Element {
       const timing = quickChatTimingsRef.current.get(event.streamId);
       if (delta?.kind === 'token' && delta.text && timing && !timing.firstVisible) {
         timing.firstVisible = true;
-        console.debug('[quickchat.latency]', { phase: 'first_visible', elapsedMs: Math.round(performance.now() - timing.submittedAt), provider: timing.provider, model: timing.model });
+        const elapsedMs = Math.round(performance.now() - timing.submittedAt);
+        console.debug('[quickchat.latency]', { phase: 'first_visible', elapsedMs, provider: timing.provider, model: timing.model });
+        if (timing.auto) logOpenCodeAutoRouter({ surface: 'quickchat', lane: timing.auto.action, model: timing.model, provider: timing.provider, classification: timing.auto.kind, reasons: timing.auto.reasons, ttftScoutMs: elapsedMs, handoffMs: timing.auto.action === 'handoff' ? elapsedMs : null });
       }
       if (delta && quickChatBindingScopeKeyRef.current) updateQuickChatMessagesForScope(quickChatBindingScopeKeyRef.current, current => applyLiveChatDelta(current, delta.kind, delta.text));
       return;
@@ -3876,6 +3881,12 @@ function AppContent(): JSX.Element {
         const delta = readLiveChatDelta(event.event, event.data);
         if (delta && isOwningContextCurrent()) {
           hasLiveOutput = true;
+          const auto = standardAutoRouteRef.current;
+          if (auto && !auto.logged && delta.kind === 'token' && delta.text) {
+            auto.logged = true;
+            const elapsedMs = Math.round(performance.now() - auto.startedAt);
+            logOpenCodeAutoRouter({ surface: 'standard', lane: auto.action, model: auto.model, provider: auto.provider, classification: auto.kind, reasons: auto.reasons, ttftScoutMs: elapsedMs, handoffMs: auto.action === 'handoff' ? elapsedMs : null });
+          }
           setChatMessages((current) => {
             const updated = applyLiveChatDelta(current, delta.kind, delta.text, messageStreamId);
             const assistant = [...updated].reverse().find((item) => item.role === 'assistant');
@@ -4364,7 +4375,21 @@ function AppContent(): JSX.Element {
         spacePath: activeSpacePathRef.current,
         backendProfileName: activeBackendProfileNameRef.current || ''
       },
-      selection: chatModelSelection,
+      selection: (() => {
+        const enabled = opencodeAutoRouterEnabled({
+          flag: window.lastbrowser.opencodeAutoRouter ? '1' : null,
+          stored: window.localStorage.getItem('lastbrowser.opencodeAutoRouter.v1')
+        });
+        const route = resolveAutoRouterSend({
+          enabled, explicitModel: false, text: trimmed, pageContext: '',
+          routingEnabled: readRouterSettings(window.localStorage.getItem(ROUTER_SETTINGS_KEY)).enabled,
+          order: readRouterSettings(window.localStorage.getItem(ROUTER_SETTINGS_KEY)).order,
+          freeModels: listFreeOpenCodeModels(chatModelSelection.groups || [])
+        });
+        if (!route) return chatModelSelection;
+        standardAutoRouteRef.current = { startedAt: performance.now(), model: route.model, provider: route.provider, action: route.plan.action, kind: route.plan.classification.kind, reasons: route.plan.classification.reasons, logged: false };
+        return { ...chatModelSelection, model: route.model, provider: route.provider };
+      })(),
       availableModels: chatModelSelection.groups,
       allowUntestedBetas: readShowUntestedProviderBetas(),
       qualificationBackendProfileName: turnBackendProfileName
@@ -5039,7 +5064,21 @@ function AppContent(): JSX.Element {
     }
     const favorite = favoriteState.favorite;
     const selection = chooseQuickchatModel(scopedSelection, preferenceScope, favorite, window.localStorage, readShowUntestedProviderBetas());
-    if (!selection) {
+    const autoEnabled = opencodeAutoRouterEnabled({
+      flag: window.lastbrowser.opencodeAutoRouter ? '1' : null,
+      stored: window.localStorage.getItem('lastbrowser.opencodeAutoRouter.v1')
+    });
+    const routerSettings = readRouterSettings(window.localStorage.getItem(ROUTER_SETTINGS_KEY));
+    const autoRoute = resolveAutoRouterSend({
+      enabled: autoEnabled && routerSettings.enabled, explicitModel: false, text: prompt,
+      pageContext: context ? JSON.stringify(context) : '',
+      order: routerSettings.order,
+      freeModels: listFreeOpenCodeModels(scopedSelection.groups || [])
+    });
+    const routedSelection = autoRoute && !favorite
+      ? { provider: autoRoute.provider, model: autoRoute.model, basis: 'estimated' as const }
+      : selection;
+    if (!routedSelection) {
       quickChatStopPendingRef.current = false;
       setQuickChatErrorForScope(capturedScopeKey, favorite
         ? (locale === 'de' ? 'Dein Quickchat-Favorit ist derzeit nicht verfügbar. Wähle ein anderes Modell oder Automatisch.' : 'Your Quickchat favorite is unavailable. Choose another model or Automatic.')
@@ -5065,9 +5104,9 @@ function AppContent(): JSX.Element {
     try {
       const startPromise = window.lastbrowser.quickChat.start({
         quickChatId: chatId, browserProfileId, workspacePath, ...(backendProfileName ? { backendProfileName } : {}), prompt,
-        ...(context ? { context } : {}), ...(selection.model ? { model: selection.model } : {}),
+        ...(context ? { context } : {}), ...(routedSelection.model ? { model: routedSelection.model } : {}),
         ...(reasoningEffort ? { reasoningEffort } : {}),
-        ...(selection.provider ? { modelProvider: selection.provider } : {})
+        ...(routedSelection.provider ? { modelProvider: routedSelection.provider } : {})
       });
       pendingStart = { quickChatId: chatId, scopeKey: capturedScopeKey, promise: startPromise };
       quickChatStartPromiseRef.current = pendingStart;
@@ -5095,8 +5134,8 @@ function AppContent(): JSX.Element {
       quickChatAwaitingStartRef.current = false;
       const binding = { quickChatId: started.quickChatId, streamId: started.streamId, scope: started.scope };
       if (quickChatTimingsRef.current.size >= 16) quickChatTimingsRef.current.clear();
-      quickChatTimingsRef.current.set(binding.streamId, { submittedAt, firstVisible: false, provider: selection.provider, model: selection.model });
-      console.debug('[quickchat.latency]', { phase: 'accepted', preflightMs, elapsedMs: Math.round(performance.now() - submittedAt), provider: selection.provider, model: selection.model, selectionBasis: selection.basis });
+      quickChatTimingsRef.current.set(binding.streamId, { submittedAt, firstVisible: false, provider: routedSelection.provider, model: routedSelection.model, ...(autoRoute && !favorite ? { auto: { action: autoRoute.plan.action, kind: autoRoute.plan.classification.kind, reasons: autoRoute.plan.classification.reasons } } : {}) });
+      console.debug('[quickchat.latency]', { phase: 'accepted', preflightMs, elapsedMs: Math.round(performance.now() - submittedAt), provider: routedSelection.provider, model: routedSelection.model, selectionBasis: routedSelection.basis });
       quickChatBindingRef.current = binding;
       quickChatBindingScopeKeyRef.current = capturedScopeKey;
       setQuickChatBinding(binding);

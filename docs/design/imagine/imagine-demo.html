@@ -1,0 +1,3526 @@
+<!DOCTYPE html>
+<html lang="de" class="theme-dark" data-accent="neon-cyan">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data: blob:;">
+<title>LastBrowser — Imagine Plugin UI Design Demo</title>
+<style>
+/* ============================================================================
+   1. LASTBROWSER CORE & THEME TOKENS (aus styles.css / appearance.css)
+   ============================================================================ */
+:root {
+  --font-sans: Inter, Outfit, "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-display: Outfit, Inter, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+
+  /* Default Accent: Neon Cyan */
+  --accent-primary: #00d9ff;
+  --accent-secondary: #0099cc;
+  --accent-glow: rgba(0, 217, 255, 0.25);
+
+  /* Dark Theme (Default) */
+  --lb-bg: #07111f;
+  --lb-bg-alt: #0a1324;
+  --lb-accent: var(--accent-primary, #00d9ff);
+  --lb-accent-soft: color-mix(in srgb, var(--lb-accent) 14%, transparent);
+  --lb-surface: rgba(7, 17, 31, 0.76);
+  --lb-surface-strong: rgba(8, 11, 25, 0.94);
+  --lb-surface-panel: rgba(16, 15, 32, 0.94);
+  --lb-surface-elevated: rgba(24, 26, 48, 0.92);
+  --lb-border: rgba(255, 255, 255, 0.09);
+  --lb-border-strong: rgba(255, 255, 255, 0.18);
+  --lb-text: #f8fbff;
+  --lb-muted: rgba(232, 242, 255, 0.72);
+  --lb-subtle: rgba(232, 242, 255, 0.52);
+
+  /* Imagine Studio Secondary Playful Palette */
+  --imagine-joy-pink: #f43f5e;
+  --imagine-joy-violet: #a855f7;
+  --imagine-joy-amber: #f59e0b;
+  --imagine-joy-emerald: #10b981;
+  --imagine-stage-bg: radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--lb-accent) 12%, transparent), transparent 45%),
+                      radial-gradient(circle at 82% 80%, rgba(168, 85, 247, 0.12), transparent 50%),
+                      linear-gradient(160deg, #050c18 0%, #0a1428 55%, #0c1224 100%);
+  --imagine-card-bg: rgba(17, 25, 44, 0.82);
+  --imagine-card-hover: rgba(26, 37, 64, 0.95);
+  --imagine-glass-blur: blur(16px);
+  --imagine-shadow: 0 14px 36px rgba(0, 0, 0, 0.42);
+  --imagine-radius-lg: 16px;
+  --imagine-radius-md: 12px;
+  --imagine-radius-sm: 8px;
+  --imagine-target-min: 36px;
+
+  /* Status Colors */
+  --status-ok: #10b981;
+  --status-warn: #f59e0b;
+  --status-err: #ef4444;
+  --status-info: #38bdf8;
+
+  /* Motion Tokens */
+  --ease-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-fast: 160ms;
+  --dur-med: 280ms;
+  --dur-slow: 520ms;
+}
+
+/* Accent Presets (aus appearance.css) */
+html[data-accent="neon-cyan"] {
+  --accent-primary: #00d9ff;
+  --accent-secondary: #0099cc;
+  --accent-glow: rgba(0, 217, 255, 0.25);
+}
+html[data-accent="electric-violet"] {
+  --accent-primary: #a855f7;
+  --accent-secondary: #9333ea;
+  --accent-glow: rgba(168, 85, 247, 0.25);
+}
+html[data-accent="emerald-flow"] {
+  --accent-primary: #10b981;
+  --accent-secondary: #059669;
+  --accent-glow: rgba(16, 185, 129, 0.25);
+}
+html[data-accent="solar-amber"] {
+  --accent-primary: #f59e0b;
+  --accent-secondary: #d97706;
+  --accent-glow: rgba(245, 158, 11, 0.25);
+}
+html[data-accent="monochrome-slate"] {
+  --accent-primary: #94a3b8;
+  --accent-secondary: #64748b;
+  --accent-glow: rgba(148, 163, 184, 0.25);
+}
+
+/* Light Theme */
+html.theme-light {
+  --lb-bg: #edf3fb;
+  --lb-bg-alt: #f6f9fe;
+  --lb-surface: rgba(255, 255, 255, 0.88);
+  --lb-surface-strong: rgba(255, 255, 255, 0.97);
+  --lb-surface-panel: rgba(244, 248, 255, 0.96);
+  --lb-surface-elevated: #ffffff;
+  --lb-border: rgba(7, 17, 31, 0.12);
+  --lb-border-strong: rgba(7, 17, 31, 0.24);
+  --lb-text: #0c1624;
+  --lb-muted: rgba(12, 22, 36, 0.72);
+  --lb-subtle: rgba(12, 22, 36, 0.56);
+  --lb-accent-soft: color-mix(in srgb, var(--lb-accent) 16%, transparent);
+  --imagine-stage-bg: radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--lb-accent) 14%, transparent), transparent 45%),
+                      radial-gradient(circle at 82% 80%, rgba(168, 85, 247, 0.10), transparent 50%),
+                      linear-gradient(160deg, #e8f0fb 0%, #f3f7fd 55%, #edf2fa 100%);
+  --imagine-card-bg: rgba(255, 255, 255, 0.92);
+  --imagine-card-hover: #ffffff;
+  --imagine-shadow: 0 12px 32px rgba(12, 22, 36, 0.08);
+  --status-ok: #047857;
+  --status-warn: #b45309;
+  --status-err: #b91c1c;
+  --status-info: #0369a1;
+}
+/* Ensure accessible accent contrast in Light theme */
+html.theme-light[data-accent="neon-cyan"] { --lb-accent: #007799; }
+html.theme-light[data-accent="emerald-flow"] { --lb-accent: #047857; }
+html.theme-light[data-accent="solar-amber"] { --lb-accent: #b45309; }
+html.theme-light[data-accent="monochrome-slate"] { --lb-accent: #334155; }
+
+/* Vision Impaired Theme: Pure Maximal Contrast (#000000 / #FFFFFF, no blur, min 48px targets) */
+html.theme-vision-impaired {
+  --font-sans: Arial, Helvetica, sans-serif;
+  --font-display: Arial, Helvetica, sans-serif;
+  --lb-bg: #000000;
+  --lb-bg-alt: #000000;
+  --lb-surface: #000000;
+  --lb-surface-strong: #000000;
+  --lb-surface-panel: #000000;
+  --lb-surface-elevated: #000000;
+  --lb-border: #ffffff;
+  --lb-border-strong: #ffffff;
+  --lb-text: #ffffff;
+  --lb-muted: #ffffff;
+  --lb-subtle: #ffffff;
+  --lb-accent: #ffffff;
+  --lb-accent-soft: #222222;
+  --imagine-stage-bg: #000000;
+  --imagine-card-bg: #000000;
+  --imagine-card-hover: #1a1a1a;
+  --imagine-glass-blur: none;
+  --imagine-shadow: none;
+  --imagine-target-min: 48px;
+  --status-ok: #ffffff;
+  --status-warn: #ffffff;
+  --status-err: #ffffff;
+  --status-info: #ffffff;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 120ms;
+    --dur-med: 150ms;
+    --dur-slow: 180ms;
+  }
+}
+html[data-reduced-motion="true"] {
+  --dur-fast: 120ms;
+  --dur-med: 150ms;
+  --dur-slow: 180ms;
+}
+
+/* ============================================================================
+   2. RESET & BASE LAYOUT
+   ============================================================================ */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--lb-bg);
+  color: var(--lb-text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: 1px solid transparent;
+  min-height: var(--imagine-target-min);
+  transition: background var(--dur-fast) var(--ease-out),
+              border-color var(--dur-fast) var(--ease-out),
+              transform var(--dur-fast) var(--ease-spring),
+              opacity var(--dur-fast) ease;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+/* Visible Focus Ring (WCAG 2.2 AA/AAA) */
+:focus-visible {
+  outline: 3px solid var(--lb-accent);
+  outline-offset: 2px;
+}
+html.theme-vision-impaired :focus-visible {
+  outline: 4px solid #ffffff;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 6px #000000;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ============================================================================
+   3. DEMO CONTROL BAR (Steuerleiste oben)
+   ============================================================================ */
+.demo-harness {
+  background: var(--lb-surface-strong);
+  border-bottom: 2px solid var(--lb-border-strong);
+  padding: 8px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+  font-size: 12px;
+}
+html.theme-vision-impaired .demo-harness {
+  border-bottom: 3px solid #ffffff;
+  font-size: 14px;
+}
+
+.demo-harness-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.demo-harness-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--lb-muted);
+  font-size: 10px;
+  margin-right: 2px;
+}
+html.theme-vision-impaired .demo-harness-label {
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.demo-select, .demo-chip {
+  background: var(--lb-surface-elevated);
+  border: 1px solid var(--lb-border-strong);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+html.theme-vision-impaired .demo-select,
+html.theme-vision-impaired .demo-chip {
+  min-height: 48px;
+  border-width: 2px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.demo-chip[aria-pressed="true"] {
+  background: var(--lb-accent-soft);
+  border-color: var(--lb-accent);
+  font-weight: 700;
+}
+html.theme-vision-impaired .demo-chip[aria-pressed="true"] {
+  background: #ffffff;
+  color: #000000;
+}
+
+.accent-swatch-bar {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.accent-dot {
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  padding: 0;
+}
+html.theme-vision-impaired .accent-dot {
+  width: 48px;
+  height: 48px;
+  min-height: 48px;
+  border: 2px solid #ffffff;
+}
+.accent-dot[aria-pressed="true"] {
+  border-color: var(--lb-text);
+  transform: scale(1.15);
+}
+
+/* ============================================================================
+   4. LASTBROWSER SHELL CHROME (Topbar + Main Workspace)
+   ============================================================================ */
+.lb-shell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--imagine-stage-bg);
+  min-height: calc(100vh - 54px);
+}
+
+/* Plugin Sub-Header Navigation */
+.imagine-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 20px;
+  background: var(--lb-surface);
+  backdrop-filter: var(--imagine-glass-blur);
+  border-bottom: 1px solid var(--lb-border);
+  flex-wrap: wrap;
+}
+html.theme-vision-impaired .imagine-topbar {
+  border-bottom: 2px solid #ffffff;
+}
+
+.imagine-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.imagine-logo-badge {
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, var(--lb-accent), var(--imagine-joy-violet), var(--imagine-joy-pink));
+  display: grid;
+  place-items: center;
+  color: #ffffff;
+  box-shadow: 0 4px 16px var(--accent-glow);
+  font-weight: 800;
+}
+html.theme-vision-impaired .imagine-logo-badge {
+  background: #ffffff;
+  color: #000000;
+  border: 2px solid #ffffff;
+  box-shadow: none;
+}
+
+.imagine-brand-titles {
+  display: flex;
+  flex-direction: column;
+}
+.imagine-brand-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.imagine-brand-sub {
+  font-size: 12px;
+  color: var(--lb-muted);
+}
+
+/* Primary Plugin Navigation (Erzeugen | Warteschlange | Galerie | Einstellungen) */
+.imagine-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--lb-surface-panel);
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--lb-border);
+}
+html.theme-vision-impaired .imagine-nav {
+  border: 2px solid #ffffff;
+  padding: 6px;
+}
+
+.imagine-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--lb-muted);
+  border: 1px solid transparent;
+}
+.imagine-nav-btn:hover {
+  color: var(--lb-text);
+  background: rgba(255, 255, 255, 0.04);
+}
+.imagine-nav-btn[aria-current="page"] {
+  background: var(--lb-accent-soft);
+  color: var(--lb-text);
+  border-color: var(--lb-accent);
+  font-weight: 700;
+}
+html.theme-vision-impaired .imagine-nav-btn[aria-current="page"] {
+  background: #ffffff;
+  color: #000000;
+  border: 2px solid #ffffff;
+}
+
+.nav-badge {
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--lb-accent);
+  color: #04101c;
+  font-weight: 800;
+}
+html.theme-light .nav-badge {
+  color: #ffffff;
+}
+html.theme-vision-impaired .nav-badge {
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid currentColor;
+}
+
+/* Engine Status Pill in Header */
+.engine-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--lb-surface-panel);
+  border: 1px solid var(--lb-border);
+  font-size: 12px;
+  font-weight: 600;
+}
+html.theme-vision-impaired .engine-status-pill {
+  border: 2px solid #ffffff;
+}
+.status-led {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--status-ok);
+  box-shadow: 0 0 8px var(--status-ok);
+}
+.status-led.warn { background: var(--status-warn); box-shadow: 0 0 8px var(--status-warn); }
+.status-led.err { background: var(--status-err); box-shadow: 0 0 8px var(--status-err); }
+html.theme-vision-impaired .status-led {
+  width: 12px;
+  height: 12px;
+  box-shadow: none;
+  border: 2px solid #ffffff;
+}
+
+/* ============================================================================
+   5. MAIN STUDIO WORKSPACE (3-Spalten Responsiv: 900px bis 2560px)
+   ============================================================================ */
+.imagine-workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 330px minmax(0, 1fr) 350px;
+  gap: 16px;
+  padding: 16px 20px;
+  max-width: 2560px;
+  width: 100%;
+  margin: 0 auto;
+  align-items: start;
+}
+
+@media (max-width: 1320px) {
+  .imagine-workspace {
+    grid-template-columns: 300px minmax(0, 1fr);
+  }
+  .imagine-sidekick-col {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 980px) {
+  .imagine-workspace {
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+}
+
+/* Panel Container Styling */
+.studio-panel {
+  background: var(--lb-surface-panel);
+  backdrop-filter: var(--imagine-glass-blur);
+  border: 1px solid var(--lb-border);
+  border-radius: var(--imagine-radius-lg);
+  box-shadow: var(--imagine-shadow);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+html.theme-vision-impaired .studio-panel {
+  border: 2px solid #ffffff;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.panel-title {
+  font-family: var(--font-display);
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ============================================================================
+   6. MODE SWITCHER (Erzeugen | Bild → Bild | Inpainting | Upscale)
+   ============================================================================ */
+.mode-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  background: var(--lb-surface);
+  padding: 5px;
+  border-radius: 12px;
+  border: 1px solid var(--lb-border);
+}
+html.theme-vision-impaired .mode-tabs {
+  border: 2px solid #ffffff;
+}
+
+.mode-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--lb-muted);
+  border: 1px solid transparent;
+}
+.mode-tab-btn[aria-selected="true"] {
+  background: var(--lb-accent-soft);
+  color: var(--lb-text);
+  border-color: var(--lb-accent);
+  font-weight: 700;
+}
+html.theme-vision-impaired .mode-tab-btn[aria-selected="true"] {
+  background: #ffffff;
+  color: #000000;
+}
+
+/* ============================================================================
+   7. ENGINE SETTINGS & DATA-DRIVEN CAPABILITIES
+   ============================================================================ */
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.control-label-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+.control-val-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--lb-accent);
+  background: var(--lb-accent-soft);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+html.theme-vision-impaired .control-val-badge {
+  border: 1px solid #ffffff;
+  color: #ffffff;
+  background: #000000;
+}
+
+.aspect-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.aspect-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 7px 4px;
+  border-radius: 8px;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border);
+  font-size: 11px;
+  font-weight: 600;
+}
+.aspect-btn[aria-pressed="true"] {
+  border-color: var(--lb-accent);
+  background: var(--lb-accent-soft);
+  font-weight: 700;
+}
+html.theme-vision-impaired .aspect-btn[aria-pressed="true"] {
+  background: #ffffff;
+  color: #000000;
+  border: 2px solid #ffffff;
+}
+.aspect-frame {
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+}
+
+.studio-input, .studio-select, .studio-textarea {
+  width: 100%;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border-strong);
+  border-radius: 9px;
+  padding: 8px 11px;
+  font-size: 13px;
+  color: var(--lb-text);
+  min-height: var(--imagine-target-min);
+}
+html.theme-vision-impaired .studio-input,
+html.theme-vision-impaired .studio-select,
+html.theme-vision-impaired .studio-textarea {
+  border: 2px solid #ffffff;
+  font-size: 16px;
+}
+
+.studio-range {
+  width: 100%;
+  accent-color: var(--lb-accent);
+  min-height: 24px;
+  cursor: pointer;
+}
+html.theme-vision-impaired .studio-range {
+  min-height: 48px;
+}
+
+.pro-toggle-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--imagine-card-bg);
+  border: 1px dashed var(--lb-border-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+html.theme-vision-impaired .pro-toggle-btn {
+  border: 2px solid #ffffff;
+}
+
+.pro-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--lb-border);
+}
+
+.capability-notice {
+  font-size: 11px;
+  color: var(--lb-muted);
+  background: var(--lb-surface);
+  border-left: 3px solid var(--lb-accent);
+  padding: 8px 10px;
+  border-radius: 6px;
+  line-height: 1.4;
+}
+html.theme-vision-impaired .capability-notice {
+  border: 2px solid #ffffff;
+  font-size: 14px;
+}
+
+.seed-row {
+  display: flex;
+  gap: 6px;
+}
+.icon-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border-strong);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.icon-btn:hover:not(:disabled) {
+  border-color: var(--lb-accent);
+  background: var(--imagine-card-hover);
+}
+html.theme-vision-impaired .icon-btn {
+  border: 2px solid #ffffff;
+}
+
+/* ============================================================================
+   8. CENTER STAGE: PROMPT DOCK, CANVAS STAGE, TEMPLATES
+   ============================================================================ */
+.imagine-center-col {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+/* Prompt Dock */
+.prompt-dock {
+  background: var(--lb-surface-panel);
+  border: 1.5px solid var(--lb-border-strong);
+  border-radius: var(--imagine-radius-lg);
+  padding: 14px;
+  box-shadow: var(--imagine-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color var(--dur-fast) ease;
+}
+.prompt-dock:focus-within {
+  border-color: var(--lb-accent);
+}
+html.theme-vision-impaired .prompt-dock {
+  border: 3px solid #ffffff;
+}
+
+.prompt-textarea {
+  width: 100%;
+  min-height: 76px;
+  background: transparent;
+  border: none;
+  resize: vertical;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--lb-text);
+}
+.prompt-textarea:focus {
+  outline: none;
+}
+
+/* Placeholder Motiv Chip Bar */
+.placeholder-Slot-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--lb-accent-soft);
+  border: 1px solid var(--lb-accent);
+  border-radius: 9px;
+  font-size: 12px;
+}
+html.theme-vision-impaired .placeholder-Slot-bar {
+  background: #000000;
+  border: 2px solid #ffffff;
+}
+
+.prompt-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--lb-border);
+}
+
+.cta-generate-btn {
+  background: linear-gradient(135deg, var(--lb-accent), var(--imagine-joy-violet));
+  color: #04101c;
+  font-weight: 800;
+  font-size: 14px;
+  padding: 10px 20px;
+  border-radius: 11px;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  box-shadow: 0 6px 20px var(--accent-glow);
+}
+html.theme-light .cta-generate-btn {
+  color: #ffffff;
+}
+html.theme-vision-impaired .cta-generate-btn {
+  background: #ffffff;
+  color: #000000;
+  border: 3px solid #ffffff;
+  box-shadow: none;
+  font-size: 16px;
+}
+.cta-generate-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.shortcut-kbd {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.28);
+  color: inherit;
+}
+html.theme-vision-impaired .shortcut-kbd {
+  background: #000000;
+  color: #ffffff;
+  border: 1px solid #ffffff;
+}
+
+/* Stage / Canvas Area */
+.stage-container {
+  position: relative;
+  min-height: 410px;
+  background: var(--lb-surface);
+  border: 1px solid var(--lb-border);
+  border-radius: var(--imagine-radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+html.theme-vision-impaired .stage-container {
+  border: 2px solid #ffffff;
+}
+
+/* Interactive Canvas Stage */
+.canvas-viewport {
+  position: relative;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+.imagine-main-canvas {
+  border-radius: 12px;
+  border: 1px solid var(--lb-border-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+  max-width: 100%;
+  height: auto;
+  background: #0b1324;
+}
+html.theme-vision-impaired .imagine-main-canvas {
+  border: 3px solid #ffffff;
+  box-shadow: none;
+}
+
+/* Results Grid (when batch > 1 or done state) */
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 720px;
+}
+.result-card {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 2px solid var(--lb-border);
+  background: var(--imagine-card-bg);
+  transition: transform var(--dur-med) var(--ease-spring), border-color var(--dur-fast) ease;
+}
+.result-card:hover, .result-card.selected {
+  border-color: var(--lb-accent);
+  transform: translateY(-2px);
+}
+html.theme-vision-impaired .result-card.selected {
+  border: 4px solid #ffffff;
+}
+.result-card canvas {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Output Action Toolbar */
+.output-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding: 10px 12px;
+  background: var(--lb-surface-strong);
+  border: 1px solid var(--lb-border-strong);
+  border-radius: 12px;
+  width: 100%;
+}
+html.theme-vision-impaired .output-action-bar {
+  border: 2px solid #ffffff;
+}
+
+/* Progress & Queue Priority Banner */
+.queue-priority-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 680px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid var(--status-warn);
+  font-size: 13px;
+}
+html.theme-vision-impaired .queue-priority-banner {
+  background: #000000;
+  border: 3px solid #ffffff;
+}
+
+.progress-bar-track {
+  width: 100%;
+  max-width: 520px;
+  height: 10px;
+  background: var(--lb-surface-strong);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--lb-border);
+}
+html.theme-vision-impaired .progress-bar-track {
+  height: 18px;
+  border: 2px solid #ffffff;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--lb-accent), var(--imagine-joy-violet), var(--imagine-joy-pink));
+  transition: width var(--dur-med) ease;
+}
+html.theme-vision-impaired .progress-bar-fill {
+  background: #ffffff;
+}
+
+/* Templates Section */
+.templates-header-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.category-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cat-chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border);
+  color: var(--lb-muted);
+}
+.cat-chip[aria-pressed="true"] {
+  background: var(--lb-accent-soft);
+  color: var(--lb-text);
+  border-color: var(--lb-accent);
+  font-weight: 700;
+}
+html.theme-vision-impaired .cat-chip[aria-pressed="true"] {
+  background: #ffffff;
+  color: #000000;
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(195px, 1fr));
+  gap: 10px;
+}
+.template-card {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border);
+  gap: 8px;
+}
+.template-card:hover {
+  border-color: var(--lb-accent);
+  background: var(--imagine-card-hover);
+  transform: translateY(-2px);
+}
+html.theme-vision-impaired .template-card {
+  border: 2px solid #ffffff;
+}
+.template-preview-swatch {
+  height: 68px;
+  width: 100%;
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding: 6px 8px;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+  position: relative;
+  overflow: hidden;
+}
+html.theme-vision-impaired .template-preview-swatch {
+  background: #000000 !important;
+  border: 2px solid #ffffff;
+}
+.template-card-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+.template-card-snippet {
+  font-size: 11px;
+  color: var(--lb-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ============================================================================
+   9. SIDEKICK PROMPT ASSISTANT & AVATAR V2 ENGINE
+   ============================================================================ */
+.sidekick-header-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 12px;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border);
+}
+html.theme-vision-impaired .sidekick-header-card {
+  border: 2px solid #ffffff;
+}
+
+.avatar-v2-stage {
+  width: 68px;
+  height: 68px;
+  flex-shrink: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.avatar-v2-stage svg {
+  width: 68px;
+  height: 68px;
+  overflow: visible;
+}
+
+/* Avatar v2 State Animations (GPU friendly transform & opacity) */
+@keyframes avFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes avSpinCW {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes avSpinCCW {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+@keyframes avPulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.96); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+@keyframes avShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-3px); }
+  75% { transform: translateX(3px); }
+}
+
+.av-root {
+  transform-origin: 60px 60px;
+  animation: avFloat 3.6s ease-in-out infinite;
+}
+.av-ring-cw {
+  transform-origin: 60px 60px;
+  animation: avSpinCW 10s linear infinite;
+}
+.av-ring-ccw {
+  transform-origin: 60px 60px;
+  animation: avSpinCCW 14s linear infinite;
+}
+.av-core-pulse {
+  transform-origin: 60px 60px;
+  animation: avPulse 2.4s ease-in-out infinite;
+}
+.av-state-working .av-ring-cw {
+  animation-duration: 2.6s;
+}
+.av-state-thinking .av-ring-cw {
+  animation-duration: 5s;
+}
+.av-state-error .av-root {
+  animation: avShake 0.35s ease-in-out 3;
+}
+
+/* Respect Reduced Motion in Avatar v2 */
+html[data-reduced-motion="true"] .av-root,
+html[data-reduced-motion="true"] .av-ring-cw,
+html[data-reduced-motion="true"] .av-ring-ccw,
+html[data-reduced-motion="true"] .av-core-pulse {
+  animation: none !important;
+}
+
+/* Diff View (Alt -> Neu) */
+.diff-box {
+  background: var(--lb-surface);
+  border: 1px solid var(--lb-border-strong);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+html.theme-vision-impaired .diff-box {
+  border: 2px solid #ffffff;
+}
+.diff-del {
+  background: rgba(239, 68, 68, 0.20);
+  color: #fca5a5;
+  text-decoration: line-through;
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+.diff-ins {
+  background: rgba(16, 185, 129, 0.22);
+  color: #6ee7b7;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 4px;
+  border-bottom: 2px solid var(--status-ok);
+}
+html.theme-light .diff-del { color: #991b1b; }
+html.theme-light .diff-ins { color: #065f46; }
+html.theme-vision-impaired .diff-del {
+  background: #000000;
+  color: #ffffff;
+  text-decoration: line-through;
+  border: 1px dashed #ffffff;
+}
+html.theme-vision-impaired .diff-ins {
+  background: #ffffff;
+  color: #000000;
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+/* Model Picker List (grouped by Provider with Local/Remote & disabledReason) */
+.model-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 250px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.model-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--lb-muted);
+  margin-top: 4px;
+}
+.model-option-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border);
+  text-align: left;
+}
+.model-option-card[aria-checked="true"] {
+  border: 2px solid var(--lb-accent);
+  background: var(--lb-accent-soft);
+}
+html.theme-vision-impaired .model-option-card[aria-checked="true"] {
+  background: #ffffff;
+  color: #000000;
+}
+.model-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.mini-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--lb-surface-strong);
+  border: 1px solid var(--lb-border-strong);
+}
+
+/* ============================================================================
+   10. SUB-PAGES: QUEUE, GALLERY, SETTINGS, HUB (`eh-`), DRAWER (`sidebar-drawer-card`)
+   ============================================================================ */
+.subpage-container {
+  max-width: 1280px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.queue-table th, .queue-table td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--lb-border);
+}
+html.theme-vision-impaired .queue-table th,
+html.theme-vision-impaired .queue-table td {
+  border-bottom: 2px solid #ffffff;
+}
+
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 16px;
+}
+
+/* UnifiedExtensionHub (`eh-*`) faithful recreation */
+.eh-dialog-mock {
+  background: var(--lb-surface-panel);
+  border: 1px solid var(--lb-border-strong);
+  border-radius: 18px;
+  padding: 20px;
+  box-shadow: var(--imagine-shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.eh-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--lb-border);
+  padding-bottom: 10px;
+}
+.eh-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border);
+}
+.eh-tab.is-active {
+  border-color: var(--lb-accent);
+  background: var(--lb-accent-soft);
+  font-weight: 700;
+}
+.eh-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+.eh-card {
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border-strong);
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+.eh-card.is-featured {
+  border: 2px solid var(--lb-accent);
+}
+
+/* SidekickSidebar Drawer (`sidebar-drawer-card`) */
+.drawer-preview-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+.sidebar-drawer-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--imagine-card-bg);
+  border: 1px solid var(--lb-border-strong);
+  text-align: left;
+}
+.sidebar-drawer-card:hover {
+  border-color: var(--lb-accent);
+  background: var(--imagine-card-hover);
+}
+.sidebar-drawer-card-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-drawer-card-copy strong {
+  font-size: 14px;
+}
+.sidebar-drawer-card-copy span {
+  font-size: 12px;
+  color: var(--lb-muted);
+}
+
+/* Toast Notification */
+.imagine-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background: var(--lb-surface-strong);
+  color: var(--lb-text);
+  border: 2px solid var(--lb-accent);
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: var(--imagine-shadow);
+  z-index: 200;
+  opacity: 0;
+  transform: translateY(10px);
+  pointer-events: none;
+  transition: opacity var(--dur-fast) ease, transform var(--dur-fast) ease;
+}
+.imagine-toast.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+</style>
+</head>
+<body>
+
+<!-- ==========================================================================
+     DEMO-STEUERLEISTE (Alle geforderten Schalter aus Abschnitt 7.1)
+     ========================================================================== -->
+<aside class="demo-harness" aria-label="Imagine Demo-Steuerleiste">
+  <div class="demo-harness-group">
+    <span class="demo-harness-label" id="lbl-harness-page">Seite:</span>
+    <select id="ctrl-page" class="demo-select" aria-labelledby="lbl-harness-page">
+      <option value="create">1. Erzeugen (Hauptseite)</option>
+      <option value="queue">2. Warteschlange (Queue)</option>
+      <option value="gallery">3. Galerie / Verlauf</option>
+      <option value="settings">4. Plugin-Einstellungen</option>
+      <option value="hub">5. Einstieg: Hub-Reiter „Plugins“</option>
+      <option value="drawer">6. Einstieg: Sidebar-Drawer</option>
+    </select>
+
+    <span class="demo-harness-label" id="lbl-harness-state">Zustand:</span>
+    <select id="ctrl-state" class="demo-select" aria-labelledby="lbl-harness-state">
+      <option value="empty">Leer / Erststart</option>
+      <option value="enhancing">Prompt wird verbessert (Diff)</option>
+      <option value="generating">Generierend (Live-Step)</option>
+      <option value="waiting">Wartend (Chat hat Vorrang)</option>
+      <option value="done">Fertig (Glanz-Moment & Aktionen)</option>
+      <option value="error">Fehler (VRAM / Engine)</option>
+      <option value="no-engine">Keine Engine installiert</option>
+    </select>
+
+    <span class="demo-harness-label" id="lbl-harness-mode">Modus:</span>
+    <select id="ctrl-mode" class="demo-select" aria-labelledby="lbl-harness-mode">
+      <option value="txt2img">Erzeugen (Text → Bild)</option>
+      <option value="img2img">Bild → Bild</option>
+      <option value="inpaint">Inpainting (Masken-Canvas)</option>
+      <option value="upscale">Upscale (2×/4× Slider)</option>
+    </select>
+  </div>
+
+  <div class="demo-harness-group">
+    <button type="button" id="ctrl-pro" class="demo-chip" aria-pressed="false">Profi-Modus: Zu</button>
+    <select id="ctrl-engine" class="demo-select" aria-label="Aktive lokale Bild-Engine">
+      <option value="engineA">Engine A: ComfyUI SDXL/Flux (Voll)</option>
+      <option value="engineB">Engine B: FastSD LCM (Reduziert)</option>
+    </select>
+
+    <span class="demo-harness-label" id="lbl-harness-persona">Sidekick:</span>
+    <select id="ctrl-persona" class="demo-select" aria-labelledby="lbl-harness-persona">
+      <option value="spark">Spark (Creative)</option>
+      <option value="nova">Nova (Default)</option>
+      <option value="orion">Orion (Analytical)</option>
+      <option value="patch">Patch (Developer)</option>
+      <option value="zen">Zen (Mentor)</option>
+      <option value="custom">Custom Agent</option>
+    </select>
+
+    <span class="demo-harness-label" id="lbl-harness-theme">Theme:</span>
+    <select id="ctrl-theme" class="demo-select" aria-labelledby="lbl-harness-theme">
+      <option value="theme-dark">Dunkel (Standard)</option>
+      <option value="theme-light">Hell</option>
+      <option value="theme-vision-impaired">Sehbeeinträchtigung (Max Kontrast)</option>
+    </select>
+
+    <div class="accent-swatch-bar" role="group" aria-label="Akzentfarbe">
+      <button type="button" class="accent-dot" data-set-accent="neon-cyan" style="background:#00d9ff" title="Neon Cyan" aria-pressed="true"></button>
+      <button type="button" class="accent-dot" data-set-accent="electric-violet" style="background:#a855f7" title="Electric Violet" aria-pressed="false"></button>
+      <button type="button" class="accent-dot" data-set-accent="emerald-flow" style="background:#10b981" title="Emerald Flow" aria-pressed="false"></button>
+      <button type="button" class="accent-dot" data-set-accent="solar-amber" style="background:#f59e0b" title="Solar Amber" aria-pressed="false"></button>
+      <button type="button" class="accent-dot" data-set-accent="monochrome-slate" style="background:#94a3b8" title="Monochrome Slate" aria-pressed="false"></button>
+    </div>
+
+    <button type="button" id="ctrl-motion" class="demo-chip" aria-pressed="false">Reduced Motion: Aus</button>
+    <button type="button" id="ctrl-lang" class="demo-chip" aria-pressed="false">DE / EN</button>
+  </div>
+</aside>
+
+<!-- ==========================================================================
+     HAUPT-OBERFLÄCHE VON LASTBROWSER IMAGINE
+     ========================================================================== -->
+<div class="lb-shell">
+  <header class="imagine-topbar">
+    <div class="imagine-brand">
+      <div class="imagine-logo-badge" aria-hidden="true">✦</div>
+      <div class="imagine-brand-titles">
+        <div class="imagine-brand-title">
+          <span>LastBrowser Imagine</span>
+          <span class="mini-badge" id="hdr-badge-local">LOKALE ENGINE</span>
+        </div>
+        <div class="imagine-brand-sub" id="hdr-subtitle">One-Page Kreativstudio · 100 % lokal auf deinem Gerät</div>
+      </div>
+    </div>
+
+    <nav class="imagine-nav" aria-label="Imagine Hauptnavigation">
+      <button type="button" class="imagine-nav-btn" data-nav="create" aria-current="page">
+        <span aria-hidden="true">🎨</span> <span data-i18n="navCreate">Erzeugen</span>
+      </button>
+      <button type="button" class="imagine-nav-btn" data-nav="queue">
+        <span aria-hidden="true">⏳</span> <span data-i18n="navQueue">Warteschlange</span>
+        <span class="nav-badge" id="queue-count-badge">3</span>
+      </button>
+      <button type="button" class="imagine-nav-btn" data-nav="gallery">
+        <span aria-hidden="true">🖼️</span> <span data-i18n="navGallery">Galerie</span>
+        <span class="nav-badge" id="gallery-count-badge">6</span>
+      </button>
+      <button type="button" class="imagine-nav-btn" data-nav="settings">
+        <span aria-hidden="true">⚙️</span> <span data-i18n="navSettings">Einstellungen</span>
+      </button>
+      <button type="button" class="imagine-nav-btn" data-nav="hub">
+        <span aria-hidden="true">🧩</span> <span data-i18n="navHub">Plugin-Hub</span>
+      </button>
+      <button type="button" class="imagine-nav-btn" data-nav="drawer">
+        <span aria-hidden="true">🗂️</span> <span data-i18n="navDrawer">Drawer</span>
+      </button>
+    </nav>
+
+    <div class="engine-status-pill" id="header-engine-pill" role="status" aria-live="polite">
+      <span class="status-led" id="header-engine-led"></span>
+      <span id="header-engine-text">ComfyUI SDXL/Flux · Bereit (8,4 GiB VRAM)</span>
+    </div>
+  </header>
+
+  <!-- Dynamischer Seiten-Inhalt -->
+  <main id="imagine-main-root" tabindex="-1"></main>
+</div>
+
+<div id="imagine-toast" class="imagine-toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ============================================================================
+   ZENTRALE STRINGS (DE & EN) — Vollständige Lokalisierung
+   ============================================================================ */
+const STRINGS = {
+  de: {
+    navCreate: "Erzeugen",
+    navQueue: "Warteschlange",
+    navGallery: "Galerie / Verlauf",
+    navSettings: "Einstellungen",
+    navHub: "Hub („Plugins“)",
+    navDrawer: "Sidebar-Drawer",
+    hdrSub: "One-Page Kreativstudio · 100 % lokal in LastBrowser",
+    localBadge: "LOKAL",
+    modesTitle: "Kreativ-Modus & Engine",
+    modeTxt2Img: "Erzeugen",
+    modeImg2Img: "Bild → Bild",
+    modeInpaint: "Inpainting",
+    modeUpscale: "Upscale",
+    defaultsTitle: "Schnell-Einstellungen",
+    aspectLabel: "Format / Seitenverhältnis",
+    countLabel: "Anzahl Bilder",
+    styleStrengthLabel: "Stil-Stärke",
+    proOpen: "Profi-Modus: Offen ▾",
+    proClosed: "Profi-Modus: Zu ▸",
+    stepsLabel: "Schritte (Steps)",
+    cfgLabel: "CFG-Skala (Prompt-Treue)",
+    samplerLabel: "Sampler / Scheduler",
+    seedLabel: "Seed (Reproduzierbar)",
+    negPromptLabel: "Negativer Prompt",
+    checkpointLabel: "Modell / Checkpoint",
+    loraLabel: "LoRA-Stilmodul",
+    resLabel: "Exakte Auflösung",
+    capNoticeA: "Engine A (ComfyUI SDXL/Flux) meldet 10 Capabilities: Alle Profi-Parameter sind freigeschaltet.",
+    capNoticeB: "Engine B (FastSD LCM Minimal) unterstützt laut Engine-Capabilities nur Format, Anzahl (max. 2), LCM-Steps (1–8) und Seed. Nicht unterstützte Schalter (CFG, Sampler, Negativ-Prompt, LoRA) werden automatisch ausgeblendet.",
+    promptLabel: "Deine Bildidee (Prompt)",
+    promptPlaceholder: "Beschreibe dein Bild oder wähle unten eine Vorlage mit {motiv}-Platzhalter …",
+    slotLabel: "Platzhalter {motiv} anpassen:",
+    btnGenerate: "Bild erzeugen",
+    btnGenerating: "Wird gerendert …",
+    btnEnhance: "✨ Prompt mit Sidekick veredeln",
+    btnSaveTemplate: "＋ Als eigene Vorlage speichern",
+    templatesTitle: "Prompt-Vorlagen (14 Studio-Presets & Eigene)",
+    catAll: "Alle",
+    catPhoto: "Foto",
+    catIllustration: "Illustration",
+    catIcon: "Icon",
+    catWallpaper: "Wallpaper",
+    catProduct: "Produkt",
+    catComic: "Comic",
+    catCustom: "Eigene",
+    sidekickTitle: "Sidekick Prompt-Assistent",
+    sidekickModelLabel: "Assistenten-Modell (LLM)",
+    diffTitle: "Vorschlag & Diff-Ansicht (Alt → Neu)",
+    btnApplyDiff: "✓ Vorschlag übernehmen",
+    btnDiscardDiff: "✕ Verwerfen",
+    queueBannerWait: "Platz 2 in der gemeinsamen Queue: Ein Auftrag aus dem sichtbaren Vordergrund-Chat wird gerade zuerst fertiggestellt.",
+    queueBannerGen: "Rendert lokal · Schritt 19 / 28 (68 %) · ca. 4 Sek. verbleibend",
+    btnCancelJob: "Auftrag abbrechen",
+    noEngineTitle: "Noch keine lokale Bild-Engine eingerichtet",
+    noEngineDesc: "LastBrowser Imagine arbeitet zu 100 % lokal auf deinem Gerät – ohne Cloud-Konto, ohne Netzwerk-Dienst und ohne heimlichen Hintergrund-Download.",
+    noEngineAction: "Lokale KI in den Einstellungen einrichten →",
+    errTitle: "Engine-Fehler: Nicht genügend VRAM verfügbar",
+    errDesc: "Die lokale Pipeline (SDXL 1024×1024, Batch 4) benötigt 9.820 MiB VRAM, frei sind aktuell 6.140 MiB. Dein Prompt und alle Einstellungen wurden gesichert.",
+    btnRetry: "Erneut versuchen",
+    btnQuickFix: "Auf 768×768 & 1 Bild reduzieren",
+    actSaveAs: "Speichern unter …",
+    actCopyImg: "In Zwischenablage",
+    actSendChat: "An Sidekick / Chat senden",
+    actVariant: "Als Variante weiterbearbeiten",
+    actCopyMeta: "Prompt & Seed kopieren",
+    actRerun: "Mit diesen Einstellungen erneut",
+    actShowFolder: "Im Ordner zeigen",
+    actDelete: "Löschen"
+  },
+  en: {
+    navCreate: "Create",
+    navQueue: "Queue",
+    navGallery: "Gallery / History",
+    navSettings: "Settings",
+    navHub: "Hub ('Plugins')",
+    navDrawer: "Sidebar Drawer",
+    hdrSub: "One-Page Creative Studio · 100% local in LastBrowser",
+    localBadge: "LOCAL",
+    modesTitle: "Creative Mode & Engine",
+    modeTxt2Img: "Create",
+    modeImg2Img: "Image → Image",
+    modeInpaint: "Inpainting",
+    modeUpscale: "Upscale",
+    defaultsTitle: "Quick Defaults",
+    aspectLabel: "Aspect Ratio",
+    countLabel: "Batch Count",
+    styleStrengthLabel: "Style Strength",
+    proOpen: "Pro Mode: Open ▾",
+    proClosed: "Pro Mode: Closed ▸",
+    stepsLabel: "Steps",
+    cfgLabel: "CFG Scale (Guidance)",
+    samplerLabel: "Sampler / Scheduler",
+    seedLabel: "Seed (Reproducible)",
+    negPromptLabel: "Negative Prompt",
+    checkpointLabel: "Model / Checkpoint",
+    loraLabel: "LoRA Adapter",
+    resLabel: "Exact Resolution",
+    capNoticeA: "Engine A (ComfyUI SDXL/Flux) reports 10 capabilities: All Pro parameters are unlocked.",
+    capNoticeB: "Engine B (FastSD LCM Minimal) only advertises Aspect Ratio, Count (max 2), LCM Steps (1–8), and Seed. Unsupported controls (CFG, Sampler, Negative Prompt, LoRA) are automatically hidden.",
+    promptLabel: "Your Image Idea (Prompt)",
+    promptPlaceholder: "Describe your image or pick a template with a {motiv} placeholder below …",
+    slotLabel: "Customize {motiv} placeholder:",
+    btnGenerate: "Generate Image",
+    btnGenerating: "Rendering …",
+    btnEnhance: "✨ Enhance Prompt with Sidekick",
+    btnSaveTemplate: "＋ Save as Custom Template",
+    templatesTitle: "Prompt Templates (14 Studio Presets & Custom)",
+    catAll: "All",
+    catPhoto: "Photo",
+    catIllustration: "Illustration",
+    catIcon: "Icon",
+    catWallpaper: "Wallpaper",
+    catProduct: "Product",
+    catComic: "Comic",
+    catCustom: "Custom",
+    sidekickTitle: "Sidekick Prompt Assistant",
+    sidekickModelLabel: "Assistant Model (LLM)",
+    diffTitle: "Suggestion & Diff View (Old → New)",
+    btnApplyDiff: "✓ Apply Suggestion",
+    btnDiscardDiff: "✕ Discard",
+    queueBannerWait: "Position 2 in shared queue: A job from the visible foreground chat has priority and finishes first.",
+    queueBannerGen: "Rendering locally · Step 19 / 28 (68%) · ~4s remaining",
+    btnCancelJob: "Cancel Job",
+    noEngineTitle: "No Local Image Engine Installed Yet",
+    noEngineDesc: "LastBrowser Imagine runs 100% locally on your machine — no cloud account, no external network service, and no automatic background downloads.",
+    noEngineAction: "Configure Local AI Runtime in Settings →",
+    errTitle: "Engine Error: Insufficient VRAM",
+    errDesc: "The local pipeline (SDXL 1024×1024, Batch 4) requires 9,820 MiB VRAM, but only 6,140 MiB is free. Your prompt and settings are preserved.",
+    btnRetry: "Try Again",
+    btnQuickFix: "Reduce to 768×768 & Batch 1",
+    actSaveAs: "Save As …",
+    actCopyImg: "Copy to Clipboard",
+    actSendChat: "Send to Sidekick / Chat",
+    actVariant: "Edit as Variant",
+    actCopyMeta: "Copy Prompt & Seed",
+    actRerun: "Re-run with Settings",
+    actShowFolder: "Show in Folder",
+    actDelete: "Delete"
+  }
+};
+
+/* ============================================================================
+   DATENGETRIEBENE ENGINE-CAPABILITIES (Engine A vs. Engine B)
+   ============================================================================ */
+const ENGINE_CAPABILITIES = {
+  engineA: {
+    id: "comfyui-sdxl-flux",
+    name: "ComfyUI Local Pipeline (SDXL + Flux.1)",
+    vramFreeMiB: 8420,
+    coldStartMs: 1180,
+    stepLatencyMs: 190,
+    aspectRatios: [
+      { id: "1:1", label: "1:1", w: 1024, h: 1024, boxW: 14, boxH: 14 },
+      { id: "16:9", label: "16:9", w: 1344, h: 768, boxW: 18, boxH: 10 },
+      { id: "9:16", label: "9:16", w: 768, h: 1344, boxW: 10, boxH: 18 },
+      { id: "4:3", label: "4:3", w: 1152, h: 896, boxW: 16, boxH: 12 }
+    ],
+    maxBatch: 4,
+    supportsStyleStrength: true,
+    supportsSteps: { min: 10, max: 50, default: 28 },
+    supportsCfg: { min: 1.0, max: 15.0, step: 0.5, default: 6.5 },
+    samplers: ["DPM++ 2M Karras", "Euler a", "UniPC", "DDIM"],
+    supportsNegativePrompt: true,
+    checkpoints: ["flux1-dev-fp8.safetensors", "juggernautXL_v9.safetensors", "animagineXL_v31.safetensors"],
+    loras: ["Kein LoRA", "DetailTweaker XL (0.75)", "Glassmorphism Icon XL (0.85)", "Analog Film Grain (0.60)"],
+    supportsLivePreview: true
+  },
+  engineB: {
+    id: "fastsd-lcm-minimal",
+    name: "FastSD Local LCM (Minimal CPU/iGPU)",
+    vramFreeMiB: 3840,
+    coldStartMs: 640,
+    stepLatencyMs: 310,
+    aspectRatios: [
+      { id: "1:1", label: "1:1", w: 512, h: 512, boxW: 14, boxH: 14 },
+      { id: "16:9", label: "16:9", w: 768, h: 432, boxW: 18, boxH: 10 },
+      { id: "9:16", label: "9:16", w: 432, h: 768, boxW: 10, boxH: 18 }
+    ],
+    maxBatch: 2,
+    supportsStyleStrength: false,
+    supportsSteps: { min: 1, max: 8, default: 4 },
+    supportsCfg: null,
+    samplers: null,
+    supportsNegativePrompt: false,
+    checkpoints: ["lcm-ssd-1b-int8.onnx"],
+    loras: null,
+    supportsLivePreview: false
+  }
+};
+
+/* ============================================================================
+   14 PROMPT-VORLAGEN MIT {motiv}-PLATZHALTER
+   ============================================================================ */
+const INITIAL_TEMPLATES = [
+  { id: "t1", cat: "Foto", title: "Kino-Porträt bei Nacht", defaultMotiv: "einer Cyberpunk-Uhrmacherin", prompt: "Kinoreifes 85mm-Porträt von {motiv} im warmen Neonregen von Tokio, feine Regentropfen auf Glas, Bokeh-Lichter, Kodak Portra 400", grad: "linear-gradient(135deg,#0f172a,#0284c7,#e11d48)" },
+  { id: "t2", cat: "Foto", title: "Makro-Naturstudie", defaultMotiv: "einer biolumineszenten Glasorchidee", prompt: "Extremes Makrofoto von {motiv} im Morgentau, kristallklare Wassertropfen, sanftes Gegenlicht, 100mm f/2.8 Objektiv, National Geographic Stil", grad: "linear-gradient(135deg,#064e3b,#10b981,#f59e0b)" },
+  { id: "t3", cat: "Foto", title: "Architektur-Minimalismus", defaultMotiv: "einer schwebenden Bibliothek am Fjord", prompt: "Nordische Gegenwartsarchitektur von {motiv}, Sichtbeton und warmes Zedernholz, dramatischer Nebel über dem Wasser, Langzeitbelichtung", grad: "linear-gradient(135deg,#1e293b,#475569,#38bdf8)" },
+  { id: "t4", cat: "Illustration", title: "Isometrisches Diorama", defaultMotiv: "einer gemütlichen Alchemisten-Buchhandlung", prompt: "Detailverliebtes isometrisches 3D-Cutaway-Diorama von {motiv}, warmes Kaminlicht, leuchtende Tränke, Blender Cycles Render, Tilt-Shift", grad: "linear-gradient(135deg,#4c1d95,#9333ea,#f59e0b)" },
+  { id: "t5", cat: "Illustration", title: "Gouache-Kinderbuchwelt", defaultMotiv: "einem kleinen Fuchs mit Messing-Teleskop", prompt: "Handgemalte Gouache-Illustration von {motiv} auf einem Hügel unter Sternbildern, sichtbare Papierstruktur, warme Pastelltöne", grad: "linear-gradient(135deg,#1e3a8a,#6366f1,#f43f5e)" },
+  { id: "t6", cat: "Illustration", title: "Botanischer Vintage-Druck", defaultMotiv: "seltenen Tiefsee-Korallen und Quallen", prompt: "Historische naturwissenschaftliche Tafel von {motiv} im Stil von Ernst Haeckel, feine Kupferstich-Schraffur auf gealtertem Pergament", grad: "linear-gradient(135deg,#27272a,#71717a,#d97706)" },
+  { id: "t7", cat: "Icon", title: "3D-Glas-App-Icon", defaultMotiv: "einem leuchtenden Kompass-Kristall", prompt: "Modernes macOS-Desktop-App-Icon mit {motiv}, transluzentes Frosted-Glass, sanfte Cyan-Violett-Kantenlichter, dunkler abgerundeter Squircle-Hintergrund", grad: "linear-gradient(135deg,#090d16,#00d9ff,#a855f7)" },
+  { id: "t8", cat: "Icon", title: "Vektor-Abzeichen / Sticker", defaultMotiv: "einer freundlichen Raketen-Kaffeetasse", prompt: "Flaches Die-Cut-Vinyl-Sticker-Design von {motiv}, kräftige Outlines, klare geometrische Formen, weißer Sticker-Rand, Dribbble Vector Art", grad: "linear-gradient(135deg,#be123c,#fb7185,#facc15)" },
+  { id: "t9", cat: "Wallpaper", title: "Abstrakte Seidenwellen 4K", defaultMotiv: "fließenden Nordlicht-Bändern in Cyan und Gold", prompt: "Abstraktes 4K-Desktop-Wallpaper aus {motiv}, seidig glänzende 3D-Schichten, sanfte Tiefenunschärfe, ruhige dunkle Ränder für Desktop-Icons", grad: "linear-gradient(135deg,#042f2e,#0d9488,#38bdf8)" },
+  { id: "t10", cat: "Wallpaper", title: "Synthwave-Horizont", defaultMotiv: "einem einsamen Elektro-Coupé vor zwei Monden", prompt: "Retrowave-Landschaftspanorama mit {motiv}, leuchtendes Vektorgitter, violette Bergketten, atmosphärischer Dunst, 21:9 Widescreen", grad: "linear-gradient(135deg,#311042,#db2777,#f59e0b)" },
+  { id: "t11", cat: "Produkt", title: "Studio-Produktinszenierung", defaultMotiv: "einem mattschwarzen Espresso-Siebträger", prompt: "High-End-Werbefotografie von {motiv} auf dunklem Schieferstein, feiner aufsteigender Dampf, präzises Rim-Lighting, Phase One XF 100MP", grad: "linear-gradient(135deg,#18181b,#52525b,#f59e0b)" },
+  { id: "t12", cat: "Produkt", title: "Flakon im Wasserschwall", defaultMotiv: "einem smaragdgrünen Parfümflakon mit Holzdeckel", prompt: "Dynamische Produktaufnahme von {motiv} inmitten eingefrorener Wasserspritzer und Moossteine, kristallklare Lichtbrechung, Studio-Blitz", grad: "linear-gradient(135deg,#065f46,#059669,#34d399)" },
+  { id: "t13", cat: "Comic", title: "Ligne-Claire-Abenteuer", defaultMotiv: "einer Detektivin auf einem Luftschiff-Deck", prompt: "Frankobelgischer Ligne-Claire-Comic-Frame von {motiv}, präzise schwarze Tuschelinien, flächige Kolorierung im Stil von Moebius und Hergé", grad: "linear-gradient(135deg,#1d4ed8,#38bdf8,#facc15)" },
+  { id: "t14", cat: "Comic", title: "Manga-Action-Panel", defaultMotiv: "einem Mecha-Piloten beim Systemstart", prompt: "Dynamisches Manga-Splash-Panel von {motiv}, dramatische Speedlines, leuchtende HUD-Holos, kontrastreiche Rasterfolie und Akzentfarbe", grad: "linear-gradient(135deg,#111827,#7c3aed,#ec4899)" }
+];
+
+/* ============================================================================
+   MODELLWAHL DES SIDEKICK-PROMPT-ASSISTENTEN (analog model-picker-options.ts)
+   ============================================================================ */
+const ASSISTANT_MODELS = [
+  { id: "lb-local-qwen25-7b", group: "Lokale Modelle (LastBrowser Runtime)", name: "Qwen 2.5 7B Instruct (Q4_K_M)", deployment: "lokal", isDefault: true, disabledReason: null, reasonText: "Verifiziert · Kaltstart 420 ms · 4.680 MiB" },
+  { id: "lb-local-llama32-3b", group: "Lokale Modelle (LastBrowser Runtime)", name: "Llama 3.2 3B Creative Prompt", deployment: "lokal", isDefault: false, disabledReason: null, reasonText: "Bereit · Extrem schnell · 2.150 MiB" },
+  { id: "lb-local-mistral-nemo", group: "Lokale Modelle (LastBrowser Runtime)", name: "Mistral NeMo 12B Instruct", deployment: "lokal", isDefault: false, disabledReason: "notConfigured", reasonText: "Gerätetest fehlt · Installation noch nicht geprüft" },
+  { id: "anthropic-claude-37", group: "Verbundene Provider (Remote)", name: "Claude 3.7 Sonnet", deployment: "remote", isDefault: false, disabledReason: null, reasonText: "API-Schlüssel aktiv" },
+  { id: "openai-gpt-4o", group: "Verbundene Provider (Remote)", name: "GPT-4o", deployment: "remote", isDefault: false, disabledReason: "unavailable", reasonText: "Lokales Offline-Profil aktiv (Remote gesperrt)" }
+];
+
+/* ============================================================================
+   PERSONA-DEFINITIONEN (Sidekick Avatare v2)
+   ============================================================================ */
+const PERSONAS = {
+  nova:   { name: "Nova",   role: "Balanced Allrounder", c1: "#00d9ff", c2: "#3b82f6" },
+  orion:  { name: "Orion",  role: "Analytical Precision", c1: "#6366f1", c2: "#00d9ff" },
+  patch:  { name: "Patch",  role: "Technical Prompt Craft", c1: "#10b981", c2: "#06b6d4" },
+  spark:  { name: "Spark",  role: "Creative Art Director", c1: "#f43f5e", c2: "#f59e0b" },
+  zen:    { name: "Zen",    role: "Minimalist & Calm", c1: "#14b8a6", c2: "#a855f7" },
+  custom: { name: "Custom", role: "Frei gestalteter Agent", c1: "#a855f7", c2: "#ec4899" }
+};
+
+/* ============================================================================
+   GLOBALER DEMO-STATE
+   ============================================================================ */
+const state = {
+  lang: "de",
+  page: "create",          // create | queue | gallery | settings | hub | drawer
+  viewState: "empty",      // empty | enhancing | generating | waiting | done | error | no-engine
+  mode: "txt2img",         // txt2img | img2img | inpaint | upscale
+  proOpen: false,
+  engineKey: "engineA",    // engineA | engineB
+  persona: "spark",        // nova | orion | patch | spark | zen | custom
+  theme: "theme-dark",     // theme-dark | theme-light | theme-vision-impaired
+  accent: "neon-cyan",
+  reducedMotion: false,
+
+  // Prompt & Template State
+  prompt: "Kinoreifes 85mm-Porträt von einer Cyberpunk-Uhrmacherin im warmen Neonregen von Tokio, feine Regentropfen auf Glas, Bokeh-Lichter, Kodak Portra 400",
+  motivValue: "einer Cyberpunk-Uhrmacherin",
+  activeTemplateId: "t1",
+  selectedCategory: "Alle",
+  templates: [...INITIAL_TEMPLATES],
+
+  // Engine Parameter Values
+  aspectRatio: "1:1",
+  batchCount: 2,
+  styleStrength: 75,
+  steps: 28,
+  cfg: 6.5,
+  sampler: "DPM++ 2M Karras",
+  seed: "849204117",
+  randomSeed: false,
+  negativePrompt: "unscharf, Wasserzeichen, Text-Artefakte, deformierte Hände, Überbelichtung",
+  checkpoint: "flux1-dev-fp8.safetensors",
+  lora: "DetailTweaker XL (0.75)",
+  img2imgStrength: 62,
+  inpaintBrushSize: 28,
+  inpaintTool: "brush", // brush | eraser
+  inpaintInverted: false,
+  upscaleFactor: 2,
+  upscaleSplit: 52,
+
+  // Sidekick Assistant
+  assistantModel: "lb-local-qwen25-7b",
+
+  // Output / Settings
+  outputPath: "Bilder/LastBrowser Imagine/",
+  outputFormat: "PNG",
+  embedMetadata: true,
+  selectedResultIndex: 0,
+
+  // Queue Items (Shared between Foreground Chat, Background Chat, and Imagine)
+  queueItems: [
+    { id: "q-101", origin: "chat-fg", originLabel: "Sichtbarer Chat (Vordergrund)", prompt: "Isometrisches Netzwerk-Diagramm einer Zero-Trust-Architektur", status: "running", progress: 74, priorityReason: "Läuft zu Ende, wird nicht abgebrochen (Sichtbarer Chat)" },
+    { id: "q-102", origin: "chat-fg", originLabel: "Sichtbarer Chat (Neuer Auftrag)", prompt: "UI-Mockup einer dunklen Musik-App mit Spektrumanalyse", status: "queued", progress: 0, priorityReason: "Als Nächstes – vor allen wartenden Hintergrund- und Imagine-Aufträgen" },
+    { id: "q-103", origin: "imagine", originLabel: "Imagine Studio", prompt: "Kinoreifes 85mm-Porträt von einer Cyberpunk-Uhrmacherin im warmen Neonregen", status: "queued", progress: 0, priorityReason: "Wie ein Hintergrund-Auftrag eingereiht, solange ein Chat im Vordergrund aktiv ist" },
+    { id: "q-104", origin: "chat-bg", originLabel: "Chat im Hintergrund (Tab #4)", prompt: "Maskottchen-Skizze für lokales Rust-CLI-Tool", status: "queued", progress: 0, priorityReason: "Hinten eingereiht in der Reihenfolge des Absendens (FIFO)" }
+  ],
+
+  // Gallery Items
+  galleryFilterMode: "all",
+  galleryFavoritesOnly: false,
+  selectedGalleryIds: ["g1"],
+  galleryItems: [
+    { id: "g1", title: "Cyberpunk-Uhrmacherin im Neonregen", prompt: "Kinoreifes 85mm-Porträt von einer Cyberpunk-Uhrmacherin im warmen Neonregen von Tokio", seed: "849204117", engine: "ComfyUI SDXL/Flux", mode: "txt2img", date: "Heute, 18:42", aspect: "1:1", fav: true, hue: 195 },
+    { id: "g2", title: "Alchemisten-Buchhandlung Diorama", prompt: "Detailverliebtes isometrisches 3D-Cutaway-Diorama einer gemütlichen Alchemisten-Buchhandlung", seed: "331098412", engine: "ComfyUI SDXL/Flux", mode: "txt2img", date: "Heute, 17:19", aspect: "4:3", fav: true, hue: 275 },
+    { id: "g3", title: "Leuchtender Kompass-Kristall Icon", prompt: "Modernes macOS-Desktop-App-Icon mit einem leuchtenden Kompass-Kristall, Frosted-Glass", seed: "992014410", engine: "ComfyUI SDXL/Flux", mode: "inpaint", date: "Heute, 16:05", aspect: "1:1", fav: false, hue: 160 },
+    { id: "g4", title: "Biolumineszente Glasorchidee", prompt: "Extremes Makrofoto einer biolumineszenten Glasorchidee im Morgentau", seed: "120948551", engine: "FastSD LCM", mode: "upscale", date: "Gestern", aspect: "16:9", fav: false, hue: 140 },
+    { id: "g5", title: "Schwebende Fjord-Bibliothek", prompt: "Nordische Gegenwartsarchitektur einer schwebenden Bibliothek am Fjord", seed: "774120984", engine: "ComfyUI SDXL/Flux", mode: "img2img", date: "Gestern", aspect: "16:9", fav: true, hue: 215 },
+    { id: "g6", title: "Mecha-Pilot beim Systemstart", prompt: "Dynamisches Manga-Splash-Panel eines Mecha-Piloten beim Systemstart", seed: "558192301", engine: "ComfyUI SDXL/Flux", mode: "txt2img", date: "12. Okt 2026", aspect: "9:16", fav: false, hue: 330 }
+  ]
+};
+
+function t(key) {
+  return (STRINGS[state.lang] && STRINGS[state.lang][key]) || STRINGS.de[key] || key;
+}
+
+function showToast(msg) {
+  const el = document.getElementById("imagine-toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add("visible");
+  clearTimeout(showToast._timer);
+  showToast._timer = setTimeout(() => el.classList.remove("visible"), 2600);
+}
+
+/* ============================================================================
+   SIDEKICK AVATAR V2 SVG GENERATOR (Persona + Status-Maschine)
+   ============================================================================ */
+function mapViewStateToAvatarState() {
+  switch (state.viewState) {
+    case "enhancing": return "working";
+    case "generating": return "working";
+    case "waiting": return "thinking";
+    case "done": return "done";
+    case "error": return "error";
+    case "no-engine": return "needs-input";
+    default: return "idle";
+  }
+}
+
+function createSidekickAvatarSVG(personaKey, avState) {
+  const p = PERSONAS[personaKey] || PERSONAS.spark;
+  const isVI = state.theme === "theme-vision-impaired";
+  const c1 = isVI ? "#ffffff" : p.c1;
+  const c2 = isVI ? "#ffffff" : p.c2;
+
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 120 120");
+  svg.setAttribute("class", "av-state-" + avState);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Sidekick " + p.name + " (" + avState + ")");
+
+  // Outer orbital ring
+  const ringCW = document.createElementNS(ns, "circle");
+  ringCW.setAttribute("cx", "60");
+  ringCW.setAttribute("cy", "60");
+  ringCW.setAttribute("r", "48");
+  ringCW.setAttribute("fill", "none");
+  ringCW.setAttribute("stroke", c1);
+  ringCW.setAttribute("stroke-width", isVI ? "3" : "2");
+  ringCW.setAttribute("stroke-dasharray", personaKey === "patch" ? "8 6" : "22 10 6 10");
+  ringCW.setAttribute("class", "av-ring-cw");
+  svg.appendChild(ringCW);
+
+  // Counter-rotating inner ring
+  const ringCCW = document.createElementNS(ns, "circle");
+  ringCCW.setAttribute("cx", "60");
+  ringCCW.setAttribute("cy", "60");
+  ringCCW.setAttribute("r", "38");
+  ringCCW.setAttribute("fill", "none");
+  ringCCW.setAttribute("stroke", c2);
+  ringCCW.setAttribute("stroke-width", isVI ? "2.5" : "1.5");
+  ringCCW.setAttribute("stroke-dasharray", "12 14");
+  ringCCW.setAttribute("class", "av-ring-ccw");
+  svg.appendChild(ringCCW);
+
+  // Core group
+  const rootG = document.createElementNS(ns, "g");
+  rootG.setAttribute("class", "av-root");
+
+  // Core body shape varies by Persona (v2 geometry)
+  if (personaKey === "orion" || personaKey === "patch") {
+    const poly = document.createElementNS(ns, "polygon");
+    poly.setAttribute("points", "60,26 90,43 90,77 60,94 30,77 30,43");
+    poly.setAttribute("fill", isVI ? "#000000" : "rgba(15,23,42,0.9)");
+    poly.setAttribute("stroke", c1);
+    poly.setAttribute("stroke-width", "3");
+    rootG.appendChild(poly);
+  } else {
+    const core = document.createElementNS(ns, "circle");
+    core.setAttribute("cx", "60");
+    core.setAttribute("cy", "60");
+    core.setAttribute("r", "30");
+    core.setAttribute("fill", isVI ? "#000000" : "rgba(15,23,42,0.9)");
+    core.setAttribute("stroke", c1);
+    core.setAttribute("stroke-width", "3");
+    rootG.appendChild(core);
+  }
+
+  // Eyes / Visor expression based on state
+  const eyesG = document.createElementNS(ns, "g");
+  if (avState === "error") {
+    const p1 = document.createElementNS(ns, "path");
+    p1.setAttribute("d", "M44,52 L54,62 M54,52 L44,62 M66,52 L76,62 M76,52 L66,62");
+    p1.setAttribute("stroke", isVI ? "#ffffff" : "#ef4444");
+    p1.setAttribute("stroke-width", "3.5");
+    p1.setAttribute("stroke-linecap", "round");
+    eyesG.appendChild(p1);
+  } else if (avState === "done") {
+    const p1 = document.createElementNS(ns, "path");
+    p1.setAttribute("d", "M43,58 Q49,50 55,58 M65,58 Q71,50 77,58");
+    p1.setAttribute("fill", "none");
+    p1.setAttribute("stroke", c1);
+    p1.setAttribute("stroke-width", "3.5");
+    p1.setAttribute("stroke-linecap", "round");
+    eyesG.appendChild(p1);
+  } else {
+    const eyeL = document.createElementNS(ns, "ellipse");
+    eyeL.setAttribute("cx", "49");
+    eyeL.setAttribute("cy", "57");
+    eyeL.setAttribute("rx", "4.5");
+    eyeL.setAttribute("ry", avState === "thinking" ? "2.5" : "6");
+    eyeL.setAttribute("fill", c1);
+    const eyeR = document.createElementNS(ns, "ellipse");
+    eyeR.setAttribute("cx", "71");
+    eyeR.setAttribute("cy", "57");
+    eyeR.setAttribute("rx", "4.5");
+    eyeR.setAttribute("ry", avState === "thinking" ? "2.5" : "6");
+    eyeR.setAttribute("fill", c1);
+    eyesG.appendChild(eyeL);
+    eyesG.appendChild(eyeR);
+  }
+  rootG.appendChild(eyesG);
+
+  // Status badge indicator in corner
+  const badge = document.createElementNS(ns, "circle");
+  badge.setAttribute("cx", "92");
+  badge.setAttribute("cy", "92");
+  badge.setAttribute("r", "10");
+  badge.setAttribute("fill", isVI ? "#000000" : c2);
+  badge.setAttribute("stroke", "#ffffff");
+  badge.setAttribute("stroke-width", "2");
+  rootG.appendChild(badge);
+
+  svg.appendChild(rootG);
+  return svg;
+}
+
+/* ============================================================================
+   PROZEDURALER CANVAS-GENERATOR FÜR VORSCHAU-, NOISE-, INPAINT- & UPSCALE-BILDER
+   ============================================================================ */
+function renderProceduralArtwork(canvas, options) {
+  const ctx = canvas.getContext("2d");
+  const w = canvas.width;
+  const h = canvas.height;
+  const isVI = state.theme === "theme-vision-impaired";
+  const hue = options.hue || 195;
+  const noiseLevel = options.noiseLevel || 0; // 0.0 (sharp) to 1.0 (pure noise)
+
+  ctx.clearRect(0, 0, w, h);
+
+  if (isVI) {
+    // High contrast black & white geometric illustration for Vision Impaired mode
+    ctx.fillStyle = "#000000";
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = "#ffffff";
+    ctx.lineWidth = 4;
+    for (let i = 20; i < w; i += 48) {
+      ctx.beginPath();
+      ctx.moveTo(i, 0);
+      ctx.lineTo(w - i, h);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#000000";
+    ctx.beginPath();
+    ctx.arc(w * 0.5, h * 0.45, Math.min(w, h) * 0.24, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px Arial";
+    ctx.textAlign = "center";
+    ctx.fillText(options.caption || "LOKALES RENDER-ERGEBNIS", w / 2, h - 24);
+    return;
+  }
+
+  // Rich atmospheric gradient background
+  const grad = ctx.createLinearGradient(0, 0, w, h);
+  grad.addColorStop(0, `hsl(${hue}, 78%, 14%)`);
+  grad.addColorStop(0.5, `hsl(${(hue + 45) % 360}, 72%, 26%)`);
+  grad.addColorStop(1, `hsl(${(hue + 95) % 360}, 82%, 18%)`);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Glowing sun / neon orb
+  const radGrad = ctx.createRadialGradient(w * 0.52, h * 0.42, 8, w * 0.52, h * 0.42, Math.min(w, h) * 0.38);
+  radGrad.addColorStop(0, `hsla(${(hue + 30) % 360}, 100%, 82%, 0.95)`);
+  radGrad.addColorStop(0.45, `hsla(${hue}, 95%, 58%, 0.55)`);
+  radGrad.addColorStop(1, "rgba(0,0,0,0)");
+  ctx.fillStyle = radGrad;
+  ctx.fillRect(0, 0, w, h);
+
+  // Stylized architectural / horizon silhouettes
+  ctx.fillStyle = "rgba(6, 11, 23, 0.78)";
+  ctx.beginPath();
+  ctx.moveTo(0, h);
+  ctx.lineTo(0, h * 0.68);
+  ctx.lineTo(w * 0.22, h * 0.54);
+  ctx.lineTo(w * 0.44, h * 0.64);
+  ctx.lineTo(w * 0.68, h * 0.46);
+  ctx.lineTo(w * 0.88, h * 0.60);
+  ctx.lineTo(w, h * 0.52);
+  ctx.lineTo(w, h);
+  ctx.closePath();
+  ctx.fill();
+
+  // Foreground neon reflections
+  ctx.strokeStyle = `hsla(${hue}, 100%, 75%, 0.65)`;
+  ctx.lineWidth = 2;
+  for (let y = h * 0.74; y < h; y += 9) {
+    ctx.beginPath();
+    ctx.moveTo(w * 0.15, y);
+    ctx.lineTo(w * 0.85, y);
+    ctx.stroke();
+  }
+
+  // If generating (noise-to-light reveal effect)
+  if (noiseLevel > 0) {
+    const dots = Math.floor(noiseLevel * 900);
+    for (let i = 0; i < dots; i++) {
+      const rx = (Math.sin(i * 78.233) * 0.5 + 0.5) * w;
+      const ry = (Math.cos(i * 45.164) * 0.5 + 0.5) * h;
+      ctx.fillStyle = i % 2 === 0 ? "rgba(0, 217, 255, 0.35)" : "rgba(255, 255, 255, 0.28)";
+      ctx.fillRect(rx, ry, 4, 4);
+    }
+  }
+
+  // If Upscale Split view
+  if (options.upscaleSplit) {
+    const splitX = (options.upscaleSplit / 100) * w;
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.32)";
+    ctx.fillRect(0, 0, splitX, h);
+    ctx.strokeStyle = "#00d9ff";
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(splitX, 0);
+    ctx.lineTo(splitX, h);
+    ctx.stroke();
+
+    ctx.fillStyle = "rgba(7, 17, 31, 0.86)";
+    ctx.fillRect(12, 12, 118, 26);
+    ctx.fillRect(w - 144, 12, 132, 26);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "600 12px sans-serif";
+    ctx.fillText("Vorher (1024 px)", 20, 29);
+    ctx.fillText(`Nachher (${state.upscaleFactor}× HD)`, w - 134, 29);
+    ctx.restore();
+  }
+
+  // Caption badge
+  if (options.caption) {
+    ctx.fillStyle = "rgba(7, 17, 31, 0.78)";
+    ctx.fillRect(10, h - 34, Math.min(w - 20, 290), 24);
+    ctx.fillStyle = "#f8fbff";
+    ctx.font = "600 11px sans-serif";
+    ctx.fillText(options.caption, 18, h - 18);
+  }
+}
+
+/* ============================================================================
+   DOM HELPER (CSP-Safe Element Creation)
+   ============================================================================ */
+function el(tag, attrs = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === null || v === undefined) continue;
+    if (k === "className") node.className = v;
+    else if (k === "textContent") node.textContent = v;
+    else if (k.startsWith("on") && typeof v === "function") {
+      node.addEventListener(k.slice(2).toLowerCase(), v);
+    } else {
+      node.setAttribute(k, String(v));
+    }
+  }
+  for (const child of children) {
+    if (!child) continue;
+    if (typeof child === "string") node.appendChild(document.createTextNode(child));
+    else node.appendChild(child);
+  }
+  return node;
+}
+
+/* ============================================================================
+   SEITE 1: „ERZEUGEN“ (HAUPTSEITE MIT ALLEN ZUSTÄNDEN & MODI)
+   ============================================================================ */
+function buildCreatePage() {
+  const cap = ENGINE_CAPABILITIES[state.engineKey];
+  const isNoEngine = state.viewState === "no-engine";
+  const wrap = el("div", { className: "imagine-workspace" });
+
+  /* --------------------------------------------------------------------------
+     SPALTE LINKS: MODI & DATENGETRIEBENE ENGINE-EINSTELLUNGEN
+     -------------------------------------------------------------------------- */
+  const leftCol = el("section", { className: "studio-panel", "aria-label": t("modesTitle") });
+
+  leftCol.appendChild(el("div", { className: "panel-header" }, [
+    el("h2", { className: "panel-title", textContent: "🎛️ " + t("modesTitle") }),
+    el("span", { className: "mini-badge", textContent: state.engineKey === "engineA" ? "SDXL/Flux" : "LCM Minimal" })
+  ]));
+
+  // 4 Modi Umschalter (Erzeugen | Bild -> Bild | Inpainting | Upscale)
+  const modeTabs = el("div", { className: "mode-tabs", role: "tablist", "aria-label": "Bearbeitungsmodus" });
+  const modes = [
+    { id: "txt2img", icon: "✨", label: t("modeTxt2Img") },
+    { id: "img2img", icon: "🖼️", label: t("modeImg2Img") },
+    { id: "inpaint", icon: "🖌️", label: t("modeInpaint") },
+    { id: "upscale", icon: "🔍", label: t("modeUpscale") }
+  ];
+  modes.forEach(m => {
+    const btn = el("button", {
+      type: "button",
+      role: "tab",
+      className: "mode-tab-btn",
+      "aria-selected": state.mode === m.id ? "true" : "false",
+      onClick: () => {
+        state.mode = m.id;
+        syncControlsFromState();
+        renderApp();
+        showToast("Modus gewechselt zu „" + m.label + "“ (Prompt & Bild bleiben erhalten)");
+      }
+    }, [el("span", { "aria-hidden": "true", textContent: m.icon }), el("span", { textContent: m.label })]);
+    modeTabs.appendChild(btn);
+  });
+  leftCol.appendChild(modeTabs);
+
+  // Mode-specific controls (Img2Img / Inpainting / Upscale)
+  if (state.mode === "img2img") {
+    leftCol.appendChild(el("div", { className: "capability-notice" }, [
+      el("strong", { textContent: "Bild → Bild Quelle aktiv: " }),
+      el("span", { textContent: "Referenzbild geladen. Stärke bestimmt, wie stark die Engine vom Original abweicht." })
+    ]));
+    leftCol.appendChild(el("div", { className: "control-group" }, [
+      el("div", { className: "control-label-row" }, [
+        el("label", { for: "rng-img2img", textContent: "Denoising / Änderungs-Stärke" }),
+        el("span", { className: "control-val-badge", textContent: state.img2imgStrength + " %" })
+      ]),
+      el("input", {
+        id: "rng-img2img",
+        type: "range",
+        className: "studio-range",
+        min: 10, max: 95, value: state.img2imgStrength,
+        onInput: (e) => { state.img2imgStrength = Number(e.target.value); renderApp(); }
+      })
+    ]));
+  } else if (state.mode === "inpaint") {
+    leftCol.appendChild(el("div", { className: "control-group" }, [
+      el("div", { className: "control-label-row" }, [
+        el("span", { textContent: "Inpainting-Werkzeug (direkt auf Leinwand malen)" }),
+        el("span", { className: "control-val-badge", textContent: state.inpaintBrushSize + " px" })
+      ]),
+      el("div", { className: "seed-row" }, [
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          "aria-pressed": state.inpaintTool === "brush",
+          onClick: () => { state.inpaintTool = "brush"; renderApp(); }
+        }, ["🖌️ Pinsel"]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          "aria-pressed": state.inpaintTool === "eraser",
+          onClick: () => { state.inpaintTool = "eraser"; renderApp(); }
+        }, ["🧽 Radierer"]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          "aria-pressed": state.inpaintInverted,
+          onClick: () => {
+            state.inpaintInverted = !state.inpaintInverted;
+            renderApp();
+            showToast(state.inpaintInverted ? "Maske invertiert" : "Maske normal");
+          }
+        }, ["⇄ Invertieren"])
+      ]),
+      el("input", {
+        type: "range",
+        className: "studio-range",
+        "aria-label": "Pinselgröße in Pixel",
+        min: 8, max: 64, value: state.inpaintBrushSize,
+        onInput: (e) => { state.inpaintBrushSize = Number(e.target.value); renderApp(); }
+      })
+    ]));
+  } else if (state.mode === "upscale") {
+    leftCol.appendChild(el("div", { className: "control-group" }, [
+      el("div", { className: "control-label-row" }, [
+        el("span", { textContent: "Upscale-Faktor (RealESRGAN / Latent)" }),
+        el("span", { className: "control-val-badge", textContent: state.upscaleFactor + "×" })
+      ]),
+      el("div", { className: "seed-row" }, [
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          "aria-pressed": state.upscaleFactor === 2,
+          onClick: () => { state.upscaleFactor = 2; renderApp(); }
+        }, ["2× (2048 × 2048)"]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          "aria-pressed": state.upscaleFactor === 4,
+          onClick: () => { state.upscaleFactor = 4; renderApp(); }
+        }, ["4× (4096 × 4096)"])
+      ])
+    ]));
+  }
+
+  // Schnell-Defaults (Format, Anzahl, Stil-Stärke sofern unterstützt)
+  leftCol.appendChild(el("div", { className: "control-group" }, [
+    el("div", { className: "control-label-row" }, [
+      el("span", { textContent: t("aspectLabel") }),
+      el("span", { className: "control-val-badge", textContent: state.aspectRatio })
+    ]),
+    (() => {
+      const grid = el("div", { className: "aspect-grid", role: "group", "aria-label": t("aspectLabel") });
+      cap.aspectRatios.forEach(ar => {
+        grid.appendChild(el("button", {
+          type: "button",
+          className: "aspect-btn",
+          "aria-pressed": state.aspectRatio === ar.id ? "true" : "false",
+          disabled: isNoEngine ? "disabled" : null,
+          onClick: () => { state.aspectRatio = ar.id; renderApp(); }
+        }, [
+          el("span", { className: "aspect-frame", style: `width:${ar.boxW}px;height:${ar.boxH}px;` }),
+          el("span", { textContent: ar.label })
+        ]));
+      });
+      return grid;
+    })()
+  ]));
+
+  // Batch Count
+  leftCol.appendChild(el("div", { className: "control-group" }, [
+    el("div", { className: "control-label-row" }, [
+      el("label", { for: "rng-batch", textContent: t("countLabel") }),
+      el("span", { className: "control-val-badge", textContent: Math.min(state.batchCount, cap.maxBatch) + " / " + cap.maxBatch })
+    ]),
+    el("input", {
+      id: "rng-batch",
+      type: "range",
+      className: "studio-range",
+      min: 1,
+      max: cap.maxBatch,
+      value: Math.min(state.batchCount, cap.maxBatch),
+      disabled: isNoEngine ? "disabled" : null,
+      onInput: (e) => { state.batchCount = Number(e.target.value); renderApp(); }
+    })
+  ]));
+
+  // Style Strength (nur wenn Engine es unterstützt!)
+  if (cap.supportsStyleStrength) {
+    leftCol.appendChild(el("div", { className: "control-group" }, [
+      el("div", { className: "control-label-row" }, [
+        el("label", { for: "rng-style", textContent: t("styleStrengthLabel") }),
+        el("span", { className: "control-val-badge", textContent: state.styleStrength + " %" })
+      ]),
+      el("input", {
+        id: "rng-style",
+        type: "range",
+        className: "studio-range",
+        min: 0, max: 100, value: state.styleStrength,
+        disabled: isNoEngine ? "disabled" : null,
+        onInput: (e) => { state.styleStrength = Number(e.target.value); renderApp(); }
+      })
+    ]));
+  }
+
+  // Datengetriebener Hinweis (Capabilities -> Controls)
+  leftCol.appendChild(el("div", { className: "capability-notice", textContent: state.engineKey === "engineA" ? t("capNoticeA") : t("capNoticeB") }));
+
+  // Ausklappbarer Profi-Modus
+  const proBtn = el("button", {
+    type: "button",
+    className: "pro-toggle-btn",
+    "aria-expanded": state.proOpen ? "true" : "false",
+    onClick: () => {
+      state.proOpen = !state.proOpen;
+      syncControlsFromState();
+      renderApp();
+    }
+  }, [
+    el("span", { textContent: state.proOpen ? t("proOpen") : t("proClosed") }),
+    el("span", { className: "mini-badge", textContent: state.engineKey === "engineA" ? "8 Parameter" : "2 Parameter" })
+  ]);
+  leftCol.appendChild(proBtn);
+
+  if (state.proOpen) {
+    const proDrawer = el("div", { className: "pro-drawer" });
+
+    // Steps (in beiden Engines vorhanden, aber mit unterschiedlichem Wertebereich)
+    if (cap.supportsSteps) {
+      const clampedSteps = Math.max(cap.supportsSteps.min, Math.min(cap.supportsSteps.max, state.steps));
+      proDrawer.appendChild(el("div", { className: "control-group" }, [
+        el("div", { className: "control-label-row" }, [
+          el("label", { for: "rng-steps", textContent: t("stepsLabel") }),
+          el("span", { className: "control-val-badge", textContent: String(clampedSteps) })
+        ]),
+        el("input", {
+          id: "rng-steps",
+          type: "range",
+          className: "studio-range",
+          min: cap.supportsSteps.min,
+          max: cap.supportsSteps.max,
+          value: clampedSteps,
+          onInput: (e) => { state.steps = Number(e.target.value); renderApp(); }
+        })
+      ]));
+    }
+
+    // CFG (nur Engine A)
+    if (cap.supportsCfg) {
+      proDrawer.appendChild(el("div", { className: "control-group" }, [
+        el("div", { className: "control-label-row" }, [
+          el("label", { for: "rng-cfg", textContent: t("cfgLabel") }),
+          el("span", { className: "control-val-badge", textContent: state.cfg.toFixed(1) })
+        ]),
+        el("input", {
+          id: "rng-cfg",
+          type: "range",
+          className: "studio-range",
+          min: cap.supportsCfg.min,
+          max: cap.supportsCfg.max,
+          step: cap.supportsCfg.step,
+          value: state.cfg,
+          onInput: (e) => { state.cfg = Number(e.target.value); renderApp(); }
+        })
+      ]));
+    }
+
+    // Sampler (nur Engine A)
+    if (cap.samplers && cap.samplers.length) {
+      const sel = el("select", {
+        id: "sel-sampler",
+        className: "studio-select",
+        onChange: (e) => { state.sampler = e.target.value; }
+      });
+      cap.samplers.forEach(s => {
+        const opt = el("option", { value: s, textContent: s });
+        if (s === state.sampler) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      proDrawer.appendChild(el("div", { className: "control-group" }, [
+        el("label", { for: "sel-sampler", className: "control-label-row", textContent: t("samplerLabel") }),
+        sel
+      ]));
+    }
+
+    // Seed (beide Engines: fix oder zufällig + kopierbar)
+    proDrawer.appendChild(el("div", { className: "control-group" }, [
+      el("label", { for: "inp-seed", className: "control-label-row", textContent: t("seedLabel") }),
+      el("div", { className: "seed-row" }, [
+        el("input", {
+          id: "inp-seed",
+          type: "text",
+          className: "studio-input",
+          value: state.randomSeed ? "Zufällig (-1)" : state.seed,
+          onInput: (e) => { state.seed = e.target.value; state.randomSeed = false; }
+        }),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          title: "Zufälligen Seed würfeln",
+          onClick: () => {
+            state.seed = String(Math.floor(100000000 + Math.random() * 900000000));
+            state.randomSeed = false;
+            renderApp();
+            showToast("Neuer Seed gewürfelt: " + state.seed);
+          }
+        }, ["🎲"]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          title: "Seed kopieren",
+          onClick: () => showToast("Seed " + state.seed + " in Zwischenablage kopiert")
+        }, ["📋"])
+      ])
+    ]));
+
+    // Negativer Prompt (nur Engine A)
+    if (cap.supportsNegativePrompt) {
+      proDrawer.appendChild(el("div", { className: "control-group" }, [
+        el("label", { for: "inp-neg", className: "control-label-row", textContent: t("negPromptLabel") }),
+        el("textarea", {
+          id: "inp-neg",
+          className: "studio-textarea",
+          rows: 2,
+          textContent: state.negativePrompt,
+          onInput: (e) => { state.negativePrompt = e.target.value; }
+        })
+      ]));
+    }
+
+    // Checkpoint & LoRA (LoRA nur Engine A)
+    if (cap.checkpoints) {
+      const selCkpt = el("select", { className: "studio-select", "aria-label": t("checkpointLabel") });
+      cap.checkpoints.forEach(c => selCkpt.appendChild(el("option", { value: c, textContent: c })));
+      proDrawer.appendChild(el("div", { className: "control-group" }, [
+        el("span", { className: "control-label-row", textContent: t("checkpointLabel") }),
+        selCkpt
+      ]));
+    }
+
+    if (cap.loras) {
+      const selLora = el("select", { className: "studio-select", "aria-label": t("loraLabel") });
+      cap.loras.forEach(l => selLora.appendChild(el("option", { value: l, textContent: l })));
+      proDrawer.appendChild(el("div", { className: "control-group" }, [
+        el("span", { className: "control-label-row", textContent: t("loraLabel") }),
+        selLora
+      ]));
+    }
+
+    // Exakte Auflösung (Read-only abgeleitet aus Aspect Ratio)
+    const activeAr = cap.aspectRatios.find(a => a.id === state.aspectRatio) || cap.aspectRatios[0];
+    proDrawer.appendChild(el("div", { className: "control-label-row" }, [
+      el("span", { textContent: t("resLabel") }),
+      el("span", { className: "control-val-badge", textContent: `${activeAr.w} × ${activeAr.h} px` })
+    ]));
+
+    leftCol.appendChild(proDrawer);
+  }
+
+  wrap.appendChild(leftCol);
+
+  /* --------------------------------------------------------------------------
+     SPALTE MITTE: PROMPT-DOCK, BÜHNE / LEINWAND, 14 VORLAGEN
+     -------------------------------------------------------------------------- */
+  const centerCol = el("section", { className: "imagine-center-col", "aria-label": "Kreativ-Bühne und Prompt" });
+
+  // 1. Prompt-Dock
+  const promptDock = el("div", { className: "prompt-dock" });
+  promptDock.appendChild(el("div", { className: "control-label-row" }, [
+    el("label", { for: "main-prompt-input", textContent: "✍️ " + t("promptLabel") }),
+    el("span", { className: "mini-badge", textContent: "Modus: " + state.mode.toUpperCase() })
+  ]));
+
+  const promptArea = el("textarea", {
+    id: "main-prompt-input",
+    className: "prompt-textarea",
+    placeholder: t("promptPlaceholder"),
+    textContent: state.prompt,
+    onInput: (e) => { state.prompt = e.target.value; }
+  });
+  promptDock.appendChild(promptArea);
+
+  // Interaktiver {motiv}-Platzhalter-Editor
+  const activeTpl = state.templates.find(tp => tp.id === state.activeTemplateId);
+  if (activeTpl && activeTpl.prompt.includes("{motiv}")) {
+    const slotBar = el("div", { className: "placeholder-Slot-bar" }, [
+      el("strong", { textContent: "🧩 " + t("slotLabel") }),
+      el("input", {
+        type: "text",
+        className: "studio-input",
+        style: "max-width:260px;min-height:30px;padding:4px 8px;",
+        value: state.motivValue,
+        "aria-label": "Platzhalter Motiv",
+        onInput: (e) => {
+          state.motivValue = e.target.value;
+          state.prompt = activeTpl.prompt.replace("{motiv}", state.motivValue || "{motiv}");
+          const area = document.getElementById("main-prompt-input");
+          if (area) area.value = state.prompt;
+        }
+      }),
+      el("span", { style: "font-size:11px;color:var(--lb-muted);", textContent: "Vorlage: „" + activeTpl.title + "“" })
+    ]);
+    promptDock.appendChild(slotBar);
+  }
+
+  // Prompt Action Buttons
+  const actionsRow = el("div", { className: "prompt-actions-row" }, [
+    el("div", { className: "demo-harness-group" }, [
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        onClick: () => {
+          state.viewState = "enhancing";
+          syncControlsFromState();
+          renderApp();
+        }
+      }, [t("btnEnhance")]),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        onClick: () => {
+          const newId = "custom-" + (state.templates.length + 1);
+          state.templates.unshift({
+            id: newId,
+            cat: "Eigene",
+            title: "Eigene Vorlage #" + (state.templates.length - 13),
+            defaultMotiv: "deinem Wunschmotiv",
+            prompt: state.prompt.includes("{motiv}") ? state.prompt : state.prompt + " mit {motiv}",
+            grad: "linear-gradient(135deg,#00d9ff,#a855f7)"
+          });
+          state.selectedCategory = "Eigene";
+          renderApp();
+          showToast("Vorlage unter „Eigene“ gespeichert!");
+        }
+      }, [t("btnSaveTemplate")])
+    ]),
+    el("button", {
+      type: "button",
+      className: "cta-generate-btn",
+      disabled: isNoEngine ? "disabled" : null,
+      title: isNoEngine ? "Noch keine lokale Bild-Engine installiert" : "Auftrag in gemeinsame Queue einreihen (Strg+Enter)",
+      onClick: () => {
+        if (isNoEngine) return;
+        state.viewState = state.viewState === "generating" ? "done" : "generating";
+        syncControlsFromState();
+        renderApp();
+      }
+    }, [
+      el("span", { textContent: state.viewState === "generating" ? t("btnGenerating") : t("btnGenerate") }),
+      el("kbd", { className: "shortcut-kbd", textContent: "Ctrl+↵" })
+    ])
+  ]);
+  promptDock.appendChild(actionsRow);
+  centerCol.appendChild(promptDock);
+
+  // 2. Zentrale Bühne (zustandsabhängig: Leer, Generierend, Wartend, Fertig, Fehler, Keine Engine + Inpaint/Upscale)
+  const stageBox = el("div", { className: "stage-container", role: "region", "aria-live": "polite", "aria-label": "Bildbühne" });
+
+  if (state.viewState === "no-engine") {
+    // Zustand 7: Keine Engine installiert (im Ton von LocalAiRuntimeControls.tsx)
+    stageBox.appendChild(el("div", { className: "studio-panel", style: "max-width:600px;text-align:center;align-items:center;" }, [
+      el("div", { style: "font-size:36px;", "aria-hidden": "true", textContent: "🔌" }),
+      el("h3", { style: "font-size:18px;font-weight:800;", textContent: t("noEngineTitle") }),
+      el("p", { style: "font-size:13px;color:var(--lb-muted);line-height:1.5;", textContent: t("noEngineDesc") }),
+      el("div", { className: "capability-notice", style: "text-align:left;width:100%;" }, [
+        el("div", { textContent: "• Laufzeit-Status: stopped / noch nicht installiert (0 MiB belegt)" }),
+        el("div", { textContent: "• Unterstützte lokale Backends: ComfyUI Local (Port 8188), FastSD LCM (ONNX/DirectML)" }),
+        el("div", { textContent: "• Gerätetest: Noch kein Kaltstart- oder Latenz-Probelauf durchgeführt" })
+      ]),
+      el("div", { className: "seed-row" }, [
+        el("button", {
+          type: "button",
+          className: "cta-generate-btn",
+          onClick: () => {
+            state.page = "settings";
+            syncControlsFromState();
+            renderApp();
+          }
+        }, [t("noEngineAction")]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          onClick: () => {
+            state.viewState = "empty";
+            syncControlsFromState();
+            renderApp();
+            showToast("Lokale Engine erkannt und verbunden!");
+          }
+        }, ["Lokale Engine erneut prüfen"])
+      ])
+    ]));
+  } else if (state.viewState === "error") {
+    // Zustand 6: Fehler (Prompt bleibt erhalten, klare Diagnose)
+    stageBox.appendChild(el("div", { className: "studio-panel", style: "max-width:580px;border-color:var(--status-err);" }, [
+      el("div", { className: "panel-header" }, [
+        el("h3", { style: "font-size:16px;font-weight:800;color:var(--status-err);", textContent: "⚠️ " + t("errTitle") }),
+        el("span", { className: "mini-badge", textContent: "CUDA_OUT_OF_MEMORY" })
+      ]),
+      el("p", { style: "font-size:13px;color:var(--lb-muted);line-height:1.5;", textContent: t("errDesc") }),
+      el("div", { className: "seed-row" }, [
+        el("button", {
+          type: "button",
+          className: "cta-generate-btn",
+          onClick: () => { state.viewState = "generating"; syncControlsFromState(); renderApp(); }
+        }, ["↻ " + t("btnRetry")]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          onClick: () => {
+            state.batchCount = 1;
+            state.viewState = "done";
+            syncControlsFromState();
+            renderApp();
+            showToast("Auf 1 Bild reduziert und erfolgreich gerendert!");
+          }
+        }, ["⚡ " + t("btnQuickFix")])
+      ])
+    ]));
+  } else if (state.viewState === "waiting") {
+    // Zustand 4: Wartend in der gemeinsamen Queue
+    stageBox.appendChild(el("div", { className: "canvas-viewport" }, [
+      el("div", { className: "queue-priority-banner" }, [
+        el("div", {}, [
+          el("strong", { textContent: "⏳ Wartet in der gemeinsamen Engine-Queue (Platz 2) · " }),
+          el("span", { textContent: t("queueBannerWait") })
+        ]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          onClick: () => { state.page = "queue"; syncControlsFromState(); renderApp(); }
+        }, ["Queue öffnen →"])
+      ]),
+      el("div", { className: "capability-notice", style: "max-width:640px;" }, [
+        el("strong", { textContent: "Warum wartet dieser Auftrag? " }),
+        el("span", { textContent: "LastBrowser teilt sich eine lokale Bild-Engine zwischen Chat und Imagine. Laufende oder neue Aufträge aus dem sichtbaren Chat haben Vorrang, damit dein Gespräch flüssig bleibt." })
+      ]),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        onClick: () => { state.viewState = "empty"; syncControlsFromState(); renderApp(); }
+      }, ["✕ " + t("btnCancelJob")])
+    ]));
+  } else if (state.viewState === "generating") {
+    // Zustand 3: Generierend (Fortschritt + Live-Vorschau schält sich aus Rauschen)
+    const viewport = el("div", { className: "canvas-viewport" });
+    viewport.appendChild(el("div", { className: "queue-priority-banner" }, [
+      el("span", { textContent: "⚡ " + t("queueBannerGen") }),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        onClick: () => { state.viewState = "empty"; syncControlsFromState(); renderApp(); }
+      }, ["✕ " + t("btnCancelJob")])
+    ]));
+    viewport.appendChild(el("div", { className: "progress-bar-track" }, [
+      el("div", { className: "progress-bar-fill", style: "width:68%;" })
+    ]));
+
+    const cnv = el("canvas", {
+      className: "imagine-main-canvas",
+      width: 520,
+      height: 320,
+      role: "img",
+      "aria-label": "Live-Vorschau während der Generierung: " + state.prompt
+    });
+    renderProceduralArtwork(cnv, {
+      hue: 198,
+      noiseLevel: cap.supportsLivePreview ? 0.42 : 0.85,
+      caption: cap.supportsLivePreview ? "LIVE-LATENT-VORSCHAU · SCHRITT 19/28" : "ENGINE B LIEFERT VORSCHAU ERST BEI 100 %"
+    });
+    viewport.appendChild(cnv);
+    stageBox.appendChild(viewport);
+  } else {
+    // Zustand 1 (Leer/Erststart mit interaktiver Modus-Bühne) oder Zustand 5 (Fertig mit Ausgabe-Aktionen)
+    const viewport = el("div", { className: "canvas-viewport", style: "width:100%;" });
+
+    if (state.mode === "inpaint") {
+      // Interaktives Inpainting-Canvas (Nutzer kann direkt mit der Maus darauf zeichnen!)
+      const cnv = el("canvas", {
+        className: "imagine-main-canvas",
+        width: 560,
+        height: 340,
+        style: "cursor:crosshair;",
+        role: "img",
+        "aria-label": "Inpainting-Leinwand zum Zeichnen der Maske: " + state.prompt
+      });
+      renderProceduralArtwork(cnv, { hue: 195, caption: "INPAINTING-BÜHNE · MIT MAUS AUF DEM BILD MALEN" });
+      const ctx = cnv.getContext("2d");
+      // Initial sample mask stroke
+      ctx.fillStyle = state.inpaintInverted ? "rgba(244, 63, 94, 0.42)" : "rgba(0, 217, 255, 0.48)";
+      ctx.beginPath();
+      ctx.arc(280, 155, 46, 0, Math.PI * 2);
+      ctx.fill();
+
+      let painting = false;
+      cnv.addEventListener("pointerdown", (ev) => {
+        painting = true;
+        const rect = cnv.getBoundingClientRect();
+        const x = (ev.clientX - rect.left) * (cnv.width / rect.width);
+        const y = (ev.clientY - rect.top) * (cnv.height / rect.height);
+        ctx.fillStyle = state.inpaintTool === "eraser" ? "rgba(10, 20, 40, 0.85)" : "rgba(0, 217, 255, 0.55)";
+        ctx.beginPath();
+        ctx.arc(x, y, state.inpaintBrushSize, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      cnv.addEventListener("pointermove", (ev) => {
+        if (!painting) return;
+        const rect = cnv.getBoundingClientRect();
+        const x = (ev.clientX - rect.left) * (cnv.width / rect.width);
+        const y = (ev.clientY - rect.top) * (cnv.height / rect.height);
+        ctx.fillStyle = state.inpaintTool === "eraser" ? "rgba(10, 20, 40, 0.85)" : "rgba(0, 217, 255, 0.55)";
+        ctx.beginPath();
+        ctx.arc(x, y, state.inpaintBrushSize, 0, Math.PI * 2);
+        ctx.fill();
+      });
+      window.addEventListener("pointerup", () => { painting = false; }, { once: true });
+      viewport.appendChild(cnv);
+    } else if (state.mode === "upscale") {
+      // Interaktiver Vorher/Nachher-Upscale-Vergleich
+      const cnv = el("canvas", {
+        className: "imagine-main-canvas",
+        width: 560,
+        height: 340,
+        role: "img",
+        "aria-label": "Upscale Vorher/Nachher-Vergleich: " + state.prompt
+      });
+      renderProceduralArtwork(cnv, { hue: 175, upscaleSplit: state.upscaleSplit });
+      viewport.appendChild(cnv);
+      viewport.appendChild(el("div", { className: "control-group", style: "width:100%;max-width:420px;" }, [
+        el("div", { className: "control-label-row" }, [
+          el("label", { for: "rng-upscale-split", textContent: "Vorher / Nachher Trennlinie verschieben" }),
+          el("span", { className: "control-val-badge", textContent: state.upscaleSplit + " %" })
+        ]),
+        el("input", {
+          id: "rng-upscale-split",
+          type: "range",
+          className: "studio-range",
+          min: 5, max: 95, value: state.upscaleSplit,
+          onInput: (e) => {
+            state.upscaleSplit = Number(e.target.value);
+            renderProceduralArtwork(cnv, { hue: 175, upscaleSplit: state.upscaleSplit });
+          }
+        })
+      ]));
+    } else if (state.viewState === "done") {
+      // Zustand 5: Fertig (Ergebnis-Raster + Glanz-Banner + Alle 8 Ausgabe-Aktionen)
+      viewport.appendChild(el("div", { className: "capability-notice", style: "width:100%;max-width:720px;display:flex;justify-content:space-between;align-items:center;" }, [
+        el("span", { textContent: "✨ Glanz-Moment: Automatisch gespeichert unter „" + state.outputPath + "2026-10-15_cyberpunk_" + state.seed + ".png“" }),
+        el("span", { className: "mini-badge", textContent: "Seed: " + state.seed })
+      ]));
+
+      const grid = el("div", { className: "results-grid" });
+      const count = Math.min(state.batchCount, cap.maxBatch);
+      for (let i = 0; i < count; i++) {
+        const card = el("div", {
+          className: "result-card" + (state.selectedResultIndex === i ? " selected" : ""),
+          tabIndex: 0,
+          role: "button",
+          "aria-label": `Ergebnisbild ${i + 1} auswählen (${state.prompt})`,
+          onClick: () => { state.selectedResultIndex = i; renderApp(); }
+        });
+        const cnv = el("canvas", { width: 360, height: 240, "aria-label": state.prompt });
+        renderProceduralArtwork(cnv, { hue: (195 + i * 38) % 360, caption: `VARIANTE #${i + 1} · SEED ${Number(state.seed) + i}` });
+        card.appendChild(cnv);
+        grid.appendChild(card);
+      }
+      viewport.appendChild(grid);
+
+      // Vollständige Ausgabe-Aktionsleiste (Abschnitt 2.9)
+      const outBar = el("div", { className: "output-action-bar", role: "toolbar", "aria-label": "Bild-Ausgabeaktionen" });
+      const actions = [
+        { icon: "💾", label: t("actSaveAs"), msg: "Dialog „Speichern unter …“ geöffnet" },
+        { icon: "📋", label: t("actCopyImg"), msg: "Bild in die System-Zwischenablage kopiert" },
+        { icon: "💬", label: t("actSendChat"), msg: "Bild direkt an den aktiven Sidekick-Chat übergeben" },
+        { icon: "🪄", label: t("actVariant"), fn: () => { state.mode = "img2img"; syncControlsFromState(); renderApp(); showToast("Bild als Bild→Bild-Variante übernommen"); } },
+        { icon: "🔑", label: t("actCopyMeta"), msg: "Prompt + Seed (" + state.seed + ") kopiert" },
+        { icon: "↻", label: t("actRerun"), fn: () => { state.viewState = "generating"; syncControlsFromState(); renderApp(); } },
+        { icon: "📂", label: t("actShowFolder"), msg: "Ordner „" + state.outputPath + "“ im Dateimanager geöffnet" },
+        { icon: "🗑️", label: t("actDelete"), fn: () => { state.viewState = "empty"; syncControlsFromState(); renderApp(); showToast("Ergebnis verworfen"); } }
+      ];
+      actions.forEach(a => {
+        outBar.appendChild(el("button", {
+          type: "button",
+          className: "icon-btn",
+          onClick: a.fn || (() => showToast(a.msg))
+        }, [el("span", { "aria-hidden": "true", textContent: a.icon }), el("span", { textContent: a.label })]));
+      });
+      viewport.appendChild(outBar);
+    } else {
+      // Zustand 1: Leer / Erststart (Einladende Studio-Vorschau)
+      const cnv = el("canvas", {
+        className: "imagine-main-canvas",
+        width: 560,
+        height: 310,
+        role: "img",
+        "aria-label": "Vorschau der ausgewählten Vorlage: " + state.prompt
+      });
+      renderProceduralArtwork(cnv, { hue: 205, caption: "BEREIT · DRÜCKE STRG+ENTER ODER WÄHLE EINE VORLAGE UNTEN" });
+      viewport.appendChild(cnv);
+    }
+
+    stageBox.appendChild(viewport);
+  }
+  centerCol.appendChild(stageBox);
+
+  // 3. Prompt-Vorlagen (14 Beispielvorlagen in 6 Kategorien + Eigene)
+  const tplPanel = el("div", { className: "studio-panel" });
+  const cats = ["Alle", "Foto", "Illustration", "Icon", "Wallpaper", "Produkt", "Comic", "Eigene"];
+  const catChips = el("div", { className: "category-chips", role: "group", "aria-label": "Vorlagen-Kategorien" });
+  cats.forEach(c => {
+    catChips.appendChild(el("button", {
+      type: "button",
+      className: "cat-chip",
+      "aria-pressed": state.selectedCategory === c ? "true" : "false",
+      onClick: () => { state.selectedCategory = c; renderApp(); }
+    }, [c]));
+  });
+
+  tplPanel.appendChild(el("div", { className: "templates-header-bar" }, [
+    el("h3", { className: "panel-title", textContent: "✨ " + t("templatesTitle") }),
+    catChips
+  ]));
+
+  const tplGrid = el("div", { className: "template-grid" });
+  const visibleTemplates = state.templates.filter(item => state.selectedCategory === "Alle" || item.cat === state.selectedCategory);
+  visibleTemplates.forEach(item => {
+    const card = el("button", {
+      type: "button",
+      className: "template-card",
+      "aria-pressed": state.activeTemplateId === item.id ? "true" : "false",
+      onClick: () => {
+        state.activeTemplateId = item.id;
+        state.motivValue = item.defaultMotiv;
+        state.prompt = item.prompt.replace("{motiv}", item.defaultMotiv);
+        renderApp();
+        showToast("Vorlage „" + item.title + "“ geladen");
+      }
+    }, [
+      el("div", { className: "template-preview-swatch", style: `background:${item.grad};` }, [
+        el("span", { className: "mini-badge", textContent: item.cat }),
+        el("span", { textContent: "{motiv}" })
+      ]),
+      el("div", { className: "template-card-title", textContent: item.title }),
+      el("div", { className: "template-card-snippet", textContent: item.prompt })
+    ]);
+    tplGrid.appendChild(card);
+  });
+  tplPanel.appendChild(tplGrid);
+  centerCol.appendChild(tplPanel);
+
+  wrap.appendChild(centerCol);
+
+  /* --------------------------------------------------------------------------
+     SPALTE RECHTS: SIDEKICK PROMPT-ASSISTENT (Avatar v2 + Diff + Modellwahl)
+     -------------------------------------------------------------------------- */
+  const rightCol = el("aside", { className: "studio-panel imagine-sidekick-col", "aria-label": t("sidekickTitle") });
+  const avState = mapViewStateToAvatarState();
+  const pInfo = PERSONAS[state.persona] || PERSONAS.spark;
+
+  const skHeader = el("div", { className: "sidekick-header-card" }, [
+    (() => {
+      const stg = el("div", { className: "avatar-v2-stage" });
+      stg.appendChild(createSidekickAvatarSVG(state.persona, avState));
+      return stg;
+    })(),
+    el("div", { style: "display:flex;flex-direction:column;gap:3px;" }, [
+      el("div", { style: "display:flex;align-items:center;gap:6px;" }, [
+        el("strong", { style: "font-size:15px;", textContent: pInfo.name }),
+        el("span", { className: "mini-badge", textContent: "v2 · " + avState.toUpperCase() })
+      ]),
+      el("span", { style: "font-size:12px;color:var(--lb-muted);", textContent: pInfo.role }),
+      el("span", { style: "font-size:11px;color:var(--lb-accent);", textContent: "Verbessert Prompts & Lichtstimmung" })
+    ])
+  ]);
+  rightCol.appendChild(skHeader);
+
+  // Persona Quick-Switcher (analog CompanionPicker.tsx)
+  const personaBar = el("div", { className: "category-chips", role: "group", "aria-label": "Sidekick Persona wählen" });
+  Object.entries(PERSONAS).forEach(([k, val]) => {
+    personaBar.appendChild(el("button", {
+      type: "button",
+      className: "cat-chip",
+      "aria-pressed": state.persona === k ? "true" : "false",
+      onClick: () => { state.persona = k; syncControlsFromState(); renderApp(); }
+    }, [val.name]));
+  });
+  rightCol.appendChild(personaBar);
+
+  // Prompt-Diff-Ansicht (Alt -> Neu) mit Übernehmen oder Verwerfen
+  const diffBox = el("div", { className: "diff-box" });
+  diffBox.appendChild(el("div", { className: "control-label-row" }, [
+    el("strong", { textContent: "🔍 " + t("diffTitle") }),
+    el("span", { className: "mini-badge", textContent: state.viewState === "enhancing" ? "Vorschlag bereit" : "Live-Assistent" })
+  ]));
+
+  const diffTextP = el("p", {}, [
+    "Kinoreifes 85mm-Porträt von ",
+    el("span", { className: "diff-del", textContent: "einer Cyberpunk-Uhrmacherin" }),
+    " ",
+    el("span", { className: "diff-ins", textContent: state.motivValue + " mit filigraner Messing-Lupe" }),
+    " im warmen Neonregen von Tokio, ",
+    el("span", { className: "diff-ins", textContent: "volumetrisches Gegenlicht, Cyan-Amber-Farbkorrektur, " }),
+    "feine Regentropfen auf Glas, Bokeh-Lichter, Kodak Portra 400"
+  ]);
+  diffBox.appendChild(diffTextP);
+
+  // Stil-Ergänzungs-Chips
+  const styleChips = el("div", { className: "category-chips" });
+  ["+ Volumetrisches Licht", "+ 85mm f/1.4 Bokeh", "+ Isometric Clay", "+ Studio Ghibli Gouache"].forEach(tag => {
+    styleChips.appendChild(el("button", {
+      type: "button",
+      className: "cat-chip",
+      onClick: () => {
+        state.prompt = state.prompt + ", " + tag.replace("+ ", "");
+        renderApp();
+        showToast("Stil-Ergänzung „" + tag + "“ angehängt");
+      }
+    }, [tag]));
+  });
+  diffBox.appendChild(styleChips);
+
+  diffBox.appendChild(el("div", { className: "seed-row" }, [
+    el("button", {
+      type: "button",
+      className: "icon-btn",
+      style: "flex:1;border-color:var(--status-ok);",
+      onClick: () => {
+        state.prompt = `Kinoreifes 85mm-Porträt von ${state.motivValue} mit filigraner Messing-Lupe im warmen Neonregen von Tokio, volumetrisches Gegenlicht, Cyan-Amber-Farbkorrektur, feine Regentropfen auf Glas, Bokeh-Lichter, Kodak Portra 400`;
+        state.viewState = "empty";
+        syncControlsFromState();
+        renderApp();
+        showToast("Verbesserten Prompt von " + pInfo.name + " übernommen!");
+      }
+    }, [t("btnApplyDiff")]),
+    el("button", {
+      type: "button",
+      className: "icon-btn",
+      onClick: () => {
+        state.viewState = "empty";
+        syncControlsFromState();
+        renderApp();
+        showToast("Vorschlag verworfen – Original-Prompt behalten");
+      }
+    }, [t("btnDiscardDiff")])
+  ]));
+  rightCol.appendChild(diffBox);
+
+  // Eigene Modellwahl des Prompt-Assistenten (analog model-picker-options.ts)
+  rightCol.appendChild(el("div", { className: "control-label-row" }, [
+    el("strong", { fontSize: "12px", textContent: "🧠 " + t("sidekickModelLabel") }),
+    el("span", { className: "mini-badge", textContent: "Provider-Gruppiert" })
+  ]));
+
+  const modelList = el("div", { className: "model-picker-list", role: "radiogroup", "aria-label": t("sidekickModelLabel") });
+  let lastGroup = "";
+  ASSISTANT_MODELS.forEach(m => {
+    if (m.group !== lastGroup) {
+      lastGroup = m.group;
+      modelList.appendChild(el("div", { className: "model-group-label", textContent: m.group }));
+    }
+    const isLocked = Boolean(m.disabledReason);
+    const card = el("button", {
+      type: "button",
+      role: "radio",
+      className: "model-option-card",
+      "aria-checked": state.assistantModel === m.id ? "true" : "false",
+      disabled: isLocked ? "disabled" : null,
+      onClick: () => {
+        if (isLocked) return;
+        state.assistantModel = m.id;
+        renderApp();
+        showToast("Assistenten-Modell gewechselt zu: " + m.name);
+      }
+    }, [
+      el("div", { style: "display:flex;justify-content:space-between;align-items:center;gap:6px;width:100%;" }, [
+        el("strong", { style: "font-size:12px;", textContent: m.name }),
+        el("div", { className: "model-badges-row" }, [
+          m.isDefault ? el("span", { className: "mini-badge", style: "border-color:var(--lb-accent);", textContent: "DEFAULT" }) : null,
+          el("span", { className: "mini-badge", textContent: m.deployment.toUpperCase() })
+        ])
+      ]),
+      el("span", {
+        style: "font-size:11px;color:var(--lb-muted);",
+        textContent: isLocked ? "🔒 Gesperrt: " + m.reasonText : "✓ " + m.reasonText
+      })
+    ]);
+    modelList.appendChild(card);
+  });
+  rightCol.appendChild(modelList);
+
+  wrap.appendChild(rightCol);
+  return wrap;
+}
+
+/* ============================================================================
+   SEITE 2: „WARTESCHLANGE“ (GEMEINSAME ENGINE-QUEUE MIT CHAT-VORRANG)
+   ============================================================================ */
+function buildQueuePage() {
+  const wrap = el("div", { className: "subpage-container" });
+
+  wrap.appendChild(el("div", { className: "studio-panel" }, [
+    el("div", { className: "panel-header" }, [
+      el("h2", { style: "font-size:20px;font-weight:800;", textContent: "⏳ Gemeinsame Engine-Warteschlange (Chat & Imagine)" }),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        onClick: () => {
+          state.queueItems = state.queueItems.length ? [] : [
+            { id: "q-101", origin: "chat-fg", originLabel: "Sichtbarer Chat (Vordergrund)", prompt: "Isometrisches Netzwerk-Diagramm einer Zero-Trust-Architektur", status: "running", progress: 74, priorityReason: "Läuft zu Ende, wird nicht abgebrochen (Sichtbarer Chat)" },
+            { id: "q-103", origin: "imagine", originLabel: "Imagine Studio", prompt: state.prompt, status: "queued", progress: 0, priorityReason: "Wie ein Hintergrund-Auftrag eingereiht, solange ein Chat vorn ist" }
+          ];
+          renderApp();
+        }
+      }, [state.queueItems.length ? "Demo: Leeren Zustand zeigen" : "Demo: Beispiel-Queue wiederherstellen"])
+    ]),
+    el("div", { className: "capability-notice" }, [
+      el("strong", { textContent: "Prioritäts-Regelwerk laut Konzept (docs/concepts/imagine.md): " }),
+      el("span", { textContent: "1. Sichtbarer Chat (schon laufend) läuft ununterbrochen zu Ende. · 2. Sichtbarer Chat (neuer Auftrag) rückt als Nächstes vor alle wartenden Hintergrund-Aufträge. · 3. Hintergrund-Chats und Imagine-Aufträge reihen sich dahinter in der Reihenfolge des Absendens ein." })
+    ])
+  ]));
+
+  if (state.queueItems.length === 0) {
+    wrap.appendChild(el("div", { className: "studio-panel", style: "align-items:center;text-align:center;padding:48px 20px;" }, [
+      el("div", { style: "font-size:36px;", textContent: "✨" }),
+      el("h3", { textContent: "Die lokale Bild-Queue ist komplett frei" }),
+      el("p", { style: "color:var(--lb-muted);font-size:13px;", textContent: "Neue Aufträge aus Imagine oder dem Sidekick-Chat starten sofort ohne Wartezeit." }),
+      el("button", {
+        type: "button",
+        className: "cta-generate-btn",
+        onClick: () => { state.page = "create"; syncControlsFromState(); renderApp(); }
+      }, ["Jetzt Bild erzeugen"])
+    ]));
+    return wrap;
+  }
+
+  const tablePanel = el("div", { className: "studio-panel" });
+  const tbl = el("table", { className: "queue-table", "aria-label": "Warteschlange der Bild-Engine" });
+  tbl.appendChild(el("thead", {}, [
+    el("tr", {}, [
+      el("th", { textContent: "Platz" }),
+      el("th", { textContent: "Herkunft" }),
+      el("th", { textContent: "Prompt / Auftrag" }),
+      el("th", { textContent: "Begründung der Reihenfolge" }),
+      el("th", { textContent: "Aktionen" })
+    ])
+  ]));
+
+  const tbody = el("tbody");
+  state.queueItems.forEach((item, idx) => {
+    const canMoveUp = idx > 1 && item.origin === "imagine" && state.queueItems[idx - 1].origin !== "chat-fg";
+    tbody.appendChild(el("tr", {}, [
+      el("td", {}, [el("span", { className: "mini-badge", textContent: item.status === "running" ? "AKTIV (#1)" : "#" + (idx + 1) })]),
+      el("td", {}, [el("strong", { textContent: item.originLabel })]),
+      el("td", { textContent: item.prompt }),
+      el("td", { style: "color:var(--lb-muted);font-size:12px;", textContent: item.priorityReason }),
+      el("td", {}, [
+        el("div", { className: "seed-row" }, [
+          el("button", {
+            type: "button",
+            className: "icon-btn",
+            disabled: canMoveUp ? null : "disabled",
+            title: canMoveUp ? "Vor Hintergrund-Auftrag ziehen" : "Nicht vor Aufträge des sichtbaren Vordergrund-Chats verschiebbar",
+            onClick: () => {
+              if (!canMoveUp) return;
+              const tmp = state.queueItems[idx - 1];
+              state.queueItems[idx - 1] = state.queueItems[idx];
+              state.queueItems[idx] = tmp;
+              renderApp();
+            }
+          }, ["↑ Nach oben"]),
+          el("button", {
+            type: "button",
+            className: "icon-btn",
+            onClick: () => {
+              state.queueItems.splice(idx, 1);
+              renderApp();
+              showToast("Auftrag aus der Queue entfernt");
+            }
+          }, ["✕ Abbrechen"])
+        ])
+      ])
+    ]));
+  });
+  tbl.appendChild(tbody);
+  tablePanel.appendChild(tbl);
+  wrap.appendChild(tablePanel);
+  return wrap;
+}
+
+/* ============================================================================
+   SEITE 3: „GALERIE / VERLAUF“ (FILTER, DETAILANSICHT, MEHRFACHAUSWAHL)
+   ============================================================================ */
+function buildGalleryPage() {
+  const wrap = el("div", { className: "subpage-container" });
+
+  // Filter Bar
+  const filterPanel = el("div", { className: "studio-panel" }, [
+    el("div", { className: "templates-header-bar" }, [
+      el("h2", { style: "font-size:20px;font-weight:800;", textContent: "🖼️ Lokale Galerie & Verlauf (" + state.outputPath + ")" }),
+      el("div", { className: "seed-row" }, [
+        el("select", {
+          className: "demo-select",
+          "aria-label": "Nach Modus filtern",
+          onChange: (e) => { state.galleryFilterMode = e.target.value; renderApp(); }
+        }, [
+          el("option", { value: "all", textContent: "Alle Modi" }),
+          el("option", { value: "txt2img", textContent: "Text → Bild" }),
+          el("option", { value: "img2img", textContent: "Bild → Bild" }),
+          el("option", { value: "inpaint", textContent: "Inpainting" }),
+          el("option", { value: "upscale", textContent: "Upscale" })
+        ]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          "aria-pressed": state.galleryFavoritesOnly ? "true" : "false",
+          onClick: () => { state.galleryFavoritesOnly = !state.galleryFavoritesOnly; renderApp(); }
+        }, ["★ Nur Favoriten"]),
+        el("button", {
+          type: "button",
+          className: "icon-btn",
+          onClick: () => showToast(state.selectedGalleryIds.length + " ausgewählte Bilder exportiert")
+        }, ["Auswahl exportieren (" + state.selectedGalleryIds.length + ")"])
+      ])
+    ])
+  ]);
+  wrap.appendChild(filterPanel);
+
+  const filtered = state.galleryItems.filter(g => {
+    if (state.galleryFilterMode !== "all" && g.mode !== state.galleryFilterMode) return false;
+    if (state.galleryFavoritesOnly && !g.fav) return false;
+    return true;
+  });
+
+  const grid = el("div", { className: "gallery-grid" });
+  filtered.forEach(item => {
+    const isSel = state.selectedGalleryIds.includes(item.id);
+    const card = el("div", { className: "studio-panel" + (isSel ? " selected" : ""), style: "padding:12px;" });
+    const cnv = el("canvas", { width: 320, height: 200, className: "imagine-main-canvas", "aria-label": item.prompt });
+    renderProceduralArtwork(cnv, { hue: item.hue, caption: `${item.mode.toUpperCase()} · SEED ${item.seed}` });
+    card.appendChild(cnv);
+
+    card.appendChild(el("div", { style: "display:flex;justify-content:space-between;align-items:center;" }, [
+      el("strong", { style: "font-size:13px;", textContent: item.title }),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        "aria-label": "Favorit umschalten",
+        onClick: () => { item.fav = !item.fav; renderApp(); }
+      }, [item.fav ? "★" : "☆"])
+    ]));
+
+    card.appendChild(el("p", { style: "font-size:11px;color:var(--lb-muted);", textContent: `${item.date} · ${item.engine} · Format ${item.aspect}` }));
+
+    card.appendChild(el("div", { className: "seed-row" }, [
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        "aria-pressed": isSel ? "true" : "false",
+        onClick: () => {
+          if (isSel) state.selectedGalleryIds = state.selectedGalleryIds.filter(i => i !== item.id);
+          else state.selectedGalleryIds.push(item.id);
+          renderApp();
+        }
+      }, [isSel ? "☑ Ausgewählt" : "☐ Wählen"]),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        onClick: () => {
+          state.prompt = item.prompt;
+          state.seed = item.seed;
+          state.page = "create";
+          syncControlsFromState();
+          renderApp();
+          showToast("Metadaten & Prompt in die Bühne geladen");
+        }
+      }, ["↻ Im Studio öffnen"])
+    ]));
+    grid.appendChild(card);
+  });
+  wrap.appendChild(grid);
+  return wrap;
+}
+
+/* ============================================================================
+   SEITE 4: „PLUGIN-EINSTELLUNGEN“ (PFAD, FORMAT, METADATEN, ENGINE)
+   ============================================================================ */
+function buildSettingsPage() {
+  const wrap = el("div", { className: "subpage-container", style: "max-width:860px;" });
+  const panel = el("div", { className: "studio-panel" });
+
+  panel.appendChild(el("h2", { style: "font-size:20px;font-weight:800;", textContent: "⚙️ Imagine Plugin-Einstellungen" }));
+
+  // Lokaler Ausgabepfad
+  panel.appendChild(el("div", { className: "control-group" }, [
+    el("label", { for: "inp-outpath", className: "control-label-row", textContent: "Lokaler Ausgabepfad (automatische Speicherung)" }),
+    el("div", { className: "seed-row" }, [
+      el("input", {
+        id: "inp-outpath",
+        type: "text",
+        className: "studio-input",
+        value: state.outputPath,
+        onInput: (e) => { state.outputPath = e.target.value; }
+      }),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        onClick: () => showToast("System-Ordnerauswahl geöffnet")
+      }, ["📂 Ordner wählen …"]),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        onClick: () => { state.outputPath = "Bilder/LastBrowser Imagine/"; renderApp(); showToast("Standardpfad wiederhergestellt"); }
+      }, ["Standard wiederherstellen"])
+    ])
+  ]));
+
+  // Dateiformat & Metadaten
+  panel.appendChild(el("div", { className: "control-group" }, [
+    el("span", { className: "control-label-row", textContent: "Dateiformat & eingebettete EXIF/PNG-Metadaten (Prompt, Seed, Modell)" }),
+    el("div", { className: "seed-row" }, [
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        "aria-pressed": state.outputFormat === "PNG",
+        onClick: () => { state.outputFormat = "PNG"; renderApp(); }
+      }, ["PNG (Verlustfrei, tEXt-Chunks)"]),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        "aria-pressed": state.outputFormat === "WebP",
+        onClick: () => { state.outputFormat = "WebP"; renderApp(); }
+      }, ["WebP (Kompakt, EXIF)"]),
+      el("button", {
+        type: "button",
+        className: "icon-btn",
+        "aria-pressed": state.embedMetadata ? "true" : "false",
+        onClick: () => { state.embedMetadata = !state.embedMetadata; renderApp(); }
+      }, [state.embedMetadata ? "☑ Metadaten einbetten: Ja" : "☐ Metadaten einbetten: Nein"])
+    ])
+  ]));
+
+  // Erkannte lokale Bild-Engine (im Stil von LocalAiRuntimeControls.tsx)
+  const cap = ENGINE_CAPABILITIES[state.engineKey];
+  panel.appendChild(el("div", { className: "capability-notice" }, [
+    el("strong", { textContent: "Erkannte lokale Bild-Engine: " + cap.name }),
+    el("div", { textContent: `• Status: ready (verifiziert) · Freier VRAM: ${cap.vramFreeMiB} MiB · Kaltstart: ${cap.coldStartMs} ms · Schritt-Latenz: ${cap.stepLatencyMs} ms/Step` }),
+    el("div", { textContent: "• Datenschutz-Garantie: Kein Konto, kein Cloud-Upload, keine Telemetrie." })
+  ]));
+
+  wrap.appendChild(panel);
+  return wrap;
+}
+
+/* ============================================================================
+   SEITE 5: EINSTIEGSPUNKT „UNIFIED EXTENSION HUB“ (NEUER REITER „PLUGINS“)
+   ============================================================================ */
+function buildHubPage() {
+  const wrap = el("div", { className: "subpage-container" });
+  const dialog = el("div", { className: "eh-dialog-mock", role: "dialog", "aria-modal": "false", "aria-label": "Extensions & Plugin Hub" });
+
+  dialog.appendChild(el("div", { className: "panel-header" }, [
+    el("div", {}, [
+      el("h2", { style: "font-size:19px;font-weight:800;", textContent: "Extensions, Skills, MCP & Plugins Hub" }),
+      el("p", { style: "font-size:12px;color:var(--lb-muted);", textContent: "Abgeleitet aus UnifiedExtensionHub.tsx: Neuer vierter Reiter „Plugins“ trennt native LastBrowser-Werkzeuge sauber von Chrome-WebExtensions und MCP-Brücken." })
+    ]),
+    el("span", { className: "mini-badge", textContent: "UnifiedExtensionHub.tsx" })
+  ]));
+
+  // 4 Reiter: Erweiterungen | Skills | Verbindungen · MCP | NEU: Plugins
+  const tabs = el("nav", { className: "eh-tabs", role: "tablist" }, [
+    el("button", { type: "button", className: "eh-tab", role: "tab", "aria-selected": "false" }, ["🧩 Erweiterungen (4)"]),
+    el("button", { type: "button", className: "eh-tab", role: "tab", "aria-selected": "false" }, ["✨ Skills (11)"]),
+    el("button", { type: "button", className: "eh-tab", role: "tab", "aria-selected": "false" }, ["🌐 Verbindungen · MCP (10)"]),
+    el("button", { type: "button", className: "eh-tab is-active", role: "tab", "aria-selected": "true" }, ["🎨 Plugins (1 · Neu)"])
+  ]);
+  dialog.appendChild(tabs);
+
+  // Gegenüberstellung: Imagine (Natives Plugin) vs. ComfyUI Image Generation (MCP-Skill)
+  const grid = el("div", { className: "eh-card-grid" }, [
+    el("article", { className: "eh-card is-featured" }, [
+      el("div", {}, [
+        el("div", { className: "panel-header" }, [
+          el("strong", { style: "font-size:16px;", textContent: "🎨 Imagine — Lokales Kreativstudio" }),
+          el("span", { className: "mini-badge", style: "border-color:var(--lb-accent);", textContent: "PLUGIN · BETA" })
+        ]),
+        el("p", { style: "font-size:13px;color:var(--lb-muted);margin-top:6px;line-height:1.45;", textContent: "Eigenständiges One-Page-Werkzeug in LastBrowser zum Erzeugen und Bearbeiten von Bildern (Text→Bild, Bild→Bild, Inpainting, Upscale) mit deiner lokal installierten Engine und gemeinsamer Chat-Queue." })
+      ]),
+      el("div", { className: "seed-row" }, [
+        el("span", { className: "mini-badge", textContent: state.viewState === "no-engine" ? "Status: Keine Engine" : "Status: Aktiv (Engine bereit)" }),
+        el("button", {
+          type: "button",
+          className: "cta-generate-btn",
+          style: "padding:6px 14px;font-size:12px;",
+          onClick: () => { state.page = "create"; syncControlsFromState(); renderApp(); }
+        }, ["Imagine öffnen →"])
+      ])
+    ]),
+    el("article", { className: "eh-card" }, [
+      el("div", {}, [
+        el("div", { className: "panel-header" }, [
+          el("strong", { style: "font-size:15px;", textContent: "🔌 ComfyUI Image Generation (MCP-Verbindung)" }),
+          el("span", { className: "mini-badge", textContent: "REITER: VERBINDUNGEN · MCP" })
+        ]),
+        el("p", { style: "font-size:13px;color:var(--lb-muted);margin-top:6px;line-height:1.45;", textContent: "Wie bleiben beide nebeneinander verständlich? „ComfyUI Image Generation“ (`mcp-comfyui`) im Reiter MCP stellt die technische REST-API-Brücke für Agenten-Tool-Calls bereit. „Imagine“ im Reiter Plugins ist die visuelle Studio-Oberfläche, die dieselbe lokale Engine & Queue nutzt." })
+      ]),
+      el("div", { className: "seed-row" }, [
+        el("span", { className: "mini-badge", textContent: "Kategorie: design · MCP-Bridge" })
+      ])
+    ])
+  ]);
+  dialog.appendChild(grid);
+  wrap.appendChild(dialog);
+  return wrap;
+}
+
+/* ============================================================================
+   SEITE 6: EINSTIEGSPUNKT „SIDEKICKSIDEBAR DRAWER“ (UTILITIES & TOOLS)
+   ============================================================================ */
+function buildDrawerPage() {
+  const wrap = el("div", { className: "subpage-container" });
+  wrap.appendChild(el("div", { className: "studio-panel" }, [
+    el("h2", { style: "font-size:19px;font-weight:800;", textContent: "🗂️ Einstiegspunkte in der SidekickSidebar (Drawer)" }),
+    el("p", { style: "font-size:13px;color:var(--lb-muted);", textContent: "Laut Konzept liegt Imagine sowohl unter „Browser Utilities“ (neben Downloads & Verlauf) als auch unter „Developer and system tools“ (neben Terminal & Settings). Beide Karten nutzen exakt die bestehende Klasse .sidebar-drawer-card und öffnen dieselbe One-Page-Ansicht." })
+  ]));
+
+  const cols = el("div", { className: "drawer-preview-columns" }, [
+    // 1. Browser Utilities
+    el("section", { className: "studio-panel" }, [
+      el("div", { className: "panel-header" }, [
+        el("strong", { textContent: "Browser Utilities (sidebar.drawer.utilities)" }),
+        el("span", { className: "mini-badge", textContent: "SidekickSidebar.tsx" })
+      ]),
+      el("button", { type: "button", className: "sidebar-drawer-card", onClick: () => showToast("Downloads geöffnet") }, [
+        el("span", { className: "sidebar-drawer-card-copy" }, [
+          el("strong", { textContent: "Downloads" }),
+          el("span", { textContent: "Keine aktiven Downloads" })
+        ]),
+        el("span", { textContent: "↓" })
+      ]),
+      el("button", { type: "button", className: "sidebar-drawer-card", onClick: () => showToast("Verlauf geöffnet") }, [
+        el("span", { className: "sidebar-drawer-card-copy" }, [
+          el("strong", { textContent: "Browser-Verlauf" }),
+          el("span", { textContent: "Chronik & geschlossene Tabs" })
+        ]),
+        el("span", { textContent: "🕒" })
+      ]),
+      el("button", {
+        type: "button",
+        className: "sidebar-drawer-card",
+        style: "border-color:var(--lb-accent);background:var(--lb-accent-soft);",
+        onClick: () => { state.page = "create"; syncControlsFromState(); renderApp(); }
+      }, [
+        el("span", { className: "sidebar-drawer-card-copy" }, [
+          el("strong", { textContent: "✦ Imagine Studio" }),
+          el("span", { textContent: "Bilder lokal erzeugen & bearbeiten (Queue: bereit)" })
+        ]),
+        el("span", { className: "mini-badge", textContent: "Öffnen →" })
+      ])
+    ]),
+
+    // 2. Developer and system tools
+    el("section", { className: "studio-panel" }, [
+      el("div", { className: "panel-header" }, [
+        el("strong", { textContent: "Developer and system tools (Tools-Bereich)" }),
+        el("span", { className: "mini-badge", textContent: "SidekickSidebar.tsx" })
+      ]),
+      el("button", { type: "button", className: "sidebar-drawer-card", onClick: () => showToast("Terminal geöffnet") }, [
+        el("span", { className: "sidebar-drawer-card-copy" }, [
+          el("strong", { textContent: "Integrated Terminal" }),
+          el("span", { textContent: "Lokale Shell & Logs" })
+        ]),
+        el("span", { textContent: ">_" })
+      ]),
+      el("button", {
+        type: "button",
+        className: "sidebar-drawer-card",
+        style: "border-color:var(--lb-accent);background:var(--lb-accent-soft);",
+        onClick: () => { state.page = "create"; syncControlsFromState(); renderApp(); }
+      }, [
+        el("span", { className: "sidebar-drawer-card-copy" }, [
+          el("strong", { textContent: "✦ Imagine (Local Image Engine)" }),
+          el("span", { textContent: "ComfyUI / FastSD Queue & Capabilities" })
+        ]),
+        el("span", { className: "mini-badge", textContent: "Öffnen →" })
+      ])
+    ])
+  ]);
+  wrap.appendChild(cols);
+  return wrap;
+}
+
+/* ============================================================================
+   HAUPT-RENDER-SCHLEIFE & SYNCHRONISATION MIT DER STEUERLEISTE
+   ============================================================================ */
+function renderApp() {
+  // Apply Theme, Accent, Reduced Motion, Lang on <html>
+  const html = document.documentElement;
+  html.lang = state.lang;
+  html.className = state.theme;
+  html.setAttribute("data-accent", state.accent);
+  html.setAttribute("data-reduced-motion", String(state.reducedMotion));
+
+  // Header I18N & Engine Status Pill
+  document.getElementById("hdr-subtitle").textContent = t("hdrSub");
+  document.getElementById("hdr-badge-local").textContent = t("localBadge");
+  document.querySelectorAll("[data-i18n]").forEach(node => {
+    const key = node.getAttribute("data-i18n");
+    node.textContent = t(key);
+  });
+
+  // Update Top Navigation active state
+  document.querySelectorAll(".imagine-nav-btn").forEach(btn => {
+    if (btn.getAttribute("data-nav") === state.page) {
+      btn.setAttribute("aria-current", "page");
+    } else {
+      btn.removeAttribute("aria-current");
+    }
+  });
+
+  document.getElementById("queue-count-badge").textContent = String(state.queueItems.length);
+  document.getElementById("gallery-count-badge").textContent = String(state.galleryItems.length);
+
+  const led = document.getElementById("header-engine-led");
+  const pillTxt = document.getElementById("header-engine-text");
+  const cap = ENGINE_CAPABILITIES[state.engineKey];
+  if (state.viewState === "no-engine") {
+    led.className = "status-led warn";
+    pillTxt.textContent = "Keine lokale Bild-Engine installiert";
+  } else if (state.viewState === "error") {
+    led.className = "status-led err";
+    pillTxt.textContent = cap.name + " · VRAM-Warnung";
+  } else {
+    led.className = "status-led";
+    pillTxt.textContent = `${cap.name} · Bereit (${(cap.vramFreeMiB / 1024).toFixed(1)} GiB frei)`;
+  }
+
+  // Render active page
+  const root = document.getElementById("imagine-main-root");
+  root.replaceChildren();
+  if (state.page === "create") root.appendChild(buildCreatePage());
+  else if (state.page === "queue") root.appendChild(buildQueuePage());
+  else if (state.page === "gallery") root.appendChild(buildGalleryPage());
+  else if (state.page === "settings") root.appendChild(buildSettingsPage());
+  else if (state.page === "hub") root.appendChild(buildHubPage());
+  else if (state.page === "drawer") root.appendChild(buildDrawerPage());
+}
+
+function syncControlsFromState() {
+  document.getElementById("ctrl-page").value = state.page;
+  document.getElementById("ctrl-state").value = state.viewState;
+  document.getElementById("ctrl-mode").value = state.mode;
+  document.getElementById("ctrl-engine").value = state.engineKey;
+  document.getElementById("ctrl-persona").value = state.persona;
+  document.getElementById("ctrl-theme").value = state.theme;
+
+  const proBtn = document.getElementById("ctrl-pro");
+  proBtn.setAttribute("aria-pressed", String(state.proOpen));
+  proBtn.textContent = state.proOpen ? "Profi-Modus: Offen" : "Profi-Modus: Zu";
+
+  const motBtn = document.getElementById("ctrl-motion");
+  motBtn.setAttribute("aria-pressed", String(state.reducedMotion));
+  motBtn.textContent = state.reducedMotion ? "Reduced Motion: An" : "Reduced Motion: Aus";
+
+  const langBtn = document.getElementById("ctrl-lang");
+  langBtn.setAttribute("aria-pressed", state.lang === "en" ? "true" : "false");
+  langBtn.textContent = "Sprache: " + state.lang.toUpperCase();
+
+  document.querySelectorAll(".accent-dot").forEach(dot => {
+    dot.setAttribute("aria-pressed", String(dot.getAttribute("data-set-accent") === state.accent));
+  });
+}
+
+/* ============================================================================
+   EVENT-LISTENER & TASTATUR-SHORTCUTS (CSP-SAFE)
+   ============================================================================ */
+document.getElementById("ctrl-page").addEventListener("change", (e) => { state.page = e.target.value; renderApp(); });
+document.getElementById("ctrl-state").addEventListener("change", (e) => { state.viewState = e.target.value; state.page = "create"; syncControlsFromState(); renderApp(); });
+document.getElementById("ctrl-mode").addEventListener("change", (e) => { state.mode = e.target.value; state.page = "create"; syncControlsFromState(); renderApp(); });
+document.getElementById("ctrl-engine").addEventListener("change", (e) => { state.engineKey = e.target.value; renderApp(); });
+document.getElementById("ctrl-persona").addEventListener("change", (e) => { state.persona = e.target.value; renderApp(); });
+document.getElementById("ctrl-theme").addEventListener("change", (e) => { state.theme = e.target.value; renderApp(); });
+
+document.getElementById("ctrl-pro").addEventListener("click", () => {
+  state.proOpen = !state.proOpen;
+  syncControlsFromState();
+  renderApp();
+});
+document.getElementById("ctrl-motion").addEventListener("click", () => {
+  state.reducedMotion = !state.reducedMotion;
+  syncControlsFromState();
+  renderApp();
+});
+document.getElementById("ctrl-lang").addEventListener("click", () => {
+  state.lang = state.lang === "de" ? "en" : "de";
+  syncControlsFromState();
+  renderApp();
+});
+
+document.querySelectorAll(".accent-dot").forEach(dot => {
+  dot.addEventListener("click", () => {
+    state.accent = dot.getAttribute("data-set-accent");
+    syncControlsFromState();
+    renderApp();
+  });
+});
+
+document.querySelectorAll(".imagine-nav-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    state.page = btn.getAttribute("data-nav");
+    syncControlsFromState();
+    renderApp();
+  });
+});
+
+// Globale Tastatur-Shortcuts (Strg+Enter = Erzeugen, Esc = Abbrechen/Verwerfen)
+window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    if (state.viewState !== "no-engine") {
+      e.preventDefault();
+      state.page = "create";
+      state.viewState = state.viewState === "generating" ? "done" : "generating";
+      syncControlsFromState();
+      renderApp();
+      showToast(state.viewState === "generating" ? "Generierung per Strg+Enter gestartet" : "Generierung abgeschlossen");
+    }
+  } else if (e.key === "Escape") {
+    if (state.viewState === "generating" || state.viewState === "enhancing" || state.viewState === "waiting") {
+      state.viewState = "empty";
+      syncControlsFromState();
+      renderApp();
+      showToast("Vorgang per Esc abgebrochen");
+    }
+  }
+});
+
+// Initial Render
+syncControlsFromState();
+renderApp();
+</script>
+</body>
+</html>

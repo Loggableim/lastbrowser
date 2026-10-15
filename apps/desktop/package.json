@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.57-beta.3",
+  "version": "0.1.57-demo.1",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
@@ -159,16 +159,13 @@
         "!node_modules/node-pty/prebuilds/linux-*/**/*"
       ],
       "icon": "build/icon.ico",
-      "verifyUpdateCodeSignature": true,
+      "signAndEditExecutable": false,
+      "verifyUpdateCodeSignature": false,
       "signExts": [
         ".dll",
         ".pyd",
         ".node"
-      ],
-      "signtoolOptions": {
-        "certificateSha1": "1AD3C19A7338BBC3FFE4D62853411AD73E139857",
-        "sign": "./scripts/preserve-valid-windows-signatures.cjs"
-      }
+      ]
     },
     "nsis": {
       "artifactName": "Lastbrowser-${version}-${arch}-setup.${ext}",

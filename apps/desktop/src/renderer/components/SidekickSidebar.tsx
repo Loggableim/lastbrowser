@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { CompanionSwitch } from './CompanionPicker.js';
 import { DownloadDockTrigger } from '../NativeDownloads.js';
 import {
   Archive,
@@ -816,6 +817,18 @@ export function SidekickSidebar({
               <div className="drawer-cards-list">
                 {aiDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;
+                  if (item.id === 'chat') {
+                    return (
+                      <div key={item.id} className={`sidebar-drawer-card ${isCurrent ? 'is-active' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button type="button" onClick={() => onSelectPanel?.('chat')} title={item.desc} style={{ display: 'flex', flex: 1, alignItems: 'center', gap: 8, background: 'transparent', border: 0, color: 'inherit', textAlign: 'left', cursor: 'pointer', minWidth: 0 }}>
+                          <div className="drawer-card-icon-box"><img src={item.iconSrc} alt="" className="drawer-popart-icon" /></div>
+                          <div className="drawer-card-text"><span className="drawer-card-title">{item.title}</span><span className="drawer-card-desc">{item.desc}</span></div>
+                        </button>
+                        <CompanionSwitch compact />
+                        {isCurrent && <span className="drawer-active-dot" />}
+                      </div>
+                    );
+                  }
                   return (
                     <button
                       key={item.id}

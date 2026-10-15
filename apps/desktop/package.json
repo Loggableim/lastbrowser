@@ -88,7 +88,8 @@
         "to": "services",
         "filter": [
           "**/*",
-          "!**/__pycache__/**",
+          "!**/*.cpython-3[!1]*.pyc",
+          "!**/*.cpython-31[!2]*.pyc",
           "!**/.pytest_cache/**",
           "!**/.test-tmp/**",
           "!**/.ruff_cache/**",
@@ -112,8 +113,8 @@
         "to": "runtime/python",
         "filter": [
           "**/*",
-          "!**/__pycache__/**",
-          "!**/*.pyc",
+          "!**/*.cpython-3[!1]*.pyc",
+          "!**/*.cpython-31[!2]*.pyc",
           "!**/site-packages/tests/**"
         ]
       }

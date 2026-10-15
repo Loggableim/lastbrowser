@@ -148,6 +148,7 @@ function main() {
 
   if (isPreparedRuntimeCompatible(marker, desired, existsSync(join(pythonRuntimeDir, 'python.exe')))) {
     console.log(`[prepare:python] Runtime already prepared: ${pythonRuntimeDir}`);
+    precompileSidekickBytecode(join(pythonRuntimeDir, 'python.exe'));
     return;
   }
 
@@ -194,8 +195,29 @@ function main() {
     'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, yaml, PIL, psutil; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
   ]);
 
+  precompileSidekickBytecode(join(pythonRuntimeDir, 'python.exe'));
   writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');
   console.log(`[prepare:python] Runtime ready: ${pythonRuntimeDir}`);
+}
+
+/**
+ * Compile services/sidekick with the bundled CPython 3.12 before electron-builder
+ * copies it. checked-hash pycs stay valid after copies that change mtimes. Only
+ * the bundled tag ships; other interpreters' caches are excluded by the packaging filters.
+ */
+export function precompileSidekickBytecode(pythonExe, sidekickDir = resolve(repoRoot, 'services', 'sidekick')) {
+  const tag = spawnSync(pythonExe, ['-I', '-c', 'import sys; print(sys.implementation.cache_tag)'], { encoding: 'utf8' });
+  if (tag.status !== 0 || tag.stdout.trim() !== 'cpython-312') {
+    throw new Error(`Bundled Python must use cache tag cpython-312, got: ${tag.stdout?.trim() || 'unknown'}`);
+  }
+  const result = spawnSync(pythonExe, ['-I', '-m', 'compileall', '-q', '--invalidation-mode', 'checked-hash', sidekickDir], {
+    encoding: 'utf8',
+    timeout: 600_000
+  });
+  if (result.status !== 0) {
+    throw new Error(`compileall failed for ${sidekickDir} with exit ${result.status}\n${result.stderr}`);
+  }
+  console.log(`[prepare:python] Precompiled ${sidekickDir} as cpython-312 bytecode`);
 }
 
 /**
@@ -362,6 +384,7 @@ function preparePosixPythonCommand() {
   };
   const runtimeImportsReady = !isLinux || hasLinuxRuntimeImports(venvPython);
   if (isPreparedRuntimeCompatible(readMarker(), desired, existsSync(venvPython), runtimeImportsReady)) {
+    precompileSidekickBytecode(venvPython);
     const launcher = writePosixLauncher();
     console.log(`[prepare:python] Linux runtime already prepared: ${launcher} -> ${venvPython}`);
     return;
@@ -394,6 +417,7 @@ function preparePosixPythonCommand() {
     pipArgs.push('-r', requirementsPath, resolve(repoRoot, 'services', 'sidekick'));
     run(venvPython, pipArgs);
   }
+  precompileSidekickBytecode(venvPython);
   run(venvPython, [
     '-c',
     'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, uvicorn, yaml, PIL, psutil; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
@@ -478,8 +502,9 @@ function copyPythonHome(source, target) {
 function runtimeFilter(src) {
   const normalized = src.replaceAll('\\', '/');
   if (normalized.includes('/Lib/site-packages')) return false;
-  if (normalized.includes('/__pycache__')) return false;
-  if (normalized.endsWith('.pyc')) return false;
+  // Stdlib bytecode from this same CPython 3.12 home ships precompiled, so workers
+  // do not recompile the stdlib on every spawn (PYTHONDONTWRITEBYTECODE=1).
+  if (normalized.endsWith('.pyc') && !normalized.endsWith('.cpython-312.pyc')) return false;
   if (normalized.includes('/test/') || normalized.includes('/tests/')) return false;
   if (normalized.includes('/idlelib')) return false;
   if (normalized.includes('/tkinter')) return false;

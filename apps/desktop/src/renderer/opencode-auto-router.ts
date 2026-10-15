@@ -73,6 +73,38 @@ export function mergeAutoRouterTranscript(scoutText: string, strongText: string,
   return `${scoutText}${strongText}`;
 }
 
+export function listFreeOpenCodeModels(groups: readonly { provider_id?: string; providerId?: string; configured?: boolean; models?: readonly { id?: string }[] }[]): FreeModel[] {
+  const models: FreeModel[] = [];
+  for (const group of groups) {
+    const provider = String(group.provider_id || group.providerId || '');
+    if (!/^opencode(?:[-_]|$)/i.test(provider) || group.configured === false) continue;
+    for (const entry of group.models || []) {
+      const raw = String(entry.id || '').trim();
+      const model = raw.includes(':') ? raw.slice(raw.lastIndexOf(':') + 1) : raw;
+      if (model) models.push({ provider, model });
+    }
+  }
+  return models;
+}
+
+/** Null keeps the caller's model. An explicit pick is never replaced. */
+export function resolveAutoRouterSend(input: {
+  enabled: boolean;
+  explicitModel: boolean;
+  text: string;
+  pageContext?: string;
+  freeModels: readonly FreeModel[];
+}): { model: string; provider: string; plan: AutoRouterPlan } | null {
+  if (!input.enabled || input.explicitModel) return null;
+  const plan = planOpenCodeAutoRoute(input);
+  if (!plan.scout || plan.action === 'disabled') return null;
+  return { model: plan.scout.model, provider: plan.scout.provider, plan };
+}
+
+export function logOpenCodeAutoRouter(point: Record<string, unknown>): void {
+  console.info(`OPENCODE_AUTO_ROUTER ${JSON.stringify({ ...point, at: new Date().toISOString() })}`);
+}
+
 export function previewAutoRouter(plan: AutoRouterPlan, lanes: {
   scout: () => { text: string; cancel: () => void };
   strong: () => { text: string; cancel: () => void };

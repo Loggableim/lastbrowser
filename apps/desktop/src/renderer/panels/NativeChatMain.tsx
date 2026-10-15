@@ -315,7 +315,7 @@ export function NativeChatMain({
           ? rawParsed.filter(group => !isRetiredProvider(group.providerId))
           : rawParsed;
         if (groups.length) publishModelCatalog(modelViewKey, groups);
-        const authNotice = classifyConnectionNotice({ authStates: ((data as { providers?: Array<{ auth_state?: string }> }).providers || []).map(provider => provider.auth_state) });
+        const authNotice = classifyConnectionNotice({ authStates: ((data as { providers?: Array<{ auth_state?: string }> }).providers || []).map(provider => String(provider.auth_state || '')) });
         setConnectionNotice(groups.length ? null : authNotice);
         setCatalogSnapshot({ viewKey: modelViewKey, phase: groups.length || !authNotice ? 'ready' : 'error', groups });
       } catch (error) {

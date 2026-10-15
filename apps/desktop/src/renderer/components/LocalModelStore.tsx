@@ -6,6 +6,7 @@ import {newIndependentRequestId,type IndependentScope} from '../independent-cont
 import type {ModelStoreRequest,StoreView,StoreModel} from '../model-store-contracts.js';
 import './local-model-store.css';
 import { storeConsentKey, storeExecutionLabel, storeJobLabel, storeModelActions } from './model-store-actions.js';
+import { beginInstallFeedback, formatInstallMegabytes, formatInstallRemaining, formatInstallStatus, installFeedbackSnapshot, markInstallCancelled, markInstallFailed, readInstallFeedback, reconcileInstallFeedback, reloadInstallFeedbackFromSession, subscribeInstallFeedback } from './local-model-install-feedback.js';
 import { LocalModelMediaForm, LocalModelMediaResult } from './LocalModelMedia.js';
 import { useDesktopI18n } from '../i18n.js';
 import { shellText } from '../i18n/shell-text.js';
@@ -50,24 +51,30 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   const [benchmarkBackend,setBenchmarkBackend]=useState<'cpu'|'vulkan'>('cpu');
   const [chatText,setChatText]=useState(''),[chatResult,setChatResult]=useState(''),[chatBusy,setChatBusy]=useState(false),[receipt,setReceipt]=useState<unknown>(null);
   const mounted=useRef(true),generation=useRef(0),inFlight=useRef(false),importInput=useRef<HTMLInputElement>(null);
+  const requestSucceeded=useRef(false),lastRequestError=useRef(''),cancelSent=useRef(new Set<string>());
+  const [installEpoch,setInstallEpoch]=useState(()=>{reloadInstallFeedbackFromSession();return 0;});
   const scopeKey=JSON.stringify(scope);
   const currentScopeKey=useRef(scopeKey);currentScopeKey.current=scopeKey;
   const view=viewState?.key===scopeKey?viewState.value:null;
   async function request(data:ModelStoreRequest,quiet=false){
     if(!ready||!mounted.current)return;
     if(view?.readOnly&&!['view','scan'].includes(data.operation)){
-      if(!quiet)setError(shellText(locale, "Diese Testversion bietet den Modellkatalog und Hardwarescan. Lokale Ausführung ist noch nicht freigegeben.", "This test build offers the model catalog and hardware scan. Local execution is not enabled yet."));
+      if(!quiet){
+        const message=shellText(locale, "Diese Testversion bietet den Modellkatalog und Hardwarescan. Lokale Ausführung ist noch nicht freigegeben.", "This test build offers the model catalog and hardware scan. Local execution is not enabled yet.");
+        setError(message);lastRequestError.current=message;requestSucceeded.current=false;
+      }
       return;
     }
     const requestGeneration=generation.current;
-    if(!quiet){setBusy(true);setPendingOperation(data.operation);setError('');}
+    if(!quiet){setBusy(true);setPendingOperation(data.operation);setError('');requestSucceeded.current=false;lastRequestError.current='';}
     try{
       const response=await client.request({schemaVersion:1,operation:'localAi',scope,payload:{action:'store',request:data}});
       if(!mounted.current||requestGeneration!==generation.current||currentScopeKey.current!==scopeKey)return;
-      if(!response.ok){if(!quiet)setError(storeReasonText(locale, response.error.code) === response.error.code ? shellText(locale, `Lokale KI: ${response.error.code}`, `Local AI: ${response.error.code}`) : storeReasonText(locale, response.error.code));return;}
-      if(!('kind'in response.value)||response.value.kind!=='model_store'){if(!quiet)setError(shellText(locale, "Ungültige Store-Antwort", "Invalid store response"));return;}
+      if(!response.ok){if(!quiet){const message=storeReasonText(locale, response.error.code) === response.error.code ? shellText(locale, `Lokale KI: ${response.error.code}`, `Local AI: ${response.error.code}`) : storeReasonText(locale, response.error.code);setError(message);lastRequestError.current=message;}return;}
+      if(!('kind'in response.value)||response.value.kind!=='model_store'){if(!quiet){const message=shellText(locale, "Ungültige Store-Antwort", "Invalid store response");setError(message);lastRequestError.current=message;}return;}
+      if(!quiet)requestSucceeded.current=true;
       setViewState({key:scopeKey,value:response.value.store});return response.value.storeResult;
-    }catch{if(mounted.current&&requestGeneration===generation.current&&currentScopeKey.current===scopeKey&&!quiet)setError('Lokale KI nicht erreichbar. Es wurde kein Cloud-Ersatz verwendet.');}
+    }catch{if(mounted.current&&requestGeneration===generation.current&&currentScopeKey.current===scopeKey&&!quiet){const message=shellText(locale, 'Lokale KI nicht erreichbar. Es wurde kein Cloud-Ersatz verwendet.', 'Local AI is unreachable. No cloud substitute was used.');setError(message);lastRequestError.current=message;}}
     finally{if(mounted.current&&requestGeneration===generation.current&&currentScopeKey.current===scopeKey&&!quiet){setBusy(false);setPendingOperation(null);}}
   }
   useEffect(()=>{
@@ -79,12 +86,23 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     })();
     return()=>{mounted.current=false;generation.current++;};
   },[ready,scopeKey]);
-  const running=view?.jobs.some(j=>active(j.state))??false;
+  const installActive=installFeedbackSnapshot().some(item=>item.phase==='starting'||item.phase==='downloading'||item.phase==='installing');
+  const running=(view?.jobs.some(j=>active(j.state))??false)||installActive;
+  void installEpoch;
+  useEffect(()=>subscribeInstallFeedback(()=>setInstallEpoch(value=>value+1)),[]);
   useEffect(()=>{
     if(!running)return;
     const timer=window.setInterval(()=>{if(inFlight.current)return;inFlight.current=true;void request({operation:'view'},true).finally(()=>{inFlight.current=false;});},1500);
     return()=>window.clearInterval(timer);
   },[running,scopeKey]);
+  useEffect(()=>{
+    if(!view)return;
+    for (const jobId of reconcileInstallFeedback(view.models, view.jobs)) {
+      if (cancelSent.current.has(jobId)) continue;
+      cancelSent.current.add(jobId);
+      void request({operation:'cancel',jobId},true);
+    }
+  },[view,scopeKey]);
   const models=view?.models??[],selected=models.find(m=>m.id===detail),chosen=models.find(m=>m.active);
   const selectedActions = selected ? storeModelActions(selected, !!view?.readOnly) : null;
   const chosenActions = chosen ? storeModelActions(chosen, !!view?.readOnly) : null;
@@ -125,6 +143,45 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     const url=URL.createObjectURL(new Blob([JSON.stringify(result,null,2)],{type:'application/json'}));
     const link=document.createElement('a');link.href=url;link.download=`lastbrowser-benchmark-${id}.json`;link.click();window.setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
+  async function startModelInstall(model:StoreModel){
+    if(!model.licenseDigest)return;
+    const requestId=newIndependentRequestId();
+    const ignored=(view?.jobs??[]).filter(job=>job.operation==='install'&&job.modelId===model.id&&!active(job.state)).map(job=>job.id);
+    beginInstallFeedback(model,requestId,ignored);
+    await request({operation:'install',modelId:model.id,licenseDigest:model.licenseDigest,requestId});
+    const current=readInstallFeedback(model.id);
+    if(current?.requestId===requestId&&current.phase==='starting'&&!requestSucceeded.current){
+      markInstallFailed(model.id,lastRequestError.current||shellText(locale,'Download fehlgeschlagen','Download failed'));
+    }
+  }
+  async function cancelModelInstall(modelId:string){
+    const jobId=markInstallCancelled(modelId);
+    if(!jobId||cancelSent.current.has(jobId))return;
+    cancelSent.current.add(jobId);
+    await request({operation:'cancel',jobId});
+  }
+  function installLive(onlyModelId?:string){
+    const known=new Set((view?.models??[]).map(model=>model.id));
+    const items=installFeedbackSnapshot().filter(item=>{
+      if(onlyModelId)return item.modelId===onlyModelId;
+      if(detail===item.modelId)return false;
+      return !view?.models.length||known.has(item.modelId);
+    });
+    if(!items.length)return null;
+    return <div className="local-model-install-live">{items.map(item=>{
+      const model=models.find(entry=>entry.id===item.modelId);
+      const label=formatInstallStatus(locale,item);
+      const showProgress=item.phase==='downloading';
+      const volume=`${formatInstallMegabytes(item.downloadedBytes,locale)} / ${item.totalBytes===null?'…':formatInstallMegabytes(item.totalBytes,locale)}`;
+      return <article key={item.modelId} className="local-model-install-live-item" data-install-phase={item.phase} data-model-id={item.modelId}>
+        <p role={item.phase==='error'?'alert':'status'} aria-live="polite"><strong>{model?.name||item.modelId}</strong> · {label}</p>
+        {showProgress&&<><progress aria-label={label} value={item.percent??0} max={100}/>
+          <span>{item.percent===null?'0%':`${item.percent}%`} · {volume} · {formatInstallRemaining(locale,item.remainingMs)}</span></>}
+        {(item.phase==='starting'||item.phase==='downloading'||item.phase==='installing')&&<button type="button" onClick={()=>void cancelModelInstall(item.modelId)}>{shellText(locale,'Abbrechen','Cancel')}</button>}
+        {item.phase==='error'&&model&&<button type="button" onClick={()=>void startModelInstall(model)}>{shellText(locale,'Erneut versuchen','Retry')}</button>}
+      </article>;
+    })}</div>;
+  }
   async function importFile(file:File){
     if(file.size>4*1024*1024){setError(shellText(locale, "Import darf höchstens 4 MiB groß sein.", "Import must be at most 4 MiB."));return;}
     try{await request({operation:'import',receipt:JSON.parse(await file.text())});}catch{setError('Import ist kein gültiges JSON.');}
@@ -145,13 +202,15 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
           <span className={`local-model-status status-${model.active || model.deviceConfirmed?'confirmed':model.eligibility.state}`}>
             {(model.active || model.deviceConfirmed) && <CheckCircle2 size={12} aria-hidden="true"/>}
             {model.execution ? storeExecutionLabel(model) : model.curated&&!model.installed&&!model.eligibility.allowed?'Nur entdecken':storeModelStatus(model)}</span>
+          {readInstallFeedback(model.id)&&<span className="local-model-fit" data-install-phase={readInstallFeedback(model.id)?.phase}>{formatInstallStatus(locale,readInstallFeedback(model.id)!)}</span>}
           {fit==='outside'&&<span className="local-model-fit">{shellText(locale, "Über deiner Speicherklasse", "Above your memory class")}</span>}
           {fit==='within'&&<span className="local-model-fit">{recommendation.placement==='cpu'?shellText(locale, "Für Prozessor und freien Speicher geprüft", "Checked for CPU and free memory"):shellText(locale, "Speicherklasse passt · Schätzung", "Memory class fits · estimate")}</span>}
         </span>
       </button>
     </article>;
   }
-  return <section ref={storeRef} className={`local-model-store${selected?' local-model-store--detail':''}`} aria-labelledby={selected?detailTitleId:titleId}>
+  return <section ref={storeRef} className={`local-model-store${selected?' local-model-store--detail':''}`} aria-labelledby={selected?detailTitleId:titleId} data-install-epoch={installEpoch}>
+    {installLive()}
     {view?.readOnly&&<p className="local-model-notice" role="status">{shellText(locale, "Katalog und Hardwarescan sind verfügbar. Lokale Ausführung ist in dieser Testversion noch nicht freigegeben; bestehende Installationen werden hier nicht geprüft.", "The catalog and hardware scan are available. Local execution is not enabled in this test build; existing installs are not checked here.")}</p>}
     {!selected&&<>
     <header className="local-model-store-header"><div className="local-model-store-intro">
@@ -269,7 +328,8 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
             {selectedActions?.download&&selected.licenseDigest&&<>
               <label><input type="checkbox" checked={consent===storeConsentKey(selected)} onChange={event=>setConsent(event.target.checked?storeConsentKey(selected):'')}/>Herausgeber-Lizenz akzeptieren</label>
               <button className="local-model-primary" type="button" disabled={!ready||busy||running||consent!==storeConsentKey(selected)}
-                onClick={()=>void request({operation:'install',modelId:selected.id,licenseDigest:selected.licenseDigest!,requestId:newIndependentRequestId()})}>Installieren · {bytes(selected.downloadBytes)}</button>
+                onClick={()=>void startModelInstall(selected)}>Installieren · {bytes(selected.downloadBytes)}</button>
+              {installLive(selected.id)}
               <button type="button" disabled={!ready||busy||running||consent!==storeConsentKey(selected)}
                 onClick={()=>void request({operation:'importModel',modelId:selected.id,licenseDigest:selected.licenseDigest!,requestId:newIndependentRequestId()})}>Vorhandene gepinnte GGUF importieren</button>
             </>}

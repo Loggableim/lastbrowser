@@ -233,11 +233,9 @@ class NativeChatHost:
 
 
 # Measured default; LASTBROWSER_CHAT_PERSISTENT_WORKER=1 or 0 always overrides it.
-# Experimental and OFF: the second turn of a reused worker fails in bind_context,
-# because the policy, SDK, file, browser and auto/teamwork bridges are process-global
-# and bind once per process (see native_chat_policy.bind_native_policy). Each of them
-# needs a release hook at the turn boundary before the flag can be enabled.
-_PERSISTENT_WORKER_DEFAULT = False
+# ON for demo 0.1.57-demo.4: the policy, SDK, file, browser and auto/teamwork bridges
+# are released at the turn boundary (fb249ae4), so a reused worker serves several turns.
+_PERSISTENT_WORKER_DEFAULT = True
 
 
 def persistent_worker_enabled() -> bool:

@@ -655,13 +655,13 @@ export function FirstRunSetupPane({
         if (merged.some(item => !saved.some(stored => stored.url === item.url))) throw new Error('Bookmark storage unavailable.');
         window.dispatchEvent(new Event('lastbrowser:bookmarks-imported'));
         setImportedBookmarksCount(imported.length);
-        setImportSuccessMsg(`${imported.length} Lesezeichen erfolgreich importiert!`);
+        setImportSuccessMsg(importCopy.fileImported(imported.length));
       } else {
-        setImportSuccessMsg('Keine gültigen Lesezeichen in der Datei gefunden.');
+        setImportSuccessMsg(importCopy.fileEmpty);
       }
     } catch (err) {
       setImportError(true);
-      setImportSuccessMsg('Fehler beim Einlesen der Lesezeichendatei.');
+      setImportSuccessMsg(importCopy.fileReadError);
     }
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -930,7 +930,7 @@ export function FirstRunSetupPane({
 
             <p>{importCopy.detected} <strong>{browserDiscovery?.defaultBrowser || importCopy.unknown}</strong></p>
             {browserDiscoveryError && <p role="alert">{browserDiscoveryError}</p>}
-            <div className="setup-browser-grid" role="radiogroup" aria-label="Quell-Browser auswählen">
+            <div className="setup-browser-grid" role="radiogroup" aria-label={importCopy.sourceBrowser}>
               {BROWSER_CHOICES.map((b) => {
                 const isSelected = selectedBrowser === b.id;
                 const discovered = browserDiscovery?.browsers?.find(browser => browser.id === b.id);

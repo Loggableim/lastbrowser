@@ -121,6 +121,12 @@ export function beginInstallFeedback(model: InstallModelHint, requestId: string,
   return feedback;
 }
 
+/** A lost or timed-out start reply is not proof the download stopped.
+ * The store starts the job before it returns the catalog. */
+export function installStartFailureKeepsWatching(code: string): boolean {
+  return code === 'request_timeout' || code === 'independent_request_failed' || code === 'local_service_failed';
+}
+
 export function markInstallFailed(modelId: string, error: string, now = Date.now()): void {
   const current = memory.get(modelId);
   if (!current || current.phase === 'cancelled' || current.phase === 'ready') return;

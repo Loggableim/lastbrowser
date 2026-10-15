@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from runtime.local_ai.model_store import ModelStore, Entitlements, _device_identity, _digest
+from runtime.local_ai.store_registry import pinned_quantization
 from runtime.local_ai.store_benchmark import CASES, evaluate
 
 class ModelStoreContracts(unittest.TestCase):
@@ -18,6 +19,10 @@ class ModelStoreContracts(unittest.TestCase):
         store._license({'totalParameters':100_000_000_000})
         store._license({'totalParameters':100_000_000_001,'activeParameters':1})
         store._license({'totalParameters':1_000_000_000_000})
+
+    def test_pinned_file_quantization_wins_over_a_mismatched_label(self):
+        self.assertEqual(pinned_quantization('Q8_0', 'Ministral-3-3B-Instruct-2512-Q4_K_M.gguf'), 'Q4_K_M')
+        self.assertEqual(pinned_quantization('Q4_K_M', 'granite-4.2-3b-Q4_K_M.gguf'), 'Q4_K_M')
 
     def test_unknown_parameter_count_is_not_a_license_gate(self):
         self.store()._license({'totalParameters':None})

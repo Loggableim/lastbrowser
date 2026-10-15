@@ -815,7 +815,7 @@ export function FirstRunSetupPane({
         <header className="first-run-topbar">
           <div className="first-run-topbar-brand">
             <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
-            <span className="first-run-badge">{de ? 'Willkommen' : 'Welcome'}</span>
+            <span className="first-run-badge">{t('firstRun.welcomeBadge')}</span>
           </div>
           <span className="first-run-page-counter" aria-live="polite">{de ? 'Schritt' : 'Step'} {currentIndex + 1} / {pages.length}</span>
         </header>

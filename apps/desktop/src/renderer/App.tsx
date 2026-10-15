@@ -5828,10 +5828,10 @@ function AppContent(): JSX.Element {
                   type="button"
                   className="modern-back-to-web-btn"
                   onClick={() => setActivePanel('browser')}
-                  title="Zurück zum Web-Browser (Tabs)"
+                  title={t('shell.backToWebTitle')}
                 >
                   <ChevronLeft size={14} />
-                  <span>Zurück zum Web</span>
+                  <span>{t('shell.backToWeb')}</span>
                 </button>
                 <div className="modern-tool-active-badge">
                   <span className="modern-tool-dot" />

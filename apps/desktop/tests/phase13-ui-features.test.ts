@@ -355,7 +355,7 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
       expect(source).toContain('modern-titlebar-tool-banner');
       expect(source).toContain('modern-back-to-web-btn');
       expect(source).toContain('modern-tool-active-badge');
-      expect(source).toContain('Zurück zum Web');
+      expect(source).toContain("t('shell.backToWeb')");
       expect(source).toContain("const isModernBrowser = layoutMode === 'modern';");
     });
   });
@@ -364,7 +364,7 @@ describe('Phase 13: UI-Synthese (Variante B), Popart Icons & Power-Tools', () =>
     it('uses Nova AI branding across CommandPalette, CopilotSplitView, and Startpage', () => {
       const cmdPalette = readRendererFile('components/CommandPalette.tsx');
       expect(cmdPalette).toContain("category: 'Nova AI'");
-      expect(cmdPalette).toContain('Nova: Neuer Chat');
+      expect(cmdPalette).toContain("t('commands.nova.newChat')");
       expect(cmdPalette).not.toContain("category: 'Sidekick AI'");
 
       const copilot = readRendererFile('components/CopilotSplitView.tsx');

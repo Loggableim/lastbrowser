@@ -17,6 +17,7 @@ import { agentPanelsTranslations } from '../src/renderer/i18n/agent-panels-trans
 import { spaceAssistantTranslations } from '../src/renderer/i18n/space-assistant-translations.js';
 import { whatsNewTranslations } from '../src/renderer/i18n/whats-new-translations.js';
 import { memoryPanelTranslations } from '../src/renderer/i18n/memory-panel-translations.js';
+import { shellCopyTranslations } from '../src/renderer/i18n/shell-copy-translations.js';
 import { searchEngineOnboardingTranslations, searchEngineOnboardingTranslationKeys } from '../src/renderer/i18n/search-engine-onboarding.js';
 import { copilotQuickChatTranslations } from '../src/renderer/i18n.js';
 
@@ -32,6 +33,7 @@ const english: Record<string, string> = {
   ...spaceAssistantTranslations.en,
   ...whatsNewTranslations.en,
   ...memoryPanelTranslations.en,
+  ...shellCopyTranslations.en,
   ...copilotQuickChatTranslations.en,
   ...Object.fromEntries(Object.entries(searchEngineOnboardingTranslationKeys).map(([key, field]) => [key, searchEngineOnboardingTranslations.en[field]])),
 };

@@ -4631,7 +4631,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     models: t('settings.panels.providers.workspaceModels'),
                     chat: t('settings.panels.providers.workspaceChatDefault')
                   }}
-                  panel={(selectedProvider, tab) => <SettingsPageDeck resetKey={`${activeProfileId}:${activeSpacePath}:${activeBackendProfileName}:${selectedProvider.id}:${tab}`} label={locale === 'de' ? 'Seite' : 'Page'}>{providerPageUnits((() => {
+                  panel={(selectedProvider, tab) => selectedProvider.id === 'local-ai' && tab === 'models'
+                    ? <div className="local-ai-models-page"><LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath} backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible /></div>
+                    : <SettingsPageDeck resetKey={`${activeProfileId}:${activeSpacePath}:${activeBackendProfileName}:${selectedProvider.id}:${tab}`} label={locale === 'de' ? 'Seite' : 'Page'}>{providerPageUnits((() => {
                     if (selectedProvider.id === 'local-ai' && tab === 'connection') return <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath} backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible />;
                     if (tab === 'connection') return <>                <SettingsCard
                   title={t('settings.panels.providers.title')}
@@ -4796,7 +4798,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 </SettingsCard>
 
 </>;
-                    if (tab === 'models') return <>                {selectedProvider.id === 'local-ai' && <LocalAiSetupPane key={JSON.stringify([activeProfileId,activeSpacePath,activeBackendProfileName||''])} browserProfileId={activeProfileId} workspacePath={activeSpacePath} backendProfileName={activeBackendProfileName} ready={ready} keepGlobalRouterStatusVisible />}
+                    if (tab === 'models') return <>
                 <SettingsCard title={t('settings.panels.providers.modelCatalog')} description={t('settings.panels.providers.modelCatalogDescription')}>
                   {(catalogState.key !== providerCatalogKey || catalogState.loading) && <p role="status">{t('settings.panels.providers.loadingModels')}</p>}
                   {catalogState.key === providerCatalogKey && catalogState.error && <div role="alert" className="workspace-error">{catalogState.error}</div>}

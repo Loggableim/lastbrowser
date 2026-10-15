@@ -229,17 +229,32 @@ export function NativeChatMain({
   useEffect(() => {
     if (!ready) return;
     let alive = true;
+    // Set once this load has an answer (catalog, error or delivered event); the deadline must not fire after that.
+    let catalogSettled = false;
+    let loadingDeadline: number | undefined;
+    const settleCatalog = () => {
+      catalogSettled = true;
+      window.clearTimeout(loadingDeadline);
+    };
     const cachedGroups = readModelCatalogGroups(modelViewKey) as CatalogGroup[];
+    setConnectionNotice(null);
     if (cachedGroups.length) {
       setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: cachedGroups });
-      setConnectionNotice(null);
     } else {
       setCatalogSnapshot({ viewKey: modelViewKey, phase: 'loading', groups: [] });
+      loadingDeadline = window.setTimeout(() => {
+        if (!alive || catalogSettled) return;
+        catalogSettled = true;
+        setConnectionNotice('opencode-unreachable');
+        setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] });
+      }, CATALOG_VISIBLE_WAIT_MS);
     }
     setScopedModel(null); setCatalogDefaultModel('');
     const onCatalog = (event: Event) => {
       const detail = (event as CustomEvent<{ viewKey?: string; groups?: CatalogGroup[] }>).detail;
       if (!detail || detail.viewKey !== modelViewKey || !Array.isArray(detail.groups)) return;
+      settleCatalog();
+      setConnectionNotice(current => (current === 'opencode-unreachable' ? null : current));
       setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: detail.groups });
     };
     window.addEventListener(MODEL_CATALOG_EVENT, onCatalog);
@@ -253,6 +268,7 @@ export function NativeChatMain({
           payload: { action: 'get', includeCatalog: true } });
         if (!result.ok) throw new Error(result.error.message);
         if (!alive) return;
+        settleCatalog();
         let data = result.value;
         if (!data.groups) data = { ...data, groups: [] };
         const statusMap: Record<string, string> = {
@@ -316,6 +332,7 @@ export function NativeChatMain({
         setConnectionNotice(authNotice);
         setCatalogSnapshot({ viewKey: modelViewKey, phase: groups.length || !authNotice ? 'ready' : 'error', groups });
       } catch (error) {
+        settleCatalog();
         if (alive) {
           setCatalogDefaultModel('');
           const notice = classifyConnectionNotice({ error }) || (cachedGroups.length ? null : 'opencode-unreachable');
@@ -329,7 +346,7 @@ export function NativeChatMain({
       }
     };
     void load();
-    return () => { alive = false; window.removeEventListener(MODEL_CATALOG_EVENT, onCatalog); };
+    return () => { alive = false; window.clearTimeout(loadingDeadline); window.removeEventListener(MODEL_CATALOG_EVENT, onCatalog); };
   }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, activeSession?.model, requestedChatDefault, t, activeModelRevision]);
 
   /** Change only this bound Space preference; executing runs keep their captured model. */
@@ -674,7 +691,7 @@ export function NativeChatMain({
   const handleSend = async (text: string, queuedEffort?: string): Promise<void> => {
     if (writerProtected) { setStatusMessage(t('spaceAssistant.writerProtected')); return; }
     if (pendingChoice) { setStatusMessage(`${t('chat.model')}: ${pendingChoice.model} · ${t('common.loading')}`); return; }
-    if (modelCatalogLoading) { setStatusMessage(t('settings.panels.providers.loadingModels')); return; }
+    if (modelCatalogLoading && !connectionNotice) { setStatusMessage(t('settings.panels.providers.loadingModels')); return; }
     if (connectionNotice) { setStatusMessage(connectionNoticeCopy[locale][connectionNotice]); return; }
     if (modelCatalogError) { setStatusMessage(t('chat.modelCatalogUnavailable')); return; }
     if(automaticBlocked||policyPending===policyOperationKey){setStatusMessage(modelPolicyReason(locale,currentPolicy?.response.executionAvailability.reasonCode));return;}

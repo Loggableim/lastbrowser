@@ -656,7 +656,7 @@ export function ChatComposer({
               >
                 {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
                 {!selectedModelVisible && <option value="" disabled title={noActiveModels ? t('settings.panels.providers.noActiveModels') : undefined}>
-                  {modelCatalogLoading ? t('settings.panels.providers.loadingModels') : noActiveModels ? (locale.startsWith('de') ? 'Keine Modelle aktiv' : 'No active models') : t('chat.noManualModels')}
+                  {modelCatalogLoading&&!connectionNotice ? t('settings.panels.providers.loadingModels') : noActiveModels ? (locale.startsWith('de') ? 'Keine Modelle aktiv' : 'No active models') : t('chat.noManualModels')}
                 </option>}
                 {manualModelPickerOptions(modelOptions).map((group) => (
                   <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false}>
@@ -671,7 +671,10 @@ export function ChatComposer({
           </label>
         </div>
       </div>
-      {connectionNotice&&<div className="composer-model-notice" role="alert">{connectionNoticeCopy[locale][connectionNotice]}</div>}
+      {connectionNotice&&<div className="composer-model-notice" role="alert">
+        <span>{connectionNoticeCopy[locale][connectionNotice]}</span>
+        {connectionNotice==='opencode-unreachable'&&onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
+      </div>}
       {modelCatalogLoading&&!connectionNotice&&<div className="composer-model-notice" role="status">{t('settings.panels.providers.loadingModels')}</div>}
       {modelCatalogError&&!connectionNotice&&<div className="composer-model-notice" role="alert">
         <span>{t('chat.modelCatalogUnavailable')}</span>

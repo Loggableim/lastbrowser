@@ -12,6 +12,6 @@ def test_select_quickchat_history_caps_multi_turn_messages():
 
 
 def test_select_quickchat_history_drops_pending_duplicate_user_turn():
-    history = [{"role": "user", "content": "Same prompt"}, {"role": "assistant", "content": "Earlier answer"}]
+    history = [{"role": "assistant", "content": "Earlier answer"}, {"role": "user", "content": "Same prompt"}]
     selected = _select_quickchat_history(history, "Same prompt")
     assert selected == [{"role": "assistant", "content": "Earlier answer"}]

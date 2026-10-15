@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import threading
@@ -19,6 +20,7 @@ from .store import RevisionConflict
 PERSONAS = {"nova": "Nova", "analytical": "Orion", "developer": "Patch", "creative": "Spark", "mentor": "Zen"}
 _LOCK = threading.RLock()
 DIRECTORY = ".lastbrowser-companions"
+logger = logging.getLogger(__name__)
 
 
 def _name(value, personality):
@@ -169,3 +171,50 @@ def read_quickchat_companion(context):
     value = _read(_path(context.space_root, context.scope), context.scope)
     verify_native_context(context)
     return _public(value) if value is not None else _default(context.scope)
+
+
+def normalize_conversation_companion(value):
+    """Return the persona a conversation stored at its start, or None when unusable."""
+    if not isinstance(value, dict) or not isinstance(value.get("personality"), str):
+        return None
+    personality = value["personality"]
+    if personality not in PERSONAS:
+        return None
+    try:
+        bot_name = _name(value.get("botName"), personality)
+    except ValueError:
+        return None
+    return {"personality": personality, "botName": bot_name}
+
+
+def start_conversation_companion(store, resolver, scope, actor):
+    """Copy the current Space companion into a conversation that starts now.
+
+    A conversation whose companion cannot be read still starts; it adopts the
+    persona on its first turn instead.
+    """
+    try:
+        current = companion_operation(store, resolver, scope, actor, {"action": "get"})
+    except Exception:
+        logger.warning("Conversation persona snapshot unavailable; it is adopted on the first turn", exc_info=True)
+        return None
+    return {"personality": current["personality"], "botName": current["botName"]}
+
+
+def conversation_companion_for_turn(session, context):
+    """Persona for one native turn, taken from the conversation itself.
+
+    A conversation keeps the persona it stored at its start. Only a conversation
+    without that field (created before it existed) adopts the current Space
+    companion, once. Returns (persona, adopted); the caller saves the session
+    when adopted is True.
+    """
+    from .native_chat_protocol import verify_native_context
+    verify_native_context(context)
+    stored = normalize_conversation_companion(getattr(session, "companion", None))
+    if stored is not None:
+        return stored, False
+    current = read_quickchat_companion(context)
+    adopted = {"personality": current["personality"], "botName": current["botName"]}
+    session.companion = dict(adopted)
+    return dict(adopted), True

@@ -7184,7 +7184,7 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             session_storage_slug = DEFAULT_SPACE_SLUG
         if captured_space_profile is not None:
             from web.api.independent import hub
-            _, native_resolver = hub().by_scope(captured_space_profile.scope,
+            native_store, native_resolver = hub().by_scope(captured_space_profile.scope,
                 str(get_active_profile_name() or "default"))
             session_storage_slug = native_resolver.resolve(captured_space_profile.scope,
                 authenticated_profile_name=str(get_active_profile_name() or "default")).space.slug
@@ -7211,6 +7211,10 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
         if captured_space_profile is not None:
             s.space_scope = captured_space_profile.scope.model_dump(mode="json", by_alias=True)
             s.space_profile_snapshot = {"profileId": captured_space_profile.snapshot_id, "revision": captured_space_profile.snapshot_revision}
+            # The persona is chosen when the conversation starts and stays with it.
+            from runtime.independent.companion import start_conversation_companion
+            s.companion = start_conversation_companion(native_store, native_resolver, captured_space_profile.scope,
+                str(get_active_profile_name() or "default"))
             s.save()
         try:
             from web.api.state_sync import sync_session_start, sync_session_usage
@@ -7263,6 +7267,8 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
                 # anchor + last_prompt_tokens are intentionally NOT carried â€” those
                 # re-derive on the next turn.
                 personality=session.personality,
+                # A copy continues the same conversation, so it keeps its persona.
+                companion=copy.deepcopy(getattr(session, "companion", None)),
                 enabled_toolsets=getattr(session, "enabled_toolsets", None),
                 context_length=getattr(session, "context_length", None),
                 threshold_tokens=getattr(session, "threshold_tokens", None),
@@ -7924,6 +7930,8 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             messages=forked_messages,
             parent_session_id=source.session_id,
             session_source="fork",
+            # A fork continues the same conversation, so it keeps its persona.
+            companion=copy.deepcopy(getattr(source, "companion", None)),
             # Inherit workspace metadata so the fork appears in the same
             # workspace sidebar. Without workspace_slug, a forked session
             # is invisible when the sidebar filters by workspace (#465 fix).

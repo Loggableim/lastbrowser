@@ -16,6 +16,11 @@ export function personalityAvatar(personality: unknown): string {
   return typeof personality === 'string' && Object.hasOwn(personalityAvatars, personality)
     ? personalityAvatars[personality as CompanionPersonality] : personalityAvatars.nova;
 }
+// Persona a saved conversation carries from its start; null when it has none (legacy).
+export function conversationCompanionAppearance(value: unknown): { personality: CompanionPersonality; botName: string; avatar: string } | null {
+  const snapshot = normalizeCompanionSnapshot(value);
+  return snapshot ? { ...snapshot, avatar: personalityAvatar(snapshot.personality) } : null;
+}
 const STANDARD_CHAT_COMPANION_KEY = 'lastbrowser.standardChatCompanion.v1';
 export const STANDARD_CHAT_COMPANION_EVENT = 'lastbrowser:standard-chat-companion';
 type CompanionRecord = { key: string; personality: CompanionPersonality; botName: string; scope: IndependentScope; revision: number };
@@ -65,8 +70,11 @@ export function CompanionAppearanceProvider({ children, browserProfileId, worksp
         if (!alive || request !== sequence || refreshRevision !== refreshGeneration.current || activeSelection.current !== 0) return;
         if (!sameAssistantScope(result.value.scope, resolved.value.scope)) throw new Error('Companion scope changed');
         const next = { key, ...result.value };
+        const previous = committedRef.current;
         committedRef.current = next;
         setAppearance(next); setError('');
+        // Sidebar, dock and standard-chat header follow the saved Space persona too.
+        if (!previous || previous.personality !== next.personality || previous.botName !== next.botName) writeStandardChatCompanion(next.personality, next.botName);
       } catch (reason) { if (alive && request === sequence && refreshRevision === refreshGeneration.current && activeSelection.current === 0) { committedRef.current = null; setAppearance(null); setError(reason instanceof Error ? reason.message : String(reason)); } }
     };
     void refresh();

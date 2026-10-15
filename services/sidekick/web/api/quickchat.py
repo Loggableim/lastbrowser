@@ -74,9 +74,13 @@ def _session_for_quickchat(body: dict[str, Any], actor: str, scope, workspace: s
             or Path(session.workspace).resolve() != Path(workspace).resolve()):
             raise QuickChatError("Quickchat identity is already bound to another conversation", 409, "quickchat_binding_conflict")
         return session
+    from runtime.independent.companion import start_conversation_companion
+    from web.api.independent import hub
+    store, resolver = hub().by_scope(scope, actor)
     session = Session(session_id=quick_id, title="Quickchat", workspace=workspace, model=model,
         model_provider=provider, profile=actor, space_scope=scope.model_dump(mode="json", by_alias=True),
-        enabled_toolsets=[], session_kind="quickchat", quick_chat_id=quick_id)
+        enabled_toolsets=[], session_kind="quickchat", quick_chat_id=quick_id,
+        companion=start_conversation_companion(store, resolver, scope, actor))
     # Register before save so standard stream workers resolve this exact private session.
     with LOCK:
         if quick_id in SESSIONS:

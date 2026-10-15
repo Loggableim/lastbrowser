@@ -2,6 +2,7 @@ import { isRetiredProvider } from '../retired-providers.js';
 import { CATALOG_VISIBLE_WAIT_MS, MODEL_CATALOG_EVENT, publishModelCatalog, readModelCatalogGroups } from '../model-catalog-prefetch.js';
 import { classifyConnectionNotice, connectionNoticeCopy, type ConnectionNotice } from '../connection-notice.js';
 import { useStandardChatCompanion } from '../components/CompanionPicker.js';
+import { conversationCompanionAppearance } from '../personality-avatar.js';
 /**
  * Native chat panel for Lastbrowser.
  *
@@ -153,6 +154,9 @@ export function NativeChatMain({
 }: NativeChatMainProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
   const standardCompanion = useStandardChatCompanion();
+  // The open conversation names its own persona; a new chat names the global choice.
+  const conversationCompanion = conversationCompanionAppearance(activeSession?.companion);
+  const headerCompanion = conversationCompanion ?? (standardCompanion.stored ? standardCompanion : null);
   const activeModelRevision = useActiveModelRevision();
   const providerEvidenceRevision = useProviderChatEvidenceRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
@@ -894,10 +898,10 @@ export function NativeChatMain({
     <section ref={chatSection} className="browser-main native-chat-main">
       <div className="native-chat-header">
         <div className="native-chat-title">
-          <img src={standardCompanion.stored ? standardCompanion.avatar : brandAssets.sidekickAvatar} alt="" />
+          <img src={headerCompanion ? headerCompanion.avatar : brandAssets.sidekickAvatar} alt="" />
           <div className="native-chat-title-copy">
             <h1>{activeSession ? sessionTitle(activeSession) : t('chat.newSession')}</h1>
-            {standardCompanion.stored && <span className="native-chat-space-context">{standardCompanion.botName} AI</span>}
+            {headerCompanion && <span className="native-chat-space-context">{headerCompanion.botName} AI</span>}
             <span className="native-chat-space-context">{activeSession ? ((activeSession.workspace || activeSpacePath).split(/[\\/]/).filter(Boolean).at(-1) || t('chat.workspace')) : t('chat.kicker')}</span>
             {activeSessionId && <span className="native-chat-session-id">{shortSessionId(activeSessionId)}</span>}
           </div>
@@ -1014,6 +1018,7 @@ export function NativeChatMain({
               migrationRequired={goalMigrationRequired===modeViewKey} editorOpenToken={goalEditorViewKey===modeViewKey?goalEditorToken:0}
               onDismissEmpty={()=>setGoalEditorViewKey(current=>current===modeViewKey?null:current)} onAction={handleCommandAction}/>}
       <ChatComposer
+        conversationCompanion={conversationCompanion}
         automaticPolicy={{active:automaticSelected,available:automaticAvailable,qualified:automaticModelsQualified,
           allowedModels:automaticAllowedModels}}
         sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked||modelCatalogLoading||modelCatalogError||Boolean(connectionNotice)||Boolean(pendingChoice)}

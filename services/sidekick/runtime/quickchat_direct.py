@@ -260,7 +260,7 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
     """Run exactly one captured SDK request, persist its measured usage and answer."""
     entered = time.monotonic()
     from runtime.independent.native_chat_protocol import verify_native_context
-    from runtime.independent.companion import read_quickchat_companion
+    from runtime.independent.companion import conversation_companion_for_turn
     if context is None or bridge is None or bridge.context != context:
         raise PermissionError("Quickchat requires its verified native profile and Space binding.")
     verify_native_context(context)
@@ -294,7 +294,9 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
     elif provider == "openrouter":
         from runtime.auxiliary_client import build_or_headers
         headers = build_or_headers()
-    identity = read_quickchat_companion(context)
+    # The conversation's own persona (saved with the session), not the global choice.
+    identity, _companion_adopted = conversation_companion_for_turn(session, context)
+    put("companion", {"personality": identity["personality"], "botName": identity["botName"]})
     tones = {"nova": "friendly and clear", "analytical": "precise and analytical",
              "developer": "practical and technical", "creative": "creative and vivid",
              "mentor": "calm and supportive"}

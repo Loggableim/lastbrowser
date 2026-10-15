@@ -704,6 +704,12 @@ def _lookup_index_message_count(session_id):
     return count if count >= 0 else None
 
 
+def _conversation_companion(value):
+    """Persona a native conversation stored at its start (see runtime.independent.companion)."""
+    from runtime.independent.companion import normalize_conversation_companion
+    return normalize_conversation_companion(value)
+
+
 class Session:
     def __init__(self, session_id: str=None, title: str=DEFAULT_SESSION_TITLE,
                  workspace=None, model=None,
@@ -754,6 +760,8 @@ class Session:
         self.output_tokens = output_tokens or 0
         self.estimated_cost = estimated_cost
         self.personality = personality
+        # Persona this conversation started with; turns use it, not the global choice.
+        self.companion = _conversation_companion(kwargs.get('companion'))
         self.active_stream_id = active_stream_id
         self.pending_user_message = pending_user_message
         self.pending_attachments = pending_attachments or []
@@ -983,7 +991,7 @@ class Session:
             'child_parent_turns',
             'pinned', 'archived', 'project_id',
             'input_tokens', 'output_tokens', 'estimated_cost',
-            'personality', 'active_stream_id',
+            'personality', 'companion', 'active_stream_id',
             'pending_user_message', 'pending_attachments', 'pending_started_at',
             'compression_anchor_visible_idx', 'compression_anchor_message_key',
             'compression_anchor_summary',
@@ -1201,6 +1209,7 @@ class Session:
             'output_tokens': self.output_tokens,
             'estimated_cost': self.estimated_cost,
             'personality': self.personality,
+            'companion': self.companion,
             'compression_anchor_visible_idx': self.compression_anchor_visible_idx,
             'compression_anchor_message_key': self.compression_anchor_message_key,
             'compression_anchor_summary': self.compression_anchor_summary,

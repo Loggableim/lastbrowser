@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { readStandardChatCompanion, useStandardChatCompanion, writeStandardChatCompanion } from './CompanionPicker.js';
+import { readStandardChatCompanion, useStandardChatCompanion } from './CompanionPicker.js';
 import type { SidekickMotion } from '../sidekick-motion.js';
 import { enginePersona } from '../sidekick-motion.js';
 import { AnimatedSidekick } from './AnimatedSidekick.js';
@@ -324,9 +324,11 @@ export function SidekickSidebar({
       document.removeEventListener('keydown', escape);
     };
   }, [personalityOpen]);
-  const choosePersonality = (personality: CompanionPersonality) => {
-    writeStandardChatCompanion(personality, companionDefaultNames[personality]);
-    setPersonalityOpen(false);
+  // Same backend save as the header picker. setSelection rolls back on failure and
+  // keeps the error visible in this flyout, so it stays open until the save succeeds.
+  const choosePersonality = async (personality: CompanionPersonality) => {
+    if (!companion.loaded || companion.busy) return;
+    if (await companion.setSelection(personality, companionDefaultNames[personality])) setPersonalityOpen(false);
   };
 
   useEffect(() => {
@@ -1006,6 +1008,8 @@ export function SidekickSidebar({
           </div>
           {personalityOpen && <div ref={personalityRef} className="sidebar-personality-flyout" role="dialog" aria-label={t('sidebar.companion.menu')} style={{ position: 'absolute', left: 0, right: 0, top: personalityTop, bottom: 0, zIndex: 30, overflow: 'auto', background: 'var(--bg-primary, #101522)', borderInlineStart: '1px solid var(--border-color)', padding: 12, display: 'grid', alignContent: 'start', gap: 8 }}>
             <strong>{t('sidebar.companion.menu')}</strong>
+            {companion.error && <p role="alert" style={{ margin: 0, fontSize: 12, lineHeight: 1.4 }}>{companion.error}</p>}
+            {!companion.loaded && !companion.error && <p role="status" style={{ margin: 0, fontSize: 12 }}>{t('copilot.loading')}</p>}
             {(Object.keys(companionDefaultNames) as CompanionPersonality[]).map(personality => {
               const selected = activePersonality === personality;
               const description = {
@@ -1015,7 +1019,7 @@ export function SidekickSidebar({
                 creative: 'sidebar.companion.creative',
                 mentor: 'sidebar.companion.mentor'
               } as const;
-              return <button key={personality} type="button" aria-pressed={selected} onClick={() => choosePersonality(personality)} style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: 10, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, border: selected ? '2px solid var(--accent-primary, #38bdf8)' : '2px solid transparent', background: 'var(--bg-hover, rgba(255,255,255,.04))', color: 'inherit', cursor: 'pointer' }}>
+              return <button key={personality} type="button" aria-pressed={selected} disabled={!companion.loaded || companion.busy} onClick={() => void choosePersonality(personality)} style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: 10, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, border: selected ? '2px solid var(--accent-primary, #38bdf8)' : '2px solid transparent', background: 'var(--bg-hover, rgba(255,255,255,.04))', color: 'inherit', cursor: 'pointer' }}>
                 <img src={personalityAvatar(personality)} alt="" width={52} height={52} style={{ objectFit: 'contain' }} />
                 <span><strong>{companionDefaultNames[personality]}</strong><span style={{ display: 'block', fontSize: 12, lineHeight: 1.4 }}>{t(description[personality])}</span></span>
               </button>;

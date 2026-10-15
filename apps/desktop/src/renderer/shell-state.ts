@@ -43,6 +43,8 @@ export type DesktopSessionSummary = {
   session_source?: string;
   raw_source?: string;
   source_tag?: string;
+  // Persona this conversation started with (its own choice, not the global one).
+  companion?: { personality: string; botName: string } | null;
 };
 
 export function shortSessionId(sessionId: string): string {

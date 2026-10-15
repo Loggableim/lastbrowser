@@ -52,7 +52,7 @@ export function CompanionPicker({ value, onChange, disabled = false }: { value: 
   </div>;
 }
 
-export function CompanionSwitch({ compact = false }: { compact?: boolean }) {
+export function CompanionSwitch({ compact = false, conversation = null }: { compact?: boolean; conversation?: CompanionSelection | null }) {
   const companion = useCompanionAppearance();
   const { t } = useDesktopI18n();
   const [open, setOpen] = useState(false);
@@ -68,17 +68,21 @@ export function CompanionSwitch({ compact = false }: { compact?: boolean }) {
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, [open]);
   const saved = readStandardChatCompanion();
-  const personality = companion.loaded ? companion.personality : saved.personality;
-  const botName = companion.loaded ? companion.botName : saved.botName;
+  // The picker chooses the persona for new chats; the header names the conversation's own persona.
+  const globalPersonality = companion.loaded ? companion.personality : saved.personality;
+  const globalBotName = companion.loaded ? companion.botName : saved.botName;
+  const personality = conversation?.personality ?? globalPersonality;
+  const botName = conversation?.botName ?? globalBotName;
   return <div ref={rootRef} style={{ position: 'relative' }}>
     <button type="button" ref={triggerRef} className={compact ? 'sidebar-companion-switch' : 'copilot-header-brand'} aria-label={t('copilot.personalitySwitch')} aria-haspopup="dialog" aria-expanded={open}
       style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
-      onClick={event => { event.stopPropagation(); setDraft({ personality, botName }); setOpen(current => !current); }}>
+      onClick={event => { event.stopPropagation(); setDraft({ personality: globalPersonality, botName: globalBotName }); setOpen(current => !current); }}>
       <img src={personalityAvatar(personality)} alt="" style={compact ? { width: 22, height: 22, objectFit: 'contain' } : undefined} className={compact ? undefined : 'copilot-header-avatar'} draggable={false} />
       <span className={compact ? undefined : 'copilot-header-title'}>{botName}{compact ? '' : ' AI'}</span>
     </button>
     {open && <section role="dialog" aria-label={t('copilot.personalityDialog')} onClick={event => event.stopPropagation()} style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300, boxSizing: 'border-box', maxWidth: 'calc(100vw - 32px)', padding: 16, borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-primary, #101522)', color: 'var(--text-primary)', zIndex: 1000, boxShadow: '0 12px 32px rgba(0,0,0,.4)' }}>
       <strong>{t('copilot.personalityTitle')}</strong>
+      <p role="note" style={{ margin: '6px 0 10px', fontSize: 12, lineHeight: 1.4 }}>{t('sidebar.companion.menu')}</p>
       <CompanionPicker value={draft} onChange={setDraft} disabled={!companion.loaded || companion.busy} />
       {companion.error && <p role="alert">{companion.error}</p>}
       {companion.error && <button type="button" onClick={companion.retry}>{t('common.retry')}</button>}

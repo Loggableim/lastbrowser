@@ -41,7 +41,7 @@ import {
   type AgenticWorkflowTemplate
 } from '../workflow-templates.js';
 import type { ScopedModelSelection } from '../independent-contracts.js';
-import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
+import { conversationCompanionAppearance, messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
 import { CompanionSwitch } from './CompanionPicker.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
@@ -179,7 +179,12 @@ export function CopilotSplitView({
 }: CopilotSplitViewProps): React.JSX.Element | null {
   const { t, locale } = useDesktopI18n();
   const companion = useCompanionAppearance();
-  const companionName = companion.botName;
+  // Quick Chat names the persona of its own conversation: the newest answer's snapshot.
+  let conversationCompanion: ReturnType<typeof conversationCompanionAppearance> = null;
+  for (let index = messages.length - 1; index >= 0 && !conversationCompanion; index -= 1) {
+    if (messages[index].role === 'assistant') conversationCompanion = conversationCompanionAppearance(messages[index].companion);
+  }
+  const companionName = conversationCompanion?.botName ?? companion.botName;
   const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
@@ -809,7 +814,7 @@ export function CopilotSplitView({
     <aside className="copilot-split-panel" aria-label={`${companionName} AI Workspace`}>
       {/* Top Header */}
       <div className="copilot-header">
-        <CompanionSwitch />
+        <CompanionSwitch conversation={conversationCompanion} />
         <div className="copilot-header-actions">
           {/* Universal Model Picker in Header */}
           <div className="copilot-header-model-wrapper" ref={modelPickerRef} style={{ position: 'relative' }}>
@@ -1077,7 +1082,7 @@ export function CopilotSplitView({
             {error && <div className="copilot-stream-error" role="alert">{error}</div>}
             {status && <div className="copilot-reset-status" role="status">{status}</div>}
             <div className="copilot-empty-icon">
-              <img src={companion.avatar} alt={companionName} className="copilot-empty-avatar" draggable={false} />
+              <img src={conversationCompanion?.avatar ?? companion.avatar} alt={companionName} className="copilot-empty-avatar" draggable={false} />
             </div>
             <h4>{t('copilot.emptyTitle', { botName: companionName })}</h4>
             <p>{t('copilot.emptyDescription')}</p>

@@ -4249,9 +4249,15 @@ def _run_agent_streaming(
             agent._quick_chat_mode = bool(quickchat)
             _turn_companion = None
             if _native_context is not None:
-                from runtime.independent.companion import read_quickchat_companion
-                _companion = read_quickchat_companion(_native_context)
-                _turn_companion = {"personality": _companion["personality"], "botName": _companion["botName"]}
+                from runtime.independent.companion import conversation_companion_for_turn
+                # The conversation's own persona, not the global choice; only a
+                # legacy conversation without one adopts the current persona, once.
+                _turn_companion, _companion_adopted = conversation_companion_for_turn(s, _native_context)
+                if _companion_adopted and not ephemeral:
+                    try:
+                        s.save()
+                    except Exception:
+                        logger.warning('Could not persist the adopted conversation persona for %s', session_id, exc_info=True)
                 put("companion", _turn_companion)
             if quickchat:
                 from runtime.quickchat_prompt import quickchat_personality

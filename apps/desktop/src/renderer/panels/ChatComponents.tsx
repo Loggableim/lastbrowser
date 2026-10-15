@@ -32,7 +32,7 @@ import {
   StopCircle,
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
-import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
+import { conversationCompanionAppearance, messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
 import { useStandardChatCompanion } from '../components/CompanionPicker.js';
 import { connectionNoticeCopy } from '../connection-notice.js';
 import { describeChatContent } from '../chat-display.js';
@@ -126,7 +126,10 @@ export function ChatTranscript({
   const { locale, t } = useDesktopI18n();
   const companion = useCompanionAppearance();
   const standardCompanion = useStandardChatCompanion();
-  const liveCompanion = standardCompanion.stored ? standardCompanion : companion;
+  // A running turn speaks with the persona its conversation started with.
+  const conversationCompanion = conversationCompanionAppearance(activeSession?.companion);
+  const pendingCompanion = conversationCompanion ?? (standardCompanion.stored ? standardCompanion : null);
+  const liveCompanion = pendingCompanion ?? companion;
   const transcript=useChatTranscriptScroll(activeSession?.session_id??'',{messages,childGroups,pendingUserMessage});
   const numberFormat = new Intl.NumberFormat(locale);
   const normalizedPendingUserMessage = pendingUserMessage.replace(/\s+/g, ' ').trim();
@@ -169,8 +172,8 @@ export function ChatTranscript({
     <div ref={transcript} className="chat-transcript">
       {error && <div className="chat-error">{error}</div>}
       {messages.map((message, index) => {
-        const messageAppearance = (message.pending || message.streaming) && standardCompanion.stored
-          ? standardCompanion
+        const messageAppearance = (message.pending || message.streaming) && pendingCompanion
+          ? pendingCompanion
           : messageCompanionAppearance(message.companion, liveCompanion);
         const isLastAssistant = message.role === 'assistant' && !messages.slice(index + 1).some((item) => item.role === 'assistant');
         const messageUsage = isLastAssistant ? latestTurnUsage : null;
@@ -421,6 +424,8 @@ export function BionicText({ text, enabled = true, as = 'p' }: { text: string; e
 // ─── ChatComposer ─────────────────────────────────────────────────────────────
 
 export type ChatComposerProps = {
+  // Persona of the open conversation; null for a new chat (the global choice applies).
+  conversationCompanion?: { avatar: string; botName: string } | null;
   automaticPolicy?:Readonly<{active:boolean;available:boolean;qualified?:boolean;allowedModels?:readonly {provider:string;model:string}[]}>;
   sendBlocked?:boolean;
   betaSelectionBlocked?:boolean;
@@ -483,6 +488,7 @@ function workspaceLabel(path?: string | null): string {
 }
 
 export function ChatComposer({
+  conversationCompanion = null,
   automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,multiAgentBetaBlocked=false,modelQualified=false,requestedLunaInCatalog,
   requestedDefaultModel='',requestedDefaultProviderLabel='',requestedDefaultQualified=false,requestedDefaultAvailable=false,requestedDefaultUnavailableReason='',
   browserProfileId='',backendProfileName='default',
@@ -523,7 +529,7 @@ export function ChatComposer({
   const { t,locale } = useDesktopI18n();
   const companion = useCompanionAppearance();
   const standardCompanion = useStandardChatCompanion();
-  const composerCompanion = standardCompanion.stored ? standardCompanion : companion;
+  const composerCompanion = conversationCompanion ?? (standardCompanion.stored ? standardCompanion : companion);
   const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
   const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;

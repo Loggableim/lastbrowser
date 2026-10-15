@@ -33,4 +33,4 @@ Dieselbe Frage, Quickchat und Standard-Chat, Auto gegen ein fest gewähltes Mode
 
 `apps/desktop/src/renderer/opencode-auto-router.ts`
 
-Der laufende Quickchat und der Standard-Chat rufen den Planer auf, wenn `LASTBROWSER_OPENCODE_AUTO_ROUTER=1` oder `localStorage['lastbrowser.opencodeAutoRouter.v1']==='1'`. Ein expliziter Quickchat-Favorit bleibt. Sonst geht die erste Anfrage an das Scout-Modell. Pro Turn schreibt die Konsole eine Zeile `OPENCODE_AUTO_ROUTER` mit Spur, Modell, Klasse, `ttftScoutMs` und `handoffMs`.
+Der Nutzer stellt die Reihenfolge unter Einstellungen → Router ein, sichtbar nur mit dem Prototyp-Flag. Auto-Routing ist dort standardmäßig an und per Schalter aus. Bezahlte Modelle stehen in Advanced settings mit Preis, kommen aber nicht in die automatische Reihenfolge. „Benchmark erneut ausführen“ misst die gewählten Gratis-Modelle am lokalen Fragenset und übernimmt den Vorschlag mit einem Klick. Die Tempo-Werte bleiben die Box-Messung, bis Felix die Rohdatei `results.csv` einspielt.

@@ -93,13 +93,15 @@ export function planOpenCodeAutoRoute(input: {
   freeModels: readonly FreeModel[];
   enabled: boolean;
   modelJudgment?: ModelClassJudgment;
+  order?: readonly FreeModel[];
 }): AutoRouterPlan {
   const heuristic = classifyAutoRouterPrompt(input);
   const kind = combineAutoRouterClass(heuristic.kind, input.modelJudgment ?? null);
   const classification = { ...heuristic, kind, reasons: input.modelJudgment && input.modelJudgment !== 'simple' ? [...heuristic.reasons, `model:${input.modelJudgment}`] : heuristic.reasons };
   if (!input.enabled) return { enabled: false, classification, scout: null, strong: null, action: 'disabled' };
   const free = freeOpenCode(input.freeModels);
-  const scout = pick(free, SCOUT_PREFERENCE, null, 'any');
+  const preferred = (input.order ?? []).map(normalizeFreeModel).filter(isDefaultFreeRouterModel);
+  const scout = pick(free, preferred.length ? preferred : SCOUT_PREFERENCE, null, 'any');
   const strong = pick(free, [], scout, 'other');
   if (!scout) return { enabled: true, classification, scout: null, strong: null, action: 'disabled' };
   if (classification.kind === 'simple' || !strong || (strong.provider === scout.provider && strong.model === scout.model)) {
@@ -138,8 +140,10 @@ export function resolveAutoRouterSend(input: {
   text: string;
   pageContext?: string;
   freeModels: readonly FreeModel[];
+  routingEnabled?: boolean;
+  order?: readonly FreeModel[];
 }): { model: string; provider: string; plan: AutoRouterPlan } | null {
-  if (!input.enabled || input.explicitModel) return null;
+  if (!input.enabled || input.explicitModel || input.routingEnabled === false) return null;
   const plan = planOpenCodeAutoRoute(input);
   if (!plan.scout || plan.action === 'disabled') return null;
   return { model: plan.scout.model, provider: plan.scout.provider, plan };

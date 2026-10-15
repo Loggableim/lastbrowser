@@ -46,18 +46,24 @@ export function mergeSessionListSnapshot<T extends SessionListEntry>(
   requestedScope: SessionListScope,
   previousSessions: T[],
   nextSessions: T[],
-  currentSessionId: string | null
+  currentSessionId: string | null,
+  removedSessionIds?: ReadonlySet<string>
 ): { scopeChanged: boolean; sessions: T[] } {
   const scopeChanged = !sameSessionListScope(previousScope, requestedScope);
-  if (scopeChanged) return { scopeChanged, sessions: nextSessions };
+  const removed = removedSessionIds ?? new Set<string>();
+  const filteredNext = removed.size
+    ? nextSessions.filter((session) => !removed.has(session.session_id))
+    : nextSessions;
+  if (scopeChanged) return { scopeChanged, sessions: filteredNext };
 
   const currentSession = currentSessionId
     ? previousSessions.find((session) => session.session_id === currentSessionId)
     : undefined;
-  if (currentSession && !nextSessions.some((session) => session.session_id === currentSessionId)) {
-    return { scopeChanged, sessions: [currentSession, ...nextSessions] };
+  if (currentSession && !filteredNext.some((session) => session.session_id === currentSessionId)) {
+    if (currentSessionId && removed.has(currentSessionId)) return { scopeChanged, sessions: filteredNext };
+    return { scopeChanged, sessions: [currentSession, ...filteredNext] };
   }
-  return { scopeChanged, sessions: nextSessions };
+  return { scopeChanged, sessions: filteredNext };
 }
 
 export function resolveSessionListSelection<T extends SessionListEntry>(

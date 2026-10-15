@@ -55,6 +55,35 @@ describe('profile and Space scoped session lists', () => {
     expect(resolveSessionListSelection('active', result.sessions, result.scopeChanged, false)).toBe('active');
   });
 
+  it('does not resurrect locally deleted chats from stale session-list polls', () => {
+    const deleted = session('deleted');
+    const kept = session('kept');
+    const removed = new Set(['deleted']);
+    const result = mergeSessionListSnapshot(
+      workScope,
+      workScope,
+      [deleted, kept],
+      [deleted, kept],
+      'kept',
+      removed
+    );
+
+    expect(result.sessions.map((item) => item.session_id)).toEqual(['kept']);
+  });
+
+  it('never re-adds a locally deleted active session as a missing-active-session fallback', () => {
+    const result = mergeSessionListSnapshot(
+      workScope,
+      workScope,
+      [session('active')],
+      [session('active')],
+      'active',
+      new Set(['active'])
+    );
+
+    expect(result.sessions.map((item) => item.session_id)).toEqual([]);
+  });
+
   it('drops the previous scope and selects only from the new scoped snapshot', () => {
     const result = mergeSessionListSnapshot(
       workScope,

@@ -1,7 +1,8 @@
 import { isRetiredProvider } from '../retired-providers.js';
 import { CATALOG_VISIBLE_WAIT_MS, MODEL_CATALOG_EVENT, chatModelCatalogViewKey, publishModelCatalog, readModelCatalogGroups } from '../model-catalog-prefetch.js';
-import { classifyConnectionNotice, connectionNoticeCopy, resolveCatalogConnectionNotice, type ConnectionNotice } from '../connection-notice.js';
-import { useStandardChatCompanion } from '../components/CompanionPicker.js';
+import { classifyConnectionNotice, connectionNoticeCopy, noticeFromProviderRows, resolveCatalogConnectionNotice, type ConnectionNotice, type ProviderConnectionRow } from '../connection-notice.js';
+import { useStandardChatCompanion, writeStandardChatCompanion } from '../components/CompanionPicker.js';
+import { companionDefaultNames, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 /**
  * Native chat panel for Lastbrowser.
  *
@@ -153,6 +154,7 @@ export function NativeChatMain({
 }: NativeChatMainProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
   const standardCompanion = useStandardChatCompanion();
+  const companionAppearance = useCompanionAppearance();
   const activeModelRevision = useActiveModelRevision();
   const providerEvidenceRevision = useProviderChatEvidenceRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
@@ -320,14 +322,14 @@ export function NativeChatMain({
           : rawParsed;
         const groups = discovered.length ? discovered : cachedGroups;
         if (groups.length) publishModelCatalog(modelViewKey, groups);
-        // An expired sign-in must be named even when the catalog still lists models.
-        const authNotice = classifyConnectionNotice({ authStates: ((data as { providers?: Array<{ auth_state?: string }> }).providers || []).map(provider => String(provider.auth_state || '')) });
+        const providerRows = ((data as { providers?: readonly ProviderConnectionRow[] }).providers || []);
+        const authNotice = noticeFromProviderRows(providerRows) || classifyConnectionNotice({ authStates: providerRows.map(provider => String(provider.auth_state || '')) });
         setConnectionNotice(authNotice);
         setCatalogSnapshot({ viewKey: modelViewKey, phase: groups.length || !authNotice ? 'ready' : 'error', groups });
       } catch (error) {
         if (alive) {
           setCatalogDefaultModel('');
-          const notice = resolveCatalogConnectionNotice({ error });
+          const notice = noticeFromProviderRows((error as { providers?: readonly ProviderConnectionRow[] })?.providers) || resolveCatalogConnectionNotice({ error });
           setConnectionNotice(notice);
           // A failed discovery is distinct from an empty or unqualified catalog:
           // keep any cached rows selectable but surface the retryable error state.
@@ -341,7 +343,7 @@ export function NativeChatMain({
     };
     void load();
     return () => { alive = false; window.clearTimeout(loadingDeadline); window.removeEventListener(MODEL_CATALOG_EVENT, onCatalog); };
-  }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, activeSession?.model, requestedChatDefault, t, activeModelRevision]);
+  }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, requestedChatDefault, t, activeModelRevision]);
 
   /** Change only this bound Space preference; executing runs keep their captured model. */
   const commitComposerModelChoice = useCallback((selection: string) => {
@@ -892,6 +894,24 @@ export function NativeChatMain({
           <div className="native-chat-title-copy">
             <h1>{activeSession ? sessionTitle(activeSession) : t('chat.newSession')}</h1>
             {standardCompanion.stored && <span className="native-chat-space-context">{standardCompanion.botName} AI</span>}
+            <label className="native-chat-space-context">
+              <select
+                aria-label="Sidekick"
+                value={companionAppearance.loaded ? companionAppearance.personality : standardCompanion.personality}
+                disabled={!companionAppearance.loaded || companionAppearance.busy}
+                onChange={event => {
+                  const personality = event.target.value as CompanionPersonality;
+                  const botName = companionDefaultNames[personality];
+                  void companionAppearance.setSelection(personality, botName).then(saved => {
+                    if (saved) writeStandardChatCompanion(personality, botName);
+                  });
+                }}
+              >
+                {(Object.keys(companionDefaultNames) as CompanionPersonality[]).map(personality => (
+                  <option key={personality} value={personality}>{companionDefaultNames[personality]}</option>
+                ))}
+              </select>
+            </label>
             <span className="native-chat-space-context">{activeSession ? ((activeSession.workspace || activeSpacePath).split(/[\\/]/).filter(Boolean).at(-1) || t('chat.workspace')) : t('chat.kicker')}</span>
             {activeSessionId && <span className="native-chat-session-id">{shortSessionId(activeSessionId)}</span>}
           </div>

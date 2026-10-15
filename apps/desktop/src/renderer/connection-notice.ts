@@ -3,7 +3,7 @@ import type { DesktopLocaleId } from './i18n/keys.js';
 export type ConnectionNotice = 'opencode-unreachable' | 'sign-in-expired';
 
 const EXPIRED_STATE = /expired|reauth|invalid_grant|unauthorized/;
-const EXPIRED_TEXT = /sign-?in expired|login expired|reauth_required|invalid_grant|\b401\b|unauthorized/i;
+const EXPIRED_TEXT = /sign-?in expired|login expired|reauth_required|invalid_grant|device_login|expired_token|\b401\b|unauthorized/i;
 const UNREACHABLE_TEXT = /timed out|timeout|econnrefused|enotfound|eai_again|unreachable|failed to fetch|network error|opencode\.ai/i;
 /** Only an actual transport failure names an unreachable OpenCode; a slow or empty catalog must not. */
 const CONNECTION_ERROR_TEXT = /econnrefused|econnreset|enotfound|eai_again|unreachable|failed to fetch|network error|socket hang up|opencode\.ai/i;
@@ -39,6 +39,19 @@ export function resolveCatalogConnectionNotice(input: {
   if (!text) return null;
   if (classifyConnectionNotice({ error: input.error }) === 'sign-in-expired') return 'sign-in-expired';
   return CONNECTION_ERROR_TEXT.test(text) ? 'opencode-unreachable' : null;
+}
+
+export type ProviderConnectionRow = {
+  auth_state?: string;
+  connection_state?: string;
+};
+
+/** Expired login wins. A probed `connection_state` is the only cache-safe unreachable signal. */
+export function noticeFromProviderRows(rows: readonly ProviderConnectionRow[] | null | undefined): ConnectionNotice | null {
+  const list = Array.isArray(rows) ? rows : [];
+  const authNotice = classifyConnectionNotice({ authStates: list.map(row => String(row.auth_state || '')) });
+  if (authNotice) return authNotice;
+  return list.some(row => row.connection_state === 'unreachable') ? 'opencode-unreachable' : null;
 }
 
 export const connectionNoticeCopy: Record<DesktopLocaleId, Record<ConnectionNotice, string>> = {

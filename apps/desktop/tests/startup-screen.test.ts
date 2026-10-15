@@ -10,7 +10,7 @@ import { StartupScreen } from '../src/renderer/startup/StartupScreen.js';
 import { StartupPreferencesPanel } from '../src/renderer/startup/StartupPreferencesPanel.js';
 import { reduceStartupOpeningState } from '../src/renderer/startup/startup-opening-state.js';
 import { startupFailureMessage, startupScreenCopy, startupLocaleIds } from '../src/renderer/startup/startup-screen-copy.js';
-import { chooseStartupIcon, chooseStartupQuoteIndex, deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isStartupReady, isValidStartupModelCatalog, nextStartupQuoteIndex, startupIconIds, type StartupReadinessSignals } from '../src/renderer/startup/startup-screen-state.js';
+import { chooseStartupIcon, chooseStartupQuoteIndex, deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isStartupReady, isValidStartupModelCatalog, nextStartupQuoteIndex, retainStartupShell, startupIconIds, type StartupReadinessSignals } from '../src/renderer/startup/startup-screen-state.js';
 
 const sourceRoot = path.resolve(process.cwd(), 'src/renderer/startup');
 const renderWithI18n = (element: ReturnType<typeof createElement>) => renderToStaticMarkup(createElement(DesktopI18nProvider, { children: element }));
@@ -186,6 +186,13 @@ describe('startup screen copy and motion rules', () => {
     expect(styles).not.toContain('startup-rainbow-trail');
     expect(styles).toContain('startup-open-overlay var(--startup-opening-duration,650ms)');
     expect(styles).toContain('startup-open-mascot var(--startup-opening-duration,650ms)');
+  });
+
+  it('keeps the shell up when startup only flaps to pending', () => {
+    expect(retainStartupShell(true, 'sidekick', null)).toBe(true);
+    expect(retainStartupShell(true, 'session', 'session')).toBe(false);
+    expect(retainStartupShell(false, 'ready', null)).toBe(true);
+    expect(retainStartupShell(false, 'sidekick', null)).toBe(false);
   });
 
   it('replaces raw transport failures with the friendly localized startup message', () => {

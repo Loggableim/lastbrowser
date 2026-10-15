@@ -203,7 +203,7 @@ import {
   workspacePanelCollapsedStorageKey
 } from './shell-state.js';
 import { canCallSidekickApi } from './runtime-readiness.js';
-import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
+import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, retainStartupShell, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
 import { startupScreenCopy, resolveStartupLocale, startupFailureMessage } from './startup/startup-screen-copy.js';
 import { chatModelCatalogViewKey, clearModelCatalog, prefetchModelCatalog } from './model-catalog-prefetch.js';
 import { StartupScreen } from './startup/StartupScreen.js';
@@ -1544,8 +1544,9 @@ function AppContent(): JSX.Element {
     logged_in: accessAuthChecked && !accessAuthRequired
   });
   useEffect(() => {
-    setStartupReadyAcknowledged(startupPhase === 'ready' && startupAuthAllowsShell);
-  }, [startupPhase, startupAuthAllowsShell]);
+    if (!startupAuthAllowsShell) return;
+    setStartupReadyAcknowledged(current => retainStartupShell(current, startupPhase, startupFailureStage));
+  }, [startupPhase, startupAuthAllowsShell, startupFailureStage]);
   useEffect(() => {
     pendingStartupSoundRef.current = null;
     stopStartupSoundRef.current?.();

@@ -5,6 +5,7 @@ import contextlib
 import json
 import os
 from pathlib import Path
+import socket
 import tempfile
 import threading
 import time
@@ -137,6 +138,62 @@ def credential_status(provider_id):
         return {"logged_in": bool(valid), **({} if valid else {"error_code": "device_login_required"})}
     except DeviceError:
         return {"logged_in": False, "error_code": "device_login_required"}
+
+
+_REACH_LOCK = threading.Lock()
+_REACH = {"at": 0.0, "value": "ok"}
+
+
+def connection_state(timeout=1.0):
+    """`ok` when opencode.ai:443 accepts TCP, otherwise `unreachable`. Cached for 15s."""
+    now = time.monotonic()
+    with _REACH_LOCK:
+        if now - float(_REACH["at"]) < 15:
+            return _REACH["value"]
+    value = "unreachable"
+    try:
+        with socket.create_connection(("opencode.ai", 443), timeout):
+            value = "ok"
+    except OSError:
+        value = "unreachable"
+    with _REACH_LOCK:
+        _REACH["at"] = time.monotonic()
+        _REACH["value"] = value
+    return value
+
+
+def _auth_state_for(provider_id, current):
+    status = credential_status(provider_id)
+    code = str(status.get("error_code") or "")
+    if code in {"expired", "expired_token", "invalid_grant"}:
+        return "expired"
+    if code == "device_login_required" and has_credentials(provider_id):
+        return "expired"
+    if status.get("logged_in"):
+        return "connected"
+    return str(current or "not_connected")
+
+
+def annotate_opencode_providers(providers):
+    """Attach reachability and an expired-login state for OpenCode rows."""
+    rows = list(providers) if isinstance(providers, list) else []
+    state = connection_state()
+    seen = set()
+    result = []
+    for row in rows:
+        if not isinstance(row, dict):
+            result.append(row)
+            continue
+        pid = str(row.get("id") or row.get("providerId") or "")
+        if pid in _PROVIDERS:
+            seen.add(pid)
+            row = {**row, "connection_state": state, "auth_state": _auth_state_for(pid, row.get("auth_state"))}
+        result.append(row)
+    for pid in _PROVIDERS:
+        if pid in seen or not has_credentials(pid):
+            continue
+        result.append({"id": pid, "auth_state": _auth_state_for(pid, "not_connected"), "connection_state": state})
+    return result
 
 
 def start_login(provider_id):

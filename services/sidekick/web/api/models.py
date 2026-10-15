@@ -1323,7 +1323,7 @@ def _apply_core_sync_or_error_marker(
         session.pending_started_at = None
         session.messages.append({
             'role': 'assistant',
-            'content': '**Previous turn did not complete.**',
+            'content': _turn_failure_marker(session),
             'timestamp': int(time.time()),
             '_error': True,
         })
@@ -1380,7 +1380,7 @@ def _apply_core_sync_or_error_marker(
     session.pending_started_at = None
     session.messages.append({
         'role': 'assistant',
-        'content': '**Previous turn did not complete.**',
+        'content': _turn_failure_marker(session),
         'timestamp': int(time.time()),
         '_error': True,
     })
@@ -1407,6 +1407,24 @@ def _apply_core_sync_or_error_marker(
 # existed, or any path that forgot to set it) is treated as "old enough" so
 # repair still recovers them — preserves current behavior for legacy data.
 _REPAIR_STALE_PENDING_GRACE_SECONDS = 30
+
+
+def _turn_failure_marker(session) -> str:
+    """Name an expired OpenCode login. Other failures keep the generic marker."""
+    provider = str(getattr(session, "model_provider", "") or "")
+    if provider not in {"opencode-go", "opencode-zen"}:
+        return "**Previous turn did not complete.**"
+    try:
+        from cli.opencode_device import credential_status, has_credentials
+        status = credential_status(provider)
+        code = str(status.get("error_code") or "")
+        if code in {"expired", "expired_token", "invalid_grant"} or (
+            code == "device_login_required" and has_credentials(provider)
+        ):
+            return "Sign-in expired. Sign in to OpenCode again, then retry."
+    except Exception:
+        pass
+    return "**Previous turn did not complete.**"
 
 
 def _repair_stale_pending(session) -> bool:

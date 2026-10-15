@@ -26,6 +26,7 @@ import { useDesktopI18n } from '../i18n.js';
 import type { BrowserTab } from '../tabs.js';
 import { canAcceptPinnedTabDrag, canPinBrowserTab, resolvePinnedTabDrop } from '../pinned-tab-drop.js';
 import './pinned-tab-drop.css';
+import { shellText } from '../i18n/shell-text.js';
 import {
   type PinnedApp,
   DEFAULT_PINNED_APPS,
@@ -170,7 +171,7 @@ export function PinnedAppGrid({
   tabs = [],
   onPinTabAsApp
 }: PinnedAppGridProps): React.JSX.Element {
-  const { t } = useDesktopI18n();
+  const { t, locale } = useDesktopI18n();
   const store = usePinnedAppStore();
   const apps = propsApps || (spacePath
     ? store.apps.filter((app) => !app.spacePath || app.spacePath === spacePath)
@@ -260,7 +261,7 @@ export function PinnedAppGrid({
               type="button"
               draggable
               className={`pinned-dock-btn ${isActive ? 'is-active' : ''} ${isRunning ? 'is-running' : ''}`}
-              title={`${app.name}${isRunning ? ' (Läuft)' : ''} – Rechtsklick für Optionen`}
+              title={shellText(locale, `${app.name}${isRunning ? ' (Läuft)' : ''} – Rechtsklick für Optionen`, `${app.name}${isRunning ? ' (Running)' : ''} – right-click for options`)}
               aria-label={app.name}
               style={{ '--app-accent': app.color, '--app-bg': app.bg } as React.CSSProperties}
               onClick={(e) => onOpenApp(app, { newTab: e.ctrlKey || e.metaKey })}
@@ -283,8 +284,8 @@ export function PinnedAppGrid({
           <button
             type="button"
             className="pinned-dock-btn add-btn"
-            title="App anheften (+)"
-            aria-label="App anheften"
+            title={shellText(locale, "App anheften (+)", "Pin an app (+)")}
+            aria-label={shellText(locale, "App anheften", "Pin an app")}
             onClick={onAddApp}
           >
             <div className="pinned-dock-icon-wrapper">
@@ -366,7 +367,7 @@ export function PinnedAppGrid({
               type="button"
               draggable
               className={`pinned-grid-cell ${isActive ? 'is-active' : ''} ${isRunning ? 'is-running' : ''}`}
-              title={`${app.name}${isRunning ? ' (Aktiv)' : ''} – Rechtsklick für Optionen`}
+              title={shellText(locale, `${app.name}${isRunning ? ' (Aktiv)' : ''} – Rechtsklick für Optionen`, `${app.name}${isRunning ? ' (Active)' : ''} – right-click for options`)}
               aria-label={app.name}
               style={{ '--app-accent': app.color } as React.CSSProperties}
               onClick={(e) => onOpenApp(app, { newTab: e.ctrlKey || e.metaKey })}
@@ -441,6 +442,7 @@ function PinnedContextMenuOverlay({
   onRemove: (id: string) => void;
   onClose: () => void;
 }): React.JSX.Element {
+  const { locale } = useDesktopI18n();
   const { app, x, y } = contextMenu;
   const idx = apps.findIndex((a) => a.id === app.id);
 
@@ -465,7 +467,7 @@ function PinnedContextMenuOverlay({
         }}
       >
         <Sparkles size={13} />
-        <span>Öffnen / Wechseln</span>
+        <span>{shellText(locale, "Öffnen / Wechseln", "Open / switch")}</span>
       </button>
 
       <button
@@ -477,7 +479,7 @@ function PinnedContextMenuOverlay({
         }}
       >
         <ExternalLink size={13} />
-        <span>In neuem Tab öffnen</span>
+        <span>{shellText(locale, "In neuem Tab öffnen", "Open in a new tab")}</span>
       </button>
 
       <div className="pinned-context-separator" />
@@ -492,7 +494,7 @@ function PinnedContextMenuOverlay({
           }}
         >
           <Edit2 size={13} />
-          <span>Bearbeiten...</span>
+          <span>{shellText(locale, 'Bearbeiten...', 'Edit...')}</span>
         </button>
       )}
 
@@ -503,7 +505,7 @@ function PinnedContextMenuOverlay({
           onClick={() => onMove(app, 'prev')}
         >
           <ArrowLeft size={13} />
-          <span>Nach vorne verschieben</span>
+          <span>{shellText(locale, 'Nach vorne verschieben', 'Move forward')}</span>
         </button>
       )}
 
@@ -514,7 +516,7 @@ function PinnedContextMenuOverlay({
           onClick={() => onMove(app, 'next')}
         >
           <ArrowRight size={13} />
-          <span>Nach hinten verschieben</span>
+          <span>{shellText(locale, 'Nach hinten verschieben', 'Move backward')}</span>
         </button>
       )}
 
@@ -526,7 +528,7 @@ function PinnedContextMenuOverlay({
         onClick={() => onRemove(app.id)}
       >
         <Trash2 size={13} />
-        <span>Aus Pinned Apps entfernen</span>
+        <span>{shellText(locale, 'Aus Pinned Apps entfernen', 'Remove from pinned apps')}</span>
       </button>
     </div>
   );

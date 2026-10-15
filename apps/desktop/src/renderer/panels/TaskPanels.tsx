@@ -18,6 +18,7 @@ import { jsonPreview } from './NativeRestPanels.js';
 import type { DesktopChatMessage, DesktopSessionDetail } from '../shell-state.js';
 import { OptionalAiProfileContext, useOptionalAiPolicy } from '../optional-ai-policy.js';
 import { useDesktopI18n } from '../i18n.js';
+import { shellText } from '../i18n/shell-text.js';
 
 export function NativeTaskCenterMain(props: { initialSection: 'now' | 'scheduled' | 'board'; activeContextItem: string; activeSpacePath: string; activeSession: DesktopSessionDetail | null; messages: DesktopChatMessage[]; serviceStatus: ServiceStatus | null }): JSX.Element {
   const { locale } = useDesktopI18n();
@@ -132,6 +133,7 @@ export function NativeTasksMain({
   activeContextItem: string;
   serviceStatus: ServiceStatus | null;
 }): JSX.Element {
+  const { locale } = useDesktopI18n();
   const ready = canCallSidekickApi(serviceStatus);
   const [jobs, setJobs] = useState<CronJobSummary[]>([]);
   const [loading, setLoading] = useState(false);
@@ -250,7 +252,7 @@ export function NativeTasksMain({
         <div>
           <span className="eyebrow">Tasks</span>
           <h1>{section}</h1>
-          <p>Wiederkehrende Aufgaben anlegen, pausieren und ausführen.</p>
+          <p>{shellText(locale, "Wiederkehrende Aufgaben anlegen, pausieren und ausführen.", "Create, pause, and run recurring tasks.")}</p>
         </div>
         <button type="button" className="secondary-action compact" onClick={() => void refresh()} disabled={!ready || loading}>
           {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}

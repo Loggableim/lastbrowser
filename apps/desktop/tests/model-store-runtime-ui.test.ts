@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import type { StoreModel } from '../src/renderer/model-store-contracts.js';
 import { decodeStoreInput, decodeStoreMedia, storeConsentKey, storeExecutionLabel, storeModelActions } from '../src/renderer/components/model-store-actions.js';
 import { LocalModelMediaForm } from '../src/renderer/components/LocalModelMedia.js';
+import { DesktopI18nProvider } from '../src/renderer/i18n.js';
 import { filterStoreModels, storeHardwareRecommendation } from '../src/renderer/components/model-store-presentation.js';
 
 const base = { id:'publisher/model', revision:'revision-a', installQualified:true, licenseDigest:'license-a', installed:null,
@@ -55,25 +56,25 @@ describe('real store runtime actions', () => {
   it('renders only backend-provided generation bounds without dispatching any operation', () => {
     let calls=0;
     const model={...base,execution:{...execution,kind:'image' as const,media:{width:{min:256,max:512,step:64},height:{min:256,max:512,step:64},steps:{min:1,max:8,default:4}}}};
-    const html=renderToStaticMarkup(React.createElement(LocalModelMediaForm,{model,disabled:false,request:async()=>{calls++;}}));
+    const html=renderToStaticMarkup(React.createElement(DesktopI18nProvider, null, React.createElement(LocalModelMediaForm,{model,disabled:false,request:async()=>{calls++;}})));
     expect(html).toContain('min="256" max="512" step="64"');
-    expect(html).toContain('Bild lokal erstellen');
+    expect(html).toContain('Create image locally');
     expect(html).toContain('maxLength="4096"');
     expect(html).toContain('max="2147483647"');
     expect(html).not.toContain('4294967295');
     expect(calls).toBe(0);
-    expect(renderToStaticMarkup(React.createElement(LocalModelMediaForm,{model:base,disabled:false,request:async()=>{calls++;}}))).toContain('noch keine geprüfte');
+    expect(renderToStaticMarkup(React.createElement(DesktopI18nProvider, null, React.createElement(LocalModelMediaForm,{model:base,disabled:false,request:async()=>{calls++;}})))).toContain('No verified creation setup');
   });
   it('requires native local image/audio selections for declared I2V and S2V inputs', () => {
     const model={...base,execution:{...execution,kind:'video' as const,media:{width:{min:256,max:512,step:64},height:{min:256,max:512,step:64},
       steps:{min:1,max:8,default:4},frames:{min:33,max:81,step:16},fps:{min:16,max:16,default:16},requiredInputs:['reference_image','audio_wav'] as Array<'reference_image'|'audio_wav'>}}};
     let calls=0;
-    const html=renderToStaticMarkup(React.createElement(LocalModelMediaForm,{model,disabled:false,request:async()=>{calls++;}}));
-    expect(html).toContain('Bild auswählen');
-    expect(html).toContain('WAV auswählen');
-    expect(html).toContain('PCM-WAV');
+    const html=renderToStaticMarkup(React.createElement(DesktopI18nProvider, null, React.createElement(LocalModelMediaForm,{model,disabled:false,request:async()=>{calls++;}})));
+    expect(html).toContain('Choose image');
+    expect(html).toContain('Choose WAV');
+    expect(html).toContain('PCM WAV');
     expect(html).toContain('max="16" value="16"');
-    expect(html).toMatch(/disabled=""[^>]*>Video lokal erstellen/);
+    expect(html).toMatch(/disabled=""[^>]*>Create video locally/);
     expect(html).not.toContain('type="file"');
     expect(calls).toBe(0);
   });
@@ -87,10 +88,10 @@ describe('real store runtime actions', () => {
     const model={...base,execution:{...execution,kind:'video' as const,benchmarkAllowed:true,executeAllowed:false,
       media:{width:{min:256,max:512,step:64},height:{min:256,max:512,step:64},steps:{min:1,max:8,default:4},
         frames:{min:33,max:81,step:16},fps:{min:16,max:16,default:16},requiredInputs:['reference_image'] as Array<'reference_image'>}}};
-    const html=renderToStaticMarkup(React.createElement(LocalModelMediaForm,{model,disabled:false,canBenchmark:true,canGenerate:false,request:async()=>undefined}));
-    expect(html).toContain('Mit diesen Dateien auf diesem PC testen');
-    expect(html).toMatch(/disabled=""[^>]*>Mit diesen Dateien auf diesem PC testen/);
-    expect(html).toMatch(/disabled=""[^>]*>Video lokal erstellen/);
-    expect(html).toContain('Nach einem erfolgreichen Gerätetest');
+    const html=renderToStaticMarkup(React.createElement(DesktopI18nProvider, null, React.createElement(LocalModelMediaForm,{model,disabled:false,canBenchmark:true,canGenerate:false,request:async()=>undefined})));
+    expect(html).toContain('Test with these files on this PC');
+    expect(html).toMatch(/disabled=""[^>]*>Test with these files on this PC/);
+    expect(html).toMatch(/disabled=""[^>]*>Create video locally/);
+    expect(html).toContain('After a successful device test');
   });
 });

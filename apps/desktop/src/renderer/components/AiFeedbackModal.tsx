@@ -8,7 +8,9 @@
  */
 
 import React, { useState } from 'react';
+import { useDesktopI18n } from '../i18n.js';
 import { AlertCircle, CheckCircle2, MessageSquare, ThumbsDown, X } from 'lucide-react';
+import { shellText } from '../i18n/shell-text.js';
 
 export interface AiFeedbackEntry {
   id: string;
@@ -59,6 +61,7 @@ export function AiFeedbackModal({
   onClose: () => void;
   onSubmitted?: (entry: AiFeedbackEntry) => void;
 }): JSX.Element | null {
+  const { locale } = useDesktopI18n();
   const [reason, setReason] = useState<AiFeedbackEntry['reason']>('inaccurate');
   const [comments, setComments] = useState('');
   const [submitted, setSubmitted] = useState(false);
@@ -87,9 +90,9 @@ export function AiFeedbackModal({
         <header className="ai-feedback-modal-header">
           <div className="ai-feedback-title-row">
             <ThumbsDown size={16} className="ai-feedback-icon" />
-            <strong>Feedback zur KI-Antwort</strong>
+            <strong>{shellText(locale, "Feedback zur KI-Antwort", "Feedback on the AI reply")}</strong>
           </div>
-          <button type="button" className="ai-feedback-close-btn" onClick={onClose} aria-label="Schließen">
+          <button type="button" className="ai-feedback-close-btn" onClick={onClose} aria-label={shellText(locale, "Schließen", "Close")}>
             <X size={14} />
           </button>
         </header>
@@ -97,7 +100,7 @@ export function AiFeedbackModal({
         {submitted ? (
           <div className="ai-feedback-success-state">
             <CheckCircle2 size={32} color="#22c55e" />
-            <p>Vielen Dank für deine Rückmeldung! Dein Feedback hilft, LastBrowser zu verbessern.</p>
+            <p>{shellText(locale, "Vielen Dank für deine Rückmeldung! Dein Feedback hilft, LastBrowser zu verbessern.", "Thanks for the feedback. It helps improve LastBrowser.")}</p>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="ai-feedback-form">
@@ -106,14 +109,14 @@ export function AiFeedbackModal({
             </p>
 
             <div className="ai-feedback-quote-preview">
-              <span className="quote-label">Auszug:</span>
+              <span className="quote-label">{shellText(locale, "Auszug:", "Excerpt:")}</span>
               <p className="quote-text">
                 {messageContent.slice(0, 140)}
                 {messageContent.length > 140 ? '…' : ''}
               </p>
             </div>
 
-            <label className="ai-feedback-field-label">Was trifft auf diese Antwort zu?</label>
+            <label className="ai-feedback-field-label">{shellText(locale, "Was trifft auf diese Antwort zu?", "What applies to this reply?")}</label>
             <div className="ai-feedback-radio-group">
               <label className="ai-feedback-radio-item">
                 <input
@@ -123,7 +126,7 @@ export function AiFeedbackModal({
                   checked={reason === 'inaccurate'}
                   onChange={() => setReason('inaccurate')}
                 />
-                <span>Ungenau oder sachlich inkorrekt</span>
+                <span>{shellText(locale, "Ungenau oder sachlich inkorrekt", "Inaccurate or factually wrong")}</span>
               </label>
               <label className="ai-feedback-radio-item">
                 <input
@@ -133,7 +136,7 @@ export function AiFeedbackModal({
                   checked={reason === 'harmful'}
                   onChange={() => setReason('harmful')}
                 />
-                <span>Unangemessener, irreführender oder störender Inhalt</span>
+                <span>{shellText(locale, "Unangemessener, irreführender oder störender Inhalt", "Inappropriate, misleading, or disruptive content")}</span>
               </label>
               <label className="ai-feedback-radio-item">
                 <input
@@ -143,7 +146,7 @@ export function AiFeedbackModal({
                   checked={reason === 'formatting'}
                   onChange={() => setReason('formatting')}
                 />
-                <span>Unvollständig, abgeschnitten oder Formatierungsfehler</span>
+                <span>{shellText(locale, "Unvollständig, abgeschnitten oder Formatierungsfehler", "Incomplete, cut off, or formatting error")}</span>
               </label>
               <label className="ai-feedback-radio-item">
                 <input
@@ -153,14 +156,14 @@ export function AiFeedbackModal({
                   checked={reason === 'other'}
                   onChange={() => setReason('other')}
                 />
-                <span>Sonstiges Feedback</span>
+                <span>{shellText(locale, "Sonstiges Feedback", "Other feedback")}</span>
               </label>
             </div>
 
             <label className="ai-feedback-field-label">Details oder Anmerkungen (optional):</label>
             <textarea
               className="ai-feedback-textarea"
-              placeholder="Was hätte die KI besser oder anders machen sollen?"
+              placeholder={shellText(locale, "Was hätte die KI besser oder anders machen sollen?", "What should the AI have done differently?")}
               rows={3}
               value={comments}
               onChange={(e) => setComments(e.target.value)}

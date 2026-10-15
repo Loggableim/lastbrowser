@@ -2,6 +2,7 @@ import React, { Component, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
 import { BootCommitted } from './boot-fallback.js';
+import { readShellLocale, shellText } from './i18n/shell-text.js';
 
 interface RootErrorBoundaryProps {
   children: ReactNode;
@@ -42,6 +43,7 @@ class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBound
 
   render(): ReactNode {
     if (this.state.hasError) {
+      const locale = readShellLocale();
       return (
         <div style={{
           display: 'flex',
@@ -67,10 +69,10 @@ class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBound
           }}>
             <div style={{ fontSize: '36px', marginBottom: '16px' }}>⚡</div>
             <h2 style={{ fontSize: '20px', margin: '0 0 12px 0', fontWeight: 600 }}>
-              Unerwarteter Anzeigefehler
+              {shellText(locale, 'Unerwarteter Anzeigefehler', 'Unexpected display error')}
             </h2>
             <p style={{ fontSize: '13px', color: 'rgba(232, 242, 255, 0.7)', margin: '0 0 20px 0', lineHeight: 1.5 }}>
-              Ein Fehler in der Benutzeroberfläche hat das Laden verhindert. Du kannst die Ansicht neu laden oder den Cache zurücksetzen.
+              {shellText(locale, 'Ein Fehler in der Benutzeroberfläche hat das Laden verhindert. Du kannst die Ansicht neu laden oder den Cache zurücksetzen.', 'A display error stopped this view from loading. Reload the view or reset the cache.')}
             </p>
             {this.state.error && (
               <pre style={{
@@ -103,7 +105,7 @@ class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBound
                   cursor: 'pointer'
                 }}
               >
-                Neu laden
+                {shellText(locale, 'Neu laden', 'Reload')}
               </button>
               <button
                 type="button"
@@ -118,7 +120,7 @@ class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBound
                   cursor: 'pointer'
                 }}
               >
-                Tabs zurücksetzen
+                {shellText(locale, 'Tabs zurücksetzen', 'Reset tabs')}
               </button>
             </div>
           </div>

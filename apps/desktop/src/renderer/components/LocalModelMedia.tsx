@@ -2,11 +2,14 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ModelStoreRequest, StoreJob, StoreModel } from '../model-store-contracts.js';
 import { newIndependentRequestId } from '../independent-contracts.js';
 import { decodeStoreInput, decodeStoreMedia, type StoreSelectedInput } from './model-store-actions.js';
+import { useDesktopI18n } from '../i18n.js';
+import { shellText } from '../i18n/shell-text.js';
 
 type Request = (request: ModelStoreRequest) => Promise<unknown>;
 
 export function LocalModelMediaForm({ model, request, disabled, canGenerate = false, canBenchmark = false, benchmarkMode = 'quick', backend = 'cpu' }:
   { model: StoreModel; request: Request; disabled: boolean; canGenerate?: boolean; canBenchmark?: boolean; benchmarkMode?: 'quick'|'standard'; backend?: 'cpu'|'vulkan' }) {
+  const { locale } = useDesktopI18n();
   const bounds = model.execution?.media;
   const [prompt, setPrompt] = useState('');
   const [width, setWidth] = useState(bounds?.width.min ?? 512);
@@ -20,7 +23,7 @@ export function LocalModelMediaForm({ model, request, disabled, canGenerate = fa
   const [picking, setPicking] = useState(false), [inputError, setInputError] = useState('');
   const lifecycle = useRef(0);
   useEffect(() => () => { lifecycle.current++; }, []);
-  if (!bounds) return <p>Für dieses Modell ist noch keine geprüfte Erstellungskonfiguration verfügbar.</p>;
+  if (!bounds) return <p>{shellText(locale, 'Für dieses Modell ist noch keine geprüfte Erstellungskonfiguration verfügbar.', 'No verified creation setup is available for this model yet.')}</p>;
   const video = model.execution?.kind === 'video';
   const needsImage = bounds.requiredInputs?.includes('reference_image') ?? false;
   const needsAudio = bounds.requiredInputs?.includes('audio_wav') ?? false;
@@ -43,7 +46,7 @@ export function LocalModelMediaForm({ model, request, disabled, canGenerate = fa
       const previous = kind === 'reference_image' ? referenceImage : audio;
       if (kind === 'reference_image') setReferenceImage(selected); else setAudio(selected);
       if (previous && previous.assetId !== selected.assetId) await request({ operation: 'releaseMediaInput', assetId: previous.assetId });
-    } catch (reason) { if (epoch === lifecycle.current) setInputError(reason instanceof Error ? reason.message : 'Die Datei konnte nicht ausgewählt werden.'); }
+    } catch (reason) { if (epoch === lifecycle.current) setInputError(reason instanceof Error ? reason.message : shellText(locale, "Die Datei konnte nicht ausgewählt werden.", "The file could not be selected.")); }
     finally { if (epoch === lifecycle.current) setPicking(false); }
   }
   async function clear(kind: 'reference_image' | 'audio_wav') {
@@ -63,42 +66,43 @@ export function LocalModelMediaForm({ model, request, disabled, canGenerate = fa
       ...(needsImage && referenceImage ? { referenceImageAssetId: referenceImage.assetId } : {}),
       ...(needsAudio && audio ? { audioAssetId: audio.assetId } : {}) });
   }}>
-    <h4>{video ? 'Video erstellen' : 'Bild erstellen'}</h4>
-    <label>Was möchtest du erstellen?<textarea value={prompt} maxLength={4096} onChange={event => setPrompt(event.target.value)} required disabled={disabled} /></label>
-    {(needsImage || needsAudio) && <fieldset className="local-model-media-inputs" disabled={disabled || picking}><legend>Deine lokalen Dateien</legend>
-      {needsImage && <div><strong>Referenzbild</strong><p>{referenceImage ? `${referenceImage.name}${referenceImage.width && referenceImage.height ? ` · ${referenceImage.width} × ${referenceImage.height}` : ''}` : 'PNG oder JPEG · höchstens 16 MiB'}</p>
-        <button type="button" onClick={() => void pick('reference_image')}>{referenceImage ? 'Bild ändern' : 'Bild auswählen'}</button>
-        {referenceImage && <button type="button" onClick={() => void clear('reference_image')}>Bild entfernen</button>}</div>}
-      {needsAudio && <div><strong>Audio</strong><p>{audio ? `${audio.name}${audio.durationMs ? ` · ${Math.round(audio.durationMs / 1000)} s` : ''}` : 'PCM-WAV · höchstens 24 MiB und 2 Minuten'}</p>
-        <button type="button" onClick={() => void pick('audio_wav')}>{audio ? 'Audio ändern' : 'WAV auswählen'}</button>
-        {audio && <button type="button" onClick={() => void clear('audio_wav')}>Audio entfernen</button>}</div>}
-      <p>Diese Dateien bleiben auf deinem PC und werden nur für dieses Modell verwendet.</p>
+    <h4>{video ? shellText(locale, 'Video erstellen', 'Create video') : shellText(locale, 'Bild erstellen', 'Create image')}</h4>
+    <label>{shellText(locale, 'Was möchtest du erstellen?', 'What do you want to create?')}<textarea value={prompt} maxLength={4096} onChange={event => setPrompt(event.target.value)} required disabled={disabled} /></label>
+    {(needsImage || needsAudio) && <fieldset className="local-model-media-inputs" disabled={disabled || picking}><legend>{shellText(locale, 'Deine lokalen Dateien', 'Your local files')}</legend>
+      {needsImage && <div><strong>{shellText(locale, 'Referenzbild', 'Reference image')}</strong><p>{referenceImage ? `${referenceImage.name}${referenceImage.width && referenceImage.height ? ` · ${referenceImage.width} × ${referenceImage.height}` : ''}` : shellText(locale, 'PNG oder JPEG · höchstens 16 MiB', 'PNG or JPEG · 16 MiB maximum')}</p>
+        <button type="button" onClick={() => void pick('reference_image')}>{referenceImage ? shellText(locale, 'Bild ändern', 'Change image') : shellText(locale, 'Bild auswählen', 'Choose image')}</button>
+        {referenceImage && <button type="button" onClick={() => void clear('reference_image')}>{shellText(locale, 'Bild entfernen', 'Remove image')}</button>}</div>}
+      {needsAudio && <div><strong>{shellText(locale, 'Audio', 'Audio')}</strong><p>{audio ? `${audio.name}${audio.durationMs ? ` · ${Math.round(audio.durationMs / 1000)} s` : ''}` : shellText(locale, 'PCM-WAV · höchstens 24 MiB und 2 Minuten', 'PCM WAV · 24 MiB and 2 minutes maximum')}</p>
+        <button type="button" onClick={() => void pick('audio_wav')}>{audio ? shellText(locale, 'Audio ändern', 'Change audio') : shellText(locale, 'WAV auswählen', 'Choose WAV')}</button>
+        {audio && <button type="button" onClick={() => void clear('audio_wav')}>{shellText(locale, 'Audio entfernen', 'Remove audio')}</button>}</div>}
+      <p>{shellText(locale, 'Diese Dateien bleiben auf deinem PC und werden nur für dieses Modell verwendet.', 'These files stay on your PC and are used only for this model.')}</p>
     </fieldset>}
-    {picking && <p role="status">Datei wird lokal geprüft…</p>}
+    {picking && <p role="status">{shellText(locale, 'Datei wird lokal geprüft…', 'Checking the file locally…')}</p>}
     {inputError && <p role="alert">{inputError}</p>}
     {canBenchmark && <button type="button" disabled={disabled || picking || !inputsValid} onClick={() => {
       if (disabled || picking || !inputsValid) return;
       void request({ operation: 'benchmark', modelId: model.id, requestId: newIndependentRequestId(), mode: benchmarkMode, backend,
         ...(needsImage && referenceImage ? { referenceImageAssetId: referenceImage.assetId } : {}),
         ...(needsAudio && audio ? { audioAssetId: audio.assetId } : {}) });
-    }}>Mit diesen Dateien auf diesem PC testen</button>}
-    {!canGenerate && <p>Nach einem erfolgreichen Gerätetest kannst du dieses Modell zur Erstellung nutzen.</p>}
+    }}>{shellText(locale, 'Mit diesen Dateien auf diesem PC testen', 'Test with these files on this PC')}</button>}
+    {!canGenerate && <p>{shellText(locale, 'Nach einem erfolgreichen Gerätetest kannst du dieses Modell zur Erstellung nutzen.', 'After a successful device test you can use this model to create.')}</p>}
     <div className="local-model-media-fields">
-      <label>Breite<input type="number" min={bounds.width.min} max={bounds.width.max} step={bounds.width.step} value={width} onChange={event => setWidth(event.target.valueAsNumber)} disabled={disabled} /></label>
-      <label>Höhe<input type="number" min={bounds.height.min} max={bounds.height.max} step={bounds.height.step} value={height} onChange={event => setHeight(event.target.valueAsNumber)} disabled={disabled} /></label>
-      {video && bounds.frames && <label>Einzelbilder<input type="number" min={bounds.frames.min} max={bounds.frames.max} step={bounds.frames.step} value={frames} onChange={event => setFrames(event.target.valueAsNumber)} disabled={disabled} /></label>}
-      {video && bounds.fps && <label>Bilder pro Sekunde<input type="number" min={bounds.fps.min} max={bounds.fps.max} value={fps} onChange={event => setFps(event.target.valueAsNumber)} disabled={disabled} /></label>}
+      <label>{shellText(locale, 'Breite', 'Width')}<input type="number" min={bounds.width.min} max={bounds.width.max} step={bounds.width.step} value={width} onChange={event => setWidth(event.target.valueAsNumber)} disabled={disabled} /></label>
+      <label>{shellText(locale, 'Höhe', 'Height')}<input type="number" min={bounds.height.min} max={bounds.height.max} step={bounds.height.step} value={height} onChange={event => setHeight(event.target.valueAsNumber)} disabled={disabled} /></label>
+      {video && bounds.frames && <label>{shellText(locale, 'Einzelbilder', 'Frames')}<input type="number" min={bounds.frames.min} max={bounds.frames.max} step={bounds.frames.step} value={frames} onChange={event => setFrames(event.target.valueAsNumber)} disabled={disabled} /></label>}
+      {video && bounds.fps && <label>{shellText(locale, 'Bilder pro Sekunde', 'Frames per second')}<input type="number" min={bounds.fps.min} max={bounds.fps.max} value={fps} onChange={event => setFps(event.target.valueAsNumber)} disabled={disabled} /></label>}
     </div>
-    <details className="local-model-advanced"><summary>Weitere Optionen</summary><div className="local-model-media-fields">
-      <label>Schritte<input type="number" min={bounds.steps.min} max={bounds.steps.max} value={steps} onChange={event => setSteps(event.target.valueAsNumber)} disabled={disabled} /></label>
-      <label>Startwert<input type="number" min={0} max={2147483647} value={seed} onChange={event => setSeed(event.target.valueAsNumber)} disabled={disabled} /></label>
+    <details className="local-model-advanced"><summary>{shellText(locale, 'Weitere Optionen', 'More options')}</summary><div className="local-model-media-fields">
+      <label>{shellText(locale, 'Schritte', 'Steps')}<input type="number" min={bounds.steps.min} max={bounds.steps.max} value={steps} onChange={event => setSteps(event.target.valueAsNumber)} disabled={disabled} /></label>
+      <label>{shellText(locale, 'Startwert', 'Seed')}<input type="number" min={0} max={2147483647} value={seed} onChange={event => setSeed(event.target.valueAsNumber)} disabled={disabled} /></label>
     </div></details>
-    <p className="local-model-catalog-note">Die verfügbaren Größen wurden für dieses Modell freigegeben. Erstellung bleibt lokal und kann jederzeit gestoppt werden.</p>
-    <button className="local-model-primary" disabled={disabled || picking || !canGenerate || !valid} type="submit">{video ? 'Video lokal erstellen' : 'Bild lokal erstellen'}</button>
+    <p className="local-model-catalog-note">{shellText(locale, 'Die verfügbaren Größen wurden für dieses Modell freigegeben. Erstellung bleibt lokal und kann jederzeit gestoppt werden.', 'The available sizes were approved for this model. Creation stays local and can be stopped at any time.')}</p>
+    <button className="local-model-primary" disabled={disabled || picking || !canGenerate || !valid} type="submit">{video ? shellText(locale, 'Video lokal erstellen', 'Create video locally') : shellText(locale, 'Bild lokal erstellen', 'Create image locally')}</button>
   </form>;
 }
 
 export function LocalModelMediaResult({ job, request }: { job: StoreJob; request: Request }) {
+  const { locale } = useDesktopI18n();
   const [index, setIndex] = useState(0), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [preview, setPreview] = useState<{ url: string; mime: string; id: string } | null>(null);
   const generation = useRef(0);
@@ -116,23 +120,23 @@ export function LocalModelMediaResult({ job, request }: { job: StoreJob; request
     try {
       const data = decodeStoreMedia(await request({ operation: 'readMedia', jobId: job.id, assetId: selected.id }));
       if (epoch !== generation.current) return;
-      if (data.mimeType !== selected.mimeType) throw new Error('Das Ergebnisformat hat sich geändert. Bitte neu laden.');
+      if (data.mimeType !== selected.mimeType) throw new Error(shellText(locale, "Das Ergebnisformat hat sich geändert. Bitte neu laden.", "The result format changed. Please reload."));
       const url = URL.createObjectURL(new Blob([data.bytes as BlobPart], { type: data.mimeType }));
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
       urlRef.current = url; setPreview({ url, mime: data.mimeType, id: selected.id });
-    } catch (reason) { if (epoch === generation.current) setError(reason instanceof Error ? reason.message : 'Das Ergebnis ist nicht verfügbar.'); }
+    } catch (reason) { if (epoch === generation.current) setError(reason instanceof Error ? reason.message : shellText(locale, "Das Ergebnis ist nicht verfügbar.", "The result is not available.")); }
     finally { if (epoch === generation.current) setBusy(false); }
   }
-  return <section className="local-model-media-result" aria-label="Lokal erstelltes Ergebnis">
-    <h5>{job.result?.kind === 'video' ? 'Video-Ergebnis' : 'Bild-Ergebnis'}</h5>
-    {assets.length > 1 && <label>Einzelbild<select value={index} onChange={event => setIndex(Number(event.target.value))}>{assets.map((asset, number) => <option key={asset.id} value={number}>{number + 1} / {assets.length}</option>)}</select></label>}
-    <p>{selected.width} × {selected.height}{selected.fps ? ` · ${selected.fps} Bilder/s` : ''}</p>
-    <button type="button" disabled={busy} onClick={() => void open()}>{busy ? 'Ergebnis wird geladen…' : 'Vorschau öffnen'}</button>
+  return <section className="local-model-media-result" aria-label={shellText(locale, 'Lokal erstelltes Ergebnis', 'Locally created result')}>
+    <h5>{job.result?.kind === 'video' ? shellText(locale, 'Video-Ergebnis', 'Video result') : shellText(locale, 'Bild-Ergebnis', 'Image result')}</h5>
+    {assets.length > 1 && <label>{shellText(locale, 'Einzelbild', 'Frame')}<select value={index} onChange={event => setIndex(Number(event.target.value))}>{assets.map((asset, number) => <option key={asset.id} value={number}>{number + 1} / {assets.length}</option>)}</select></label>}
+    <p>{selected.width} × {selected.height}{selected.fps ? ` · ${selected.fps} ${shellText(locale, 'Bilder/s', 'fps')}` : ''}</p>
+    <button type="button" disabled={busy} onClick={() => void open()}>{busy ? shellText(locale, "Ergebnis wird geladen…", "Loading result…") : shellText(locale, "Vorschau öffnen", "Open preview")}</button>
     {error && <p role="alert">{error}</p>}
     {preview?.id === selected.id && <>
-      {preview.mime.startsWith('video/') ? <video controls preload="metadata" src={preview.url} /> : <img src={preview.url} alt="Lokal erstelltes Ergebnis" />}
-      <a href={preview.url} download={`lastbrowser-${job.id}-${index + 1}.${preview.mime === 'image/png' ? 'png' : preview.mime === 'image/jpeg' ? 'jpg' : preview.mime === 'image/webp' ? 'webp' : preview.mime === 'video/mp4' ? 'mp4' : 'webm'}`}>Ergebnis speichern</a>
+      {preview.mime.startsWith('video/') ? <video controls preload="metadata" src={preview.url} /> : <img src={preview.url} alt={shellText(locale, 'Lokal erstelltes Ergebnis', 'Locally created result')} />}
+      <a href={preview.url} download={`lastbrowser-${job.id}-${index + 1}.${preview.mime === 'image/png' ? 'png' : preview.mime === 'image/jpeg' ? 'jpg' : preview.mime === 'image/webp' ? 'webp' : preview.mime === 'video/mp4' ? 'mp4' : 'webm'}`}>{shellText(locale, 'Ergebnis speichern', 'Save result')}</a>
     </>}
-    {job.result?.kind === 'video' && assets.length > 1 && <p>Einzelbildfolge · wähle ein Bild für Vorschau oder Speicherung.</p>}
+    {job.result?.kind === 'video' && assets.length > 1 && <p>{shellText(locale, "Einzelbildfolge · wähle ein Bild für Vorschau oder Speicherung.", "Frame sequence · choose an image to preview or save.")}</p>}
   </section>;
 }

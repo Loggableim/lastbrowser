@@ -46,6 +46,7 @@ import './sidebar-drawer-tabs.css';
 import './sidebar-sessions.css';
 import { useTerminalEnabled } from '../terminal-feature.js';
 import { useOptionalAiPolicy } from '../optional-ai-policy.js';
+import { shellText } from '../i18n/shell-text.js';
 
 export interface DrawerItem {
   id: LastbrowserPanelId;
@@ -355,7 +356,7 @@ export function SidekickSidebar({
   return (
     <aside className={`sidekick-sidebar ${mode} dock-pos-${effectiveDockPos} ${researchToolbar ? 'has-research-toolbar' : ''} ${isFloatingOverlay ? 'zen-floating-sidebar' : ''}`}>
       {researchToolbar && <div className="sidebar-research-host">
-        {mode === 'slim' ? <button type="button" className="sidebar-research-reveal" title="Nova Research" aria-label="Nova Research öffnen"
+        {mode === 'slim' ? <button type="button" className="sidebar-research-reveal" title="Nova Research" aria-label={shellText(locale, "Nova Research öffnen", "Open Nova Research")}
           onClick={() => {
             onSetMode('expanded');
             requestAnimationFrame(() => requestAnimationFrame(() => {

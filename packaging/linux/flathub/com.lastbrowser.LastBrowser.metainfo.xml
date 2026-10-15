@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.lastbrowser.LastBrowser</id>
+  <name>LastBrowser</name>
+  <summary>Linux-Vorschau: Browser für Windows und Linux mit Sidekick</summary>
+  <developer id="com.lastbrowser">
+    <name>LastBrowser</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>LicenseRef-LastBrowser</project_license>
+  <url type="homepage">https://lastbrowser.com</url>
+  <url type="help">https://lastbrowser.com/support/</url>
+  <description>
+    <p>LastBrowser is a browser for Windows and Linux with the built-in AI system Sidekick. This Linux package is a preview of the published version 0.1.56.</p>
+    <p>LastBrowser ist ein Browser für Windows und Linux mit dem eingebauten KI-System Sidekick. Dieses Linux-Paket ist eine Vorschau der veröffentlichten Version 0.1.56.</p>
+  </description>
+  <launchable type="desktop-id">com.lastbrowser.LastBrowser.desktop</launchable>
+  <screenshots>
+    <screenshot type="default">
+      <caption>LastBrowser Linux preview with the Sidekick sidebar</caption>
+      <image type="source" width="1920" height="1080">https://github.com/Loggableim/lastbrowser/raw/cursor/vesper-v0157-linux-integrate-1e2c/assets/store/store-screen-1-zen-sidebar.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>LastBrowser Linux preview with Sidekick beside the page</caption>
+      <image type="source" width="1920" height="1080">https://github.com/Loggableim/lastbrowser/raw/cursor/vesper-v0157-linux-integrate-1e2c/assets/store/store-screen-2-copilot-splitview.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.1.56" date="2026-10-13">
+      <description>
+        <p>Published Linux preview 0.1.56. Linux-Vorschau der veröffentlichten Version 0.1.56.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+  <categories>
+    <category>Network</category>
+    <category>WebBrowser</category>
+  </categories>
+</component>

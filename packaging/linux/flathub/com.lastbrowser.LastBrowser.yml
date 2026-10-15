@@ -1,0 +1,45 @@
+app-id: com.lastbrowser.LastBrowser
+runtime: org.freedesktop.Platform
+runtime-version: '25.08'
+sdk: org.freedesktop.Sdk
+command: lastbrowser
+separate-locales: false
+finish-args:
+  - --share=ipc
+  - --share=network
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --socket=pulseaudio
+  - --device=dri
+  - --filesystem=xdg-download:create
+  - --filesystem=xdg-documents:create
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.freedesktop.secrets
+modules:
+  - name: lastbrowser
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 lastbrowser.sh /app/bin/lastbrowser
+      - install -Dm755 apply_extra /app/bin/apply_extra
+      - install -Dm644 com.lastbrowser.LastBrowser.desktop /app/share/applications/com.lastbrowser.LastBrowser.desktop
+      - install -Dm644 com.lastbrowser.LastBrowser.metainfo.xml /app/share/metainfo/com.lastbrowser.LastBrowser.metainfo.xml
+      - install -Dm644 com.lastbrowser.LastBrowser.png /app/share/icons/hicolor/256x256/apps/com.lastbrowser.LastBrowser.png
+      - install -Dm644 LICENSE.LastBrowser /app/share/licenses/com.lastbrowser.LastBrowser/LICENSE.LastBrowser
+    sources:
+      - type: file
+        path: lastbrowser.sh
+      - type: file
+        path: apply_extra
+      - type: file
+        path: com.lastbrowser.LastBrowser.desktop
+      - type: file
+        path: com.lastbrowser.LastBrowser.metainfo.xml
+      - type: file
+        path: com.lastbrowser.LastBrowser.png
+      - type: file
+        path: LICENSE.LastBrowser
+      - type: extra-data
+        filename: Lastbrowser-0.1.56-x64.tar.gz
+        url: https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64.tar.gz
+        sha256: fe34e0d6ccf03d889c7eb2f55cd56ff7b52d1653f21ba7c82b6bc9234606d54e
+        size: 214261159

@@ -303,6 +303,7 @@ import { readShowUntestedProviderBetas, useShowUntestedProviderBetas } from './p
 import { useActiveModelRevision } from './active-model-selection.js';
 import { chooseQuickchatModel } from './quickchat-automatic.js';
 import { listFreeOpenCodeModels, logOpenCodeAutoRouter, opencodeAutoRouterEnabled, resolveAutoRouterSend } from './opencode-auto-router.js';
+import { ROUTER_SETTINGS_KEY, readRouterSettings } from './router-settings.js';
 import { readQuickchatFavorite, readQuickchatFavoriteState, setQuickchatFavorite, QUICKCHAT_FAVORITE_CHANGED_EVENT } from './quickchat-preferences.js';
 import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
@@ -4355,6 +4356,8 @@ function AppContent(): JSX.Element {
         });
         const route = resolveAutoRouterSend({
           enabled, explicitModel: false, text: trimmed, pageContext: '',
+          routingEnabled: readRouterSettings(window.localStorage.getItem(ROUTER_SETTINGS_KEY)).enabled,
+          order: readRouterSettings(window.localStorage.getItem(ROUTER_SETTINGS_KEY)).order,
           freeModels: listFreeOpenCodeModels(chatModelSelection.groups || [])
         });
         if (!route) return chatModelSelection;
@@ -5039,9 +5042,11 @@ function AppContent(): JSX.Element {
       flag: window.lastbrowser.opencodeAutoRouter ? '1' : null,
       stored: window.localStorage.getItem('lastbrowser.opencodeAutoRouter.v1')
     });
+    const routerSettings = readRouterSettings(window.localStorage.getItem(ROUTER_SETTINGS_KEY));
     const autoRoute = resolveAutoRouterSend({
-      enabled: autoEnabled, explicitModel: false, text: prompt,
+      enabled: autoEnabled && routerSettings.enabled, explicitModel: false, text: prompt,
       pageContext: context ? JSON.stringify(context) : '',
+      order: routerSettings.order,
       freeModels: listFreeOpenCodeModels(scopedSelection.groups || [])
     });
     const routedSelection = autoRoute && !favorite

@@ -11,8 +11,12 @@ export type AutoRouterPlan = Readonly<{
   action: 'disabled' | 'scout-only' | 'handoff';
 }>;
 
-const SCOUT_PREFERENCE = ['glm-5.3-flash', 'deepseek-v4.1-flash'];
-const STRONG_PREFERENCE = ['deepseek-v4.1-flash', 'glm-5.3-flash'];
+const SCOUT_PREFERENCE: readonly FreeModel[] = [
+  { provider: 'opencode', model: 'cat-jam-free' },
+  { provider: 'opencode', model: 'space-bunny-free' },
+  { provider: 'opencode-go', model: 'cat-jam-free' }
+];
+const DENIED = new Set(['opencode/deepseek-v4.1-flash-free', 'opencode-go/deepseek-v4.1-flash']);
 const COMPLEX_KEYWORD = /\b(refactor|debug|implement|architecture|migration|stacktrace|compare|analysiere|architektur|beweis|schritt)\b/i;
 const CODE_MARK = /```|\bfunction\b|\bclass\b|\bimport\b|\bdef\b/;
 
@@ -33,17 +37,54 @@ export function classifyAutoRouterPrompt(input: { text: string; pageContext?: st
   return { kind, score: Math.round(score * 10) / 10, reasons };
 }
 
-function freeOpenCode(models: readonly FreeModel[]): FreeModel[] {
-  return models.filter(model => /^opencode(?:[-_]|$)/i.test(model.provider) && model.model.trim());
+function modelKey(model: FreeModel): string {
+  return `${model.provider}/${model.model}`.toLowerCase();
 }
 
-function pick(models: readonly FreeModel[], preference: readonly string[], avoid?: FreeModel | null): FreeModel | null {
-  const pool = models.filter(model => !avoid || model.provider !== avoid.provider || model.model !== avoid.model);
-  for (const id of preference) {
-    const found = pool.find(model => model.model === id);
+function normalizeFreeModel(model: FreeModel): FreeModel {
+  const name = model.model.includes('/') ? model.model.slice(model.model.lastIndexOf('/') + 1) : model.model;
+  return { provider: model.provider.trim(), model: name.trim() };
+}
+
+export function isDefaultFreeRouterModel(model: FreeModel): boolean {
+  const normalized = normalizeFreeModel(model);
+  const key = modelKey(normalized);
+  if (!/^opencode(?:-go)?$/i.test(normalized.provider) || !normalized.model.toLowerCase().endsWith('-free')) return false;
+  if (DENIED.has(key) || normalized.model.toLowerCase().includes('muse-spark')) return false;
+  return true;
+}
+
+function freeOpenCode(models: readonly FreeModel[]): FreeModel[] {
+  return models.map(normalizeFreeModel).filter(isDefaultFreeRouterModel);
+}
+
+function sameModel(left: FreeModel, right: FreeModel): boolean {
+  return left.provider.toLowerCase() === right.provider.toLowerCase() && left.model.toLowerCase() === right.model.toLowerCase();
+}
+
+function pick(models: readonly FreeModel[], preference: readonly FreeModel[], avoid: FreeModel | null, fallback: 'any' | 'other'): FreeModel | null {
+  const pool = models.filter(model => !avoid || !sameModel(model, avoid));
+  for (const preferred of preference) {
+    const found = pool.find(model => sameModel(model, preferred));
     if (found) return found;
   }
-  return pool[0] ?? null;
+  if (fallback === 'any') return pool[0] ?? null;
+  return pool.find(model => !SCOUT_PREFERENCE.some(preferred => sameModel(model, preferred))) ?? null;
+}
+
+export type ModelClassJudgment = 'simple' | 'complex' | 'uncertain' | null;
+
+/** Heuristic plus the scout's own class. A missing judgment keeps the heuristic. Doubt is complex. */
+export function combineAutoRouterClass(heuristic: AutoRouterClass, modelJudgment: ModelClassJudgment): AutoRouterClass {
+  if (heuristic === 'complex' || modelJudgment === 'complex' || modelJudgment === 'uncertain') return 'complex';
+  return 'simple';
+}
+
+export function readScoutClass(text: string): ModelClassJudgment {
+  const match = text.match(/\{[^{}]*"class"\s*:\s*"(simple|complex|uncertain)"[^{}]*\}/i);
+  if (!match) return null;
+  const value = match[1].toLowerCase();
+  return value === 'simple' || value === 'complex' || value === 'uncertain' ? value : 'uncertain';
 }
 
 export function planOpenCodeAutoRoute(input: {
@@ -51,12 +92,15 @@ export function planOpenCodeAutoRoute(input: {
   pageContext?: string;
   freeModels: readonly FreeModel[];
   enabled: boolean;
+  modelJudgment?: ModelClassJudgment;
 }): AutoRouterPlan {
-  const classification = classifyAutoRouterPrompt(input);
+  const heuristic = classifyAutoRouterPrompt(input);
+  const kind = combineAutoRouterClass(heuristic.kind, input.modelJudgment ?? null);
+  const classification = { ...heuristic, kind, reasons: input.modelJudgment && input.modelJudgment !== 'simple' ? [...heuristic.reasons, `model:${input.modelJudgment}`] : heuristic.reasons };
   if (!input.enabled) return { enabled: false, classification, scout: null, strong: null, action: 'disabled' };
   const free = freeOpenCode(input.freeModels);
-  const scout = pick(free, SCOUT_PREFERENCE);
-  const strong = pick(free, STRONG_PREFERENCE, scout) ?? scout;
+  const scout = pick(free, SCOUT_PREFERENCE, null, 'any');
+  const strong = pick(free, [], scout, 'other');
   if (!scout) return { enabled: true, classification, scout: null, strong: null, action: 'disabled' };
   if (classification.kind === 'simple' || !strong || (strong.provider === scout.provider && strong.model === scout.model)) {
     return { enabled: true, classification, scout, strong: null, action: 'scout-only' };

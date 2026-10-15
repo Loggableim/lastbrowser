@@ -6,10 +6,12 @@ Eigener Strang. Nicht Teil des beta.10-Gates. Standard aus.
 
 Die erste Eingabe im Auto-Modus startet zwei Gratis-Spuren von OpenCode, nur wenn `LASTBROWSER_OPENCODE_AUTO_ROUTER=1` oder `localStorage['lastbrowser.opencodeAutoRouter.v1']==='1'`.
 
-1. Ein schnelles Gratis-Modell (`glm-5.3-flash`, sonst `deepseek-v4.1-flash`) streamt sofort eine kurze Einordnung.
-2. Parallel wählt der Router ein stärkeres Gratis-Modell (`deepseek-v4.1-flash`, wenn es nicht schon die Scout-Spur ist).
+1. Das schnelle Gratis-Modell ist `opencode/cat-jam-free` (Box-Benchmark: Median 4,5 s, p90 7,3 s, Einstufung 70 %, JSON 100 %). Ersatz ist `opencode/space-bunny-free`, danach `opencode-go/cat-jam-free`.
+2. Eine komplexe Frage geht nur dann an ein anderes Gratis-Modell, wenn der Katalog eines enthält, das nicht selbst das Schnellmodell ist. `opencode-go/deepseek-v4.1-flash` bleibt aus, bis Cid es freigibt.
 
-Die Klasse steht vorher per Heuristik fest, damit sie ohne Modellantwort messbar ist:
+Die Klasse ist Heuristik plus Modellurteil. Die Heuristik zählt Länge, Code, Schlüsselwörter und Seitenkontext. Ein fehlendes Modellurteil lässt die Heuristik stehen. `complex`, `uncertain` oder Widerspruch wird komplex.
+
+Nicht im Default: `opencode/deepseek-v4.1-flash-free` (Timeouts), `muse-spark` (unter Last instabil), Bezahlvarianten unter `opencode/*`.
 
 | Signal | Wirkung |
 | --- | --- |

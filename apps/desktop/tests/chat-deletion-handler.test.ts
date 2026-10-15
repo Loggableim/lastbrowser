@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import ts from 'typescript';
-import { sessionDeletionSucceeded, sessionListResponseMatchesScope } from '../src/renderer/session-list-scope.js';
+import { sessionDeletionSucceeded, sessionListResponseMatchesScope, mergeSessionListSnapshot } from '../src/renderer/session-list-scope.js';
 
 // Execute the actual handler, with controlled React state and IPC scheduling.
 // This proves its delayed-response decisions, not mounted DOM or disk persistence.
@@ -25,6 +25,7 @@ function fixture(handlerName = 'deleteNativeSession') {
   const pending = new Promise((resolve, reject) => { complete = resolve; fail = reject; });
   const refs = { activeProfileIdRef: { current: 'browser' }, activeSpacePathRef: { current: 'C:/space' },
     activeBackendProfileNameRef: { current: 'alpha' }, activeSessionIdRef: { current: 'first' },
+    removedSessionIdsRef: { current: new Set<string>() },
     sessionsRef: { get current() { return rows; } } };
   const deleteSession = vi.fn(() => pending);
   const confirm = vi.fn(() => true), setSessionError = vi.fn(), setActiveSessionId = vi.fn();
@@ -104,5 +105,33 @@ describe('actual scoped single-chat deletion handler', () => {
     await request;
     expect(state.setSessionError).not.toHaveBeenCalled();
     expect(state.rows()).toHaveLength(2);
+  });
+});
+
+describe('confirmed two-click deletion survives stale session-list polls', () => {
+  const scope = { profile: 'browser', workspacePath: 'C:/space', backendProfileName: 'alpha' };
+  const session = (session_id: string) => ({ session_id });
+
+  it('registers a local tombstone that a late poll cannot resurrect', async () => {
+    const state = fixture();
+    const deleting = state.remove({ session_id: 'first' }, 'sidebar-inline-confirmed');
+    state.complete({ deleted: true });
+    await deleting;
+    expect([...state.refs.removedSessionIdsRef.current]).toEqual(['first']);
+    expect(state.rows().map((item) => item.session_id)).toEqual(['second']);
+
+    const stalePoll = mergeSessionListSnapshot(scope, scope, state.rows(), [session('first'), session('second')], 'second',
+      state.refs.removedSessionIdsRef.current);
+
+    expect(stalePoll.sessions.map((item) => item.session_id)).toEqual(['second']);
+  });
+
+  it('does not tombstone a chat the backend explicitly refused to delete', async () => {
+    const state = fixture();
+    const deleting = state.remove({ session_id: 'first' }, 'sidebar-inline-confirmed');
+    state.complete({ deleted: false });
+    await deleting;
+    expect([...state.refs.removedSessionIdsRef.current]).toEqual([]);
+    expect(state.rows().map((item) => item.session_id)).toEqual(['first', 'second']);
   });
 });

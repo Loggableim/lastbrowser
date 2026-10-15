@@ -26,6 +26,7 @@ import { useDesktopI18n } from '../i18n.js';
 import { canDragFloatingDock, createDockAutoHideController, resolveDockOrientationForPanel } from '../dock-auto-hide.js';
 import type { BrowserTab } from '../tabs.js';
 import { canAcceptPinnedTabDrag, canPinBrowserTab, resolvePinnedTabDrop } from '../pinned-tab-drop.js';
+import { shellText } from '../i18n/shell-text.js';
 
 export interface NovaDockProps {
   botName?: string;
@@ -68,7 +69,7 @@ export function NovaDock({
   tabs = [],
   onPinTabAsApp
 }: NovaDockProps): React.JSX.Element {
-  const { t } = useDesktopI18n();
+  const { t, locale } = useDesktopI18n();
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const setDockSettings = usePanelStore((s) => s.setDockSettings);
   const setSidebarMode = usePanelStore((s) => s.setSidebarMode);
@@ -368,7 +369,7 @@ export function NovaDock({
           <div
             className="nova-dock-drag-handle"
             onMouseDown={handleDragMouseDown}
-            title="Klicken & Ziehen zum Verschieben"
+            title={shellText(locale, "Klicken & Ziehen zum Verschieben", "Click and drag to move")}
           >
             {isHorizontal ? <GripVertical size={13} /> : <GripHorizontal size={13} />}
           </div>
@@ -496,7 +497,7 @@ export function NovaDock({
                 </button>
                 <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(index)}>
                   <span className="label-text">{app.name}</span>
-                  {isRunning && <span className="label-status">Aktiv</span>}
+                  {isRunning && <span className="label-status">{shellText(locale, "Aktiv", "Active")}</span>}
                 </div>
               </div>
             );
@@ -513,14 +514,14 @@ export function NovaDock({
                 type="button"
                 className="nova-dock-btn add-btn"
                 onClick={onAddPinnedApp}
-                aria-label="App anheften"
+                aria-label={shellText(locale, "App anheften", "Pin an app")}
               >
                 <div className="pinned-dock-icon-wrapper">
                   <Plus size={14} />
                 </div>
               </button>
               <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(addAppIndex ?? 0)}>
-                <span className="label-text">App anheften</span>
+                <span className="label-text">{shellText(locale, "App anheften", "Pin an app")}</span>
               </div>
             </div>
           )}

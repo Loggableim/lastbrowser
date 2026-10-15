@@ -13239,7 +13239,7 @@ html.theme-light .browser-start-search input {
 /* Universal Model Picker in Header & Footer */
 .copilot-header-model-btn {
   display: inline-flex;
-  max-width: 72px;
+  max-width: min(100%, 28rem);
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;

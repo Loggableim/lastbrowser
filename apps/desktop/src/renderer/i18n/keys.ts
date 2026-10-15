@@ -1593,6 +1593,7 @@ export const desktopTranslationKeys = [
   , "copilot.personalitySwitch"
   , "copilot.personalityDialog"
   , "copilot.personalityTitle"
+  , "copilot.personalityNameLabel"
   , "copilot.loading"
   , "copilot.workflowsEmpty"
   , "copilot.teamworkActive"

@@ -5,6 +5,7 @@ import type { BackendProfileEntry, BackendProfilesResponse, ProfilePatch } from 
 import { isBackendProfilesResponse } from '../independent-assistant-client.js';
 import { backendProfileCopy } from '../i18n/backend-profile-copy.js';
 import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
+import { shellText } from '../i18n/shell-text.js';
 import {
   X,
   Sparkles,
@@ -491,8 +492,8 @@ export function SpaceSetupModal({
           {/* STEP 2: AI Model Selection */}
           {step === 2 && (
             <div className="space-step-content">
-              <h3>Space-Persönlichkeit</h3>
-              <p>Prägt Schnellchat und Antwortstil. Basis-Profil und Werkzeuge bleiben erhalten.</p>
+              <h3>{shellText(locale, "Space-Persönlichkeit", "Space personality")}</h3>
+              <p>{shellText(locale, "Prägt Schnellchat und Antwortstil. Basis-Profil und Werkzeuge bleiben erhalten.", "Shapes Quick Chat and reply style. The base profile and tools stay in place.")}</p>
               <CompanionPicker value={companion} onChange={setCompanion} disabled={isSubmitting} />
               <label className="space-setup-label">{t('spaceSetup.modelLabel')}</label>
               <p className="space-step-description">

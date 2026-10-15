@@ -54,6 +54,7 @@ import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQual
 import { ProviderBetaCatalogToggle } from '../components/ProviderBetaCatalogToggle.js';
 import { ProviderWorkspace, type ProviderWorkspaceItem } from '../components/ProviderWorkspace.js';
 import { SettingsPageDeck } from '../components/SettingsPageDeck.js';
+import { SettingsSectionPages } from '../components/SettingsSectionPages.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { clearBrowserDataWithFeedback } from '../utils/clear-browser-data.js';
 import { copyDoctorOutput, runDoctorExclusively } from '../utils/doctor-dashboard.js';
@@ -93,6 +94,7 @@ import { settingsEscapeAction } from '../settings-dismiss.js';
 import { modelPolicyCopy, modelPolicyReason } from '../i18n/model-policy-copy.js';
 import { modelPolicySettingsCopy } from '../i18n/model-policy-settings-copy.js';
 import { newIndependentRequestId, sameAssistantScope } from '../independent-contracts.js';
+import { shellText } from '../i18n/shell-text.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -549,7 +551,7 @@ function ScopedInsightsMain({ profile, serviceStatus, activeContextItem }: { pro
     if (row.subscription_included === true || row.billing_mode === 'subscription_included') return de ? 'Im Abo enthalten · kein Einzelpreis' : 'Included in subscription · no itemized price';
     const amount = row.total_cost ?? row.cost;
     if (typeof amount !== 'number' || !Number.isFinite(amount) || !['actual', 'estimated', 'mixed'].includes(String(row.cost_kind))) return unknown;
-    const suffix = row.cost_kind === 'estimated' ? (de ? ' · geschätzt' : ' · estimated') : row.cost_kind === 'mixed' ? (de ? ' · teilweise geschätzt' : ' · partly estimated') : '';
+    const suffix = row.cost_kind === 'estimated' ? (de ? shellText(locale, " · geschätzt", " · estimated") : ' · estimated') : row.cost_kind === 'mixed' ? (de ? ' · teilweise geschätzt' : ' · partly estimated') : '';
     return `${new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(amount)}${suffix}`;
   };
   const ready = isReady(serviceStatus);
@@ -1233,6 +1235,7 @@ export function NativeAppstoreMain({
 }
 
 export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void }): JSX.Element {
+  const { locale } = useDesktopI18n();
   const [report, setReport] = useState<DoctorReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [fixing, setFixing] = useState(false);
@@ -1286,8 +1289,8 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
 
   return (
     <SettingsCard
-      title="System-Diagnose (sidekick doctor)"
-      description="Ganzheitliche Diagnose der Python-Laufzeitumgebung, KI-Inferenz-Provider, Toolchains, Datenbanken und Konfigurationen."
+      title={shellText(locale, "System-Diagnose (sidekick doctor)", "System diagnostics (sidekick doctor)")}
+      description={shellText(locale, "Ganzheitliche Diagnose der Python-Laufzeitumgebung, KI-Inferenz-Provider, Toolchains, Datenbanken und Konfigurationen.", "Full check of the Python runtime, AI providers, toolchains, databases, and configuration.")}
       action={
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '6px', padding: '2px' }}>
@@ -1333,17 +1336,17 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
             className="secondary-action compact"
             onClick={() => void runDoctor(false)}
             disabled={loading || fixing}
-            title="Diagnose neu ausführen"
+            title={shellText(locale, "Diagnose neu ausführen", "Run diagnostics again")}
           >
             {loading ? <Loader2 size={14} className="spin" /> : <Stethoscope size={14} />}
-            <span>{loading ? 'Prüfe…' : 'Diagnose'}</span>
+            <span>{loading ? shellText(locale, "Prüfe…", "Checking…") : shellText(locale, "Diagnose", "Diagnostics")}</span>
           </button>
           <button
             type="button"
             className="secondary-action compact"
             onClick={() => void runDoctor(true)}
             disabled={loading || fixing}
-            title="sidekick doctor --fix ausführen"
+            title={shellText(locale, "sidekick doctor --fix ausführen", "Run sidekick doctor --fix")}
           >
             {fixing ? <Loader2 size={14} className="spin" /> : <Wrench size={14} />}
             <span>{fixing ? 'Repariere…' : 'Auto-Fix'}</span>
@@ -1360,7 +1363,7 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
       {loading && !report && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '30px', color: 'rgba(232, 242, 255, 0.6)', gap: '10px' }}>
           <Loader2 size={18} className="spin" />
-          <span>Führe System-Diagnose aus (`sidekick doctor`)…</span>
+          <span>{shellText(locale, 'Führe System-Diagnose aus (`sidekick doctor`)…', 'Running system diagnostics (`sidekick doctor`)…')}</span>
         </div>
       )}
 
@@ -1401,10 +1404,10 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
                   display: 'block'
                 }}>
                   {hasFailures
-                    ? 'Fehler erkannt'
+                    ? shellText(locale, "Fehler erkannt", "Failures found")
                     : hasWarnings
-                    ? 'Warnungen oder optionale Komponenten – keine blockierenden Fehler'
-                    : 'System bereit – Alle Kernprüfungen bestanden'}
+                    ? shellText(locale, "Warnungen oder optionale Komponenten – keine blockierenden Fehler", "Warnings or optional components — no blocking failures")
+                    : shellText(locale, "System bereit – Alle Kernprüfungen bestanden", "System ready — all core checks passed")}
                 </strong>
                 <span style={{ fontSize: '11px', color: 'rgba(232, 242, 255, 0.5)' }}>
                   Letzter Durchlauf: {new Date(report.timestamp).toLocaleTimeString()}
@@ -1462,7 +1465,7 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <strong style={{ color: hasFailures ? '#f87171' : '#fbbf24', fontSize: '13px' }}>
-                  {hasFailures ? 'Erforderliche Maßnahmen' : 'Empfohlene Maßnahmen'} ({report.issues.length}):
+                  {hasFailures ? shellText(locale, "Erforderliche Maßnahmen", "Required actions") : shellText(locale, "Empfohlene Maßnahmen", "Recommended actions")} ({report.issues.length}):
                 </strong>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -1473,7 +1476,7 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
                     style={{ fontSize: '11px' }}
                   >
                     <Wrench size={12} />
-                    <span>Auto-Fix ausführen</span>
+                    <span>{shellText(locale, "Auto-Fix ausführen", "Run auto-fix")}</span>
                   </button>
                   {onReopenSetup && (
                     <button
@@ -2226,7 +2229,7 @@ function VisionImpairedSettingsCard(): JSX.Element {
 export function normalizeSettingsSectionId(value: string): SettingsSectionId | null {
   const normalized = value.trim().toLowerCase();
   if (normalized === 'extensions') return 'plugins';
-  if (normalized === 'advanced' || normalized === 'conversation') return 'preferences';
+  if (normalized === 'conversation') return 'preferences';
   if (normalized === 'local-ai') return 'providers';
   if (normalized === 'teamwork' && !AI_ORCHESTRATION_ENABLED) return null;
   return (Object.keys(SETTINGS_SECTIONS) as SettingsSectionId[]).find((key) => key === normalized) ?? null;
@@ -2234,7 +2237,7 @@ export function normalizeSettingsSectionId(value: string): SettingsSectionId | n
 
 export function visibleSettingsSections(orchestrationEnabled = AI_ORCHESTRATION_ENABLED): Array<[SettingsSectionId, SettingsSectionMeta]> {
   return (Object.entries(SETTINGS_SECTIONS) as Array<[SettingsSectionId, SettingsSectionMeta]>)
-    .filter(([key]) => key !== 'advanced' && key !== 'conversation' && key !== 'local-ai' && (key !== 'teamwork' || orchestrationEnabled));
+    .filter(([key]) => key !== 'conversation' && key !== 'local-ai' && (key !== 'teamwork' || orchestrationEnabled));
 }
 
 export function mergeAppearanceSettings(
@@ -3631,7 +3634,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           ))}
         </nav>
 
-        <main className={`native-work-card settings-editor${section === 'providers' ? ' settings-provider-editor' : ' settings-panel-scroll'}`}>
+        <main className={`native-work-card settings-editor${section === 'providers' ? ' settings-provider-editor' : section === 'advanced' ? ' settings-panel-scroll' : ' settings-paged-editor'}`}>
           <header className="settings-editor-head">
             <div>
               <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>
@@ -3654,6 +3657,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
           </header>
 
           <div className="settings-panel-stack">
+            <SettingsSectionPages section={section} locale={locale} scopeKey={JSON.stringify([activeProfileId, activeSpacePath, activeBackendProfileName || '', section])}>
             {section === 'advanced' && <AdvancedModelPolicySettings sessionId={activeSessionId} workspacePath={activeSpacePath}
               browserProfileId={activeProfileId} backendProfileName={activeBackendProfileName ?? null} ready={ready} locale={locale} />}
             {section === 'preferences' && (
@@ -5344,6 +5348,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 </SettingsCard>
               </>
             )}
+            </SettingsSectionPages>
           </div>
         </main>
       </div>

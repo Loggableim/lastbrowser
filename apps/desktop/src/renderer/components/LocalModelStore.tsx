@@ -6,7 +6,7 @@ import {newIndependentRequestId,type IndependentScope} from '../independent-cont
 import type {ModelStoreRequest,StoreView,StoreModel} from '../model-store-contracts.js';
 import './local-model-store.css';
 import { storeConsentKey, storeExecutionLabel, storeJobLabel, storeModelActions } from './model-store-actions.js';
-import { beginInstallFeedback, formatInstallMegabytes, formatInstallRemaining, formatInstallStatus, installFeedbackSnapshot, markInstallCancelled, markInstallFailed, readInstallFeedback, reconcileInstallFeedback, reloadInstallFeedbackFromSession, subscribeInstallFeedback } from './local-model-install-feedback.js';
+import { beginInstallFeedback, formatInstallMegabytes, formatInstallRemaining, formatInstallStatus, installFeedbackSnapshot, installStartFailureKeepsWatching, markInstallCancelled, markInstallFailed, readInstallFeedback, reconcileInstallFeedback, reloadInstallFeedbackFromSession, subscribeInstallFeedback } from './local-model-install-feedback.js';
 import { LocalModelMediaForm, LocalModelMediaResult } from './LocalModelMedia.js';
 import { useDesktopI18n } from '../i18n.js';
 import { shellText } from '../i18n/shell-text.js';
@@ -20,6 +20,9 @@ const reasons:Record<string,string>={hardware_scan_required:'Hardware-Scan erfor
   model_parameter_count_unknown:'Gesamtparameterzahl noch ungeklärt',model_parameter_count_invalid:'Ungültige Parameterangabe'};
 const operationErrors:Record<string,string>={
   local_ai_path_too_long:'Der Windows-Profilpfad ist für den Modellpfad zu lang. Verschiebe den Windows-Benutzerordner oder ändere den App-Datenspeicherort, bevor du ein Modell installierst oder startest. Die lokale Modellansicht bleibt verfügbar.',
+  request_timeout:'Der lokale Dienst hat nicht rechtzeitig geantwortet. Ein bereits gestarteter Download läuft weiter.',
+  independent_request_failed:'Die Download-Antwort ist ohne Fehlercode angekommen. LastBrowser beobachtet den Download weiter.',
+  local_service_failed:'Der lokale Dienst konnte die Antwort nicht abschließen. Ein bereits gestarteter Download läuft weiter.',
 };
 const storeReasonEnglish: Record<string, string> = {
   hardware_scan_required: 'Hardware scan required',
@@ -32,7 +35,10 @@ const storeReasonEnglish: Record<string, string> = {
   insufficient_disk_staging: 'Not enough free disk space for download and verification',
   model_parameter_count_unknown: 'Total parameter count is still unknown',
   model_parameter_count_invalid: 'Invalid parameter count',
-  local_ai_path_too_long: 'The Windows profile path is too long for the model path. Move the Windows user folder or change the app data location before you install or start a model. The local model view stays available.'
+  local_ai_path_too_long: 'The Windows profile path is too long for the model path. Move the Windows user folder or change the app data location before you install or start a model. The local model view stays available.',
+  request_timeout: 'The local service did not answer in time. A download that already started keeps running.',
+  independent_request_failed: 'The download reply arrived without an error code. LastBrowser keeps watching the download.',
+  local_service_failed: 'The local service could not finish the reply. A download that already started keeps running.'
 };
 function storeReasonText(locale: string, code: string): string {
   const german = reasons[code] || operationErrors[code];
@@ -51,7 +57,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
   const [benchmarkBackend,setBenchmarkBackend]=useState<'cpu'|'vulkan'>('cpu');
   const [chatText,setChatText]=useState(''),[chatResult,setChatResult]=useState(''),[chatBusy,setChatBusy]=useState(false),[receipt,setReceipt]=useState<unknown>(null);
   const mounted=useRef(true),generation=useRef(0),inFlight=useRef(false),importInput=useRef<HTMLInputElement>(null);
-  const requestSucceeded=useRef(false),lastRequestError=useRef(''),cancelSent=useRef(new Set<string>());
+  const requestSucceeded=useRef(false),lastRequestError=useRef(''),lastRequestCode=useRef(''),cancelSent=useRef(new Set<string>());
   const [installEpoch,setInstallEpoch]=useState(()=>{reloadInstallFeedbackFromSession();return 0;});
   const scopeKey=JSON.stringify(scope);
   const currentScopeKey=useRef(scopeKey);currentScopeKey.current=scopeKey;
@@ -66,11 +72,11 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
       return;
     }
     const requestGeneration=generation.current;
-    if(!quiet){setBusy(true);setPendingOperation(data.operation);setError('');requestSucceeded.current=false;lastRequestError.current='';}
+    if(!quiet){setBusy(true);setPendingOperation(data.operation);setError('');requestSucceeded.current=false;lastRequestError.current='';lastRequestCode.current='';}
     try{
       const response=await client.request({schemaVersion:1,operation:'localAi',scope,payload:{action:'store',request:data}});
       if(!mounted.current||requestGeneration!==generation.current||currentScopeKey.current!==scopeKey)return;
-      if(!response.ok){if(!quiet){const message=storeReasonText(locale, response.error.code) === response.error.code ? shellText(locale, `Lokale KI: ${response.error.code}`, `Local AI: ${response.error.code}`) : storeReasonText(locale, response.error.code);setError(message);lastRequestError.current=message;}return;}
+      if(!response.ok){if(!quiet){lastRequestCode.current=response.error.code;const message=storeReasonText(locale, response.error.code) === response.error.code ? shellText(locale, `Lokale KI: ${response.error.code}`, `Local AI: ${response.error.code}`) : storeReasonText(locale, response.error.code);setError(message);lastRequestError.current=message;}return;}
       if(!('kind'in response.value)||response.value.kind!=='model_store'){if(!quiet){const message=shellText(locale, "Ungültige Store-Antwort", "Invalid store response");setError(message);lastRequestError.current=message;}return;}
       if(!quiet)requestSucceeded.current=true;
       setViewState({key:scopeKey,value:response.value.store});return response.value.storeResult;
@@ -150,7 +156,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
     beginInstallFeedback(model,requestId,ignored);
     await request({operation:'install',modelId:model.id,licenseDigest:model.licenseDigest,requestId});
     const current=readInstallFeedback(model.id);
-    if(current?.requestId===requestId&&current.phase==='starting'&&!requestSucceeded.current){
+    if(current?.requestId===requestId&&current.phase==='starting'&&!requestSucceeded.current&&!installStartFailureKeepsWatching(lastRequestCode.current)){
       markInstallFailed(model.id,lastRequestError.current||shellText(locale,'Download fehlgeschlagen','Download failed'));
     }
   }

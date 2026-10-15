@@ -6,6 +6,7 @@ is never sent to renderers, model workers, pages or connector configurations.
 from __future__ import annotations
 
 import hmac
+import logging
 import os
 import threading
 import time
@@ -880,6 +881,12 @@ async def independent_operation(operation: str, raw: Request):
         return JSONResponse(status_code=503, content={"error": {"schemaVersion": 1, "code": "independent_worker_unavailable", "message": "The profile-bound worker is unavailable. Inspect the stored operation state before retrying.", "retryable": False}})
     except (ValueError, KeyError, ValidationError) as exc:
         return JSONResponse(status_code=400, content={"error": {"schemaVersion": 1, "code": "invalid_request", "message": "The independent request is invalid or stale.", "retryable": False}})
+    except Exception:
+        # A store install starts its download thread before the response is
+        # encoded. An unexpected failure must stay a coded error so the client
+        # does not report the generic independent_request_failed wrapper.
+        logging.getLogger(__name__).exception("independent operation failed")
+        return JSONResponse(status_code=500, content={"error": {"schemaVersion": 1, "code": "local_service_failed", "message": "The local service could not finish this request. A download that already started keeps running.", "retryable": True}})
 
 
 def shutdown():

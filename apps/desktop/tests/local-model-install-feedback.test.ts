@@ -6,6 +6,7 @@ import {
   formatInstallRemaining,
   formatInstallStatus,
   markInstallCancelled,
+  installStartFailureKeepsWatching,
   markInstallFailed,
   readInstallFeedback,
   reconcileInstallFeedback,
@@ -73,6 +74,10 @@ describe('local model install feedback', () => {
 
     beginInstallFeedback(model, 'request-3', ['job-2'], 40_000);
     markInstallFailed(model.id, 'disk full');
+    expect(installStartFailureKeepsWatching('request_timeout')).toBe(true);
+    expect(installStartFailureKeepsWatching('independent_request_failed')).toBe(true);
+    expect(installStartFailureKeepsWatching('local_service_failed')).toBe(true);
+    expect(installStartFailureKeepsWatching('invalid_request')).toBe(false);
     expect(readInstallFeedback(model.id)?.phase).toBe('error');
     expect(readInstallFeedback(model.id)?.error).toBe('disk full');
     reloadInstallFeedbackFromSession();

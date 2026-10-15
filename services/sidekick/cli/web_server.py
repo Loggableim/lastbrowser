@@ -3323,7 +3323,7 @@ def _load_space_session_tail(path: Path, *, limit: int) -> dict[str, Any] | None
 async def get_space_session_detail(request: Request):
     t0 = time.perf_counter()
     workspace_slug = _workspace_slug_from_request(request)
-    workspace_path = _workspace_path_from_request(request)
+    workspace_path = await asyncio.to_thread(_workspace_path_from_request, request)
     if not workspace_slug and workspace_path is None:
         return await dispatch_route(request)
 
@@ -3332,14 +3332,14 @@ async def get_space_session_detail(request: Request):
         return JSONResponse({"error": "session_id is required"}, status_code=400)
     if workspace_path is not None:
         from web.api.space_engine import DEFAULT_SPACE_SLUG
-        bound = _bound_workspace_session(workspace_path, sid)
+        bound = await asyncio.to_thread(_bound_workspace_session, workspace_path, sid)
         if bound:
             path, slug, bound_scope = bound
         else:
-            path, slug = _space_session_path(DEFAULT_SPACE_SLUG, sid)
+            path, slug = await asyncio.to_thread(_space_session_path, DEFAULT_SPACE_SLUG, sid)
             bound_scope = None
     else:
-        path, slug = _space_session_path(workspace_slug, sid)
+        path, slug = await asyncio.to_thread(_space_session_path, workspace_slug, sid)
     t_path = time.perf_counter()
     if not path or not path.exists():
         raise HTTPException(status_code=404, detail="Session not found")
@@ -3362,19 +3362,19 @@ async def get_space_session_detail(request: Request):
     session = None
     tail_loaded = False
     if load_messages and msg_limit is not None and msg_before is None:
-        session = _load_space_session_tail(path, limit=msg_limit)
+        session = await asyncio.to_thread(_load_space_session_tail, path, limit=msg_limit)
         tail_loaded = session is not None
 
     if session is None and not load_messages:
-        session = _load_space_session_metadata(path)
+        session = await asyncio.to_thread(_load_space_session_metadata, path)
         if session is not None:
-            indexed_count = _space_session_index_message_count(slug, sid)
+            indexed_count = await asyncio.to_thread(_space_session_index_message_count, slug, sid)
             if indexed_count is not None:
                 session["message_count"] = indexed_count
 
     if session is None:
         try:
-            session = json.loads(path.read_text(encoding="utf-8"))
+            session = await asyncio.to_thread(_read_space_session_json, path)
         except Exception as exc:
             _log.exception("Failed to load space session %s", sid)
             raise HTTPException(status_code=500, detail=f"Failed to load session: {exc}") from exc
@@ -3391,7 +3391,7 @@ async def get_space_session_detail(request: Request):
     # advertises an active stream, reload the complete document instead.
     if tail_loaded and session.get("active_stream_id"):
         try:
-            session = json.loads(path.read_text(encoding="utf-8"))
+            session = await asyncio.to_thread(_read_space_session_json, path)
             tail_loaded = False
         except Exception as exc:
             _log.exception("Failed to reload active space session %s", sid)
@@ -3401,7 +3401,7 @@ async def get_space_session_detail(request: Request):
     # is present, then reload the complete document before repairing it.
     if session.get("_metadata_only") and session.get("active_stream_id"):
         try:
-            session = json.loads(path.read_text(encoding="utf-8"))
+            session = await asyncio.to_thread(_read_space_session_json, path)
         except Exception as exc:
             _log.exception("Failed to reload active space session %s", sid)
             raise HTTPException(status_code=500, detail=f"Failed to load session: {exc}") from exc
@@ -3469,13 +3469,45 @@ async def get_space_session_detail(request: Request):
     return {"session": payload}
 
 
+# Synchronous Space and session readers run in worker threads (asyncio.to_thread).
+# A blocking file or SQLite read on the event loop stalls every request for as
+# long as it takes, including the public auth-status route.
+_SPACE_SESSIONS_READ_LOCK = threading.Lock()
+
+
+def _load_space_sessions_threaded(slug: str) -> list[dict[str, Any]]:
+    """Run ``_load_space_sessions`` from worker threads without overlapping writes.
+
+    The loader may repair stale index rows on disk. Serializing these calls keeps
+    two worker threads from rewriting ``_index.json`` at the same time.
+    """
+    with _SPACE_SESSIONS_READ_LOCK:
+        return _load_space_sessions(slug)
+
+
+def _read_space_session_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _list_sessions_compat(db: Any, limit: int, offset: int, derive_titles: bool) -> list:
+    try:
+        return db.list_sessions(limit=limit, offset=offset, derive_titles=derive_titles)
+    except TypeError:
+        # Keep compatibility with older injected/embedded SessionDBs.
+        return db.list_sessions(limit=limit, offset=offset)
+
+
+def _count_session_rows(db: Any) -> int:
+    return db._conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+
+
 @app.get("/api/sessions")
 async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
     try:
         include_archived_raw = str(request.query_params.get("include_archived") or "").strip().lower()
         include_archived = include_archived_raw in {"1", "true", "yes", "on"}
         workspace_slug = _workspace_slug_from_request(request)
-        workspace_path = _workspace_path_from_request(request)
+        workspace_path = await asyncio.to_thread(_workspace_path_from_request, request)
         defer_cli = str(request.query_params.get("defer_cli") or "").strip().lower() in {"1", "true", "yes", "on"}
         startup_fallback = (
             not workspace_slug
@@ -3486,12 +3518,12 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
             from web.api.space_engine import DEFAULT_SPACE_SLUG
 
             sessions = [
-                row for row in _load_space_sessions(DEFAULT_SPACE_SLUG)
+                row for row in await asyncio.to_thread(_load_space_sessions_threaded, DEFAULT_SPACE_SLUG)
                 if _workspace_path_matches(row, workspace_path)
                 and not _is_private_quickchat_session(row)
             ]
             # Keep legacy chats while adding only verified original transcripts.
-            own_rows = _bound_workspace_sessions(workspace_path)
+            own_rows = await asyncio.to_thread(_bound_workspace_sessions, workspace_path)
             own_ids = {row["session_id"] for row in own_rows}
             sessions = [row for row in sessions if row.get("session_id") not in own_ids] + own_rows
             sessions.sort(key=lambda row: (bool(row.get("pinned")), row.get("last_message_at") or row.get("updated_at") or 0), reverse=True)
@@ -3510,7 +3542,7 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
                 {"sessions": page, "total": total, "archived_count": archived_count, "limit": limit, "offset": offset},
             )
         if workspace_slug:
-            sessions = [row for row in _load_space_sessions(workspace_slug)
+            sessions = [row for row in await asyncio.to_thread(_load_space_sessions_threaded, workspace_slug)
                 if not _is_private_quickchat_session(row)]
             archived_count = sum(1 for s in sessions if s.get("archived"))
             visible_sessions = sessions if include_archived else [s for s in sessions if not s.get("archived")]
@@ -3528,7 +3560,7 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
             )
 
         from runtime._compat.shim_state import SessionDB
-        db = SessionDB()
+        db = await asyncio.to_thread(SessionDB)
         try:
             # The first-paint fallback is deliberately bounded.  Passing the
             # normal sidebar limit through here still makes SessionDB inspect
@@ -3537,16 +3569,12 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
             # for several seconds on a cold profile.  Bound the database
             # query itself; normal non-startup callers retain their limit.
             db_limit = min(limit, 10) if startup_fallback else limit
-            try:
-                sessions = db.list_sessions(limit=db_limit, offset=offset, derive_titles=not defer_cli)
-            except TypeError:
-                # Keep compatibility with older injected/embedded SessionDBs.
-                sessions = db.list_sessions(limit=db_limit, offset=offset)
+            sessions = await asyncio.to_thread(_list_sessions_compat, db, db_limit, offset, not defer_cli)
             if not startup_fallback:
                 try:
                     from web.api.space_engine import DEFAULT_SPACE_SLUG
                     existing_ids = {s.get("session_id") or s.get("id") for s in sessions}
-                    for sp in _load_space_sessions(DEFAULT_SPACE_SLUG):
+                    for sp in await asyncio.to_thread(_load_space_sessions_threaded, DEFAULT_SPACE_SLUG):
                         sid = sp.get("session_id") or sp.get("id")
                         if sid and sid not in existing_ids:
                             sessions.append(sp)
@@ -3579,7 +3607,7 @@ async def get_sessions(request: Request, limit: int = 200, offset: int = 0):
             total = len(sessions)
             if total == limit or offset > 0:
                 try:
-                    total = db._conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+                    total = await asyncio.to_thread(_count_session_rows, db)
                 except Exception:
                     total = len(sessions)
             now = time.time()
@@ -3616,7 +3644,7 @@ async def search_sessions(request: Request, q: str = "", limit: int = 20):
         if _is_space_scoped_request(request):
             needle = q.strip().lower()
             results = []
-            for session in _load_space_sessions(_workspace_slug_from_request(request)):
+            for session in await asyncio.to_thread(_load_space_sessions_threaded, _workspace_slug_from_request(request)):
                 haystack = " ".join(
                     str(session.get(key) or "")
                     for key in ("title", "workspace", "model", "model_provider", "profile")
@@ -3639,7 +3667,7 @@ async def search_sessions(request: Request, q: str = "", limit: int = 20):
             return {"results": results, "sessions": results, "query": q.strip(), "count": len(results)}
 
         from runtime._compat.shim_state import SessionDB
-        db = SessionDB()
+        db = await asyncio.to_thread(SessionDB)
         try:
             # Auto-add prefix wildcards so partial words match
             # e.g. "nimb" Ã¢â€ â€™ "nimb*" matches "nimby"
@@ -3652,7 +3680,7 @@ async def search_sessions(request: Request, q: str = "", limit: int = 20):
                 else:
                     terms.append(token + "*")
             prefix_query = " ".join(terms)
-            matches = db.search_messages(query=prefix_query, limit=limit)
+            matches = await asyncio.to_thread(db.search_messages, query=prefix_query, limit=limit)
             # Group by session_id Ã¢â‚¬â€ return unique sessions with their best snippet
             seen: dict = {}
             for m in matches:

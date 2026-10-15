@@ -2351,7 +2351,7 @@ function AppContent(): JSX.Element {
     }
   }, [refreshStartupModelDiscovery]);
 
-  const refreshSessions = useCallback(async (): Promise<void> => {
+  const loadSessionList = useCallback(async (): Promise<void> => {
     if (!sidekickApiReady) return;
     const requestedScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };
     const isRequestScopeCurrent = (): boolean => sessionListResponseMatchesScope(requestedScope, {
@@ -2395,6 +2395,33 @@ function AppContent(): JSX.Element {
       setSessionError(isTransientSidekickFetchError(message) ? '' : message);
     }
   }, [activeProfileId, activeSpacePath, activeBackendProfileName, sidekickApiReady]);
+
+  // Single-flight session refresh: never run two session-list queries at once.
+  // A refresh requested while one is running is replayed once afterwards, so the
+  // newest scope still wins without piling requests behind a slow backend.
+  const sessionListInFlightRef = useRef(false);
+  const sessionListRerunRef = useRef(false);
+  const refreshSessionsRef = useRef<() => Promise<void>>(async () => {});
+  const refreshSessions = useCallback(async (): Promise<void> => {
+    if (!sidekickApiReady) return;
+    if (sessionListInFlightRef.current) {
+      sessionListRerunRef.current = true;
+      return;
+    }
+    sessionListInFlightRef.current = true;
+    try {
+      await loadSessionList();
+    } finally {
+      sessionListInFlightRef.current = false;
+      if (sessionListRerunRef.current) {
+        sessionListRerunRef.current = false;
+        void refreshSessionsRef.current();
+      }
+    }
+  }, [loadSessionList, sidekickApiReady]);
+  useEffect(() => {
+    refreshSessionsRef.current = refreshSessions;
+  }, [refreshSessions]);
 
   const refreshSpaces = useCallback(async (): Promise<void> => {
     if (!sidekickApiReady) return;

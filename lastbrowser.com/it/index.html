@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
@@ -24,7 +24,7 @@
 <link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
-<link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
+<link rel="stylesheet" href="/assets/css/components.css">
 <link rel="stylesheet" href="/assets/css/download-counter.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <script src="/assets/js/theme.js"></script>
@@ -36,7 +36,7 @@
   "name": "LastBrowser",
   "operatingSystem": "Windows 10, Windows 11 (x64)",
   "applicationCategory": "BrowserApplication",
-  "softwareVersion": "0.1.56",
+  "softwareVersion": "0.1.55 Beta",
   "description": "Browser Chromium AI-nativo per Windows con Sidekick, terminale ConPTY, Widevine DRM L3 e Spazi multi-account isolati.",
   "downloadUrl": "https://lastbrowser.com/it/download/",
   "offers": {
@@ -54,7 +54,7 @@
   <div class="container inner">
     <a href="/it/" class="logo">
       <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="40" height="40">
-      <div><strong>LastBrowser</strong><span>v0.1.56 · AI-Nativo</span></div>
+      <div><strong>LastBrowser</strong><span>v0.1.55 Beta · AI-Nativo</span></div>
     </a>
     <div class="nav-links">
       <a href="/it/features/">Funzionalità</a>
@@ -100,7 +100,7 @@
   <!-- Hero Section -->
   <section class="hero">
     <div class="container">
-      <div class="pill-badge">🚀 v0.1.56 Disponibile · Terminale ConPTY &amp; Spazi</div>
+      <div class="pill-badge">🚀 v0.1.55 Beta Disponibile · Terminale ConPTY &amp; Spazi</div>
       <h1>Il Browser AI-Nativo per Windows. <span class="grad">100% Local-First.</span></h1>
       <p class="lead">
         Non è un semplice contenitore web. LastBrowser unisce la velocità di Chromium con il copilota Sidekick, 48 flussi di agenti selezionati, terminale nativo Windows ConPTY PowerShell, Castlabs Widevine DRM L3 e vero isolamento delle sessioni negli Spazi.
@@ -109,7 +109,7 @@
       <div class="download-counter" data-download-counter data-locale="it" role="status">Il numero di download non è disponibile.</div>
       <div class="cta-group">
         <a href="/it/download/" class="btn btn-primary btn-lg">
-          ⬇️ Scarica per Windows (v0.1.56)
+          ⬇️ Scarica per Windows (v0.1.55 Beta)
         </a>
         <a href="/it/features/" class="btn btn-ghost btn-lg">Esplora le Funzionalità</a>
       </div>
@@ -155,7 +155,10 @@
           <div style="font-size:12px;color:var(--muted);">LastBrowser Win32 Shell</div>
         </div>
         <div class="showcase-view">
-          <img id="showcase-image" src="/assets/screenshots/store-screen-1-sidebar-spaces.png" alt="Interfaccia LastBrowser" width="1920" height="1080">
+          <picture id="showcase-picture">
+            <source id="showcase-image-webp" type="image/webp" srcset="/assets/screenshots/store-screen-1-sidebar-spaces.webp">
+            <img id="showcase-image" src="/assets/screenshots/store-screen-1-sidebar-spaces.png" alt="LastBrowser: barra laterale verticale con spazi e pagina iniziale in modalità scura" width="1920" height="1080" decoding="async" loading="eager">
+          </picture>
         </div>
         <div class="showcase-footer">
           <div>
@@ -304,7 +307,7 @@
   </div>
 </footer>
 
-<script src="/assets/js/app.js?v=linux56-20261014"></script>
+<script src="/assets/js/app.js"></script>
 <script src="/assets/js/download-counter.js" defer></script>
 </body>
 </html>

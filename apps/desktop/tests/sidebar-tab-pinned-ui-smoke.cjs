@@ -69,9 +69,9 @@ async function child(temp) {
       }
       throw new Error(`Timeout: ${label}`);
     };
-    await until("document.querySelector('[aria-label=\"App anheften\"]') && document.querySelector('[aria-label=\"Close Probe Tab\"]')", 'pinned-app add and tab-close buttons mount');
+    await until("(document.querySelector('[aria-label=\"App anheften\"]') || document.querySelector('[aria-label=\"Pin an app\"]')) && document.querySelector('[aria-label=\"Close Probe Tab\"]')", 'pinned-app add and tab-close buttons mount');
 
-    await win.webContents.executeJavaScript("document.querySelector('[aria-label=\"App anheften\"]').click()");
+    await win.webContents.executeJavaScript("(document.querySelector('[aria-label=\"App anheften\"]') || document.querySelector('[aria-label=\"Pin an app\"]')).click()");
     await until("document.querySelector('#add-count').textContent==='1'", 'pinned-app plus dispatches one add callback');
 
     await win.webContents.executeJavaScript("document.querySelector('[aria-label=\"Close Probe Tab\"]').click()");

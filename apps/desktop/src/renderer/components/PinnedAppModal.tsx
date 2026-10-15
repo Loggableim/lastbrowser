@@ -21,6 +21,8 @@ import {
   usePinnedAppStore
 } from '../stores/usePinnedAppStore.js';
 import { TOP_64_PINNED_APPS, type CatalogApp } from '../pinned-apps-catalog.js';
+import { useDesktopI18n } from '../i18n.js';
+import { shellText } from '../i18n/shell-text.js';
 
 export interface PinnedAppModalProps {
   isOpen: boolean;
@@ -50,6 +52,7 @@ export function PinnedAppModal({
   activeTab,
   defaultSpacePath = ''
 }: PinnedAppModalProps): React.JSX.Element | null {
+  const { locale } = useDesktopI18n();
   const { addApp, updateApp, removeApp, pinTabAsApp, apps } = usePinnedAppStore();
 
   const [name, setName] = useState('');
@@ -197,7 +200,7 @@ export function PinnedAppModal({
               <p className="pinned-modal-subtitle">
                 {editApp
                   ? 'Passe Namen, URL und Akzentfarbe an.'
-                  : 'Wähle aus den Top 64 Web-Apps oder füge eigene Adressen hinzu.'}
+                  : shellText(locale, "Wähle aus den Top 64 Web-Apps oder füge eigene Adressen hinzu.", "Choose from the top 64 web apps, or add your own addresses.")}
               </p>
             </div>
           </div>
@@ -205,7 +208,7 @@ export function PinnedAppModal({
             type="button"
             className="pinned-modal-close-btn"
             onClick={onClose}
-            aria-label="Schließen"
+            aria-label={shellText(locale, "Schließen", "Close")}
           >
             <X size={16} />
           </button>
@@ -409,7 +412,7 @@ export function PinnedAppModal({
               className="catalog-custom-toggle-btn"
               onClick={() => setShowCustomForm((prev) => !prev)}
             >
-              {showCustomForm ? '▲ Zum Top 64 Katalog wechseln' : '▼ Eigene Web-Adresse (Custom URL) hinzufügen'}
+              {showCustomForm ? '▲ Zum Top 64 Katalog wechseln' : shellText(locale, "▼ Eigene Web-Adresse (Custom URL) hinzufügen", "▼ Add a custom web address")}
             </button>
           </div>
         )}
@@ -533,7 +536,7 @@ export function PinnedAppModal({
                   className="pinned-save-btn"
                   disabled={!name.trim()}
                 >
-                  {editApp ? 'Änderungen speichern' : 'Custom App anheften'}
+                  {editApp ? shellText(locale, "Änderungen speichern", "Save changes") : shellText(locale, "Custom App anheften", "Pin custom app")}
                 </button>
               </div>
             </div>

@@ -22,6 +22,7 @@ import { extractLinkedFiles, normalizeSkillCategories, normalizeSkillCategory } 
 import { MemoryPanelStateModel, memoryDocumentId, type MemorySection } from './memory-panel-state.js';
 import { OptionalAiProfileContext, OptionalAiWorkspaceContext, useOptionalAiPolicy } from '../optional-ai-policy.js';
 import { ProfileResolutionPending } from '../profile-resolution.js';
+import { shellText } from '../i18n/shell-text.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -781,7 +782,7 @@ function ScopedMemoryMain({ profile, workspacePath, serviceStatus, activeContext
   const canForget = !!memoryDocumentId(state.selected) && !!state.detail && !state.documentBusy;
   return (
     <section className="browser-main native-rest-main memory-main">
-      <NativeHeader icon={<Brain size={21} />} title={de ? 'Gedächtnis & Wissen' : 'Memory & Knowledge'} kicker={de ? 'Deine Informationen' : 'Your information'}
+      <NativeHeader icon={<Brain size={21} />} title={de ? shellText(locale, "Gedächtnis & Wissen", "Memory and knowledge") : 'Memory & Knowledge'} kicker={de ? 'Deine Informationen' : 'Your information'}
         detail={de ? 'Du entscheidest, was dein Assistent verwenden darf.' : 'You decide what your assistant may use.'} loading={state.loading} ready={ready} onRefresh={model.refresh} />
       <p role="status">{optional.loaded ? optional.policy.enabled
         ? (de ? 'Gedächtnis aktiv' : 'Memory enabled')

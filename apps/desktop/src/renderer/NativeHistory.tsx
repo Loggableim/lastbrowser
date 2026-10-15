@@ -10,6 +10,8 @@ import React, { useMemo, useState } from 'react';
 import { Clock, Search, Trash2, X } from 'lucide-react';
 import { groupVisitsByDay, searchVisits, type BrowserVisit } from './history.js';
 import { clearHistorySelection } from './utils/clear-browser-data.js';
+import { useDesktopI18n } from './i18n.js';
+import { shellText } from './i18n/shell-text.js';
 
 function formatTime(timestamp: number): string {
   return new Date(timestamp).toLocaleTimeString(undefined, {
@@ -33,6 +35,7 @@ export function HistoryPanel({
   onRemove: (url: string) => void;
   onClear: () => void;
 }): JSX.Element | null {
+  const { locale } = useDesktopI18n();
   const [query, setQuery] = useState('');
   const [showClearModal, setShowClearModal] = useState(false);
   const [includeHistory, setIncludeHistory] = useState(true);
@@ -55,7 +58,7 @@ export function HistoryPanel({
         { history: includeHistory, cache: includeCache, cookies: includeCookies },
         window.lastbrowser?.browser?.clearData,
         onClear,
-        () => setClearError('Browserdaten konnten nicht vollständig gelöscht werden. Bitte erneut versuchen.')
+        () => setClearError(shellText(locale, "Browserdaten konnten nicht vollständig gelöscht werden. Bitte erneut versuchen.", "Browsing data could not be fully cleared. Please try again."))
       );
       if (!cleared) return;
       setShowClearModal(false);
@@ -88,7 +91,7 @@ export function HistoryPanel({
       {showClearModal && (
         <div className="history-clear-dialog">
           <div className="history-clear-dialog-header">
-            <strong>Browserdaten löschen</strong>
+            <strong>{shellText(locale, "Browserdaten löschen", "Clear browsing data")}</strong>
             <button
               type="button"
               className="history-clear-dialog-close"
@@ -113,7 +116,7 @@ export function HistoryPanel({
                 checked={includeCache}
                 onChange={(e) => setIncludeCache(e.target.checked)}
               />
-              <span>Bilder & Dateien im Cache</span>
+              <span>{shellText(locale, "Bilder & Dateien im Cache", "Cached images and files")}</span>
             </label>
             <label className="history-clear-option">
               <input
@@ -121,7 +124,7 @@ export function HistoryPanel({
                 checked={includeCookies}
                 onChange={(e) => setIncludeCookies(e.target.checked)}
               />
-              <span>Cookies & Website-Speicher</span>
+              <span>{shellText(locale, "Cookies & Website-Speicher", "Cookies and site storage")}</span>
             </label>
           </div>
           <div className="history-clear-dialog-footer">
@@ -138,7 +141,7 @@ export function HistoryPanel({
               disabled={clearing || (!includeHistory && !includeCache && !includeCookies)}
               onClick={handleClearConfirmed}
             >
-              {clearing ? 'Wird gelöscht...' : 'Daten löschen'}
+              {clearing ? shellText(locale, "Wird gelöscht...", "Deleting...") : shellText(locale, "Daten löschen", "Clear data")}
             </button>
           </div>
         </div>

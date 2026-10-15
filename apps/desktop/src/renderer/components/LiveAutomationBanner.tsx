@@ -1,12 +1,15 @@
 import React, { useEffect } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, Sparkles, X } from 'lucide-react';
 import { useLiveAutomationStore, abortLiveAutomation } from '../live-automation.js';
+import { useDesktopI18n } from '../i18n.js';
+import { shellText } from '../i18n/shell-text.js';
 
 export interface LiveAutomationBannerProps {
   webview: Electron.WebviewTag | null;
 }
 
 export function LiveAutomationBanner({ webview }: LiveAutomationBannerProps): JSX.Element | null {
+  const { locale } = useDesktopI18n();
   const { running, actionLabel, stepDescription, aborted, lastError } = useLiveAutomationStore();
 
   // Escape key global listener while running
@@ -69,7 +72,7 @@ export function LiveAutomationBanner({ webview }: LiveAutomationBannerProps): JS
           onClick={() => abortLiveAutomation(webview)}
         >
           <X size={12} />
-          <span>Abbrechen <kbd>Esc</kbd></span>
+          <span>{shellText(locale, "Abbrechen", "Cancel")}<kbd>Esc</kbd></span>
         </button>
       )}
     </div>

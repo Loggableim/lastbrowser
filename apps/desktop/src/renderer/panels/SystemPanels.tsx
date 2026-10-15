@@ -93,6 +93,7 @@ import { settingsEscapeAction } from '../settings-dismiss.js';
 import { modelPolicyCopy, modelPolicyReason } from '../i18n/model-policy-copy.js';
 import { modelPolicySettingsCopy } from '../i18n/model-policy-settings-copy.js';
 import { newIndependentRequestId, sameAssistantScope } from '../independent-contracts.js';
+import { shellText } from '../i18n/shell-text.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -549,7 +550,7 @@ function ScopedInsightsMain({ profile, serviceStatus, activeContextItem }: { pro
     if (row.subscription_included === true || row.billing_mode === 'subscription_included') return de ? 'Im Abo enthalten · kein Einzelpreis' : 'Included in subscription · no itemized price';
     const amount = row.total_cost ?? row.cost;
     if (typeof amount !== 'number' || !Number.isFinite(amount) || !['actual', 'estimated', 'mixed'].includes(String(row.cost_kind))) return unknown;
-    const suffix = row.cost_kind === 'estimated' ? (de ? ' · geschätzt' : ' · estimated') : row.cost_kind === 'mixed' ? (de ? ' · teilweise geschätzt' : ' · partly estimated') : '';
+    const suffix = row.cost_kind === 'estimated' ? (de ? shellText(locale, " · geschätzt", " · estimated") : ' · estimated') : row.cost_kind === 'mixed' ? (de ? ' · teilweise geschätzt' : ' · partly estimated') : '';
     return `${new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD', maximumFractionDigits: 4 }).format(amount)}${suffix}`;
   };
   const ready = isReady(serviceStatus);
@@ -1233,6 +1234,7 @@ export function NativeAppstoreMain({
 }
 
 export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void }): JSX.Element {
+  const { locale } = useDesktopI18n();
   const [report, setReport] = useState<DoctorReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [fixing, setFixing] = useState(false);
@@ -1286,8 +1288,8 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
 
   return (
     <SettingsCard
-      title="System-Diagnose (sidekick doctor)"
-      description="Ganzheitliche Diagnose der Python-Laufzeitumgebung, KI-Inferenz-Provider, Toolchains, Datenbanken und Konfigurationen."
+      title={shellText(locale, "System-Diagnose (sidekick doctor)", "System diagnostics (sidekick doctor)")}
+      description={shellText(locale, "Ganzheitliche Diagnose der Python-Laufzeitumgebung, KI-Inferenz-Provider, Toolchains, Datenbanken und Konfigurationen.", "Full check of the Python runtime, AI providers, toolchains, databases, and configuration.")}
       action={
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <div style={{ display: 'flex', background: 'rgba(255, 255, 255, 0.06)', borderRadius: '6px', padding: '2px' }}>
@@ -1333,17 +1335,17 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
             className="secondary-action compact"
             onClick={() => void runDoctor(false)}
             disabled={loading || fixing}
-            title="Diagnose neu ausführen"
+            title={shellText(locale, "Diagnose neu ausführen", "Run diagnostics again")}
           >
             {loading ? <Loader2 size={14} className="spin" /> : <Stethoscope size={14} />}
-            <span>{loading ? 'Prüfe…' : 'Diagnose'}</span>
+            <span>{loading ? shellText(locale, "Prüfe…", "Checking…") : shellText(locale, "Diagnose", "Diagnostics")}</span>
           </button>
           <button
             type="button"
             className="secondary-action compact"
             onClick={() => void runDoctor(true)}
             disabled={loading || fixing}
-            title="sidekick doctor --fix ausführen"
+            title={shellText(locale, "sidekick doctor --fix ausführen", "Run sidekick doctor --fix")}
           >
             {fixing ? <Loader2 size={14} className="spin" /> : <Wrench size={14} />}
             <span>{fixing ? 'Repariere…' : 'Auto-Fix'}</span>
@@ -1360,7 +1362,7 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
       {loading && !report && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '30px', color: 'rgba(232, 242, 255, 0.6)', gap: '10px' }}>
           <Loader2 size={18} className="spin" />
-          <span>Führe System-Diagnose aus (`sidekick doctor`)…</span>
+          <span>{shellText(locale, 'Führe System-Diagnose aus (`sidekick doctor`)…', 'Running system diagnostics (`sidekick doctor`)…')}</span>
         </div>
       )}
 
@@ -1401,10 +1403,10 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
                   display: 'block'
                 }}>
                   {hasFailures
-                    ? 'Fehler erkannt'
+                    ? shellText(locale, "Fehler erkannt", "Failures found")
                     : hasWarnings
-                    ? 'Warnungen oder optionale Komponenten – keine blockierenden Fehler'
-                    : 'System bereit – Alle Kernprüfungen bestanden'}
+                    ? shellText(locale, "Warnungen oder optionale Komponenten – keine blockierenden Fehler", "Warnings or optional components — no blocking failures")
+                    : shellText(locale, "System bereit – Alle Kernprüfungen bestanden", "System ready — all core checks passed")}
                 </strong>
                 <span style={{ fontSize: '11px', color: 'rgba(232, 242, 255, 0.5)' }}>
                   Letzter Durchlauf: {new Date(report.timestamp).toLocaleTimeString()}
@@ -1462,7 +1464,7 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <strong style={{ color: hasFailures ? '#f87171' : '#fbbf24', fontSize: '13px' }}>
-                  {hasFailures ? 'Erforderliche Maßnahmen' : 'Empfohlene Maßnahmen'} ({report.issues.length}):
+                  {hasFailures ? shellText(locale, "Erforderliche Maßnahmen", "Required actions") : shellText(locale, "Empfohlene Maßnahmen", "Recommended actions")} ({report.issues.length}):
                 </strong>
                 <div style={{ display: 'flex', gap: '8px' }}>
                   <button
@@ -1473,7 +1475,7 @@ export function DoctorDashboard({ onReopenSetup }: { onReopenSetup?: () => void 
                     style={{ fontSize: '11px' }}
                   >
                     <Wrench size={12} />
-                    <span>Auto-Fix ausführen</span>
+                    <span>{shellText(locale, "Auto-Fix ausführen", "Run auto-fix")}</span>
                   </button>
                   {onReopenSetup && (
                     <button

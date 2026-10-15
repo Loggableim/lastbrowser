@@ -1582,6 +1582,7 @@ export const desktopTranslationKeys = [
   , "copilot.quotaAvailable"
   , "copilot.modelMenuTitle"
   , "copilot.modelLabel"
+  , "copilot.modelGroupOtherEngines"
   , "copilot.engineTooltip"
   , "copilot.activeEngineTooltip"
   , "copilot.openOrchestrationSettings"

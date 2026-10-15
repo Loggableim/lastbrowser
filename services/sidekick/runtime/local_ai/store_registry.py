@@ -132,6 +132,18 @@ def load_registry(path=None):
     return data['revision'], engines, models
 
 
+def pinned_quantization(declared, relative_path):
+    """The download uses the pinned filename. A card label that names a
+    different quantization, such as Q8_0 on a Q4_K_M file, must not win."""
+    name = Path(str(relative_path)).name
+    if isinstance(declared, str) and declared in name:
+        return declared
+    for token in ('Q4_K_XL', 'Q4_K_M', 'Q5_K_M', 'Q8_0', 'Q4_0', 'Q4_K', 'MXFP4'):
+        if token in name:
+            return token
+    return declared
+
+
 def enrich_entry(entry, artifact, engines):
     primary_role = 'model' if artifact['category'] == 'text' else 'diffusion'
     primary = next(fact for role, fact in artifact['fileObjects'] if role == primary_role)
@@ -140,7 +152,7 @@ def enrich_entry(entry, artifact, engines):
             'downloadBytes': sum(fact.bytes for _, fact in artifact['fileObjects']),
             'recommendedRamBytes': artifact['requiredRamBytes'], 'recommendedVramBytes': artifact['requiredVramBytes'],
             'memoryPolicy': 'Admission uses measured available RAM and at most 75% of measured free dedicated VRAM.',
-            'quantization': artifact['quantization'], 'runtimeStatus': 'pinned_candidate',
+            'quantization': pinned_quantization(artifact['quantization'], primary.relative_path), 'runtimeStatus': 'pinned_candidate',
             'runtimeReason': 'Pinned artifact and engine; current-device inference qualification remains required.',
             'licenseLabel': artifact['license'], 'licenseText': artifact['licenseText'],
             'licenseDigest': artifact['licenseDigest'], 'artifact': {'filename': primary.relative_path,

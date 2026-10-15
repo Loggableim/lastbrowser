@@ -29,7 +29,9 @@ NATIVE_AVAILABILITY_REASONS = frozenset({
     "independent_unsupported", "context_missing", "cloud_denied", "binding_mismatch",
 })
 
-_CATALOG_REUSE_SECONDS = 5.0
+# Peak chat sessions reuse the same scope/profile; rediscovering the full catalog
+# every few seconds spawned an extra isolated worker on each turn.
+_CATALOG_REUSE_SECONDS = 300.0
 _CATALOG_SETUP_LOCK = threading.Lock()
 _CATALOG_DISK_NAME = "model-catalog-cache.json"
 

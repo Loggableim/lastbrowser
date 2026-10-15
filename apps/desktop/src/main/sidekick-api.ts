@@ -32,31 +32,22 @@ export async function independentApiRequest(
 ): Promise<unknown> {
   if (!INDEPENDENT_OPERATIONS.has(operation) || !privateBridgeNonce) throw new Error('Independent operation unavailable.');
   let response: Response;
+  let value: unknown;
+  // A store install starts its download before the catalog response is built.
+  // Give that response longer than a normal broker call so a slow catalog
+  // does not look like a failed download.
+  const timeoutMs = operation === 'localAi.store' ? 120_000 : WEBUI_REQUEST_TIMEOUT_MS;
   try {
     response = await sendJson(webuiUrl, `/api/independent/v1/${operation}`, {
       method: 'POST',
       headers: { ...profileScopeHeaders(backendProfileName), 'x-lastbrowser-bridge-token': privateBridgeNonce },
       body: JSON.stringify({ schemaVersion: 1, scope, payload: payload ?? {} }),
-      signal: AbortSignal.timeout(WEBUI_REQUEST_TIMEOUT_MS)
+      signal: AbortSignal.timeout(timeoutMs)
     }, fetchImpl);
+    value = await response.json();
   } catch (cause) {
-    // A refused loopback connection means the local server has not accepted
-    // this request yet. Preserve that distinction for bounded startup recovery.
-    let current: unknown = cause;
-    const seen = new Set<object>();
-    for (let depth = 0; depth < 5 && current && typeof current === 'object' && !seen.has(current); depth++) {
-      seen.add(current);
-      if ('code' in current && (current as { code?: unknown }).code === 'ECONNREFUSED') {
-        const error = Object.assign(new Error('The local Sidekick service is starting.'), {
-          code: 'sidekick_not_ready', retryable: true, cause
-        });
-        throw error;
-      }
-      current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
-    }
-    throw cause;
+    throw classifyIndependentTransportError(cause);
   }
-  const value: unknown = await response.json();
   if (!response.ok) {
     const detail = isRecord(value) && isRecord(value.error) ? value.error : null;
     const error = new Error(detail && typeof detail.message === 'string' ? detail.message : 'Independent broker request failed.');
@@ -65,6 +56,31 @@ export async function independentApiRequest(
     throw error;
   }
   return value;
+}
+
+/** Startup refusal stays retryable. A timed-out store call must not collapse
+ * into the generic independent_request_failed code: the download thread may
+ * already be running. */
+export function classifyIndependentTransportError(cause: unknown): Error {
+  let current: unknown = cause;
+  const seen = new Set<object>();
+  for (let depth = 0; depth < 5 && current && typeof current === 'object' && !seen.has(current); depth++) {
+    seen.add(current);
+    const record = current as { code?: unknown; name?: unknown; cause?: unknown };
+    if (record.code === 'ECONNREFUSED') {
+      return Object.assign(new Error('The local Sidekick service is starting.'), {
+        code: 'sidekick_not_ready', retryable: true, cause
+      });
+    }
+    const name = typeof record.name === 'string' ? record.name : '';
+    if (name === 'TimeoutError' || name === 'AbortError' || record.code === 'ABORT_ERR' || record.code === 'UND_ERR_CONNECT_TIMEOUT') {
+      return Object.assign(new Error('The local service did not answer in time. A download that already started keeps running.'), {
+        code: 'request_timeout', retryable: true, cause
+      });
+    }
+    current = record.cause;
+  }
+  return cause instanceof Error ? cause : new Error('Independent broker request failed.');
 }
 
 export type WebuiRequestMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';

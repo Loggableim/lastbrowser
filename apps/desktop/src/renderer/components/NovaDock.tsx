@@ -23,6 +23,8 @@ import {
 } from '../stores/usePinnedAppStore.js';
 import { renderAppIcon } from './PinnedAppGrid.js';
 import { useDesktopI18n } from '../i18n.js';
+import { shellText } from '../i18n/shell-text.js';
+import { useStandardChatCompanion } from './CompanionPicker.js';
 import { canDragFloatingDock, createDockAutoHideController, resolveDockOrientationForPanel } from '../dock-auto-hide.js';
 import type { BrowserTab } from '../tabs.js';
 import { canAcceptPinnedTabDrag, canPinBrowserTab, resolvePinnedTabDrop } from '../pinned-tab-drop.js';
@@ -68,7 +70,10 @@ export function NovaDock({
   tabs = [],
   onPinTabAsApp
 }: NovaDockProps): React.JSX.Element {
-  const { t } = useDesktopI18n();
+  const { t, locale } = useDesktopI18n();
+  const standardCompanion = useStandardChatCompanion();
+  const shownName = standardCompanion.stored ? standardCompanion.botName : botName;
+  const shownAvatar = standardCompanion.stored ? standardCompanion.avatar : brandAssets.sidekickAvatar;
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const setDockSettings = usePanelStore((s) => s.setDockSettings);
   const setSidebarMode = usePanelStore((s) => s.setSidebarMode);
@@ -384,12 +389,12 @@ export function NovaDock({
             type="button"
             className="nova-dock-btn avatar-btn"
             onClick={onExpandSidebar}
-            aria-label={`${botName} AI`}
+            aria-label={`${shownName} AI`}
           >
             <div className="dock-brand-circle">
               <img
-                src={brandAssets.sidekickAvatar}
-                alt={botName}
+                src={shownAvatar}
+                alt={shownName}
                 className="dock-popart-avatar"
                 onError={(e) => {
                   (e.currentTarget as HTMLElement).style.display = 'none';
@@ -399,7 +404,7 @@ export function NovaDock({
             <span className="dock-online-dot" />
           </button>
           <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(avatarIndex)}>
-            <span className="label-text">{botName} AI</span>
+            <span className="label-text">{shownName} AI</span>
             <span className="label-badge">Assistant</span>
           </div>
         </div>
@@ -416,7 +421,7 @@ export function NovaDock({
             type="button"
             className={`nova-dock-btn ${activePanel === 'chat' ? 'is-active' : ''}`}
             onClick={() => onSelectPanel?.('chat')}
-            aria-label={`${botName} Chat`}
+            aria-label={`${shownName} Chat`}
             data-testid="nova-dock-chat"
           >
             <img src={brandAssets.sidebarIcons.chat} alt="Chat" className="dock-mini-icon" />
@@ -513,14 +518,14 @@ export function NovaDock({
                 type="button"
                 className="nova-dock-btn add-btn"
                 onClick={onAddPinnedApp}
-                aria-label="App anheften"
+                aria-label={shellText(locale, "App anheften", "Pin an app")}
               >
                 <div className="pinned-dock-icon-wrapper">
                   <Plus size={14} />
                 </div>
               </button>
               <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(addAppIndex ?? 0)}>
-                <span className="label-text">App anheften</span>
+                <span className="label-text">{shellText(locale, "App anheften", "Pin an app")}</span>
               </div>
             </div>
           )}

@@ -7,6 +7,7 @@ const shellCopyRows: Record<string, Record<LegacyDesktopLocaleId | 'ja', string>
   "copilot.quotaAvailable": { "en": "{percent}% quota available{account}", "de": "{percent}% Kontingent verfügbar{account}", "it": "{percent}% di quota disponibile{account}", "es": "{percent}% de cuota disponible{account}", "fr": "{percent} % de quota disponible{account}", "pt-BR": "{percent}% de cota disponível{account}", "ru": "{percent}% квоты доступно{account}", "ja": "{percent}%の残り容量{account}" },
   "copilot.modelMenuTitle": { "en": "Select AI model", "de": "KI-Modell auswählen", "it": "Seleziona modello IA", "es": "Elegir modelo de IA", "fr": "Choisir le modèle d’IA", "pt-BR": "Escolher modelo de IA", "ru": "Выбрать модель ИИ", "ja": "AIモデルを選択" },
   "copilot.modelLabel": { "en": "Model:", "de": "Modell:", "it": "Modello:", "es": "Modelo:", "fr": "Modèle :", "pt-BR": "Modelo:", "ru": "Модель:", "ja": "モデル:" },
+  "copilot.modelGroupOtherEngines": { "en": "Other engines", "de": "Weitere Engines", "it": "Altri motori", "es": "Otros motores", "fr": "Autres moteurs", "pt-BR": "Outros motores", "ru": "Другие движки", "ja": "その他のエンジン" },
   "copilot.engineTooltip": { "en": "AI engine: {label} • Click to switch", "de": "KI-Engine: {label} • Klicken zum Wechseln", "it": "Motore IA: {label} • Fai clic per cambiare", "es": "Motor de IA: {label} • Clic para cambiar", "fr": "Moteur d’IA : {label} • Cliquer pour changer", "pt-BR": "Motor de IA: {label} • Clique para trocar", "ru": "Движок ИИ: {label} • Нажмите, чтобы сменить", "ja": "AIエンジン: {label} • クリックして切り替え" },
   "copilot.activeEngineTooltip": { "en": "Active AI engine: {label} • Click to switch", "de": "Aktive KI-Engine: {label} • Klicken zum Wechseln", "it": "Motore IA attivo: {label} • Fai clic per cambiare", "es": "Motor de IA activo: {label} • Clic para cambiar", "fr": "Moteur d’IA actif : {label} • Cliquer pour changer", "pt-BR": "Motor de IA ativo: {label} • Clique para trocar", "ru": "Активный движок ИИ: {label} • Нажмите, чтобы сменить", "ja": "使用中のAIエンジン: {label} • クリックして切り替え" },
   "copilot.openOrchestrationSettings": { "en": "Open orchestration settings", "de": "Orchestrierungs-Einstellungen öffnen", "it": "Apri impostazioni di orchestrazione", "es": "Abrir ajustes de orquestación", "fr": "Ouvrir les paramètres d’orchestration", "pt-BR": "Abrir configurações de orquestração", "ru": "Открыть настройки оркестрации", "ja": "オーケストレーション設定を開く" },
@@ -177,6 +178,7 @@ export const shellCopyJa = Object.fromEntries(Object.entries(shellCopyRows).map(
   "copilot.quotaAvailable": string;
   "copilot.modelMenuTitle": string;
   "copilot.modelLabel": string;
+  "copilot.modelGroupOtherEngines": string;
   "copilot.engineTooltip": string;
   "copilot.activeEngineTooltip": string;
   "copilot.openOrchestrationSettings": string;

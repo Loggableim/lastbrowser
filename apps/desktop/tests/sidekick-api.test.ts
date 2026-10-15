@@ -190,6 +190,13 @@ describe('sidekick api client', () => {
     expect(resetError).not.toHaveProperty('code', 'sidekick_not_ready');
   });
 
+  it('keeps a timed-out store call distinct from the generic independent failure', async () => {
+    const timeout = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError', code: 'ABORT_ERR' });
+    const fetchImpl = vi.fn(async () => { throw Object.assign(new Error('fetch failed'), { cause: timeout }); });
+    await expect(independentApiRequest('http://127.0.0.1:8788', 'localAi.store', null, {}, 'default', 'private', fetchImpl as any))
+      .rejects.toMatchObject({ code: 'request_timeout', retryable: true });
+  });
+
   it('posts cloud setup using the existing onboarding API shape', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string | URL, init?: RequestInit) => {

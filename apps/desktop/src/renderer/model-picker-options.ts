@@ -10,7 +10,7 @@ export type ModelPickerOptionGroup = Readonly<{
   deployment?: ProviderDeployment;
   disabledReason?: 'unavailable' | 'notConfigured';
   models: readonly Readonly<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability;
-    deploymentKind?:ProviderDeployment;modelSource?:'explicit_config'|'local_catalog';contextLength?:number|null;contextLengthSource?:'local_catalog'|'unknown';localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }>[];
+    deploymentKind?:ProviderDeployment;modelSource?:'explicit_config'|'local_catalog';contextLength?:number|null;contextLengthSource?:'live_catalog'|'local_catalog'|'official_model_docs'|'catalog'|'provided_catalog'|'models_dev'|'explicit_config'|'unknown';localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }>[];
 }>;
 
 /** Device evidence is necessary, but never overrides the native adapter gate. */

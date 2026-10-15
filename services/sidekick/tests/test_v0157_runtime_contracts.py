@@ -77,6 +77,12 @@ def test_latency_is_local_bounded_and_excludes_invalid_samples(tmp_path):
     assert read_latency_summaries(tmp_path / "other")["models"] == []
     saved = json.loads((tmp_path / "state" / "quickchat-latency.json").read_text(encoding="utf-8"))
     assert set(saved["models"][0]["samples"][0]) == {"at", "ttft_ms", "provider_ttft_ms", "preflight_ms", "total_ms"}
+    record_latency(tmp_path, provider="fake-provider", model="fake-model", ttft_ms=1000,
+                   provider_ttft_ms=900, preflight_ms=100, total_ms=3000, output_chars=400)
+    with_chars = json.loads((tmp_path / "state" / "quickchat-latency.json").read_text(encoding="utf-8"))
+    sample = with_chars["models"][0]["samples"][-1]
+    assert sample["output_chars"] == 400 and sample["output_tokens"] == 100
+    assert sample["usage_estimated"] is True and sample["tokens_per_sec"] == 50.0
 
 
 def test_quickchat_reasoning_default_is_minimal_and_explicit_choice_wins():

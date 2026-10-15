@@ -63,6 +63,7 @@ import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.
 import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from './access-auth-gate.js';
+import { fetchAccessAuthStatusWithRetry } from './access-auth-status.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishStoppedLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
@@ -1687,10 +1688,22 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     if (!sidekickTransportReady) return;
     let alive = true;
+    let inFlight = false;
+    const controller = new AbortController();
     const checkAccessStatus = async (): Promise<void> => {
+      // One check at a time: a stalled check must not pile up more requests
+      // behind the periodic poll, and unmount cancels the pending backoff.
+      if (inFlight) return;
+      inFlight = true;
       const generation = accessAuthGateRef.current!.state.generation;
       try {
-        const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
+        // The local WebUI can stall past the bridge timeout while a chat turn
+        // or background task runs. Retry transient failures with backoff so a
+        // single timeout does not lock an already-unlocked shell.
+        const auth = await fetchAccessAuthStatusWithRetry(
+          () => window.lastbrowser.sidekick.getAccessAuthStatus(),
+          { signal: controller.signal }
+        );
         if (!alive) return;
         const state = accessAuthGateRef.current!.dispatch({ type: 'status', generation, auth });
         setAccessAuthRequired(state.required);
@@ -1706,6 +1719,8 @@ function AppContent(): JSX.Element {
         // session token changes) must never leave an already-unlocked shell
         // visible. Keep the retry screen up until status can be verified.
         setAccessAuthChecked(state.checked);
+      } finally {
+        inFlight = false;
       }
     };
     void checkAccessStatus();
@@ -1716,6 +1731,8 @@ function AppContent(): JSX.Element {
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       alive = false;
+      inFlight = false;
+      controller.abort();
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisible);
     };

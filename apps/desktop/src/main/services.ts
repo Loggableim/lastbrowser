@@ -433,6 +433,12 @@ export class SidecarServices {
     startedAt: null
   };
   private isStopping = false;
+  private announcedRuntimeGeneration: string | null = null;
+  private runtimeReadyListener: ((generation: string) => void) | null = null;
+
+  onRuntimeReady(listener: (generation: string) => void): void {
+    this.runtimeReadyListener = listener;
+  }
 
   constructor(
     private readonly layout: ServiceLayout,
@@ -735,8 +741,9 @@ export class SidecarServices {
         lastError: `Sidekick service stopped (code=${code}, signal=${signal}).`
       };
       // Auto-restart if the process crashed (not a clean stop)
-      if (wasRunning && code !== 0 && code !== null && !this.isStopping) {
-        console.warn(`[lastbrowser] WebUI process crashed (code=${code}), restarting in 2s...`);
+      const signaled = signal === 'SIGTERM' || signal === 'SIGKILL';
+      if (wasRunning && !this.isStopping && ((code !== 0 && code !== null) || signaled)) {
+        console.warn(`[lastbrowser] WebUI process stopped (code=${code}, signal=${signal}), restarting in 2s...`);
         setTimeout(() => {
           if (!this.webuiProcess && !this.isStopping) {
             void this.start();
@@ -774,7 +781,12 @@ export class SidecarServices {
       this.healthCheckInFlight = false;
     }
     if (result.ok) {
+      const generation = this.status.runtimeGeneration;
       this.status = { ...this.status, webuiHealth: 'ready', lastError: null };
+      if (generation && generation !== this.announcedRuntimeGeneration) {
+        this.announcedRuntimeGeneration = generation;
+        this.runtimeReadyListener?.(generation);
+      }
       return;
     }
 

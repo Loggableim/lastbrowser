@@ -1697,6 +1697,12 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
       undefined, getAccessAuthCookie(), nativeChatReadHeaders({ profile: binding.profile, workspacePath: binding.workspacePath ?? undefined,
         nativeBridgeNonce: services!.getLayout().bridgeToken }))
   });
+  services.onRuntimeReady(() => {
+    void (async () => {
+      await ensureSidecarAuth();
+      await independentController?.rebind();
+    })().catch((error) => console.warn('[independent] Bridge rebind failed:', error));
+  });
   void services.start().then(async () => { await ensureSidecarAuth();
     try { await independentController?.start(); } catch (error) { console.warn('[independent] Browser bridge unavailable:', error); }
   });

@@ -1,12 +1,12 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="it">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scarica Lastbrowser – Programma di Installazione per Windows (v0.1.56)</title>
-<meta name="description" content="Scarica Lastbrowser per Windows 10 &amp; 11 (64-Bit). Versione 0.1.56: Programma di installazione NSIS ed edizione Portable. 100% Local-First e conforme al GDPR.">
-<meta property="og:title" content="Scarica Lastbrowser – Build Ufficiale per Windows (v0.1.56)">
-<meta property="og:description" content="Browser Chromium rapido e privato con Nova AI, Spazi isolati e Castlabs Widevine DRM. Download diretto per Windows.">
+<title>Scarica LastBrowser – Programma di Installazione per Windows (v0.1.55 Beta)</title>
+<meta name="description" content="Scarica LastBrowser per Windows 10 &amp; 11 (64-Bit). Versione 0.1.55 Beta: Programma di installazione NSIS ed edizione Portable. 100% Local-First e conforme al GDPR.">
+<meta property="og:title" content="Scarica LastBrowser – Build Ufficiale per Windows (v0.1.55)">
+<meta property="og:description" content="Browser Chromium rapido e privato con Sidekick, Spazi isolati e Castlabs Widevine DRM. Download diretto per Windows.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lastbrowser.com/it/download/">
 <meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
@@ -24,7 +24,8 @@
 <link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
-<link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
+<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/download-counter.css">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <link rel="stylesheet" href="/assets/css/docs.css">
 <script src="/assets/js/theme.js"></script>
@@ -33,11 +34,11 @@
 {
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
-  "name": "Lastbrowser",
-  "operatingSystem": "Windows 10, Windows 11 (x64), Linux x64",
+  "name": "LastBrowser",
+  "operatingSystem": "Windows 10, Windows 11 (x64)",
   "applicationCategory": "BrowserApplication",
-  "softwareVersion": "0.1.56",
-  "downloadUrl": "https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe",
+  "softwareVersion": "0.1.55 Beta",
+  "downloadUrl": "https://github.com/Loggableim/lastbrowser/releases/download/v0.1.55/Lastbrowser-0.1.55-x64-setup.exe",
   "offers": {
     "@type": "Offer",
     "price": "0.00",
@@ -45,7 +46,6 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/assets/css/download-counter.css?v=56-restore1">
 </head>
 <body>
 <a href="#main" class="skip-link">Salta al contenuto principale</a>
@@ -53,8 +53,8 @@
 <nav>
   <div class="container inner">
     <a href="/it/" class="logo">
-      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
-      <div><strong>Lastbrowser</strong><span>Scarica · v0.1.56</span></div>
+      <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="40" height="40">
+      <div><strong>LastBrowser</strong><span>Scarica · v0.1.55</span></div>
     </a>
     <div class="nav-links">
       <a href="/it/features/">Funzionalità</a>
@@ -99,22 +99,22 @@
 <main id="main">
   <section class="hero">
     <div class="container">
-      <div class="pill-badge">Build Ufficiale per Windows · v0.1.56</div>
+      <div class="pill-badge">Build Ufficiale per Windows · v0.1.55 Beta</div>
       <h1>Ottieni il <span class="grad">Browser AI-Nativo per Windows</span></h1>
-      <p class="lead">Lastbrowser unisce la reattività di Chromium con Nova AI, terminale ConPTY, Widevine DRM L3 e Spazi isolati. 100% Local-First sul tuo PC.</p>
+      <p class="lead">LastBrowser unisce la reattività di Chromium con Sidekick, terminale ConPTY, Widevine DRM L3 e Spazi isolati. 100% Local-First sul tuo PC.</p>
       
       <div class="download-counter" data-download-counter data-locale="it" role="status">Il numero di download non è disponibile.</div>
+      <div class="feature-card" role="note" style="max-width:760px;margin:18px auto 0;text-align:left;"><strong>v0.1.55:</strong> Pubblicata il 12 ottobre 2026. Standardchat consente Stop durante l’avvio; Quickchat mostra Stop durante la ricerca dei modelli. I cataloghi vengono riutilizzati per profilo e configurazione. Limiti: al primo avvio può apparire un’area nera fino a Ctrl+R; la verifica del pacchetto firmato nella VM è ancora aperta. Il miglioramento della latenza non è confermato.<br>Setup: 167,267,992 bytes · Portable: 166,904,592 bytes.</div>
+<div class="feature-card" role="note" style="max-width:760px;margin:12px auto 0;text-align:left;"><strong>v0.1.47 TEST · prerelease firmata separata:</strong> Solo per test; non è una versione stabile e il canale di aggiornamento v0.1.55 resta invariato. <a href="https://github.com/Loggableim/lastbrowser/releases/download/test-v0.1.47-20261007-f67320f/Lastbrowser-0.1.47-x64-setup.exe">Scarica Setup TEST (174.778.024 byte)</a> · <a href="https://github.com/Loggableim/lastbrowser/releases/download/test-v0.1.47-20261007-f67320f/Lastbrowser-0.1.47-x64-portable.exe">Scarica Portable TEST (174.415.880 byte)</a><br>SHA-256 Setup: <code style="overflow-wrap:anywhere;word-break:break-all;">7affb53fb25d9dde379b367805aca6a60e5ce614676918262d276a892e7caef0</code><br>SHA-256 Portable: <code style="overflow-wrap:anywhere;word-break:break-all;">0a8d82bfe4d144b5e426a7d1b1fc802779f2ab3ccd6f2e586bfc2fa98d8e6b52</code><br>Verifiche VM, provider e due profili ancora in sospeso; non certificata per Microsoft Store.</div>
       <div class="cta-group">
-        <a id="main-download-btn" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-lg">
-          ⬇️ Scarica Installatore (.exe)
-        </a>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-portable.exe" class="btn btn-ghost btn-lg">
-          📦 Versione Portable (.exe)
-        </a>
+        <a id="main-download-btn" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.55/Lastbrowser-0.1.55-x64-setup.exe" class="btn btn-primary btn-lg">
+          ⬇️ Scarica Installatore (.exe) (159.52 MB)</a>
+        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.55/Lastbrowser-0.1.55-x64-portable.exe" class="btn btn-ghost btn-lg">
+          📦 Versione Portable (.exe) (159.17 MB)</a>
       </div>
       
       <div style="margin-top:16px;display:flex;gap:16px;justify-content:center;align-items:center;flex-wrap:wrap;">
-        <span class="sub-cta-note">Windows 10 &amp; 11 (x64) · 100% Gratuito &amp; Open Source · Zero Telemetria</span>
+        <span class="sub-cta-note">Windows 10 &amp; 11 (x64) · 100% Gratuito &amp; Local-First · Zero Telemetria</span>
         <button onclick="openSmartScreenModal()" class="btn btn-ghost btn-sm" style="font-size:12px;padding:4px 10px;border-radius:20px;">🛡️ Avviso Windows SmartScreen?</button>
       </div>
 
@@ -127,33 +127,11 @@
     </div>
   </section>
 
-
-<section class="container" id="linux-downloads" style="padding:20px 0 40px;scroll-margin-top:90px;">
-  <div class="feature-card" style="border-color:var(--stroke-glow);">
-    <span class="badge badge-cyan">Linux x64 · v0.1.56 · Preview</span>
-    <h2>Scarica per Linux</h2><p class="text-muted">Pacchetti Linux x64 firmati. Avvia AppImage o estrai l’archivio tar.gz.</p>
-    <div class="cta-group">
-      <a class="btn btn-primary" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x86_64.AppImage">AppImage · 204.8 MiB</a>
-      <a class="btn btn-ghost" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64.tar.gz">tar.gz · 204.3 MiB</a>
-    </div>
-    <p><a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/SHA256SUMS">SHA256SUMS</a> · <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/SHA256SUMS.asc">SHA256SUMS.asc</a> · <a href="/assets/keys/lastbrowser-linux-0.1.56-signing.pub.asc">Chiave pubblica di firma</a></p>
-    <p data-linux-host-requirements>AppImage richiede FUSE con libfuse.so.2 e fusermount. Se questi componenti di sistema non sono disponibili, usa l’archivio tar.gz. Chat e DRM su Linux non sono ancora verificati.</p>
-    <details><summary>Verifica firma e checksum</summary>
-      <p>Fingerprint completo: <code style="overflow-wrap:anywhere;">0546B4B0840C0A86D62B54A79DC2502686684B33</code></p>
-      <pre style="overflow-x:auto;padding:12px;background:var(--bg-secondary,#0b1220);border-radius:10px;"><code>gpg --import lastbrowser-linux-0.1.56-signing.pub.asc
-gpg --fingerprint 0546B4B0840C0A86D62B54A79DC2502686684B33
-gpg --verify SHA256SUMS.asc SHA256SUMS
-sha256sum -c SHA256SUMS
-chmod +x Lastbrowser-0.1.56-x86_64.AppImage
-./Lastbrowser-0.1.56-x86_64.AppImage</code></pre>
-    </details>
-  </div>
-</section>
   <!-- Setup vs Portable Comparison -->
   <section class="container" style="padding: 40px 0 60px;">
     <div class="section-header">
       <h2>Scegli il tuo Formato di Installazione</h2>
-      <p>Entrambe le edizioni contengono il motore Chromium completo, Nova AI e il terminale ConPTY.</p>
+      <p>Entrambe le edizioni contengono il motore Chromium completo, Sidekick e il terminale ConPTY.</p>
     </div>
 
     <div class="grid-2">
@@ -167,8 +145,8 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
           <li>✓ Aggiornamenti trasparenti in background</li>
           <li>✓ Supporto per installazione invisibile tramite flag <code>/S</code></li>
         </ul>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">
-          Scarica Lastbrowser-0.1.56-x64-setup.exe (264.70 MB)
+        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.55/Lastbrowser-0.1.55-x64-setup.exe" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">
+          Scarica Lastbrowser-0.1.55-x64-setup.exe (159.52 MB)
         </a>
       </div>
 
@@ -182,8 +160,8 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
           <li>✓ Profili salvati localmente o in <code>%APPDATA%</code></li>
           <li>✓ Ideale per postazioni di lavoro aziendali e test rapidi</li>
         </ul>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-portable.exe" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;">
-          Scarica Lastbrowser-0.1.56-x64-portable.exe (264.35 MB)
+        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.55/Lastbrowser-0.1.55-x64-portable.exe" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;">
+          Scarica Lastbrowser-0.1.55-x64-portable.exe (159.17 MB)
         </a>
       </div>
     </div>
@@ -205,7 +183,7 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
       <div class="feature-card">
         <div class="fc-icon purple">2</div>
         <h3>Scegli la tua Mentalità IA</h3>
-        <p>Configura Nova AI in base alle tue esigenze: Approccio Tecnico, Ricerca Accademica o Creatività con controllo completo dei prompt.</p>
+        <p>Configura Sidekick in base alle tue esigenze: Approccio Tecnico, Ricerca Accademica o Creatività con controllo completo dei prompt.</p>
       </div>
       <div class="feature-card">
         <div class="fc-icon green">3</div>
@@ -223,13 +201,13 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
       <div class="code-block" style="margin-top:14px;">
         <button class="copy-btn" onclick="copyCode(this)">Copia</button>
         <pre><code># Verifica tramite PowerShell su Windows:
-Get-FileHash -Algorithm SHA256 .\Lastbrowser-0.1.56-x64-setup.exe
+Get-FileHash -Algorithm SHA256 .\Lastbrowser-0.1.55-x64-setup.exe
 
-# Impronta SHA-256 ufficiale per v0.1.56 (Setup, 277629344 byte):
-BA114390205DC4588EEC5029BE32ABF340A9439DCA8A8B36525C8D827433775F
+# Impronta SHA-256 ufficiale per v0.1.55 Beta (Setup):
+0b827dd9069edd74aab5c457422483c82ed4f57a4b18bb2648affa94556897f2
 
-# Impronta SHA-256 ufficiale per v0.1.56 (Portable, 277265952 byte):
-FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
+# Impronta SHA-256 ufficiale per v0.1.55 Beta (Portable):
+fb62b810fdab8a46cc7ca8861ee1e9b2caeb13ee2efcd8000a8d5f101faf8aa6</code></pre>
       </div>
     </div>
   </section>
@@ -244,19 +222,19 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
     <div class="grid-2">
       <div class="feature-card">
         <h4>Perché compare l'avviso di Windows SmartScreen?</h4>
-        <p>Trattandosi di una recente build open source, il binario sta consolidando la propria reputazione statistica sui server Microsoft. Puoi cliccare in tutta sicurezza su "Ulteriori informazioni" e poi su "Esegui comunque".</p>
+        <p>Trattandosi di una recente build Local-First, il binario sta consolidando la propria reputazione statistica sui server Microsoft. Puoi cliccare in tutta sicurezza su "Ulteriori informazioni" e poi su "Esegui comunque".</p>
       </div>
       <div class="feature-card">
         <h4>È supportata l'installazione silenziosa aziendale?</h4>
         <p>Sì, il setup supporta il parametro <code>/S</code> per installazioni automatizzate via SCCM, Intune o script PowerShell aziendali.</p>
       </div>
       <div class="feature-card">
-        <h4>Come disinstallare completamente Lastbrowser?</h4>
+        <h4>Come disinstallare completamente LastBrowser?</h4>
         <p>Dalle Impostazioni di Windows > App installate, oppure eseguendo il programma di disinstallazione nella directory dell'app. I dati in <code>%APPDATA%\Lastbrowser</code> possono essere rimossi integralmente.</p>
       </div>
       <div class="feature-card">
         <h4>Esistono versioni per macOS o Linux?</h4>
-        <p>Pacchetti Linux x64 firmati. Avvia AppImage o estrai l’archivio tar.gz. La versione macOS è ancora in preparazione.</p>
+        <p>Attualmente LastBrowser è calibrato al 100% per Windows (ConPTY, DirectWrite, DPAPI). Le versioni per Linux e macOS sono previste nella tabella di marcia futura.</p>
       </div>
     </div>
   </section>
@@ -266,11 +244,10 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
 <div class="floating-download-bar">
   <div class="float-info">
     <img src="/assets/app-icons/nav-icon.ico" alt="Icona" width="28" height="28">
-    <div><strong>Lastbrowser</strong> <span>v0.1.56 per Windows 10 &amp; 11</span></div>
+    <div><strong>LastBrowser</strong> <span>v0.1.55 Beta per Windows 10 &amp; 11</span></div>
   </div>
-  <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-sm">
-    ⬇️ Scarica (.exe)
-  </a>
+  <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.55/Lastbrowser-0.1.55-x64-setup.exe" class="btn btn-primary btn-sm">
+    ⬇️ Scarica (.exe) (159.52 MB)</a>
 </div>
 
 <!-- SmartScreen Modal -->
@@ -281,7 +258,7 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
       <button class="modal-close" onclick="closeSmartScreenModal()">✕</button>
     </div>
     <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">
-      Essendo una nuova versione open source senza telemetria cloud di massa, Windows SmartScreen può mostrare un avviso blu preventivo:
+      Essendo una nuova versione Local-First senza telemetria cloud di massa, Windows SmartScreen può mostrare un avviso blu preventivo:
     </p>
     <div style="background:rgba(255,255,255,0.03);padding:16px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
       <p style="font-weight:600;margin-bottom:8px;">Passaggio 1: Fai clic sul link <span style="text-decoration:underline;">"Ulteriori informazioni"</span>.</p>
@@ -300,11 +277,11 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
 <div class="modal-backdrop" id="waitlist-modal" onclick="if(event.target===this)closeWaitlistModal()">
   <div class="modal-card">
     <div class="modal-header">
-      <h3>macOS</h3>
+      <h3>LastBrowser per macOS e Linux</h3>
       <button class="modal-close" onclick="closeWaitlistModal()">✕</button>
     </div>
     <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">
-      Lastbrowser è sviluppato nativamente per Windows 10 e 11. Vuoi ricevere una notifica quando sarà disponibile per il tuo sistema operativo?
+      LastBrowser è sviluppato nativamente per Windows 10 e 11. Vuoi ricevere una notifica quando sarà disponibile per il tuo sistema operativo?
     </p>
     <form onsubmit="event.preventDefault();alert('Grazie! Ti informeremo appena disponibile.');closeWaitlistModal();">
       <input type="email" placeholder="tua-email@esempio.com" required style="width:100%;padding:12px 14px;border-radius:8px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:#fff;margin-bottom:14px;">
@@ -317,13 +294,13 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
   <div class="container footer-grid">
     <div class="footer-brand">
       <div class="logo">
-        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
-        <div><strong>Lastbrowser</strong><span>Browser AI-Nativo</span></div>
+        <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="36" height="36">
+        <div><strong>LastBrowser</strong><span>Browser AI-Nativo</span></div>
       </div>
       <p>Il moderno browser Chromium per Windows 10 &amp; 11 con IA nativa, 48 flussi di lavoro e terminale ConPTY. 100% Local-First.</p>
       <div style="margin-top:14px;">
-        <span class="footer-contact-highlight">Licenze Commerciali: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
-      <nav class="footer-social-links" aria-label="Social media">
+        <span class="footer-contact-highlight">Kontakt: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+        <nav class="footer-social-links" aria-label="Social media">
           <a href="https://x.com/lastbrowser" target="_blank" rel="noopener noreferrer" aria-label="X"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68L14.54 10.98l9.452 11.867h-7.406l-5.8-7.584-6.64 7.584H.464l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.606h2.039L6.486 3.132h-2.19z"/></svg><span>X</span></a>
           <a href="https://bsky.app/profile/lastbrowser.bsky.social" target="_blank" rel="noopener noreferrer" aria-label="Bluesky"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M5.36 2.25c2.72 2.04 5.65 6.17 6.64 8.39.99-2.22 3.92-6.35 6.64-8.39 1.96-1.47 5.14-2.61 5.14 1.01 0 .72-.41 6.07-.65 6.94-.83 2.99-3.84 3.76-6.52 3.3 4.69.79 5.89 3.41 3.31 6.03-4.9 4.99-7.04-1.25-7.59-2.84-.1-.3-.15-.44-.33-.44s-.23.14-.33.44c-.55 1.59-2.69 7.83-7.59 2.84-2.58-2.62-1.38-5.24 3.31-6.03-2.68.46-5.69-.31-6.52-3.3C.63 9.33.22 3.98.22 3.26c0-3.62 3.18-2.48 5.14-1.01Z"/></svg><span>Bluesky</span></a>
         </nav>
@@ -343,12 +320,12 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
     <div class="footer-col">
       <h4>Confronti (VS)</h4>
       <ul>
-        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
-        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
-        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
-        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
-        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
-        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+        <li><a href="/vs/arc/">LastBrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">LastBrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">LastBrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">LastBrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">LastBrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">LastBrowser vs. Opera One</a></li>
       </ul>
     </div>
     <div class="footer-col">
@@ -367,6 +344,8 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
       <ul>
         <li><a href="/it/imprint/">Note Legali (§ 5 DDG)</a></li>
         <li><a href="/it/privacy/">Informativa sulla Privacy</a></li>
+        <li><a href="/it/license/">Open Source (GPL-3.0)</a></li>
+        
         <li><a href="/it/enterprise/">Licenze Enterprise</a></li>
         <li><a href="/it/support/">Centro di Supporto</a></li>
         <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
@@ -374,7 +353,7 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
     </div>
   </div>
   <div class="container footer-bottom">
-    <div>&copy; 2026 Progetto Lastbrowser. Tutti i diritti riservati. Zero Telemetria Involontaria.</div>
+    <div>&copy; 2026 Progetto LastBrowser. Tutti i diritti riservati. Zero Telemetria Involontaria.</div>
     <div style="display:flex;gap:14px;align-items:center;">
       <span>Windows 10 &amp; 11 (64-Bit)</span>
       <span>·</span>
@@ -383,7 +362,7 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
   </div>
 </footer>
 
-<script src="/assets/js/app.js?v=linux56-20261014"></script>
-<script src="/assets/js/download-counter.js?v=56-restore1" defer></script>
+<script src="/assets/js/app.js"></script>
+<script src="/assets/js/download-counter.js" defer></script>
 </body>
 </html>

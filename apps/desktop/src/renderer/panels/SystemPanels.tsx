@@ -1,3 +1,4 @@
+import { MailPluginSettings } from './MailPluginSettings.js';
 import { PasswordVaultPanel } from '../components/PasswordVaultPanel.js';
 import { StartupPreferencesPanel } from '../startup/StartupPreferencesPanel.js';
 import { OptionalAiProfileContext } from '../optional-ai-policy.js';
@@ -5171,6 +5172,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'plugins' && (
               <>
                 <ExtensionsSettingsSection />
+                <MailPluginSettings workspace={activeSpacePath} ready={ready} />
                 <SettingsCard title={t('settings.panels.plugins.connectedApps')} description={t('settings.panels.plugins.connectedAppsDescription')}>
                   <div className="settings-field-grid">
                     <SettingsToggle

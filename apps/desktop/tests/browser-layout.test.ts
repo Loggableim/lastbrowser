@@ -234,7 +234,7 @@ describe('browser shell layout', () => {
     expect(source).toContain('<NativeMemoryMain');
     expect(source).toContain('<NativeInsightsMain');
     expect(source).toContain('<NativeLogsMain');
-    expect(source).toContain('<NativeGmailMain');
+    expect(source).toContain('<NativeMailMain');
     expect(source).toContain('<NativeDiscordMain');
     expect(source).toContain('<NativeAppstoreMain');
     expect(source).toContain('<NativeSettingsMain');
@@ -376,7 +376,7 @@ describe('browser shell layout', () => {
     expect(restPanels).toContain("useState(activeContextItem === 'Profiles')");
     expect(source).toContain('<NativeMemoryMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeLogsMain activeContextItem={activeContextItem}');
-    expect(source).toContain('<NativeGmailMain activeContextItem={activeContextItem} serviceStatus={serviceStatus}');
+    expect(source).toContain('<NativeMailMain workspace={activeSpacePath} activeContextItem={activeContextItem} ready={canCallSidekickApi(serviceStatus)}');
     expect(source).toContain('<NativeDiscordMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeAppstoreMain');
     expect(source).toContain('<NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus}');

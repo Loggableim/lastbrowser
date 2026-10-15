@@ -1,9 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Mail } from 'lucide-react';
 import { mailRequest, type MailAccount } from '../mail-plugin.js';
+import { mailPanelCopy } from '../i18n/mail-plugin-copy.js';
+import { useDesktopI18n } from '../i18n.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
 type RecordData = Record<string, any>;
 export function NativeMailMain({ workspace, ready, activeContextItem = 'Inbox' }: { workspace: string; ready: boolean; activeContextItem?: string }): JSX.Element {
+  const { locale } = useDesktopI18n();
+  const copy = mailPanelCopy(locale);
   const [accounts, setAccounts] = useState<MailAccount[]>([]);
   const [enabled, setEnabled] = useState(false);
   const [account, setAccount] = useState('');
@@ -48,7 +52,13 @@ export function NativeMailMain({ workspace, ready, activeContextItem = 'Inbox' }
       mailRequest(workspace, 'folders', undefined, { account }).then((payload) => { if (activeKey.current === key) setFolders(payload.folders as RecordData[]); }).catch((failure) => { if (activeKey.current === key) setError(String(failure)); });
     }
   }, [workspace, account, folder, enabled]);
-  function settings() { const store = usePanelStore.getState(); store.setActiveContextItem('plugins'); store.setActivePanel('settings'); }
+  function settings() {
+    const store = usePanelStore.getState();
+    store.setActivePanel('settings');
+    // Panel changes reset the context item to the first settings section.
+    // Apply Plugins after that reset so Mail settings opens the account card.
+    setTimeout(() => store.setActiveContextItem('plugins'), 0);
+  }
   async function read(item: RecordData) {
     const key = tokenKey;
     const request = ++reading.current;
@@ -66,23 +76,23 @@ export function NativeMailMain({ workspace, ready, activeContextItem = 'Inbox' }
     } catch (failure) { if (activeKey.current === key) setError(String(failure)); }
   }
   return <section className="browser-main native-rest-main mail-main">
-    <header className="native-rest-header"><div className="native-rest-title"><Mail size={21}/><div><span className="eyebrow">Mail-Plugin</span><h1>Mail</h1><p>Postfach dieses Spaces</p></div></div><button type="button" onClick={settings}>Mail-Einstellungen</button></header>
-    {!enabled || !accounts.length ? <div className="native-work-card"><p>{!ready ? 'Sidekick startet…' : 'Für diesen Space ist noch kein Mailkonto aktiviert.'}</p><button type="button" onClick={settings}>Mailkonto einrichten</button></div> : <>
-      <div className="native-card-actions"><label>Konto<select value={account} onChange={(event) => { setQuery(''); setCompose({ to: '', subject: '', body: '' }); setAccount(event.target.value); }}>{accounts.map((item) => <option key={item.id} value={item.id}>{item.email}</option>)}</select></label>
-        <label>Ordner<select value={folder} onChange={(event) => { setQuery(''); setFolder(event.target.value); }}><option value="INBOX">Posteingang</option>{folders.filter((item) => (item.name || item.id) !== 'INBOX').map((item) => <option key={item.name || item.id} value={item.name || item.id}>{item.label || item.name || item.id}</option>)}</select></label>
-        <form onSubmit={(event) => { event.preventDefault(); void refresh(); }}><input ref={searchInput} aria-label="Mails durchsuchen" value={query} placeholder="Mails durchsuchen" onChange={(event) => setQuery(event.target.value)}/><button disabled={busy}>Suchen / Aktualisieren</button></form>
+    <header className="native-rest-header"><div className="native-rest-title"><Mail size={21}/><div><span className="eyebrow">{copy.eyebrow}</span><h1>{copy.title}</h1><p>{copy.inboxForSpace}</p></div></div><button type="button" onClick={settings}>{copy.mailSettings}</button></header>
+    {!enabled || !accounts.length ? <div className="native-work-card"><p>{!ready ? copy.starting : copy.noAccount}</p><button type="button" onClick={settings}>{copy.setupAccount}</button></div> : <>
+      <div className="native-card-actions"><label>{copy.account}<select value={account} onChange={(event) => { setQuery(''); setCompose({ to: '', subject: '', body: '' }); setAccount(event.target.value); }}>{accounts.map((item) => <option key={item.id} value={item.id}>{item.email}</option>)}</select></label>
+        <label>{copy.folder}<select value={folder} onChange={(event) => { setQuery(''); setFolder(event.target.value); }}><option value="INBOX">{copy.inbox}</option>{folders.filter((item) => (item.name || item.id) !== 'INBOX').map((item) => <option key={item.name || item.id} value={item.name || item.id}>{item.label || item.name || item.id}</option>)}</select></label>
+        <form onSubmit={(event) => { event.preventDefault(); void refresh(); }}><input ref={searchInput} aria-label={copy.search} value={query} placeholder={copy.search} onChange={(event) => setQuery(event.target.value)}/><button disabled={busy}>{copy.refresh}</button></form>
       </div>
-      <div className="native-rest-split"><aside className="integration-list">{messages.map((item) => <button key={item.id} type="button" className="integration-row" onClick={() => void read(item)}><span>{item.subject || '(Kein Betreff)'}</span><small>{item.from_name || item.from} · {item.date}</small></button>)}{!messages.length && !busy && <p>Keine Nachrichten gefunden.</p>}</aside>
-      <main className="native-rest-detail">{detail && <article className="native-work-card"><h2>{detail.subject || '(Kein Betreff)'}</h2><p>{detail.from} · {detail.date}</p><pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{detail.body_plain || detail.body || 'Diese Nachricht enthält nur HTML oder Anhänge.'}</pre>{(detail.attachments || []).map((name: string, index: number) => <button key={index} type="button" onClick={() => void download(index)}>Anhang herunterladen: {name}</button>)}<button type="button" onClick={() => { setCompose({ to: detail.from_email || detail.from || '', subject: `Re: ${detail.subject || ''}`, body: '' }); }}>Antworten</button></article>}
+      <div className="native-rest-split"><aside className="integration-list">{messages.map((item) => <button key={item.id} type="button" className="integration-row" onClick={() => void read(item)}><span>{item.subject || copy.noSubject}</span><small>{item.from_name || item.from} · {item.date}</small></button>)}{!messages.length && !busy && <p>{copy.noMessages}</p>}</aside>
+      <main className="native-rest-detail">{detail && <article className="native-work-card"><h2>{detail.subject || copy.noSubject}</h2><p>{detail.from} · {detail.date}</p><pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit' }}>{detail.body_plain || detail.body || copy.htmlOnly}</pre>{(detail.attachments || []).map((name: string, index: number) => <button key={index} type="button" onClick={() => void download(index)}>{copy.download(name)}</button>)}<button type="button" onClick={() => { setCompose({ to: detail.from_email || detail.from || '', subject: `Re: ${detail.subject || ''}`, body: '' }); }}>{copy.reply}</button></article>}
         <form ref={composeForm} className="native-work-card gmail-compose" onSubmit={(event) => { event.preventDefault(); if (!confirmSend) { setConfirmSend(true); return; } setConfirmSend(false);
           const key = tokenKey; setBusy(true); setError(''); setNotice('');
-          mailRequest(workspace, 'send', { ...compose, account, attachments }).then(() => { if (activeKey.current === key) { setCompose({ to: '', subject: '', body: '' }); setAttachments([]); setNotice('Mail wurde gesendet.'); } }).catch((failure) => { if (activeKey.current === key) setError(String(failure)); }).finally(() => { if (activeKey.current === key) setBusy(false); });
-        }}><h2>Neue Nachricht</h2><label>An<input type="email" required value={compose.to} onChange={(event) => setCompose({ ...compose, to: event.target.value })}/></label><label>Betreff<input value={compose.subject} onChange={(event) => setCompose({ ...compose, subject: event.target.value })}/></label><label>Nachricht<textarea required value={compose.body} onChange={(event) => setCompose({ ...compose, body: event.target.value })}/></label><label>Anhänge (insgesamt maximal 10 MB)<input type="file" multiple onChange={async (event) => {
+          mailRequest(workspace, 'send', { ...compose, account, attachments }).then(() => { if (activeKey.current === key) { setCompose({ to: '', subject: '', body: '' }); setAttachments([]); setNotice(copy.sent); } }).catch((failure) => { if (activeKey.current === key) setError(String(failure)); }).finally(() => { if (activeKey.current === key) setBusy(false); });
+        }}><h2>{copy.newMessage}</h2><label>{copy.to}<input type="email" required value={compose.to} onChange={(event) => setCompose({ ...compose, to: event.target.value })}/></label><label>{copy.subject}<input value={compose.subject} onChange={(event) => setCompose({ ...compose, subject: event.target.value })}/></label><label>{copy.message}<textarea required value={compose.body} onChange={(event) => setCompose({ ...compose, body: event.target.value })}/></label><label>{copy.attachments}<input type="file" multiple onChange={async (event) => {
           const files = Array.from(event.target.files || []); const key = tokenKey;
-          if (files.length > 10 || files.reduce((total, file) => total + file.size, 0) > 10 * 1024 * 1024) { setError('Maximal 10 Dateien und insgesamt 10 MB.'); event.target.value = ''; return; }
+          if (files.length > 10 || files.reduce((total, file) => total + file.size, 0) > 10 * 1024 * 1024) { setError(copy.tooLarge); event.target.value = ''; return; }
           const items = await Promise.all(files.map((file) => new Promise<RecordData>((resolve, reject) => { const reader = new FileReader(); reader.onerror = reject; reader.onload = () => resolve({ filename: file.name, mimetype: file.type || 'application/octet-stream', content_b64: String(reader.result).split(',')[1] }); reader.readAsDataURL(file); })));
           if (activeKey.current === key) setAttachments(items);
-        }}/></label>{attachments.map((item) => <span key={item.filename}>{item.filename}</span>)}<button type="submit" disabled={busy || !ready || !compose.to.trim() || !compose.body.trim()}>{confirmSend ? `Jetzt an ${compose.to} senden` : 'Senden'}</button>{confirmSend && <button type="button" onClick={() => setConfirmSend(false)}>Abbrechen</button>}</form>
+        }}/></label>{attachments.map((item) => <span key={item.filename}>{item.filename}</span>)}<button type="submit" disabled={busy || !ready || !compose.to.trim() || !compose.body.trim()}>{confirmSend ? copy.sendNow(compose.to) : copy.send}</button>{confirmSend && <button type="button" onClick={() => setConfirmSend(false)}>{copy.cancel}</button>}</form>
       </main></div>
     </>}{error && <div className="workspace-error" role="alert">{error}</div>}{notice && <p role="status">{notice}</p>}
   </section>;

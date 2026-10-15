@@ -33,6 +33,8 @@ import {
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
+import { useStandardChatCompanion } from '../components/CompanionPicker.js';
+import { connectionNoticeCopy } from '../connection-notice.js';
 import { describeChatContent } from '../chat-display.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
@@ -123,6 +125,8 @@ export function ChatTranscript({
 }: ChatTranscriptProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
   const companion = useCompanionAppearance();
+  const standardCompanion = useStandardChatCompanion();
+  const liveCompanion = standardCompanion.stored ? standardCompanion : companion;
   const transcript=useChatTranscriptScroll(activeSession?.session_id??'',{messages,childGroups,pendingUserMessage});
   const numberFormat = new Intl.NumberFormat(locale);
   const normalizedPendingUserMessage = pendingUserMessage.replace(/\s+/g, ' ').trim();
@@ -150,7 +154,7 @@ export function ChatTranscript({
   if (!activeSession && !messages.length && !childGroups.length) {
     return (
       <div className="chat-transcript chat-empty-state">
-        <img src={companion.avatar} alt="" />
+        <img src={liveCompanion.avatar} alt="" />
         <h2>{t('chat.startOrSelect')}</h2>
         <p>{t('chat.emptyHint')}</p>
         <button type="button" className="primary-action compact" onClick={onCreateSession} disabled={!ready}>
@@ -165,7 +169,9 @@ export function ChatTranscript({
     <div ref={transcript} className="chat-transcript">
       {error && <div className="chat-error">{error}</div>}
       {messages.map((message, index) => {
-        const messageAppearance = messageCompanionAppearance(message.companion, companion);
+        const messageAppearance = (message.pending || message.streaming) && standardCompanion.stored
+          ? standardCompanion
+          : messageCompanionAppearance(message.companion, liveCompanion);
         const isLastAssistant = message.role === 'assistant' && !messages.slice(index + 1).some((item) => item.role === 'assistant');
         const messageUsage = isLastAssistant ? latestTurnUsage : null;
         const inputTokens = messageUsage?.inputTokens;
@@ -441,6 +447,7 @@ export type ChatComposerProps = {
   noActiveModels?: boolean;
   modelCatalogError?: boolean;
   modelCatalogLoading?: boolean;
+  connectionNotice?: 'opencode-unreachable' | 'sign-in-expired' | null;
   antigravityCatalogUnavailable?: boolean;
   antigravityCatalogUnknown?: boolean;
   antigravityCatalogReady?: boolean;
@@ -495,6 +502,7 @@ export function ChatComposer({
   noActiveModels = false,
   modelCatalogError=false,
   modelCatalogLoading=false,
+  connectionNotice=null,
   antigravityCatalogUnavailable=false,
   antigravityCatalogUnknown=false,
   antigravityCatalogReady=false,
@@ -514,6 +522,8 @@ export function ChatComposer({
 }: ChatComposerProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
   const companion = useCompanionAppearance();
+  const standardCompanion = useStandardChatCompanion();
+  const composerCompanion = standardCompanion.stored ? standardCompanion : companion;
   const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
   const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
@@ -581,7 +591,7 @@ export function ChatComposer({
     <form className="chat-composer" onSubmit={submit}>
       <div className="composer-toolbar">
         <div className="composer-toolbar-group composer-command-group">
-          <img className="composer-sidekick" src={companion.avatar} alt="" aria-hidden="true" />
+          <img className="composer-sidekick" src={composerCompanion.avatar} alt="" aria-hidden="true" />
           {commandContext&&onCommandAction&&<button type="button" className="composer-command-button" title={commandCopy.menu} aria-label={commandCopy.menu}
             onClick={()=>{setSlashFilter('');setShowSlashDropdown(current=>!current);}}>/</button>}
           <div className="composer-mode" role="group" aria-label={`${t('chat.action')} / ${t('chat.plan')}`}>
@@ -602,10 +612,10 @@ export function ChatComposer({
                 aria-label={`${t('chat.model')}: ${model || 'default'}`}
                 title={`${model || 'default'} · ${modelProvider || 'current'}`}
                 value={AI_ORCHESTRATION_ENABLED && automaticPolicy?.active?'__lastbrowser_auto_policy__':selectedModelVisible?qualifyModelForProvider(model, modelProvider):''}
-                disabled={!ready || running}
+                disabled={!ready}
                 onChange={(event) => onModelChange(event.target.value)}
               >
-                {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready || running}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
+                {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
                 {!selectedModelVisible && <option value="" disabled>
                   {modelCatalogLoading ? t('settings.panels.providers.loadingModels') : noActiveModels ? t('settings.panels.providers.noActiveModels') : t('chat.noManualModels')}
                 </option>}
@@ -622,8 +632,9 @@ export function ChatComposer({
           </label>
         </div>
       </div>
-      {modelCatalogLoading&&<div className="composer-model-notice" role="status">{t('settings.panels.providers.loadingModels')}</div>}
-      {modelCatalogError&&<div className="composer-model-notice" role="alert">
+      {connectionNotice&&<div className="composer-model-notice" role="alert">{connectionNoticeCopy[locale][connectionNotice]}</div>}
+      {modelCatalogLoading&&!connectionNotice&&<div className="composer-model-notice" role="status">{t('settings.panels.providers.loadingModels')}</div>}
+      {modelCatalogError&&!connectionNotice&&<div className="composer-model-notice" role="alert">
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}

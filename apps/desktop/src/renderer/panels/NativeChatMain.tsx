@@ -1,4 +1,7 @@
 import { isRetiredProvider } from '../retired-providers.js';
+import { CATALOG_VISIBLE_WAIT_MS, publishModelCatalog, readModelCatalogGroups } from '../model-catalog-prefetch.js';
+import { classifyConnectionNotice, connectionNoticeCopy, type ConnectionNotice } from '../connection-notice.js';
+import { useStandardChatCompanion } from '../components/CompanionPicker.js';
 /**
  * Native chat panel for Lastbrowser.
  *
@@ -149,6 +152,7 @@ export function NativeChatMain({
   onStop
 }: NativeChatMainProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
+  const standardCompanion = useStandardChatCompanion();
   const activeModelRevision = useActiveModelRevision();
   const providerEvidenceRevision = useProviderChatEvidenceRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
@@ -212,6 +216,7 @@ export function NativeChatMain({
   const modelCatalogError = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'error';
   const modelCatalogLoading = ready && !modelCatalogLoaded && !modelCatalogError;
   const [catalogStatus, setCatalogStatus] = useState<Record<string, string>>({});
+  const [connectionNotice, setConnectionNotice] = useState<ConnectionNotice | null>(null);
   const [modelCatalogRetry, setModelCatalogRetry] = useState(0);
   const [requestedChatDefault] = useState(readRequestedChatDefault);
   useEffect(() => {
@@ -224,7 +229,23 @@ export function NativeChatMain({
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    setCatalogSnapshot({ viewKey: modelViewKey, phase: 'loading', groups: [] });
+    const cachedGroups = readModelCatalogGroups(modelViewKey) as CatalogGroup[];
+    if (cachedGroups.length) {
+      setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: cachedGroups });
+      setConnectionNotice(null);
+    } else {
+      setCatalogSnapshot({ viewKey: modelViewKey, phase: 'loading', groups: [] });
+    }
+    const loadingDeadline = window.setTimeout(() => {
+      if (!alive) return;
+      setCatalogSnapshot(current => {
+        if (current.viewKey === modelViewKey && current.phase === 'loading') {
+          setConnectionNotice('opencode-unreachable');
+          return { viewKey: modelViewKey, phase: 'error', groups: [] };
+        }
+        return current;
+      });
+    }, CATALOG_VISIBLE_WAIT_MS);
     setScopedModel(null); setCatalogDefaultModel('');
     const load = async () => {
       try {
@@ -290,19 +311,28 @@ export function NativeChatMain({
               activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
         setCatalogDefaultModel((selectedModelQualified && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) ? selectionForView.model : '');
         if (selectedModelQualified && selectionForView.model && activeSpacePath && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) saveSpaceModel(activeSpacePath, selectionForView.model, window.localStorage, selectionForView.provider);
-        setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: isAntigravityCatalogUnverified
+        const groups = isAntigravityCatalogUnverified
           ? rawParsed.filter(group => !isRetiredProvider(group.providerId))
-          : rawParsed });
-      } catch {
+          : rawParsed;
+        if (groups.length) publishModelCatalog(modelViewKey, groups);
+        const authNotice = classifyConnectionNotice({ authStates: ((data as { providers?: Array<{ auth_state?: string }> }).providers || []).map(provider => provider.auth_state) });
+        setConnectionNotice(groups.length ? null : authNotice);
+        setCatalogSnapshot({ viewKey: modelViewKey, phase: groups.length || !authNotice ? 'ready' : 'error', groups });
+      } catch (error) {
         if (alive) {
           setCatalogDefaultModel('');
-          setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] });
-          setCatalogStatus({ antigravity: 'unknown' });
+          const notice = classifyConnectionNotice({ error }) || (cachedGroups.length ? null : 'opencode-unreachable');
+          setConnectionNotice(notice);
+          if (cachedGroups.length) setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: cachedGroups });
+          else {
+            setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] });
+            setCatalogStatus({ antigravity: 'unknown' });
+          }
         }
       }
     };
     void load();
-    return () => { alive = false; };
+    return () => { alive = false; window.clearTimeout(loadingDeadline); };
   }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, activeSession?.model, requestedChatDefault, t, activeModelRevision]);
 
   /** Change only this bound Space preference; executing runs keep their captured model. */
@@ -648,6 +678,7 @@ export function NativeChatMain({
     if (writerProtected) { setStatusMessage(t('spaceAssistant.writerProtected')); return; }
     if (pendingChoice) { setStatusMessage(`${t('chat.model')}: ${pendingChoice.model} · ${t('common.loading')}`); return; }
     if (modelCatalogLoading) { setStatusMessage(t('settings.panels.providers.loadingModels')); return; }
+    if (connectionNotice) { setStatusMessage(connectionNoticeCopy[locale][connectionNotice]); return; }
     if (modelCatalogError) { setStatusMessage(t('chat.modelCatalogUnavailable')); return; }
     if(automaticBlocked||policyPending===policyOperationKey){setStatusMessage(modelPolicyReason(locale,currentPolicy?.response.executionAvailability.reasonCode));return;}
     const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
@@ -849,9 +880,10 @@ export function NativeChatMain({
     <section ref={chatSection} className="browser-main native-chat-main">
       <div className="native-chat-header">
         <div className="native-chat-title">
-          <img src={brandAssets.sidekickAvatar} alt="" />
+          <img src={standardCompanion.stored ? standardCompanion.avatar : brandAssets.sidekickAvatar} alt="" />
           <div className="native-chat-title-copy">
             <h1>{activeSession ? sessionTitle(activeSession) : t('chat.newSession')}</h1>
+            {standardCompanion.stored && <span className="native-chat-space-context">{standardCompanion.botName} AI</span>}
             <span className="native-chat-space-context">{activeSession ? ((activeSession.workspace || activeSpacePath).split(/[\\/]/).filter(Boolean).at(-1) || t('chat.workspace')) : t('chat.kicker')}</span>
             {activeSessionId && <span className="native-chat-session-id">{shortSessionId(activeSessionId)}</span>}
           </div>
@@ -970,7 +1002,7 @@ export function NativeChatMain({
       <ChatComposer
         automaticPolicy={{active:automaticSelected,available:automaticAvailable,qualified:automaticModelsQualified,
           allowedModels:automaticAllowedModels}}
-        sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked||modelCatalogLoading||modelCatalogError||Boolean(pendingChoice)}
+        sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked||modelCatalogLoading||modelCatalogError||Boolean(connectionNotice)||Boolean(pendingChoice)}
         betaSelectionBlocked={betaSelectionBlocked}
         multiAgentBetaBlocked={multiAgentBetaBlocked}
         modelQualified={automaticSelected?automaticModelsQualified:modelQualified}
@@ -996,6 +1028,7 @@ export function NativeChatMain({
         requestedLunaInCatalog={modelCatalogLoaded ? requestedLunaInCatalog : undefined}
         modelCatalogError={modelCatalogError}
         modelCatalogLoading={modelCatalogLoading}
+        connectionNotice={connectionNotice}
         antigravityCatalogUnavailable={modelCatalogLoaded && isAntigravityCatalogUnavailable}
         antigravityCatalogUnknown={(modelCatalogLoaded || modelCatalogError) && isAntigravityCatalogUnknown}
         antigravityCatalogReady={modelCatalogLoaded && String(catalogStatus.antigravity || '').toLowerCase() === 'ready'}

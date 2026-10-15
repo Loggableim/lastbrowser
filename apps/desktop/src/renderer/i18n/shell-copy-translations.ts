@@ -19,6 +19,7 @@ const shellCopyRows: Record<string, Record<LegacyDesktopLocaleId | 'ja', string>
   "copilot.personalityDialog": { "en": "Space personality", "de": "Space-Persönlichkeit", "it": "Personalità dello Space", "es": "Personalidad del Space", "fr": "Personnalité de l’espace", "pt-BR": "Personalidade do Space", "ru": "Характер Space", "ja": "Spaceの性格" },
   "copilot.personalityTitle": { "en": "Personality for this Space", "de": "Persönlichkeit für diesen Space", "it": "Personalità per questo Space", "es": "Personalidad para este Space", "fr": "Personnalité pour cet espace", "pt-BR": "Personalidade deste Space", "ru": "Характер этого Space", "ja": "このSpaceの性格" },
   "copilot.loading": { "en": "Loading…", "de": "Wird geladen …", "it": "Caricamento…", "es": "Cargando…", "fr": "Chargement…", "pt-BR": "Carregando…", "ru": "Загрузка…", "ja": "読み込み中…" },
+  "copilot.otherEngines": { "en": "Other engines", "de": "Weitere Engines", "it": "Altri motori", "es": "Otros motores", "fr": "Autres moteurs", "pt-BR": "Outros motores", "ru": "Другие движки", "ja": "その他のエンジン" },
   "copilot.workflowsEmpty": { "en": "No workflows found for “{query}”.", "de": "Keine Workflows für „{query}“ gefunden.", "it": "Nessun workflow trovato per «{query}».", "es": "No se encontraron flujos para «{query}».", "fr": "Aucun workflow trouvé pour « {query} ».", "pt-BR": "Nenhum fluxo encontrado para “{query}”.", "ru": "Рабочие процессы для «{query}» не найдены.", "ja": "「{query}」のワークフローは見つかりません。" },
   "copilot.teamworkActive": { "en": "Teamwork active: subagents are debating and checking…", "de": "Teamwork aktiv: Subagenten debattieren & prüfen...", "it": "Teamwork attivo: i subagenti discutono e verificano…", "es": "Teamwork activo: los subagentes debaten y comprueban…", "fr": "Teamwork actif : les sous-agents débattent et vérifient…", "pt-BR": "Teamwork ativo: os subagentes debatem e verificam…", "ru": "Teamwork активен: субагенты обсуждают и проверяют…", "ja": "チームワーク実行中: サブエージェントが討論して確認しています…" },
   "copilot.smartTrackActive": { "en": "Smart Track active: a curated model is starting…", "de": "Smart Track aktiv: Kuriertes Modell wird gestartet...", "it": "Smart Track attivo: avvio di un modello selezionato…", "es": "Smart Track activo: se inicia un modelo seleccionado…", "fr": "Smart Track actif : un modèle choisi démarre…", "pt-BR": "Smart Track ativo: um modelo selecionado está iniciando…", "ru": "Smart Track активен: запускается отобранная модель…", "ja": "Smart Track実行中: 選定したモデルを起動しています…" },
@@ -188,6 +189,7 @@ export const shellCopyJa = Object.fromEntries(Object.entries(shellCopyRows).map(
   "copilot.personalityDialog": string;
   "copilot.personalityTitle": string;
   "copilot.loading": string;
+  "copilot.otherEngines": string;
   "copilot.workflowsEmpty": string;
   "copilot.teamworkActive": string;
   "copilot.smartTrackActive": string;

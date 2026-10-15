@@ -1600,6 +1600,7 @@ export const desktopTranslationKeys = [
   , "copilot.personalityDialog"
   , "copilot.personalityTitle"
   , "copilot.loading"
+  , "copilot.otherEngines"
   , "copilot.workflowsEmpty"
   , "copilot.teamworkActive"
   , "copilot.smartTrackActive"

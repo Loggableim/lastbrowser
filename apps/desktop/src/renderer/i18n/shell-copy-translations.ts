@@ -18,6 +18,7 @@ const shellCopyRows: Record<string, Record<LegacyDesktopLocaleId | 'ja', string>
   "copilot.personalitySwitch": { "en": "Switch Space personality", "de": "Space-Persönlichkeit wechseln", "it": "Cambia personalità dello Space", "es": "Cambiar la personalidad del Space", "fr": "Changer la personnalité de l’espace", "pt-BR": "Trocar a personalidade do Space", "ru": "Сменить характер Space", "ja": "Spaceの性格を切り替える" },
   "copilot.personalityDialog": { "en": "Space personality", "de": "Space-Persönlichkeit", "it": "Personalità dello Space", "es": "Personalidad del Space", "fr": "Personnalité de l’espace", "pt-BR": "Personalidade do Space", "ru": "Характер Space", "ja": "Spaceの性格" },
   "copilot.personalityTitle": { "en": "Personality for this Space", "de": "Persönlichkeit für diesen Space", "it": "Personalità per questo Space", "es": "Personalidad para este Space", "fr": "Personnalité pour cet espace", "pt-BR": "Personalidade deste Space", "ru": "Характер этого Space", "ja": "このSpaceの性格" },
+  "copilot.personalityNameLabel": { "en": "Name (optional)", "de": "Name (optional)", "it": "Nome (facoltativo)", "es": "Nombre (opcional)", "fr": "Nom (facultatif)", "pt-BR": "Nome (opcional)", "ru": "Имя (необязательно)", "ja": "名前（任意）" },
   "copilot.loading": { "en": "Loading…", "de": "Wird geladen …", "it": "Caricamento…", "es": "Cargando…", "fr": "Chargement…", "pt-BR": "Carregando…", "ru": "Загрузка…", "ja": "読み込み中…" },
   "copilot.workflowsEmpty": { "en": "No workflows found for “{query}”.", "de": "Keine Workflows für „{query}“ gefunden.", "it": "Nessun workflow trovato per «{query}».", "es": "No se encontraron flujos para «{query}».", "fr": "Aucun workflow trouvé pour « {query} ».", "pt-BR": "Nenhum fluxo encontrado para “{query}”.", "ru": "Рабочие процессы для «{query}» не найдены.", "ja": "「{query}」のワークフローは見つかりません。" },
   "copilot.teamworkActive": { "en": "Teamwork active: subagents are debating and checking…", "de": "Teamwork aktiv: Subagenten debattieren & prüfen...", "it": "Teamwork attivo: i subagenti discutono e verificano…", "es": "Teamwork activo: los subagentes debaten y comprueban…", "fr": "Teamwork actif : les sous-agents débattent et vérifient…", "pt-BR": "Teamwork ativo: os subagentes debatem e verificam…", "ru": "Teamwork активен: субагенты обсуждают и проверяют…", "ja": "チームワーク実行中: サブエージェントが討論して確認しています…" },
@@ -187,6 +188,7 @@ export const shellCopyJa = Object.fromEntries(Object.entries(shellCopyRows).map(
   "copilot.personalitySwitch": string;
   "copilot.personalityDialog": string;
   "copilot.personalityTitle": string;
+  "copilot.personalityNameLabel": string;
   "copilot.loading": string;
   "copilot.workflowsEmpty": string;
   "copilot.teamworkActive": string;

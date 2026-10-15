@@ -24,6 +24,7 @@ import { BUILTIN_SKILLS_STORAGE_KEY, BUILTIN_SKILLS_CHANGED_EVENT } from '../ter
 import { useOptionalAiPolicy } from '../optional-ai-policy.js';
 import { useDesktopI18n } from '../i18n.js';
 import './extension-hub.css';
+import { shellText } from '../i18n/shell-text.js';
 
 export type McpPermissionType =
   | 'read_only'
@@ -46,6 +47,33 @@ export interface McpSkillItem {
   serverType?: 'stdio' | 'sse' | 'http';
   endpoint?: string;
 }
+
+const BUILTIN_SKILL_ENGLISH: Record<string, { name: string; description: string }> = {
+  'mcp-terminal': {
+    name: 'ConPTY Terminal Executor',
+    description: 'Runs shell commands, CLI tools (node, python, git), and sidekick doctor in the native pseudo-terminal.'
+  },
+  'mcp-supermemory': {
+    name: 'Memory & knowledge',
+    description: 'Review preferences, facts, and documents. Cloud search only after separate consent.'
+  },
+  'mcp-scraper': {
+    name: 'Deep Web Scraper',
+    description: 'Cleans web DOMs of cookies and trackers, extracts articles as Markdown, and parses HTML tables to CSV.'
+  },
+  'mcp-devtools': {
+    name: 'DevTools & CDP Inspector',
+    description: 'Direct Chrome DevTools Protocol access for live inspection of the webview DOM, CSS, and console logs.'
+  },
+  'mcp-comfyui': {
+    name: 'ComfyUI Image Generation',
+    description: 'Generates and edits images through local or remote ComfyUI / Stable Diffusion REST pipelines.'
+  },
+  'mcp-fs': {
+    name: 'File System Automator',
+    description: 'Reads and writes project files, migrates configuration, and manages local workspace file trees.'
+  }
+};
 
 export const BUILTIN_MCP_SKILLS: McpSkillItem[] = [
   {
@@ -305,7 +333,7 @@ export function UnifiedExtensionHub({
     try {
       const draft = localStorage.getItem('lastbrowser.mcp_config.v1');
       if (draft) mcpModel.setEditor(draft);
-      else notify('Kein älterer lokaler MCP-Entwurf vorhanden.');
+      else notify(shellText(locale, "Kein älterer lokaler MCP-Entwurf vorhanden.", "No older local MCP draft was found."));
     } catch { notify('Lokaler MCP-Entwurf konnte nicht gelesen werden.', true); }
   };
 
@@ -350,7 +378,7 @@ export function UnifiedExtensionHub({
       notify(`Entpackte Erweiterung "${rec.name}" erfolgreich geladen!`);
       await loadExtensionData();
     } catch (err) {
-      notify(`Fehler beim Laden: ${err instanceof Error ? err.message : String(err)}`, true);
+      notify(shellText(locale, `Fehler beim Laden: ${err instanceof Error ? err.message : String(err)}`, `Load failed: ${err instanceof Error ? err.message : String(err)}`), true);
     } finally {
       setInstallingId(null);
     }
@@ -362,7 +390,7 @@ export function UnifiedExtensionHub({
       await window.lastbrowser.extensions.toggle({ id: ext.id, enabled: !ext.enabled });
       await loadExtensionData();
     } catch (err) {
-      notify(`Fehler beim Umschalten: ${err instanceof Error ? err.message : String(err)}`, true);
+      notify(shellText(locale, `Fehler beim Umschalten: ${err instanceof Error ? err.message : String(err)}`, `Could not toggle: ${err instanceof Error ? err.message : String(err)}`), true);
     }
   };
 
@@ -372,7 +400,7 @@ export function UnifiedExtensionHub({
       await window.lastbrowser.extensions.toggleIncognito({ id: ext.id, allow: !ext.allowInIncognito });
       await loadExtensionData();
     } catch (err) {
-      notify(`Fehler bei Inkognito-Freigabe: ${err instanceof Error ? err.message : String(err)}`, true);
+      notify(shellText(locale, `Fehler bei Inkognito-Freigabe: ${err instanceof Error ? err.message : String(err)}`, `Incognito permission failed: ${err instanceof Error ? err.message : String(err)}`), true);
     }
   };
 
@@ -384,7 +412,7 @@ export function UnifiedExtensionHub({
       notify(`"${ext.name}" entfernt.`);
       await loadExtensionData();
     } catch (err) {
-      notify(`Fehler beim Entfernen: ${err instanceof Error ? err.message : String(err)}`, true);
+      notify(shellText(locale, `Fehler beim Entfernen: ${err instanceof Error ? err.message : String(err)}`, `Could not remove: ${err instanceof Error ? err.message : String(err)}`), true);
     }
   };
 
@@ -560,10 +588,13 @@ export function UnifiedExtensionHub({
       read_only: text('Lesen', 'Read'), filesystem_write: text('Dateien ändern', 'Change files'), terminal_execute: text('Befehle ausführen', 'Run commands'),
       network_outbound: text('Internet', 'Internet'), agent_autonomy: text('Selbstständige Aktionen', 'Autonomous actions')
     };
+    const english = BUILTIN_SKILL_ENGLISH[skill.id];
+    const skillName = text(skill.name, english?.name ?? skill.name);
+    const skillDescription = text(skill.description, english?.description ?? skill.description);
     return <article key={skill.id} className="eh-card">
-      <div className="eh-card-head"><span className="eh-card-icon">{skill.icon}</span><div className="eh-card-title"><h4>{skill.name}</h4>
+      <div className="eh-card-head"><span className="eh-card-icon">{skill.icon}</span><div className="eh-card-title"><h4>{skillName}</h4>
         <span className="eh-muted">{skill.type === 'builtin' ? text('Integriert', 'Built in') : skill.serverType?.toUpperCase()}</span></div>{status(skill.enabled)}</div>
-      <p>{skill.description}</p>
+      <p>{skillDescription}</p>
       {memory && <p className="eh-muted">{text('Gespeicherte Daten bleiben auch inaktiv einsehbar und löschbar. Cloud-Suche wird separat in den Gedächtnis-Einstellungen aktiviert.', 'Saved data can be viewed and deleted while inactive. Cloud search is enabled separately in memory settings.')}</p>}
       <details className="eh-details"><summary>{text('Details & Zuordnung', 'Details & category')}</summary>
         <div className="eh-permissions">{skill.permissions.map(permission => <span key={permission}>{permissionNames[permission]}</span>)}</div>
@@ -573,7 +604,7 @@ export function UnifiedExtensionHub({
         </select></label>
       </details>
       <footer className="eh-card-footer"><label className="eh-check"><input type="checkbox" checked={skill.enabled}
-        aria-label={`${skill.name}: ${text('Aktivieren', 'Enable')}`}
+        aria-label={`${skillName}: ${text('Aktivieren', 'Enable')}`}
         disabled={memory ? !optional.loaded || optional.busy : skill.type === 'mcp_server' ? !mcp.loaded || mcp.busy : false}
         onChange={event => updateSkill(skill.id, { enabled: event.target.checked })} />{text('Aktivieren', 'Enable')}</label>
         {memory && <button type="button" onClick={() => openPanel('memory')}>{text('Daten verwalten', 'Manage data')}</button>}

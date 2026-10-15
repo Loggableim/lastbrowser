@@ -330,6 +330,7 @@ import {
   type SnapLayoutRatios
 } from './types/snap-layouts.js';
 import './styles.css';
+import { shellText } from './i18n/shell-text.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 type UpdateStatus = Awaited<ReturnType<typeof window.lastbrowser.updates.status>>;
@@ -1977,7 +1978,7 @@ function AppContent(): JSX.Element {
       setActivePanel('chat');
       if (payload.selectionText) {
         await startNativeChat(
-          `Erstelle eine tiefe, fundierte Recherche zu folgendem ausgewählten Text:\n\n„${payload.selectionText}“\n\nQuelle: ${payload.pageUrl || 'Browser'}`,
+          shellText(locale, `Erstelle eine tiefe, fundierte Recherche zu folgendem ausgewählten Text:\n\n„${payload.selectionText}“\n\nQuelle: ${payload.pageUrl || 'Browser'}`, `Create a deep, sourced research brief for this selected text:\n\n“${payload.selectionText}”\n\nSource: ${payload.pageUrl || 'Browser'}`),
           `Deep Research: ${payload.selectionText.slice(0, 30)}…`
         );
       } else if (payload.pageUrl) {
@@ -5877,7 +5878,7 @@ function AppContent(): JSX.Element {
                 onMouseLeave={handleZenSidebarLeave}
                 onClick={handleZenSidebarEnter}
                 aria-hidden="true"
-                title="Kante berühren, um Seitenleiste einzublenden"
+                title={shellText(locale, "Kante berühren, um Seitenleiste einzublenden", "Touch the edge to show the sidebar")}
               />
               <div
                 className={`zen-sidebar-overlay ${zenSidebarRevealed ? 'zen-revealed' : ''}`}

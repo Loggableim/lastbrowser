@@ -1,9 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { companionDefaultNames, personalityAvatar, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 import { useDesktopI18n } from '../i18n.js';
+import type { DesktopTranslationKey } from '../i18n/keys.js';
+import './companion-personality.css';
 
 export type CompanionSelection = { personality: CompanionPersonality; botName: string };
 const STANDARD_CHAT_COMPANION_KEY = 'lastbrowser.standardChatCompanion.v1';
+
+const COMPANION_DESCRIPTION_KEYS: Record<CompanionPersonality, DesktopTranslationKey> = {
+  nova: 'sidebar.companion.nova',
+  analytical: 'sidebar.companion.analytical',
+  developer: 'sidebar.companion.developer',
+  creative: 'sidebar.companion.creative',
+  mentor: 'sidebar.companion.mentor'
+};
 
 export function readStandardChatCompanion(): CompanionSelection {
   try {
@@ -19,14 +29,22 @@ export function readStandardChatCompanion(): CompanionSelection {
 
 export function CompanionPicker({ value, onChange, disabled = false }: { value: CompanionSelection; onChange: (value: CompanionSelection) => void; disabled?: boolean }) {
   const { t } = useDesktopI18n();
-  return <div>
-    <div role="group" aria-label={t('copilot.personalityDialog')} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(72px,1fr))', gap: 8 }}>
-      {(Object.keys(companionDefaultNames) as CompanionPersonality[]).map(personality => <button key={personality} type="button" disabled={disabled} aria-pressed={value.personality === personality}
-        onClick={() => onChange({ personality, botName: companionDefaultNames[personality] })} style={{ display: 'grid', justifyItems: 'center', padding: 8, border: value.personality === personality ? '2px solid var(--accent-primary)' : '2px solid transparent', borderRadius: 8, background: 'var(--bg-hover)', color: 'var(--text-primary)' }}>
-        <img src={personalityAvatar(personality)} alt="" style={{ width: 52, height: 52, objectFit: 'contain' }} /><span>{companionDefaultNames[personality]}</span>
-      </button>)}
+  return <div className="companion-personality-picker">
+    <div className="companion-personality-options" role="group" aria-label={t('copilot.personalityDialog')}>
+      {(Object.keys(companionDefaultNames) as CompanionPersonality[]).map(personality => {
+        const selected = value.personality === personality;
+        return <button key={personality} type="button" className="companion-personality-option" disabled={disabled} aria-pressed={selected}
+          onClick={() => onChange({ personality, botName: companionDefaultNames[personality] })}>
+          <img src={personalityAvatar(personality)} alt="" />
+          <span>{companionDefaultNames[personality]}</span>
+        </button>;
+      })}
     </div>
-    <label style={{ display: 'grid', gap: 6, marginBlock: 12 }}>{t('copilot.personalityTitle')}<input maxLength={80} value={value.botName} disabled={disabled} aria-label={t('copilot.personalityTitle')} onChange={event => onChange({ ...value, botName: event.target.value })} /></label>
+    <p className="companion-personality-blurb" role="status">{t(COMPANION_DESCRIPTION_KEYS[value.personality])}</p>
+    <label className="companion-name-field">
+      <span>{t('copilot.personalityNameLabel')}</span>
+      <input className="companion-name-input" maxLength={80} value={value.botName} disabled={disabled} aria-label={t('copilot.personalityTitle')} onChange={event => onChange({ ...value, botName: event.target.value })} />
+    </label>
   </div>;
 }
 
@@ -55,14 +73,14 @@ export function CompanionSwitch({ compact = false }: { compact?: boolean }) {
       <img src={personalityAvatar(personality)} alt="" style={compact ? { width: 22, height: 22, objectFit: 'contain' } : undefined} className={compact ? undefined : 'copilot-header-avatar'} draggable={false} />
       <span className={compact ? undefined : 'copilot-header-title'}>{botName}{compact ? '' : ' AI'}</span>
     </button>
-    {open && <section role="dialog" aria-label={t('copilot.personalityDialog')} onClick={event => event.stopPropagation()} style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300, boxSizing: 'border-box', maxWidth: 'calc(100vw - 32px)', padding: 16, borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-primary, #101522)', color: 'var(--text-primary)', zIndex: 1000, boxShadow: '0 12px 32px rgba(0,0,0,.4)' }}>
-      <strong>{t('copilot.personalityTitle')}</strong>
+    {open && <section className="companion-personality-popover" role="dialog" aria-label={t('copilot.personalityDialog')} onClick={event => event.stopPropagation()}>
+      <strong className="companion-personality-popover-title">{t('copilot.personalityTitle')}</strong>
       <CompanionPicker value={draft} onChange={setDraft} disabled={!companion.loaded || companion.busy} />
       {companion.error && <p role="alert">{companion.error}</p>}
       {companion.error && <button type="button" onClick={companion.retry}>{t('common.retry')}</button>}
       {!companion.loaded && !companion.error && <p role="status">{t('copilot.loading')}</p>}
-      <div className="native-card-actions">
-        <button type="button" disabled={!companion.loaded || companion.busy} onClick={async () => {
+      <div className="companion-personality-actions native-card-actions">
+        <button type="button" className="companion-personality-save" disabled={!companion.loaded || companion.busy} onClick={async () => {
           const botNameToSave = draft.botName.trim() || companionDefaultNames[draft.personality];
           if (await companion.setSelection(draft.personality, botNameToSave)) {
             window.localStorage.setItem(STANDARD_CHAT_COMPANION_KEY, JSON.stringify({ personality: draft.personality, botName: botNameToSave }));
@@ -70,7 +88,7 @@ export function CompanionSwitch({ compact = false }: { compact?: boolean }) {
             triggerRef.current?.focus();
           }
         }}>{t('common.save')}</button>
-        <button type="button" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>{t('common.cancel')}</button>
+        <button type="button" className="companion-personality-cancel" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>{t('common.cancel')}</button>
       </div>
     </section>}
   </div>;

@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Semantische Verlaufssuche – LastBrowser Blog</title>
+<meta name="description" content="Geplantes Feature: Besuchte Seiten anhand ihres Inhalts wiederfinden, nicht über URL oder Titel. Eine Idee zum Abstimmen.">
+<meta property="og:title" content="Semantische Verlaufssuche">
+<meta property="og:description" content="Besuchte Seiten nach Inhalt wiederfinden statt nach URL oder Titel. Eine Idee zum Abstimmen.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lastbrowser.com/blog/semantische-verlaufssuche/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/blog/semantische-verlaufssuche/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+<style>
+.article-wrap { max-width: 780px; margin: 0 auto; }
+.article-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--subtle); font-size: 13px; margin: 14px 0 24px; }
+.article-notice { border: 1px solid rgba(255, 200, 0, 0.4); background: rgba(255, 200, 0, 0.08); border-radius: var(--radius-md); padding: 16px 18px; margin: 24px 0; font-size: 14px; line-height: 1.6; }
+.article-body h2 { margin: 34px 0 12px; font-size: 22px; }
+.article-body p { color: var(--muted); line-height: 1.75; margin-bottom: 16px; }
+.article-body ul { color: var(--muted); line-height: 1.75; margin: 0 0 16px 22px; }
+.article-body li { margin-bottom: 8px; }
+.article-cta { border: 1px solid var(--stroke); background: var(--card-bg); border-radius: var(--radius-lg); padding: 26px; margin: 42px 0 10px; }
+.article-cta h2 { margin: 0 0 12px; font-size: 20px; }
+.article-cta p { color: var(--muted); line-height: 1.7; margin-bottom: 18px; }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Semantische Verlaufssuche",
+  "description": "Besuchte Seiten nach Inhalt wiederfinden statt nach URL oder Titel. Eine Idee zum Abstimmen.",
+  "datePublished": "2026-10-15",
+  "dateModified": "2026-10-15",
+  "inLanguage": "de",
+  "articleSection": "Feature-Voting",
+  "author": { "@type": "Organization", "name": "LastBrowser" },
+  "publisher": { "@type": "Organization", "name": "LastBrowser", "logo": { "@type": "ImageObject", "url": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png" } },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": "https://lastbrowser.com/blog/semantische-verlaufssuche/" },
+  "image": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png"
+}
+</script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Tech-Magazin</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/blog/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/blog/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/blog/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/blog/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/blog/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/blog/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/blog/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container" style="padding: 60px 0 80px;">
+  <article class="article-wrap">
+    <a class="badge badge-cyan" href="/blog/#feature-voting" style="align-self:flex-start;margin-bottom:12px;">Feature-Voting</a>
+    <h1>Semantische Verlaufssuche</h1>
+    <div class="article-meta">
+      <span>📅 15. Oktober 2026</span>
+      <span>·</span>
+      <span>⏱️ 5 Min. Lesezeit</span>
+    </div>
+
+    <div class="article-notice">
+      <strong>Geplant / Idee – noch nicht in LastBrowser verfügbar, keine Release-Zusage.</strong> Dieser Beitrag beschreibt ein Konzept zum Abstimmen, keine fertige Funktion.
+    </div>
+
+    <div class="article-body">
+      <p>
+        Du erinnerst dich an eine Seite, aber nicht daran, wie sie hieß oder auf welcher Adresse sie lag. Du weißt nur noch, dass es um ein bestimmtes Thema ging. Genau hier setzt die semantische Verlaufssuche an: Besuchte Seiten sollen sich anhand ihres Inhalts wiederfinden lassen, nicht über den exakten Titel oder die URL.
+      </p>
+
+      <h2>Zielbild</h2>
+      <p>
+        Der Verlauf wird nicht nur als Liste von Adressen und Zeitstempeln durchsucht, sondern nach Bedeutung. Wenn du nach „wie rechne ich den Stromverbrauch meines PCs aus“ suchst, findet die Suche eine Seite, auf der genau das erklärt wird – auch wenn dort nie dieses Wort steht. Die Treffer richten sich danach, worum es auf der Seite ging.
+      </p>
+
+      <h2>Warum</h2>
+      <p>
+        Der normale Verlauf merkt sich Adressen und Titel. Das hilft nur, wenn man sich an einen davon erinnern kann. In der Praxis bleibt oft nur das Thema hängen. Wer viel recherchiert, kennt das: Man weiß, dass man vor zwei Wochen etwas Gutes gelesen hat, findet es aber nicht mehr, weil der Titel nichtssagend war.
+      </p>
+      <p>
+        Eine Suche über den Inhalt macht diese Lücke kleiner. Sie bringt Seiten zurück, deren Titel man vergessen hat, und lässt sich mit naturaler Sprache bedienen statt mit Suchbegriffen, die zufällig im Text vorkommen.
+      </p>
+      <p>
+        Der Unterschied zur normalen Suche ist die Richtung. Die Keywordsuche verlangt, dass du die Worte triffst, die auf der Seite stehen. Die semantische Suche erlaubt dir, das Thema zu umschreiben. Das hilft besonders dann, wenn die Seite in einer anderen Sprache war oder der Autor andere Begriffe benutzt hat als du.
+      </p>
+
+      <h2>Wie es aussehen könnte</h2>
+      <p>
+        Im Kern steht ein Index, der die Inhalte besuchter Seiten lokal auf dem Rechner abbildet. Statt nur Wörter zu speichern, werden Seiten so abgelegt, dass sich ähnliche Bedeutungen finden lassen. Die Suche im Verlauf greift dann auf diesen Index zu.
+      </p>
+      <ul>
+        <li>Du beschreibst, worum es ging, und bekommst passende besuchte Seiten vorgeschlagen, sortiert nach inhaltlicher Nähe.</li>
+        <li>Die Suche läuft lokal, weil der Verlauf zu den persönlichsten Daten im Browser gehört.</li>
+        <li>Die Idee passt zu einem Wissensnetz, in dem auch Lesezeichen nicht in toten Ordnern liegen, sondern nach thematischem Zusammenhang gefunden werden.</li>
+        <li>Der Sidekick kann beim Formulieren einer Anfrage helfen und die Treffer zusammenfassen, wenn du das möchtest.</li>
+        <li>Als bestätigte Bausteine gibt es bereits Spaces für getrennte Arbeitskontexte und den Sidekick mit lokalen Modellen oder eigenem Key; die Suche würde darauf aufsetzen.</li>
+      </ul>
+      <p>
+        Damit das vertrauenswürdig bleibt, sollte klar sein, welche Inhalte in den Index wandern. Vertraulich markierter Space-Kontext und besonders sensible Seiten dürften nicht einfach mitlaufen, ohne dass man es steuern kann.
+      </p>
+      <p>
+        Damit die Suche nützlich bleibt, muss sie sich in den Alltag einfügen. Sie sollte sich schnell öffnen lassen, wenig kosten und auch bei einem großen Verlauf flüssig antworten. Ein Index, der lange zum Aufbau braucht oder den Browser spürbar langsamer macht, wäre im Alltag nutzlos.
+      </p>
+
+      <h2>Offene Fragen</h2>
+      <ul>
+        <li>Wie lange soll der Index gespeicherter Verlauf bleiben, und wie löscht man einzelne Einträge sauber wieder heraus?</li>
+        <li>Wird für jede besuchte Seite indexiert, oder nur für ausdrücklich ausgewählte?</li>
+        <li>Welche Inhalte, etwa vertraulicher Space-Kontext, bleiben grundsätzlich draußen?</li>
+        <li>Wie viel Rechenzeit und Speicher kostet der Index im Alltag, und läuft er im Hintergrund oder auf Wunsch?</li>
+        <li>Soll die Suche auch Lesezeichen und Notizen einbeziehen oder zunächst nur den Verlauf?</li>
+      </ul>
+    </div>
+
+    <div class="article-cta">
+      <h2>Stimme ab</h2>
+      <p>
+        Wenn du eine semantische Verlaufssuche möchtest, gib dem Feature auf der Roadmap deine Stimme. Die Abstimmung hilft bei der Priorisierung und ist keine Release-Zusage.
+      </p>
+      <div class="btn-group">
+        <a class="btn btn-primary" href="https://lastbrowser.com/roadmap/#semantic-history">Jetzt abstimmen</a>
+      </div>
+      <p style="margin-top:18px;margin-bottom:0;">Schreib uns: <a href="mailto:hello@lastbrowser.com">hello@lastbrowser.com</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      <nav class="footer-social-links" aria-label="Social media">
+          <a href="https://x.com/lastbrowser" target="_blank" rel="noopener noreferrer" aria-label="X"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68L14.54 10.98l9.452 11.867h-7.406l-5.8-7.584-6.64 7.584H.464l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.606h2.039L6.486 3.132h-2.19z"/></svg><span>X</span></a>
+          <a href="https://bsky.app/profile/lastbrowser.bsky.social" target="_blank" rel="noopener noreferrer" aria-label="Bluesky"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M5.36 2.25c2.72 2.04 5.65 6.17 6.64 8.39.99-2.22 3.92-6.35 6.64-8.39 1.96-1.47 5.14-2.61 5.14 1.01 0 .72-.41 6.07-.65 6.94-.83 2.99-3.84 3.76-6.52 3.3 4.69.79 5.89 3.41 3.31 6.03-4.9 4.99-7.04-1.25-7.59-2.84-.1-.3-.15-.44-.33-.44s-.23.14-.33.44c-.55 1.59-2.69 7.83-7.59 2.84-2.58-2.62-1.38-5.24 3.31-6.03-2.68.46-5.69-.31-6.52-3.3C.63 9.33.22 3.98.22 3.26c0-3.62 3.18-2.48 5.14-1.01Z"/></svg><span>Bluesky</span></a>
+        </nav>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js?v=linux56-20261014"></script>
+</body>
+</html>

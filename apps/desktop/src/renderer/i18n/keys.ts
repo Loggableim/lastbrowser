@@ -1595,6 +1595,7 @@ export const desktopTranslationKeys = [
   , "copilot.personalityTitle"
   , "copilot.personalityNameLabel"
   , "copilot.loading"
+  , "copilot.otherEngines"
   , "copilot.workflowsEmpty"
   , "copilot.teamworkActive"
   , "copilot.smartTrackActive"

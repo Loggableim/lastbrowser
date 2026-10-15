@@ -80,13 +80,12 @@ export function CompanionSwitch({ compact = false }: { compact?: boolean }) {
       {companion.error && <button type="button" onClick={companion.retry}>{t('common.retry')}</button>}
       {!companion.loaded && !companion.error && <p role="status">{t('copilot.loading')}</p>}
       <div className="companion-personality-actions native-card-actions">
-        <button type="button" className="companion-personality-save" disabled={!companion.loaded || companion.busy} onClick={async () => {
+        <button type="button" className="companion-personality-save" disabled={!companion.loaded} onClick={() => {
           const botNameToSave = draft.botName.trim() || companionDefaultNames[draft.personality];
-          if (await companion.setSelection(draft.personality, botNameToSave)) {
-            window.localStorage.setItem(STANDARD_CHAT_COMPANION_KEY, JSON.stringify({ personality: draft.personality, botName: botNameToSave }));
-            setOpen(false);
-            triggerRef.current?.focus();
-          }
+          window.localStorage.setItem(STANDARD_CHAT_COMPANION_KEY, JSON.stringify({ personality: draft.personality, botName: botNameToSave }));
+          setOpen(false);
+          triggerRef.current?.focus();
+          void companion.setSelection(draft.personality, botNameToSave);
         }}>{t('common.save')}</button>
         <button type="button" className="companion-personality-cancel" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>{t('common.cancel')}</button>
       </div>

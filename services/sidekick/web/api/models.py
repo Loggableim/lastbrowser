@@ -3141,6 +3141,36 @@ def count_conversation_rounds(sid: str, since: float | None = None) -> int:
 CONVERSATION_ROUND_THRESHOLD = 10
 
 
+def unlink_owned_session_files(sid: str) -> bool:
+    """Remove every JSON copy of this session, including a Space-owned file.
+
+    The request session directory is not always the directory ``Session.path``
+    writes. A delete that misses that file comes back as ``New chat`` on the
+    next process. Returns True only when none of those files remain.
+    """
+    if not sid or not all(c in "0123456789abcdefghijklmnopqrstuvwxyz_" for c in sid):
+        return False
+    paths: list[Path] = [get_session_dir() / f"{sid}.json"]
+    try:
+        from web.api.space_engine import get_all_workspaces
+        for workspace in get_all_workspaces():
+            paths.append(Path(workspace.sessions_dir) / f"{sid}.json")
+    except Exception:
+        pass
+    for path in paths:
+        try:
+            resolved = path.resolve()
+        except Exception:
+            resolved = path
+        try:
+            resolved.unlink(missing_ok=True)
+            resolved.with_suffix(".json.bak").unlink(missing_ok=True)
+        except OSError:
+            if resolved.exists():
+                return False
+    return all(not path.exists() for path in paths)
+
+
 def delete_cli_session(sid) -> bool:
     """Delete a CLI session from state.db (messages + session row).
     Returns True if deleted, False if not found or error.

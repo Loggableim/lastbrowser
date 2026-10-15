@@ -28,6 +28,19 @@ MAX_EVENTS = 128
 _ENTRY_MODULES = {"runtime.independent.runner", "runtime.independent.worker_host"}
 _SYSTEM_ENV = frozenset({"SYSTEMROOT", "WINDIR", "COMSPEC", "PATH", "PATHEXT", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL", "TZ"})
 _RESERVED_ENV = frozenset({"SIDEKICK_HOME", "SIDEKICK_BASE_HOME", "LASTBROWSER_HOME", "SIDEKICK_SESSION_ID", "SIDEKICK_WEBUI_SPACES_DIR", "SIDEKICK_WEBUI_WORKSPACES_DIR", "SIDEKICK_STREAM_RETRIES", "TERMINAL_CWD", "HOME", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "PYTHONUSERBASE"})
+_WORKER_PYTHON_ENVS = ("SIDEKICK_WEBUI_PYTHON", "LASTBROWSER_WEBUI_PYTHON", "HERMES_WEBUI_PYTHON")
+
+
+def resolve_worker_python_executable() -> Path:
+    """Prefer the packaged Sidekick interpreter over the parent uvicorn process."""
+    for env_name in _WORKER_PYTHON_ENVS:
+        raw = os.environ.get(env_name, "").strip()
+        if not raw:
+            continue
+        candidate = Path(raw)
+        if candidate.is_file():
+            return canonical_path(candidate)
+    return canonical_path(sys.executable)
 
 
 class WorkerError(RuntimeError):
@@ -318,7 +331,7 @@ class WorkerHost:
         # Revalidation creates a detached immutable model even if the parent
         # constructed it through unchecked model_copy.
         self.context = RunContext.model_validate_json(canonical_json(context))
-        self.python_executable = canonical_path(python_executable or sys.executable)
+        self.python_executable = canonical_path(python_executable or resolve_worker_python_executable())
         self.sidekick_root = Path(__file__).resolve().parents[2]
 
     def start(self, *, entry_module: str = "runtime.independent.runner", payload: dict[str, Any] | None = None, runtime_env: dict[str, str] | None = None) -> WorkerHandle:

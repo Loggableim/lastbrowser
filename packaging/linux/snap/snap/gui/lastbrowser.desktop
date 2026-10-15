@@ -1,0 +1,15 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=LastBrowser
+GenericName=Web Browser
+GenericName[de]=Webbrowser
+Comment=Linux preview of LastBrowser, a browser for Windows and Linux with the built-in AI system Sidekick
+Comment[de]=Linux-Vorschau von LastBrowser, einem Browser für Windows und Linux mit dem eingebauten KI-System Sidekick
+Exec=lastbrowser %U
+Icon=lastbrowser
+Terminal=false
+StartupNotify=true
+StartupWMClass=Lastbrowser
+Categories=Network;WebBrowser;
+MimeType=text/html;text/xml;application/xhtml+xml;application/xml;x-scheme-handler/http;x-scheme-handler/https;

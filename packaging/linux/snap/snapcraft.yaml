@@ -1,0 +1,91 @@
+name: lastbrowser
+title: LastBrowser
+base: core24
+version: "0.1.56"
+summary: Linux-Vorschau von LastBrowser mit dem KI-System Sidekick
+description: |
+  LastBrowser ist ein Browser für Windows und Linux mit dem eingebauten KI-System Sidekick.
+  Dieses Paket ist die veröffentlichte Linux-Vorschau 0.1.56.
+  LastBrowser is a browser for Windows and Linux with the built-in AI system Sidekick.
+  This package is the published Linux preview 0.1.56.
+grade: stable
+confinement: strict
+# snapd accepts the SPDX token Proprietary. The packaged notice remains LicenseRef-LastBrowser.
+license: Proprietary
+contact: mailto:hello@lastbrowser.com
+website: https://lastbrowser.com
+issues: https://github.com/Loggableim/lastbrowser/issues
+icon: snap/gui/icon.png
+
+apps:
+  lastbrowser:
+    command: bin/lastbrowser-launch
+    desktop: share/applications/lastbrowser.desktop
+    plugs:
+      - browser-support
+      - network
+      - network-bind
+      - audio-playback
+      - audio-record
+      - camera
+      - desktop
+      - desktop-legacy
+      - wayland
+      - x11
+      - opengl
+      - home
+      - removable-media
+      - gsettings
+      - unity7
+      - screen-inhibit-control
+      - upower-observe
+      - password-manager-service
+
+parts:
+  lastbrowser:
+    plugin: dump
+    source: https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64.tar.gz
+    source-checksum: sha256/fe34e0d6ccf03d889c7eb2f55cd56ff7b52d1653f21ba7c82b6bc9234606d54e
+    stage-packages:
+      - libgtk-3-0t64
+      - libnotify4
+      - libnss3
+      - libxss1
+      - libxtst6
+      - libatspi2.0-0t64
+      - libsecret-1-0
+      - libasound2t64
+      - libdrm2
+      - libgbm1
+      - libxkbcommon0
+      - libx11-6
+      - libxcomposite1
+      - libxdamage1
+      - libxext6
+      - libxfixes3
+      - libxrandr2
+      - libxi6
+      - libcups2t64
+      - libpango-1.0-0
+      - libglib2.0-0t64
+      - xdg-utils
+    prime:
+      - -usr/share/doc
+      - -usr/share/man
+      - -usr/share/lintian
+
+  launcher:
+    plugin: dump
+    source: .
+    override-build: |
+      set -eu
+      install -Dm755 "${CRAFT_PART_SRC}/scripts/lastbrowser-launch" \
+        "${CRAFT_PART_INSTALL}/bin/lastbrowser-launch"
+      install -Dm644 "${CRAFT_PART_SRC}/snap/gui/lastbrowser.desktop" \
+        "${CRAFT_PART_INSTALL}/share/applications/lastbrowser.desktop"
+      install -Dm644 "${CRAFT_PART_SRC}/LICENSE.LastBrowser" \
+        "${CRAFT_PART_INSTALL}/share/licenses/LICENSE.LastBrowser"
+    stage:
+      - bin/lastbrowser-launch
+      - share/applications/lastbrowser.desktop
+      - share/licenses/LICENSE.LastBrowser

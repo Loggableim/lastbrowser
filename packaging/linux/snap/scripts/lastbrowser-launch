@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+export LD_LIBRARY_PATH="${SNAP}/usr/lib/x86_64-linux-gnu:${SNAP}${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+exec "${SNAP}/Lastbrowser" --disable-dev-shm-usage "$@"

@@ -337,8 +337,12 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
         if cancel_event.is_set() or session.active_stream_id != context.stream_id:
             raise InterruptedError("Quickchat cancelled")
         from runtime.usage_pricing import normalize_usage
+        from runtime.quickchat_metrics import _estimate_output_tokens
         raw_usage = getattr(response, "usage", None)
         usage = normalize_usage(raw_usage, provider=provider, api_mode=bot.api_mode)
+        output_chars = len(answer)
+        usage_estimated = raw_usage is None
+        reported_output_tokens = usage.output_tokens if raw_usage is not None else _estimate_output_tokens(output_chars)
         from runtime._compat.shim_state import SessionDB
         database = SessionDB(Path(context.profile_home) / "state.db")
         try:
@@ -370,19 +374,28 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
         from web.api.helpers import redact_session_data
         put("done", {"session": redact_session_data(session.compact() | {"messages": session.messages, "tool_calls": []}),
             "usage": {"input_tokens": usage.prompt_tokens if raw_usage is not None else None,
-                      "output_tokens": usage.output_tokens if raw_usage is not None else None,
+                      "output_tokens": reported_output_tokens if reported_output_tokens else None,
+                      "output_chars": output_chars,
+                      "usage_estimated": usage_estimated,
                       "estimated_cost": None, "cost_status": "included" if provider == "openai-codex" else "unknown"}})
         put("stream_end", {"session_id": session.session_id})
         delivered = not cancel_event.is_set()
     finally:
-        if (delivered and completed is not None and bot.request_started is not None
-                and bot.first_visible_token is not None):
-            from runtime.quickchat_metrics import record_latency
-            record_latency(context.profile_home, provider=provider, model=model,
-                ttft_ms=(bot.first_visible_token - entered) * 1000,
-                provider_ttft_ms=(bot.first_visible_token - bot.request_started) * 1000,
-                preflight_ms=(bot.request_started - entered) * 1000,
-                total_ms=(completed - entered) * 1000)
+        if delivered and completed is not None and bot.request_started is not None:
+            visible_at = bot.first_visible_token
+            if visible_at is None and bot.parts:
+                # Some OpenCode worker paths deliver the full answer without token deltas.
+                visible_at = completed
+            if visible_at is not None:
+                from runtime.quickchat_metrics import record_latency
+                record_latency(context.profile_home, provider=provider, model=model,
+                    ttft_ms=(visible_at - entered) * 1000,
+                    provider_ttft_ms=(visible_at - bot.request_started) * 1000,
+                    preflight_ms=(bot.request_started - entered) * 1000,
+                    total_ms=(completed - entered) * 1000,
+                    output_chars=output_chars,
+                    output_tokens=reported_output_tokens if raw_usage is not None else None,
+                    usage_estimated=usage_estimated)
         close = getattr(bot.client, "close", None)
         if callable(close):
             try:

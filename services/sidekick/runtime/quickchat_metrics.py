@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 _LOCK = threading.Lock()
 _MAX_AGE = 7 * 86400
 _TIMINGS = ("ttft_ms", "provider_ttft_ms", "preflight_ms", "total_ms")
+_OPTIONAL_METRICS = ("output_chars", "output_tokens", "tokens_per_sec")
 
 
 def _path(profile_home):
@@ -52,7 +53,14 @@ def _read(path):
                 if not all(type(sample.get(k)) in {int, float} and math.isfinite(sample[k])
                            and 0 <= sample[k] <= 3600000 for k in _TIMINGS):
                     continue
-                samples.append({k: sample[k] for k in ("at", *_TIMINGS)})
+                row = {k: sample[k] for k in ("at", *_TIMINGS)}
+                for key in _OPTIONAL_METRICS:
+                    value = sample.get(key)
+                    if type(value) in {int, float} and math.isfinite(value) and value >= 0:
+                        row[key] = value
+                if sample.get("usage_estimated") is True:
+                    row["usage_estimated"] = True
+                samples.append(row)
             if samples:
                 result.append({"provider": row["provider"], "model": row["model"], "samples": samples})
         return result
@@ -89,8 +97,16 @@ def _writer_lock(path):
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
 
+def _estimate_output_tokens(output_chars):
+    chars = int(output_chars) if type(output_chars) in {int, float} else 0
+    if chars <= 0:
+        return 0
+    return max(1, (chars + 3) // 4)
+
+
 def record_latency(profile_home, *, provider, model, ttft_ms, provider_ttft_ms,
-                   preflight_ms, total_ms):
+                   preflight_ms, total_ms, output_chars=None, output_tokens=None,
+                   usage_estimated=False):
     """Best effort after the answer; lock contention must never delay chat."""
     if not _identifier(provider) or not _identifier(model):
         return
@@ -99,6 +115,22 @@ def record_latency(profile_home, *, provider, model, ttft_ms, provider_ttft_ms,
     if not all(type(v) in {int, float} and math.isfinite(v) and 0 <= v <= 3600000 for v in values.values()):
         return
     sample = {"at": time.time(), **{k: round(v, 2) for k, v in values.items()}}
+    chars = None
+    if type(output_chars) in {int, float} and math.isfinite(output_chars) and output_chars >= 0:
+        chars = int(output_chars)
+        sample["output_chars"] = chars
+    tokens = None
+    if type(output_tokens) in {int, float} and math.isfinite(output_tokens) and output_tokens >= 0:
+        tokens = int(output_tokens)
+    elif chars is not None:
+        tokens = _estimate_output_tokens(chars)
+        usage_estimated = True
+    if tokens is not None and tokens > 0:
+        sample["output_tokens"] = tokens
+        gen_ms = max(total_ms - ttft_ms, 1.0)
+        sample["tokens_per_sec"] = round(tokens / (gen_ms / 1000.0), 2)
+    if usage_estimated:
+        sample["usage_estimated"] = True
     logger.info("quickchat_latency %s", json.dumps({"provider": provider, "model": model, **sample}))
     try:
         path = _path(profile_home)

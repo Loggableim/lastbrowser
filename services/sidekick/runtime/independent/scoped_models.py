@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import threading
 import time
 from concurrent.futures import Future
@@ -30,6 +31,36 @@ NATIVE_AVAILABILITY_REASONS = frozenset({
 
 _CATALOG_REUSE_SECONDS = 5.0
 _CATALOG_SETUP_LOCK = threading.Lock()
+_CATALOG_DISK_NAME = "model-catalog-cache.json"
+
+
+def _catalog_disk_path(profile_home):
+    from pathlib import Path
+    return Path(profile_home) / _CATALOG_DISK_NAME
+
+
+def read_persistent_model_catalog(profile_home, digest: str):
+    """Return the startup catalog only when the saved provider connections still match."""
+    try:
+        payload = json.loads(_catalog_disk_path(profile_home).read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("digest") != digest:
+        return None
+    catalog = payload.get("catalog")
+    if not isinstance(catalog, dict) or catalog.get("providerConfigurationDigest") != digest or not isinstance(catalog.get("groups"), list):
+        return None
+    return copy.deepcopy(catalog)
+
+
+def write_persistent_model_catalog(profile_home, digest: str, catalog: dict) -> None:
+    if not isinstance(catalog, dict) or catalog.get("providerConfigurationDigest") != digest or not isinstance(catalog.get("groups"), list):
+        return
+    path = _catalog_disk_path(profile_home)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps({"digest": digest, "catalog": catalog}, ensure_ascii=False), encoding="utf-8")
+    temporary.replace(path)
 
 
 def _catalog_cache_state(manager):
@@ -241,6 +272,10 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
     selection, digest = provider_selection(resolved)
     space_state = _catalog_space_state(resolved)
     fingerprint = (evidence_digest(resolved.profile_home), _catalog_credential_state(resolved.profile_home))
+    stored = read_persistent_model_catalog(resolved.profile_home, digest)
+    if stored is not None:
+        from runtime.local_ai.store_provider_host import with_store_catalog
+        return with_store_catalog(stored, scope, resolved.profile.name)
     key = (getattr(manager, "generation", None), scope.key, resolved.binding.partition_key, resolved.binding.revision,
            bool(include_capabilities), digest, fingerprint, space_state)
     cache, inflight, lock = _catalog_cache_state(manager)
@@ -273,6 +308,10 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
         _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
         if not isinstance(result, dict) or result.get("providerConfigurationDigest") != digest or not isinstance(result.get("groups"), list):
             raise PolicyDenied("invalid_model_catalog")
+        try:
+            write_persistent_model_catalog(resolved.profile_home, digest, result)
+        except OSError:
+            pass
         with lock:
             cache[key] = (time.monotonic(), copy.deepcopy(result))
             if len(cache) > 16:

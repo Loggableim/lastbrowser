@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' blob: data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' data: blob:;" />
+  <title>LastBrowser — Startup & Unlock Animation Demo (State of the Art)</title>
+  <style>
+    :root {
+      --bg-deep: #071426;
+      --bg-mid: #0a1b31;
+      --text-main: #f4f7ff;
+      --text-dim: rgba(244, 247, 255, 0.64);
+      --accent-cyan: #5abfff;
+      --accent-mint: #63dbad;
+      --panel-bg: rgba(7, 20, 38, 0.92);
+      --border-subtle: rgba(244, 247, 255, 0.14);
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #050d1a;
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .demo-layout {
+      display: flex;
+      flex-direction: column;
+      width: 100vw;
+      height: 100vh;
+    }
+    /* Top Control Bar */
+    .control-bar {
+      position: relative;
+      z-index: 30;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 12px;
+      padding: 8px 14px;
+      background: var(--panel-bg);
+      border-bottom: 1px solid var(--border-subtle);
+      backdrop-filter: blur(12px);
+      font-size: 12px;
+    }
+    .ctrl-group {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding-right: 10px;
+      border-right: 1px solid rgba(244, 247, 255, 0.1);
+    }
+    .ctrl-group:last-child { border-right: none; }
+    .ctrl-label {
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-dim);
+      margin-right: 2px;
+    }
+    button, select, input[type="range"] {
+      font-family: inherit;
+      font-size: 11.5px;
+    }
+    .btn {
+      padding: 5px 9px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(18, 38, 68, 0.75);
+      color: var(--text-main);
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease, transform 80ms ease;
+      white-space: nowrap;
+    }
+    .btn:hover {
+      background: rgba(34, 68, 115, 0.9);
+      border-color: rgba(90, 191, 255, 0.5);
+    }
+    .btn:active { transform: scale(0.97); }
+    .btn[data-active="true"] {
+      background: rgba(90, 191, 255, 0.24);
+      border-color: var(--accent-cyan);
+      color: #ffffff;
+      font-weight: 600;
+    }
+    .btn-accent {
+      background: rgba(99, 219, 173, 0.18);
+      border-color: rgba(99, 219, 173, 0.55);
+    }
+    .btn-danger {
+      background: rgba(255, 83, 123, 0.18);
+      border-color: rgba(255, 83, 123, 0.55);
+    }
+    select {
+      padding: 4px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border-subtle);
+      background: rgba(14, 30, 54, 0.9);
+      color: var(--text-main);
+      outline: none;
+    }
+    .chk-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      color: var(--text-main);
+      white-space: nowrap;
+    }
+    input[type="range"] {
+      width: 68px;
+      accent-color: var(--accent-cyan);
+      cursor: pointer;
+    }
+
+    /* Main Viewport with Simulated Browser UI underneath */
+    .viewport-wrap {
+      position: relative;
+      flex: 1;
+      width: 100%;
+      overflow: hidden;
+    }
+    .simulated-browser {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      background: #0b1524;
+      z-index: 1;
+    }
+    .sim-toolbar {
+      height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      background: #08101d;
+      border-bottom: 1px solid rgba(244, 247, 255, 0.08);
+    }
+    .sim-tabs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sim-tab {
+      padding: 6px 14px;
+      border-radius: 7px;
+      background: rgba(244, 247, 255, 0.07);
+      font-size: 12px;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .sim-urlbar {
+      width: 380px;
+      max-width: 42vw;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: rgba(244, 247, 255, 0.05);
+      border: 1px solid rgba(244, 247, 255, 0.1);
+      font-size: 12px;
+      color: var(--text-dim);
+      text-align: center;
+    }
+    .sim-dock {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sim-sidekick-target {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: rgba(90, 191, 255, 0.14);
+      border: 1px solid rgba(90, 191, 255, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      box-shadow: 0 0 16px rgba(90, 191, 255, 0.25);
+      transition: transform 220ms cubic-bezier(0.22, 1.4, 0.36, 1), box-shadow 220ms ease;
+    }
+    .sim-sidekick-target[data-docked="true"] {
+      transform: scale(1.12);
+      box-shadow: 0 0 24px rgba(99, 219, 173, 0.65);
+    }
+    .sim-sidekick-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #63dbad 0%, #29e3ff 100%);
+    }
+    .sim-workspace {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+      text-align: center;
+      background: radial-gradient(circle at 50% 30%, rgba(26, 62, 110, 0.28), transparent 70%);
+    }
+    .sim-workspace h2 {
+      font-size: 22px;
+      margin: 0 0 8px;
+      font-weight: 700;
+    }
+    .sim-workspace p {
+      margin: 0 0 18px;
+      color: var(--text-dim);
+      font-size: 14px;
+      max-width: 480px;
+    }
+
+    /* Startup Host Container */
+    #startup-host {
+      position: absolute;
+      inset: 0;
+      z-index: 10;
+      pointer-events: auto;
+    }
+    #startup-host[data-hidden="true"] {
+      pointer-events: none;
+    }
+
+    /* Real-time Telemetry & Debug Overlay */
+    .debug-overlay {
+      position: absolute;
+      left: 14px;
+      bottom: 14px;
+      z-index: 25;
+      width: 305px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(6, 14, 26, 0.84);
+      border: 1px solid rgba(90, 191, 255, 0.25);
+      backdrop-filter: blur(8px);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #d7e8ff;
+      pointer-events: none;
+    }
+    .debug-overlay[data-visible="false"] { display: none; }
+    .dbg-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .dbg-key { color: rgba(244, 247, 255, 0.55); }
+    .dbg-val { font-weight: 600; color: #63dbad; }
+    .dbg-bar-bg {
+      margin-top: 6px;
+      width: 100%;
+      height: 5px;
+      background: rgba(244, 247, 255, 0.1);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .dbg-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #5abfff, #63dbad);
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-layout">
+    <!-- Top Interactive Control Bar -->
+    <div class="control-bar" role="region" aria-label="Demo Steuerung">
+      <div class="ctrl-group">
+        <span class="ctrl-label">Szenen:</span>
+        <button class="btn" data-scene-btn="full" data-active="true">Gesamt</button>
+        <button class="btn" data-scene-btn="coldstart">A Kaltstart</button>
+        <button class="btn" data-scene-btn="coldstart-loop">A-Loop</button>
+        <button class="btn" data-scene-btn="unlock-input">B1 Eingabe</button>
+        <button class="btn" data-scene-btn="unlock-success">B2 Erfolg</button>
+        <button class="btn" data-scene-btn="unlock-error">B3 Fehler</button>
+        <button class="btn" data-scene-btn="transition">C Übergang</button>
+        <button class="btn" data-scene-btn="D">D Auftritt (6x)</button>
+      </div>
+
+      <div class="ctrl-group">
+        <span class="ctrl-label">Clip:</span>
+        <select id="ctrl-clip" aria-label="Audio Clip">
+          <option value="welcome-in">welcome-in (6014 ms)</option>
+          <option value="three-ascending-tones">three-ascending-tones (6494 ms)</option>
+          <option value="untitled">untitled / First Light (6414 ms)</option>
+          <option value="spring-vibes">spring-vibes (5614 ms)</option>
+          <option value="unlock-gesture">unlock-gesture (5614 ms)</option>
+        </select>
+        <label class="chk-wrap">
+          <input type="checkbox" id="ctrl-sound" />
+          <span>Ton</span>
+        </label>
+        <input type="range" id="ctrl-volume" min="0" max="1" step="0.01" value="0.35" title="Lautstärke (Standard 0.35)" />
+      </div>
+
+      <div class="ctrl-group">
+        <span class="ctrl-label">Sidekick:</span>
+        <select id="ctrl-persona" aria-label="Sidekick Persona">
+          <option value="nova">Nova</option>
+          <option value="orion">Orion</option>
+          <option value="patch">Patch</option>
+          <option value="spark">Spark</option>
+          <option value="zen">Zen</option>
+          <option value="custom">Custom</option>
+        </select>
+        <span class="ctrl-label">Rahmen:</span>
+        <select id="ctrl-rainbow" aria-label="Regenbogenrahmen">
+          <option value="classic">classic</option>
+          <option value="aurora">aurora</option>
+          <option value="orbit">orbit</option>
+          <option value="none">aus</option>
+        </select>
+      </div>
+
+      <div class="ctrl-group">
+        <span class="ctrl-label">Sprache:</span>
+        <select id="ctrl-locale" aria-label="Sprache">
+          <option value="de">Deutsch (de)</option>
+          <option value="en">English (en)</option>
+          <option value="ja">日本語 (ja)</option>
+          <option value="it">Italiano (it)</option>
+          <option value="es">Español (es)</option>
+          <option value="fr">Français (fr)</option>
+          <option value="pt-BR">Português (pt-BR)</option>
+          <option value="ru">Русский (ru)</option>
+        </select>
+      </div>
+
+      <div class="ctrl-group">
+        <span class="ctrl-label">Simulation:</span>
+        <select id="ctrl-ready-Timing" aria-label="Ready Zeitpunkt">
+          <option value="normal">Ready @ Clip-Ausklang</option>
+          <option value="early">Ready früher (1.6 s)</option>
+          <option value="late">Ready später (4.8 s)</option>
+          <option value="manual">Manuell</option>
+        </select>
+        <button class="btn btn-accent" id="btn-trigger-ready">Ready jetzt</button>
+        <button class="btn" id="btn-trigger-key">Keypress (B1)</button>
+        <button class="btn btn-danger" id="btn-trigger-error">Fehler (B3)</button>
+        <button class="btn" id="btn-skip">Skip (Esc)</button>
+      </div>
+
+      <div class="ctrl-group">
+        <label class="chk-wrap">
+          <input type="checkbox" id="ctrl-reduced-motion" />
+          <span>Reduced Motion</span>
+        </label>
+        <label class="chk-wrap">
+          <input type="checkbox" id="ctrl-debug" checked />
+          <span>Debug</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Main Stage + Underlying Browser Surface -->
+    <div class="viewport-wrap">
+      <div class="simulated-browser">
+        <div class="sim-toolbar">
+          <div class="sim-tabs">
+            <div class="sim-tab">LASTBROWSER Workspace</div>
+            <div class="sim-tab" style="opacity:0.55">AI Research</div>
+          </div>
+          <div class="sim-urlbar">lastbrowser://newtab — Ready &amp; Unblocked</div>
+          <div class="sim-dock">
+            <span style="font-size:11px;color:var(--text-dim)">Sidekick-Dock-Ziel:</span>
+            <div class="sim-sidekick-target" data-startup-sidekick-target title="[data-startup-sidekick-target]">
+              <div class="sim-sidekick-dot"></div>
+            </div>
+          </div>
+        </div>
+        <div class="sim-workspace">
+          <h2>LastBrowser ist startklar</h2>
+          <p>Die Start- und Entsperranimation hat den Sidekick nahtlos ins Dock-Icon oben rechts übergeben und alle Eingaben freigegeben.</p>
+          <button class="btn btn-accent" id="btn-replay-main">Animation erneut abspielen</button>
+        </div>
+      </div>
+
+      <!-- Startup Animation Container -->
+      <div id="startup-host"></div>
+
+      <!-- Telemetry Debug Overlay -->
+      <div class="debug-overlay" id="debug-overlay" data-visible="true" aria-hidden="true">
+        <div class="dbg-row"><span class="dbg-key">Clip / Theme:</span><span class="dbg-val" id="dbg-clip">welcome-in</span></div>
+        <div class="dbg-row"><span class="dbg-key">Audiozeit / Dauer:</span><span class="dbg-val" id="dbg-time">0 / 6014 ms</span></div>
+        <div class="dbg-row"><span class="dbg-key">Nächste Cue:</span><span class="dbg-val" id="dbg-cue">-</span></div>
+        <div class="dbg-row"><span class="dbg-key">FPS (geglättet):</span><span class="dbg-val" id="dbg-fps">60 fps</span></div>
+        <div class="dbg-row"><span class="dbg-key">A/V-Drift:</span><span class="dbg-val" id="dbg-drift">0.00 ms</span></div>
+        <div class="dbg-row"><span class="dbg-key">Letztes Ereignis:</span><span class="dbg-val" id="dbg-last-event">init</span></div>
+        <div class="dbg-bar-bg"><div class="dbg-bar-fill" id="dbg-progress"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    /**
+     * Embedded LastBrowser Startup & Unlock Animation Engine
+     * Identical API to startup-animation.js + WebAudio Synthesizer fallback for standalone preview.
+     */
+    const TIMING_DATA = {
+      'welcome-in': {
+        id: 'welcome-in',
+        theme: 'welcome-aurora',
+        durationMs: 6014,
+        mainPeakMs: 250,
+        peaksMs: [250, 700, 1030, 1280],
+        onsetsMs: [120, 440, 1210, 1470],
+        tailStartMs: 3100,
+        hasTail: true,
+        cues: [
+          { at: 120, attack: 20, do: 'gatherLight' },
+          { at: 250, attack: 25, do: 'mainPeakAwaken' },
+          { at: 440, attack: 20, do: 'revealWordmark' },
+          { at: 700, attack: 20, do: 'auroraPulse' },
+          { at: 1030, attack: 20, do: 'startQuoteStream' },
+          { at: 1210, attack: 20, do: 'orbitBoost' },
+          { at: 1280, attack: 15, do: 'shimmerPeak' },
+          { at: 1470, attack: 20, do: 'sidekickDone' },
+          { at: 3100, attack: 0, do: 'tailTransitionWindow' }
+        ],
+        envelope_50ms_db_rel: [
+          -55,-42,-18,-6,0,-3,-9,-14,-11,-7,-12,-16,-11,-8,-4,-9,-15,-18,-14,-9,
+          -5,-2,-7,-12,-6,-3,-8,-11,-9,-4,-10,-14,-17,-19,-21,-22,-24,-25,-26,-27,
+          -28,-29,-30,-31,-32,-33,-33,-34,-35,-36,-36,-37,-38,-38,-39,-40,-40,-41,-42,-42,
+          -43,-44,-44,-45,-46,-46,-47,-48,-48,-49,-50,-50,-51,-52,-52,-53,-54,-54,-55,-56,
+          -56,-57,-57,-58,-58,-59,-59,-60,-60,-60
+        ]
+      },
+      'three-ascending-tones': {
+        id: 'three-ascending-tones',
+        theme: 'tones-rise',
+        durationMs: 6494,
+        mainPeakMs: 900,
+        peaksMs: [900, 1270, 1930],
+        onsetsMs: [200, 390, 620, 830, 1050, 1270, 1490, 1700, 1930, 2140, 2570, 3010, 3220, 3720],
+        tailStartMs: 1150,
+        hasTail: true,
+        cues: [
+          { at: 200, attack: 20, do: 'toneStep', step: 0 },
+          { at: 390, attack: 20, do: 'toneStep', step: 1 },
+          { at: 620, attack: 20, do: 'toneStep', step: 2 },
+          { at: 830, attack: 20, do: 'toneStep', step: 3 },
+          { at: 900, attack: 25, do: 'mainPeakAwaken' },
+          { at: 1050, attack: 20, do: 'toneStep', step: 4 },
+          { at: 1150, attack: 0, do: 'tailStart' },
+          { at: 1270, attack: 20, do: 'toneStep', step: 5 },
+          { at: 1490, attack: 15, do: 'harmonicEcho', step: 6 },
+          { at: 1700, attack: 15, do: 'harmonicEcho', step: 7 },
+          { at: 1930, attack: 15, do: 'harmonicEcho', step: 8 },
+          { at: 2140, attack: 15, do: 'harmonicEcho', step: 9 },
+          { at: 2570, attack: 15, do: 'tailTransitionWindow' },
+          { at: 3010, attack: 15, do: 'harmonicEcho', step: 11 },
+          { at: 3220, attack: 15, do: 'harmonicEcho', step: 12 },
+          { at: 3720, attack: 15, do: 'harmonicEcho', step: 13 }
+        ],
+        envelope_50ms_db_rel: [
+          -58,-48,-32,-18,-12,-15,-10,-6,-11,-5,-2,-7,-3,-1,0,-2,-5,-8,-6,-4,
+          -9,-7,-5,-11,-8,-6,-12,-14,-10,-15,-17,-13,-18,-19,-14,-20,-22,-18,-23,-25,
+          -26,-28,-29,-30,-31,-32,-34,-35,-36,-37,-38,-35,-37,-39,-40,-42,-43,-44,-45,-46,
+          -42,-44,-46,-47,-45,-47,-48,-50,-51,-52,-53,-54,-55,-49,-51,-53,-55,-56,-57,-58,
+          -58,-59,-59,-60,-60,-60
+        ]
+      },
+      'untitled': {
+        id: 'untitled',
+        theme: 'first-light',
+        durationMs: 6414,
+        mainPeakMs: 3260,
+        peaksMs: [3260, 3620, 4200, 5920],
+        onsetsMs: [2760, 2910, 3060, 3200, 3340, 3480, 3620, 3770, 4200, 5920],
+        tailStartMs: 6410,
+        hasTail: false,
+        cues: [
+          { at: 80, attack: 0, do: 'slowHorizonBuild' },
+          { at: 1200, attack: 0, do: 'revealWordmarkSoft' },
+          { at: 2760, attack: 20, do: 'firstLightRay', step: 0 },
+          { at: 2910, attack: 20, do: 'firstLightRay', step: 1 },
+          { at: 3060, attack: 20, do: 'firstLightRay', step: 2 },
+          { at: 3200, attack: 20, do: 'firstLightRay', step: 3 },
+          { at: 3260, attack: 25, do: 'mainPeakAwaken' },
+          { at: 3340, attack: 15, do: 'cascadePulse', step: 4 },
+          { at: 3480, attack: 15, do: 'cascadePulse', step: 5 },
+          { at: 3620, attack: 15, do: 'cascadePulse', step: 6 },
+          { at: 3770, attack: 15, do: 'cascadePulse', step: 7 },
+          { at: 4200, attack: 20, do: 'tailTransitionWindow' },
+          { at: 5920, attack: 25, do: 'crescendoFinalCut' }
+        ],
+        envelope_50ms_db_rel: [
+          -56,-55,-54,-53,-52,-51,-50,-49,-48,-47,-46,-45,-44,-43,-42,-41,-40,-39,-38,-37,
+          -36,-35,-34,-33,-32,-31,-30,-29,-28,-27,-26,-25,-24,-23,-22,-21,-20,-19,-18,-17,
+          -16,-15,-14,-13,-12,-11,-10,-9,-8,-7,-6,-5,-4,-3,-2,-1,0,-1,-2,-2,
+          -1,-2,-3,-2,-1,-3,-4,-5,-6,-5,-4,-3,-5,-6,-7,-6,-5,-4,-3,-2,
+          -2,-1,-1,0,-1,-1,0,0
+        ]
+      },
+      'spring-vibes': {
+        id: 'spring-vibes',
+        theme: 'spring-orbit',
+        durationMs: 5614,
+        mainPeakMs: 180,
+        peaksMs: [180, 480, 860, 1480],
+        onsetsMs: [240, 360, 480, 610, 730, 860, 1110, 1360, 1480, 1610, 1860, 2110],
+        tailStartMs: 920,
+        hasTail: true,
+        cues: [
+          { at: 180, attack: 25, do: 'mainPeakAwaken' },
+          { at: 240, attack: 15, do: 'orbitPulse', step: 0 },
+          { at: 360, attack: 15, do: 'orbitPulse', step: 1 },
+          { at: 480, attack: 15, do: 'orbitPulse', step: 2 },
+          { at: 610, attack: 15, do: 'orbitPulse', step: 3 },
+          { at: 730, attack: 15, do: 'orbitPulse', step: 4 },
+          { at: 860, attack: 15, do: 'orbitPulse', step: 5 },
+          { at: 920, attack: 0, do: 'tailStart' },
+          { at: 1110, attack: 15, do: 'orbitPulse', step: 6 },
+          { at: 1360, attack: 15, do: 'orbitPulse', step: 7 },
+          { at: 1480, attack: 15, do: 'orbitPulse', step: 8 },
+          { at: 1610, attack: 15, do: 'orbitPulse', step: 9 },
+          { at: 1860, attack: 15, do: 'orbitPulse', step: 10 },
+          { at: 2110, attack: 15, do: 'tailTransitionWindow' }
+        ],
+        envelope_50ms_db_rel: [
+          -50,-22,-4,0,-3,-5,-2,-6,-3,-7,-4,-8,-4,-9,-5,-10,-6,-4,-12,-15,
+          -17,-18,-13,-16,-19,-21,-15,-18,-14,-17,-16,-20,-22,-24,-21,-25,-27,-29,-24,-28,
+          -30,-32,-27,-31,-34,-36,-38,-39,-41,-42,-43,-45,-46,-47,-48,-49,-50,-51,-52,-53,
+          -54,-55,-56,-57,-57,-58,-58,-59,-59,-60,-60
+        ]
+      },
+      'unlock-gesture': {
+        id: 'unlock-gesture',
+        theme: 'unlock-ripple',
+        durationMs: 5614,
+        mainPeakMs: 330,
+        peaksMs: [330, 540, 810, 1080],
+        onsetsMs: [330, 540, 810, 1080, 1350, 1620, 1950, 2290, 2660],
+        tailStartMs: 370,
+        hasTail: true,
+        cues: [
+          { at: 330, attack: 25, do: 'unlockFlash' },
+          { at: 370, attack: 0, do: 'tailStart' },
+          { at: 540, attack: 15, do: 'unlockRipple', step: 1 },
+          { at: 810, attack: 15, do: 'unlockRipple', step: 2 },
+          { at: 1080, attack: 15, do: 'unlockRipple', step: 3 },
+          { at: 1350, attack: 15, do: 'unlockRipple', step: 4 },
+          { at: 1620, attack: 15, do: 'unlockRipple', step: 5 },
+          { at: 1950, attack: 15, do: 'tailTransitionWindow' },
+          { at: 2290, attack: 15, do: 'unlockRipple', step: 7 },
+          { at: 2660, attack: 15, do: 'unlockRipple', step: 8 }
+        ],
+        envelope_50ms_db_rel: [
+          -54,-40,-25,-12,-3,0,-2,-8,-12,-14,-9,-13,-16,-19,-12,-16,-19,-22,-15,-19,
+          -23,-25,-18,-22,-26,-28,-21,-25,-29,-31,-24,-28,-32,-34,-36,-38,-31,-35,-38,-40,
+          -42,-44,-37,-41,-44,-46,-48,-49,-43,-47,-49,-51,-52,-53,-54,-55,-56,-57,-58,-58,
+          -59,-59,-60,-60
+        ]
+      }
+    };
+
+    const PERSONAS = {
+      nova: { id: 'nova', name: 'Nova', fallbackPng: 'brand/sidekick-01.png', shellColor: '#ffffff', shellShadow: '#d9e6ff', visorColor: '#0c1729', eyeColor: '#29e3ff', scarfColor: '#63dbad', accentColor: '#ff6b9d', glowColor: [0.16, 0.89, 1.0], earStyle: 'round-single' },
+      orion: { id: 'orion', name: 'Orion', fallbackPng: 'brand/sidekick-02.png', shellColor: '#eef3ff', shellShadow: '#b8c9f0', visorColor: '#091326', eyeColor: '#7c9fe5', scarfColor: '#4e67b8', accentColor: '#ffe578', glowColor: [0.49, 0.62, 0.9], earStyle: 'antenna-dual' },
+      patch: { id: 'patch', name: 'Patch', fallbackPng: 'brand/sidekick-03.png', shellColor: '#fff8f0', shellShadow: '#ebd5c0', visorColor: '#161824', eyeColor: '#ffad59', scarfColor: '#ff785a', accentColor: '#63dbad', glowColor: [1.0, 0.68, 0.35], earStyle: 'cat-ears' },
+      spark: { id: 'spark', name: 'Spark', fallbackPng: 'brand/sidekick-04.png', shellColor: '#f7f4ff', shellShadow: '#d5c8f5', visorColor: '#120f29', eyeColor: '#ffe578', scarfColor: '#a88bff', accentColor: '#5abfff', glowColor: [0.66, 0.55, 1.0], earStyle: 'lightning-crest' },
+      zen: { id: 'zen', name: 'Zen', fallbackPng: 'brand/sidekick-05.png', shellColor: '#f0fbf8', shellShadow: '#bfe6dc', visorColor: '#0a1f22', eyeColor: '#60d9d1', scarfColor: '#3aa89e', accentColor: '#ffe578', glowColor: [0.38, 0.85, 0.82], earStyle: 'halo-leaf' },
+      custom: { id: 'custom', name: 'Custom', fallbackPng: 'brand/sidekick-06.png', shellColor: '#f5f0ff', shellShadow: '#d38cda', visorColor: '#171026', eyeColor: '#ff537b', scarfColor: '#8188ee', accentColor: '#60d9d1', glowColor: [0.83, 0.55, 0.85], earStyle: 'crystal-crown' }
+    };
+
+    const I18N_TEXTS = {
+      de: {
+        quotes: [
+          'Dein Sidekick wird wach. Bitte noch keine Prompts.',
+          'Hamster beim Vortrainieren des Sprachmodells …',
+          'Kontext wird geladen. Brainrot wird aussortiert …',
+          'Neuronale Pfade werden frisch gebügelt …'
+        ],
+        phases: {
+          engine: 'Browser-Engine wird initialisiert …',
+          profile: 'Profil & Tresor werden entschlüsselt …',
+          spaces: 'Spaces & Arbeitsbereiche werden sortiert …',
+          connections: 'Sichere Verbindungen werden aufgebaut …',
+          models: 'Lokale & Cloud-Modelle werden geprüft …',
+          sidekick: 'Verbinde mit Sidekick …',
+          session: 'Sitzung wird wiederhergestellt …',
+          ready: 'Bereit für den Abflug.'
+        },
+        unlockPrompt: 'Profil gesperrt — Passwort eingeben',
+        unlockError: 'Passwort nicht korrekt. Bitte erneut versuchen.'
+      },
+      en: {
+        quotes: [
+          'Loading context. Sorting out the brainrot …',
+          'Waking up your Sidekick. Hold your prompts.',
+          'Pre-training the hamsters on fresh tokens …',
+          'Aligning attention heads and cosmic rays …'
+        ],
+        phases: {
+          engine: 'Initializing browser engine …',
+          profile: 'Loading profile & encrypted vault …',
+          spaces: 'Restoring spaces & tabs …',
+          connections: 'Establishing secure connections …',
+          models: 'Warming up AI models …',
+          sidekick: 'Connecting to Sidekick …',
+          session: 'Restoring session state …',
+          ready: 'Ready.'
+        },
+        unlockPrompt: 'Profile locked — Enter password',
+        unlockError: 'Incorrect password. Please try again.'
+      },
+      it: {
+        quotes: [
+          'Il tuo Sidekick si sta svegliando. Niente prompt per ora.',
+          'Caricamento del contesto. Filtro del brainrot in corso …',
+          'Criceti al lavoro sul pre-training del modello …'
+        ],
+        phases: { sidekick: 'Connessione al Sidekick …', ready: 'Pronto.' },
+        unlockPrompt: 'Profilo bloccato — Inserisci la password',
+        unlockError: 'Password errata. Riprova.'
+      },
+      es: {
+        quotes: [
+          'Tu Sidekick está despertando. Aún sin prompts, por favor.',
+          'Cargando contexto. Filtrando el brainrot …',
+          'Hámsters pre-entrenando el modelo de lenguaje …'
+        ],
+        phases: { sidekick: 'Conectando con Sidekick …', ready: 'Listo.' },
+        unlockPrompt: 'Perfil bloqueado — Introduce la contraseña',
+        unlockError: 'Contraseña incorrecta. Inténtalo de nuevo.'
+      },
+      fr: {
+        quotes: [
+          'Votre Sidekick se réveille. Pas encore de prompts.',
+          'Chargement du contexte. Tri du brainrot en cours …',
+          'Les hamsters pré-entraînent le modèle linguistique …'
+        ],
+        phases: { sidekick: 'Connexion au Sidekick …', ready: 'Prêt.' },
+        unlockPrompt: 'Profil verrouillé — Entrez le mot de passe',
+        unlockError: 'Mot de passe incorrect. Veuillez réessayer.'
+      },
+      'pt-BR': {
+        quotes: [
+          'Seu Sidekick está acordando. Sem prompts por enquanto.',
+          'Carregando contexto. Filtrando o brainrot …',
+          'Hamsters pré-treinando o modelo de linguagem …'
+        ],
+        phases: { sidekick: 'Conectando ao Sidekick …', ready: 'Pronto.' },
+        unlockPrompt: 'Perfil bloqueado — Digite a senha',
+        unlockError: 'Senha incorreta. Tente novamente.'
+      },
+      ru: {
+        quotes: [
+          'Ваш Sidekick просыпается. Пожалуйста, подождите с промптами.',
+          'Загрузка контекста. Отфильтровываем брейнрот …',
+          'Хомячки предобучают языковую модель на свежих токенах …'
+        ],
+        phases: { sidekick: 'Подключение к Sidekick …', ready: 'Готово.' },
+        unlockPrompt: 'Профиль защищён — Введите пароль',
+        unlockError: 'Неверный пароль. Попробуйте ещё раз.'
+      },
+      ja: {
+        quotes: [
+          'Sidekickが起動中です。プロンプトはまだお待ちください。',
+          'コンテキストを読み込み中。ブレインロットを整理しています…',
+          'ハムスターが言語モデルを事前学習しています…'
+        ],
+        phases: { sidekick: 'Sidekickに接続しています…', ready: '準備完了。' },
+        unlockPrompt: 'プロファイルはロックされています — パスワードを入力',
+        unlockError: 'パスワードが正しくありません。もう一度お試しください。'
+      }
+    };
+
+    const VERTEX_SHADER = `#version 300 es
+    in vec2 a_pos;
+    out vec2 v_uv;
+    void main() {
+      v_uv = a_pos * 0.5 + 0.5;
+      gl_Position = vec4(a_pos, 0.0, 1.0);
+    }`;
+
+    const FRAGMENT_SHADER = `#version 300 es
+    precision highp float;
+    in vec2 v_uv;
+    out vec4 outColor;
+    uniform vec2 u_res;
+    uniform float u_time;
+    uniform float u_energy;
+    uniform float u_peakFlash;
+    uniform float u_unlockRipple;
+    uniform float u_dissolve;
+    uniform float u_errorTint;
+    uniform vec3 u_glowColor;
+
+    float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+    float noise(vec2 p) {
+      vec2 i = floor(p); vec2 f = fract(p);
+      vec2 u = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+                 mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+    }
+    float fbm(vec2 p) {
+      float v = 0.0, a = 0.5;
+      mat2 rot = mat2(0.8, 0.6, -0.6, 0.8);
+      for (int i = 0; i < 4; i++) { v += a * noise(p); p = rot * p * 2.02 + vec2(0.13, 0.27); a *= 0.5; }
+      return v;
+    }
+    void main() {
+      vec2 uv = v_uv;
+      vec2 aspect = vec2(u_res.x / max(u_res.y, 1.0), 1.0);
+      vec2 center = vec2(0.5, 0.56);
+      vec2 p = (uv - center) * aspect;
+      float dist = length(p);
+      float diag = clamp((uv.x * 0.57 + (1.0 - uv.y) * 0.82), 0.0, 1.0);
+      vec3 col = mix(vec3(0.027, 0.078, 0.149), vec3(0.039, 0.106, 0.192), 1.0 - abs(diag - 0.55) * 1.8);
+      float t = u_time * 0.00035;
+      vec2 q = p * 2.2 + vec2(sin(t * 1.3), cos(t * 1.1)) * 0.3;
+      float n1 = fbm(q + vec2(t * 0.9, -t * 0.6));
+      float n2 = fbm(q * 1.6 - vec2(t * 0.5, t * 0.8) + n1);
+      vec3 auroraMix = mix(vec3(0.376, 0.851, 0.820), vec3(0.506, 0.533, 0.933), smoothstep(0.2, 0.8, n1));
+      auroraMix = mix(auroraMix, vec3(0.827, 0.549, 0.855), smoothstep(0.35, 0.85, n2));
+      auroraMix = mix(auroraMix, u_glowColor, 0.45);
+      float radialMask = exp(-dist * dist * (3.4 - u_energy * 1.2));
+      col += auroraMix * (0.14 + u_energy * 0.38 + u_peakFlash * 0.45) * radialMask * (0.6 + 0.6 * n2);
+      col += u_glowColor * exp(-dist * (5.2 - u_energy * 1.5)) * (0.28 + u_energy * 0.55 + u_peakFlash * 0.7);
+      if (u_unlockRipple > 0.001) {
+        float ring = exp(-abs(dist - u_unlockRipple * 0.95) * 42.0) * (1.0 - u_unlockRipple * 0.65);
+        col += mix(u_glowColor, vec3(0.95, 0.98, 1.0), 0.6) * ring * 0.9;
+      }
+      if (u_errorTint > 0.001) {
+        col = mix(col, col + vec3(0.85, 0.22, 0.34) * radialMask * 0.55, u_errorTint);
+      }
+      float alpha = 1.0;
+      if (u_dissolve > 0.001) {
+        float threshold = u_dissolve * 1.35 - dist * 0.35 + n2 * 0.28;
+        float edgeGlow = smoothstep(0.35, 0.5, threshold) * (1.0 - smoothstep(0.5, 0.68, threshold));
+        col += vec3(0.75, 0.93, 1.0) * edgeGlow * 1.1;
+        alpha = 1.0 - smoothstep(0.48, 0.78, threshold);
+      }
+      outColor = vec4(col, alpha);
+    }`;
+
+    const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+    const lerp = (a, b, t) => a + (b - a) * t;
+
+    function springDecay(elapsedMs, durationMs = 420, frequencyHz = 8.5, damping = 6.5) {
+      if (elapsedMs <= 0 || elapsedMs >= durationMs) return 0;
+      const t = elapsedMs / 1000;
+      return Math.exp(-damping * t) * Math.sin(2 * Math.PI * frequencyHz * t);
+    }
+
+    function sampleEnvelopeLinear(timingObj, timeMs) {
+      const env = timingObj?.envelope_50ms_db_rel;
+      if (!env || !env.length) return 0.25;
+      const idxFloat = clamp(timeMs / 50, 0, env.length - 1);
+      const i0 = Math.floor(idxFloat);
+      const i1 = Math.min(env.length - 1, i0 + 1);
+      const db = lerp(env[i0], env[i1], idxFloat - i0);
+      return clamp(Math.pow(10, db / 28), 0, 1);
+    }
+
+    /**
+     * Synthesizes an accurate AudioBuffer matching the clip's exact onsets, peaks & 50ms envelope
+     * when the external MP3 file is unavailable in standalone file:// mode.
+     */
+    function synthesizeClipAudioBuffer(audioCtx, timingObj) {
+      const sampleRate = audioCtx.sampleRate;
+      const totalSamples = Math.ceil((timingObj.durationMs / 1000) * sampleRate);
+      const buffer = audioCtx.createBuffer(2, totalSamples, sampleRate);
+      const left = buffer.getChannelData(0);
+      const right = buffer.getChannelData(1);
+
+      const baseFreqs = {
+        'welcome-in': [261.63, 329.63, 392.00, 523.25],
+        'three-ascending-tones': [293.66, 369.99, 440.00, 587.33],
+        'untitled': [220.00, 277.18, 329.63, 440.00],
+        'spring-vibes': [329.63, 415.30, 493.88, 659.25],
+        'unlock-gesture': [392.00, 493.88, 587.33, 783.99]
+      }[timingObj.id] || [261.63, 329.63, 392.00, 523.25];
+
+      for (let i = 0; i < totalSamples; i++) {
+        const tSec = i / sampleRate;
+        const tMs = tSec * 1000;
+        const env = sampleEnvelopeLinear(timingObj, tMs);
+
+        // Add crisp transient chime on each measured onset
+        let onsetPing = 0;
+        for (let k = 0; k < timingObj.onsetsMs.length; k++) {
+          const dt = tMs - timingObj.onsetsMs[k];
+          if (dt >= 0 && dt < 220) {
+            const f = baseFreqs[k % baseFreqs.length] * 2;
+            onsetPing += Math.exp(-dt / 45) * Math.sin(2 * Math.PI * f * tSec) * 0.35;
+          }
+        }
+
+        const pad =
+          Math.sin(2 * Math.PI * baseFreqs[0] * tSec) * 0.35 +
+          Math.sin(2 * Math.PI * baseFreqs[1] * tSec) * 0.25 +
+          Math.sin(2 * Math.PI * baseFreqs[2] * tSec) * 0.2;
+
+        const val = (pad * env + onsetPing) * 0.45;
+        left[i] = val;
+        right[i] = val * 0.96;
+      }
+      return buffer;
+    }
+
+    const STYLESHEET_CONTENT = `
+    .lb-startup-root {
+      position: relative; width: 100%; height: 100%; min-height: 420px; overflow: hidden;
+      user-select: none; color: #f4f7ff;
+      background: linear-gradient(145deg, #071426 0%, #0a1b31 55%, #071426 100%);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      box-sizing: border-box; contain: layout style paint;
+    }
+    .lb-startup-gl, .lb-startup-particles {
+      position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+    }
+    .lb-startup-rainbow-frame {
+      position: absolute; inset: 0; pointer-events: none; padding: 3px; box-sizing: border-box;
+      opacity: 0; transition: opacity 320ms ease;
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+    }
+    .lb-startup-rainbow-frame[data-rainbow="classic"],
+    .lb-startup-rainbow-frame[data-rainbow="aurora"],
+    .lb-startup-rainbow-frame[data-rainbow="orbit"] { opacity: 0.9; }
+    .lb-startup-rainbow-frame::before {
+      content: ""; position: absolute; inset: -50%;
+      background: conic-gradient(from var(--lb-angle, 0deg), #ff537b, #ffad59, #ffe578, #63dbad, #5abfff, #a88bff, #ff537b);
+    }
+    .lb-startup-rainbow-frame[data-rainbow="aurora"]::before {
+      background: conic-gradient(from var(--lb-angle, 0deg), #60d9d1, #8188ee, #d38cda, #7c9fe5, #60d9d1);
+    }
+    .lb-startup-rainbow-frame[data-rainbow="orbit"]::before {
+      background: conic-gradient(from var(--lb-angle, 0deg), transparent 0deg, #5abfff 65deg, #63dbad 130deg, transparent 190deg, #a88bff 280deg, transparent 360deg);
+    }
+    .lb-startup-stage {
+      position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center;
+      text-align: center; max-width: 680px; width: 90%; padding: 24px; pointer-events: none;
+      will-change: transform, opacity;
+    }
+    .lb-avatar-wrap {
+      position: relative; width: 184px; height: 172px; display: flex; align-items: center;
+      justify-content: center; will-change: transform, opacity;
+    }
+    .lb-avatar-canvas { width: 184px; height: 172px; display: block; }
+    .lb-wordmark {
+      margin-top: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.34em;
+      text-transform: uppercase; color: rgba(244, 247, 255, 0.86); will-change: transform, opacity;
+    }
+    .lb-quote-container {
+      margin-top: 18px; min-height: 36px; display: flex; align-items: center; justify-content: center;
+    }
+    .lb-quote {
+      font-size: clamp(18px, 2.2vw, 24px); font-weight: 700; line-height: 1.35;
+      letter-spacing: -0.015em; color: #f4f7ff; margin: 0; will-change: opacity, transform;
+    }
+    .lb-status {
+      margin-top: 14px; min-height: 22px; font-size: 13.5px; font-weight: 400;
+      color: rgba(244, 247, 255, 0.64); transition: color 200ms ease;
+    }
+    .lb-unlock-box {
+      margin-top: 16px; display: none; flex-direction: column; align-items: center;
+      gap: 8px; pointer-events: auto;
+    }
+    .lb-unlock-box[data-visible="true"] { display: flex; }
+    .lb-unlock-pill {
+      display: flex; align-items: center; gap: 10px; width: 240px; height: 40px; padding: 0 16px;
+      border-radius: 999px; background: rgba(12, 27, 49, 0.78);
+      border: 1px solid rgba(90, 191, 255, 0.35); box-shadow: 0 8px 28px rgba(0, 0, 0, 0.38);
+      will-change: transform;
+    }
+    .lb-unlock-input {
+      width: 100%; background: transparent; border: none; outline: none; color: #f4f7ff;
+      font-size: 14px; letter-spacing: 0.18em; text-align: center;
+    }
+    .lb-gear-btn {
+      position: absolute; right: 16px; bottom: 16px; z-index: 4; width: 32px; height: 32px;
+      border-radius: 8px; border: 1px solid rgba(244, 247, 255, 0.14);
+      background: rgba(10, 27, 49, 0.65); color: rgba(244, 247, 255, 0.72);
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      pointer-events: auto; transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+    .lb-gear-btn:hover { background: rgba(25, 52, 88, 0.85); color: #f4f7ff; transform: rotate(24deg); }
+    `;
+
+    function drawSidekickAvatar(ctx, persona, state, timeMs, pulse, scale = 1, alpha = 1) {
+      if (alpha <= 0.001) return;
+      const w = ctx.canvas.width, h = ctx.canvas.height;
+      const cx = w * 0.5, cy = h * 0.52;
+      ctx.save();
+      ctx.globalAlpha = clamp(alpha, 0, 1);
+
+      const breathe = Math.sin(timeMs * 0.0028) * 0.025;
+      const hoverY = Math.sin(timeMs * 0.0032) * 3.5;
+      const tilt = state === 'thinking'
+        ? Math.sin(timeMs * 0.006) * 0.08
+        : state === 'error'
+          ? Math.sin(timeMs * 0.035) * 0.12
+          : Math.sin(timeMs * 0.002) * 0.035;
+
+      ctx.translate(cx, cy + hoverY);
+      ctx.scale(scale * (1 + breathe + pulse * 0.08), scale * (1 + breathe + pulse * 0.08));
+      ctx.rotate(tilt);
+
+      const [gr, gg, gb] = persona.glowColor;
+      const glowRadius = 64 + pulse * 22 + Math.sin(timeMs * 0.003) * 6;
+      const radGrad = ctx.createRadialGradient(0, 0, 14, 0, 0, glowRadius);
+      radGrad.addColorStop(0, `rgba(${Math.round(gr * 255)}, ${Math.round(gg * 255)}, ${Math.round(gb * 255)}, ${0.42 + pulse * 0.3})`);
+      radGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = radGrad;
+      ctx.beginPath();
+      ctx.arc(0, 0, glowRadius, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = persona.shellColor;
+      if (persona.earStyle === 'round-single') {
+        ctx.beginPath(); ctx.arc(38, -28, 11, 0, Math.PI * 2); ctx.fill();
+      } else if (persona.earStyle === 'antenna-dual') {
+        ctx.strokeStyle = persona.shellShadow; ctx.lineWidth = 4;
+        ctx.beginPath(); ctx.moveTo(-24, -38); ctx.lineTo(-32, -52); ctx.moveTo(24, -38); ctx.lineTo(32, -52); ctx.stroke();
+        ctx.fillStyle = persona.accentColor;
+        ctx.beginPath(); ctx.arc(-32, -53, 5, 0, Math.PI * 2); ctx.arc(32, -53, 5, 0, Math.PI * 2); ctx.fill();
+      } else if (persona.earStyle === 'cat-ears') {
+        ctx.beginPath(); ctx.moveTo(-38, -20); ctx.lineTo(-44, -48); ctx.lineTo(-18, -38);
+        ctx.moveTo(38, -20); ctx.lineTo(44, -48); ctx.lineTo(18, -38); ctx.fill();
+      } else if (persona.earStyle === 'lightning-crest') {
+        ctx.fillStyle = persona.eyeColor;
+        ctx.beginPath(); ctx.moveTo(0, -56); ctx.lineTo(10, -40); ctx.lineTo(2, -40);
+        ctx.lineTo(8, -28); ctx.lineTo(-8, -42); ctx.lineTo(0, -42); ctx.closePath(); ctx.fill();
+      } else if (persona.earStyle === 'halo-leaf') {
+        ctx.strokeStyle = persona.eyeColor; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(0, -49, 22, 5, 0, 0, Math.PI * 2); ctx.stroke();
+      } else if (persona.earStyle === 'crystal-crown') {
+        ctx.fillStyle = persona.accentColor;
+        ctx.beginPath(); ctx.moveTo(-14, -42); ctx.lineTo(0, -56); ctx.lineTo(14, -42); ctx.closePath(); ctx.fill();
+      }
+
+      ctx.fillStyle = persona.shellShadow;
+      ctx.beginPath(); ctx.ellipse(-42, 22, 9, 7, 0.3, 0, Math.PI * 2); ctx.fill();
+
+      const headGrad = ctx.createLinearGradient(-35, -42, 35, 38);
+      headGrad.addColorStop(0, persona.shellColor);
+      headGrad.addColorStop(1, persona.shellShadow);
+      ctx.fillStyle = headGrad;
+      ctx.beginPath(); ctx.roundRect(-46, -40, 92, 72, 34); ctx.fill();
+
+      ctx.fillStyle = persona.visorColor;
+      ctx.beginPath(); ctx.roundRect(-34, -27, 68, 46, 22); ctx.fill();
+
+      const eyeColor = state === 'error' ? '#ff537b' : persona.eyeColor;
+      ctx.strokeStyle = eyeColor; ctx.fillStyle = eyeColor;
+      ctx.lineWidth = 3.8; ctx.lineCap = 'round';
+      ctx.shadowColor = eyeColor; ctx.shadowBlur = 10 + pulse * 8;
+
+      if (state === 'idle' || state === 'done') {
+        ctx.beginPath(); ctx.arc(-15, -6, 7.5, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(15, -6, 7.5, Math.PI * 1.1, Math.PI * 1.9); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 3, 5.5, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+      } else if (state === 'thinking' || state === 'working') {
+        const scanX = Math.sin(timeMs * 0.008) * 3.5;
+        ctx.beginPath(); ctx.arc(-15 + scanX, -5, 5.2, 0, Math.PI * 2); ctx.arc(15 + scanX, -5, 5.2, 0, Math.PI * 2); ctx.fill();
+        ctx.lineWidth = 2.6; ctx.beginPath(); ctx.moveTo(-4, 6); ctx.lineTo(4, 6); ctx.stroke();
+      } else if (state === 'needs-input') {
+        const r = 5.5 + pulse * 2.2;
+        ctx.lineWidth = 2.8;
+        ctx.beginPath(); ctx.arc(-15, -5, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(15, -5, r, 0, Math.PI * 2); ctx.stroke();
+      } else if (state === 'error') {
+        ctx.beginPath(); ctx.moveTo(-21, -9); ctx.lineTo(-10, -4); ctx.moveTo(21, -9); ctx.lineTo(10, -4); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 9, 5, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
+      }
+
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = persona.scarfColor;
+      ctx.beginPath(); ctx.roundRect(-38, 17, 76, 16, 8); ctx.fill();
+      ctx.beginPath(); ctx.roundRect(10, 24, 15, 20, 6); ctx.roundRect(22, 20, 18, 16, 6); ctx.fill();
+
+      ctx.fillStyle = persona.accentColor;
+      ctx.beginPath();
+      const hx = 14, hy = 25;
+      ctx.moveTo(hx, hy + 4);
+      ctx.bezierCurveTo(hx - 6, hy, hx - 6, hy - 5, hx, hy - 2);
+      ctx.bezierCurveTo(hx + 6, hy - 5, hx + 6, hy, hx, hy + 4);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function createStartupAnimation(el, options = {}) {
+      const opts = {
+        audio: {
+          url: options.audio?.url || 'audio/welcome-in.mp3',
+          timing: options.audio?.timing || null,
+          volume: typeof options.audio?.volume === 'number' ? clamp(options.audio.volume, 0, 1) : 0.35,
+          enabled: Boolean(options.audio?.enabled ?? false)
+        },
+        scene: options.scene || 'full',
+        persona: (options.persona || 'nova').toLowerCase(),
+        locale: options.locale || 'de',
+        texts: options.texts || null,
+        reducedMotion: Boolean(options.reducedMotion),
+        rainbow: options.rainbow ?? 'classic',
+        target: options.target || (() => document.querySelector('[data-startup-sidekick-target]')),
+        onComplete: options.onComplete || null,
+        onCue: options.onCue || null,
+        onFrame: options.onFrame || null
+      };
+
+      const resolveTiming = () => {
+        if (opts.audio.timing) return opts.audio.timing;
+        const urlStr = String(opts.audio.url || 'welcome-in');
+        for (const key of Object.keys(TIMING_DATA)) {
+          if (urlStr.includes(key)) return TIMING_DATA[key];
+        }
+        return TIMING_DATA['welcome-in'];
+      };
+
+      let currentTiming = resolveTiming();
+      let currentPersona = PERSONAS[opts.persona] || PERSONAS.nova;
+
+      if (!document.getElementById('lb-startup-styles')) {
+        const styleEl = document.createElement('style');
+        styleEl.id = 'lb-startup-styles';
+        styleEl.textContent = STYLESHEET_CONTENT;
+        document.head.appendChild(styleEl);
+      }
+
+      const root = document.createElement('div');
+      root.className = 'lb-startup-root';
+      const glCanvas = document.createElement('canvas');
+      glCanvas.className = 'lb-startup-gl';
+      glCanvas.setAttribute('aria-hidden', 'true');
+      const particleCanvas = document.createElement('canvas');
+      particleCanvas.className = 'lb-startup-particles';
+      particleCanvas.setAttribute('aria-hidden', 'true');
+      const rainbowFrame = document.createElement('div');
+      rainbowFrame.className = 'lb-startup-rainbow-frame';
+      rainbowFrame.setAttribute('aria-hidden', 'true');
+      rainbowFrame.dataset.rainbow = opts.rainbow || 'none';
+
+      const stage = document.createElement('div');
+      stage.className = 'lb-startup-stage';
+      const avatarWrap = document.createElement('div');
+      avatarWrap.className = 'lb-avatar-wrap';
+      avatarWrap.setAttribute('aria-hidden', 'true');
+      const avatarCanvas = document.createElement('canvas');
+      avatarCanvas.className = 'lb-avatar-canvas';
+      avatarCanvas.width = 368;
+      avatarCanvas.height = 344;
+      avatarWrap.appendChild(avatarCanvas);
+
+      const wordmark = document.createElement('div');
+      wordmark.className = 'lb-wordmark';
+      wordmark.textContent = 'LASTBROWSER';
+
+      const quoteContainer = document.createElement('div');
+      quoteContainer.className = 'lb-quote-container';
+      const quoteEl = document.createElement('h1');
+      quoteEl.className = 'lb-quote';
+      quoteContainer.appendChild(quoteEl);
+
+      const statusEl = document.createElement('div');
+      statusEl.className = 'lb-status';
+      statusEl.setAttribute('aria-live', 'polite');
+
+      const unlockBox = document.createElement('div');
+      unlockBox.className = 'lb-unlock-box';
+      const unlockPill = document.createElement('div');
+      unlockPill.className = 'lb-unlock-pill';
+      const unlockInput = document.createElement('input');
+      unlockInput.type = 'password';
+      unlockInput.className = 'lb-unlock-input';
+      unlockInput.placeholder = '••••••••';
+      unlockPill.appendChild(unlockInput);
+      unlockBox.appendChild(unlockPill);
+
+      const gearBtn = document.createElement('button');
+      gearBtn.type = 'button';
+      gearBtn.className = 'lb-gear-btn';
+      gearBtn.setAttribute('aria-label', 'Startup Settings');
+      gearBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
+
+      stage.appendChild(avatarWrap);
+      stage.appendChild(wordmark);
+      stage.appendChild(quoteContainer);
+      stage.appendChild(statusEl);
+      stage.appendChild(unlockBox);
+      root.appendChild(glCanvas);
+      root.appendChild(particleCanvas);
+      root.appendChild(rainbowFrame);
+      root.appendChild(stage);
+      root.appendChild(gearBtn);
+      el.appendChild(root);
+
+      let gl = null, glProgram = null, glUniforms = {}, glVao = null;
+      try {
+        gl = glCanvas.getContext('webgl2', { alpha: true, antialias: false });
+        if (gl) {
+          const vs = gl.createShader(gl.VERTEX_SHADER);
+          gl.shaderSource(vs, VERTEX_SHADER); gl.compileShader(vs);
+          const fs = gl.createShader(gl.FRAGMENT_SHADER);
+          gl.shaderSource(fs, FRAGMENT_SHADER); gl.compileShader(fs);
+          glProgram = gl.createProgram();
+          gl.attachShader(glProgram, vs); gl.attachShader(glProgram, fs); gl.linkProgram(glProgram);
+          glVao = gl.createVertexArray(); gl.bindVertexArray(glVao);
+          const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+          gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+          const posLoc = gl.getAttribLocation(glProgram, 'a_pos');
+          gl.enableVertexAttribArray(posLoc); gl.vertexAttribPointer(posLoc, 2, gl.FLOAT, false, 0, 0);
+          glUniforms = {
+            res: gl.getUniformLocation(glProgram, 'u_res'),
+            time: gl.getUniformLocation(glProgram, 'u_time'),
+            energy: gl.getUniformLocation(glProgram, 'u_energy'),
+            peakFlash: gl.getUniformLocation(glProgram, 'u_peakFlash'),
+            unlockRipple: gl.getUniformLocation(glProgram, 'u_unlockRipple'),
+            dissolve: gl.getUniformLocation(glProgram, 'u_dissolve'),
+            errorTint: gl.getUniformLocation(glProgram, 'u_errorTint'),
+            glowColor: gl.getUniformLocation(glProgram, 'u_glowColor')
+          };
+        }
+      } catch (_) { gl = null; }
+
+      const pCtx = particleCanvas.getContext('2d');
+      const avatarCtx = avatarCanvas.getContext('2d');
+      const particles = Array.from({ length: 28 }, (_, i) => ({
+        angle: (i / 28) * Math.PI * 2,
+        radius: 55 + (i % 7) * 28,
+        speed: (0.00025 + (i % 5) * 0.00008) * (i % 2 === 0 ? 1 : -1),
+        size: 1.2 + (i % 3) * 0.8,
+        alpha: 0.18 + (i % 4) * 0.12
+      }));
+
+      const resizeCanvases = () => {
+        const rect = root.getBoundingClientRect();
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        glCanvas.width = particleCanvas.width = Math.max(1, Math.round(rect.width * dpr));
+        glCanvas.height = particleCanvas.height = Math.max(1, Math.round(rect.height * dpr));
+      };
+      resizeCanvases();
+      window.addEventListener('resize', resizeCanvases);
+
+      let audioCtx = null, gainNode = null, analyserNode = null, analyserData = null, sourceNode = null;
+      let audioStartTimeSec = 0, perfStartTimeMs = 0, rafId = 0, watchdogTimer = null;
+      let destroyed = false, completed = false, isReady = false, transitionStartTimeMs = -1;
+      let errorTriggerMs = -1000, keypressTriggerMs = -1000, unlockSuccessTriggerMs = -1000;
+      let lastFramePerfMs = performance.now(), smoothedFps = 60, currentDriftMs = 0;
+      const triggeredCues = new Set();
+
+      function getLocalePack() {
+        return I18N_TEXTS[opts.locale] || I18N_TEXTS.de;
+      }
+
+      function updateStatusText(phaseKey = 'sidekick') {
+        const pack = getLocalePack();
+        if (opts.scene === 'unlock-input') {
+          statusEl.textContent = pack.unlockPrompt;
+        } else {
+          statusEl.textContent = pack.phases[phaseKey] || pack.phases.sidekick;
+        }
+      }
+
+      async function startWebAudio() {
+        if (!opts.audio.enabled) return false;
+        try {
+          const Ctx = window.AudioContext || window.webkitAudioContext;
+          if (!Ctx) return false;
+          if (!audioCtx) audioCtx = new Ctx();
+          if (audioCtx.state === 'suspended') await audioCtx.resume().catch(() => {});
+          if (audioCtx.state !== 'running') return false;
+
+          let audioBuf = null;
+          try {
+            const resp = await fetch(opts.audio.url);
+            if (resp.ok) {
+              const arr = await resp.arrayBuffer();
+              audioBuf = await audioCtx.decodeAudioData(arr);
+            }
+          } catch (_) {}
+
+          if (!audioBuf) {
+            audioBuf = synthesizeClipAudioBuffer(audioCtx, currentTiming);
+          }
+
+          gainNode = audioCtx.createGain();
+          gainNode.gain.value = opts.audio.volume;
+          analyserNode = audioCtx.createAnalyser();
+          analyserNode.fftSize = 64;
+          analyserData = new Uint8Array(analyserNode.frequencyBinCount);
+
+          sourceNode = audioCtx.createBufferSource();
+          sourceNode.buffer = audioBuf;
+          sourceNode.connect(gainNode);
+          gainNode.connect(analyserNode);
+          analyserNode.connect(audioCtx.destination);
+          audioStartTimeSec = audioCtx.currentTime;
+          sourceNode.start(0);
+          return true;
+        } catch (_) { return false; }
+      }
+
+      function readClockMs(nowPerfMs) {
+        if (audioCtx && audioCtx.state === 'running' && sourceNode) {
+          const latencySec = (audioCtx.baseLatency || 0) + (audioCtx.outputLatency || 0);
+          const audioMs = Math.max(0, (audioCtx.currentTime - audioStartTimeSec - latencySec) * 1000);
+          currentDriftMs = audioMs - (nowPerfMs - perfStartTimeMs);
+          return audioMs;
+        }
+        currentDriftMs = 0;
+        return Math.max(0, nowPerfMs - perfStartTimeMs);
+      }
+
+      function renderQuoteStream(timeMs) {
+        const quotes = getLocalePack().quotes;
+        const elapsed = Math.max(0, timeMs - (currentTiming.id === 'untitled' ? 400 : 280));
+        const cycleMs = 4000;
+        const activeQuote = quotes[Math.floor(elapsed / cycleMs) % quotes.length];
+        const withinCycleMs = elapsed % cycleMs;
+        const chars = opts.reducedMotion ? activeQuote.length : clamp(Math.floor(withinCycleMs / 26), 0, activeQuote.length);
+        quoteEl.textContent = activeQuote.slice(0, chars);
+        let fade = 1;
+        if (!opts.reducedMotion) {
+          if (withinCycleMs < 240) fade = withinCycleMs / 240;
+          else if (withinCycleMs > cycleMs - 320) fade = (cycleMs - withinCycleMs) / 320;
+        }
+        quoteEl.style.opacity = String(clamp(fade, 0, 1));
+      }
+
+      function finishAnimation() {
+        if (completed || destroyed) return;
+        completed = true;
+        cancelAnimationFrame(rafId);
+        clearTimeout(watchdogTimer);
+        opts.onComplete?.();
+      }
+
+      function renderFrame(nowPerfMs) {
+        if (destroyed || completed) return;
+        const dt = Math.max(1, nowPerfMs - lastFramePerfMs);
+        lastFramePerfMs = nowPerfMs;
+        smoothedFps = lerp(smoothedFps, 1000 / dt, 0.12);
+
+        const rawTimeMs = readClockMs(nowPerfMs);
+        const clipDur = currentTiming.durationMs;
+
+        if (opts.reducedMotion) {
+          stage.style.opacity = String(clamp(rawTimeMs / 220, 0, 1));
+          renderQuoteStream(rawTimeMs);
+          avatarCtx.clearRect(0, 0, avatarCanvas.width, avatarCanvas.height);
+          drawSidekickAvatar(avatarCtx, currentPersona, 'done', 0, 0, 1, 1);
+          opts.onFrame?.({ currentTimeMs: rawTimeMs, durationMs: clipDur, fps: Math.round(smoothedFps), driftMs: 0, nextCue: 'reduced-motion' });
+          if (opts.scene === 'transition' || (isReady && rawTimeMs >= 260)) {
+            root.style.opacity = '0';
+            finishAnimation();
+            return;
+          }
+          rafId = requestAnimationFrame(renderFrame);
+          return;
+        }
+
+        const isLooping = opts.scene === 'coldstart-loop';
+        const timeMs = isLooping ? (1500 + (rawTimeMs % 2400)) : rawTimeMs;
+
+        let nextCue = null;
+        for (const cue of currentTiming.cues) {
+          const trig = Math.max(0, cue.at - (cue.attack || 0));
+          if (timeMs >= trig && !triggeredCues.has(cue.at)) {
+            triggeredCues.add(cue.at);
+            opts.onCue?.(cue, timeMs);
+          }
+          if (trig > timeMs && !nextCue) nextCue = cue;
+        }
+
+        const energy = sampleEnvelopeLinear(currentTiming, timeMs % clipDur);
+        const distMain = timeMs - currentTiming.mainPeakMs;
+        const peakFlash = distMain >= -25 && distMain < 550 ? Math.exp(-Math.max(0, distMain) / 180) : 0;
+
+        let unlockRipple = 0;
+        if (opts.scene === 'unlock-success' || currentTiming.id === 'unlock-gesture' || unlockSuccessTriggerMs > 0) {
+          const orig = unlockSuccessTriggerMs > 0 ? unlockSuccessTriggerMs : 330;
+          const since = timeMs - orig;
+          if (since >= -20 && since < 1400) unlockRipple = clamp((since + 20) / 1200, 0, 1);
+        }
+
+        const sinceErr = opts.scene === 'unlock-error' ? rawTimeMs : (nowPerfMs - errorTriggerMs);
+        const isErr = sinceErr >= 0 && sinceErr < 440;
+        const errorShakeX = isErr ? springDecay(sinceErr, 430, 9.2, 6.8) * 18 : 0;
+        const errorTint = isErr ? clamp(1 - sinceErr / 440, 0, 1) : 0;
+        quoteEl.style.color = isErr ? '#ffdce1' : '#f4f7ff';
+        statusEl.style.color = isErr ? '#e3d3dc' : 'rgba(244, 247, 255, 0.64)';
+
+        const sinceKey = nowPerfMs - keypressTriggerMs;
+        const keypressPulse = (sinceKey >= 0 && sinceKey < 240) ? Math.sin((1 - sinceKey / 240) * Math.PI) * 0.55 : 0;
+
+        let dissolveProgress = 0, flyX = 0, flyY = 0, flyScale = 1;
+        if (opts.scene === 'transition' && transitionStartTimeMs < 0) transitionStartTimeMs = 0;
+        else if (isReady && transitionStartTimeMs < 0 && timeMs >= Math.min(currentTiming.tailStartMs, clipDur - 950)) {
+          transitionStartTimeMs = timeMs;
+        }
+
+        if (transitionStartTimeMs >= 0) {
+          const transDur = Math.max(520, Math.min(1100, clipDur - transitionStartTimeMs));
+          const p = clamp((timeMs - transitionStartTimeMs) / transDur, 0, 1);
+          const ease = p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+          dissolveProgress = ease;
+          const targetEl = opts.target?.();
+          if (targetEl) {
+            const tRect = targetEl.getBoundingClientRect();
+            const aRect = avatarWrap.getBoundingClientRect();
+            flyX = ((tRect.left + tRect.width * 0.5) - (aRect.left + aRect.width * 0.5)) * ease;
+            flyY = ((tRect.top + tRect.height * 0.5) - (aRect.top + aRect.height * 0.5)) * ease - Math.sin(ease * Math.PI) * 42;
+            flyScale = lerp(1, Math.max(0.18, tRect.width / 160), ease);
+          }
+        }
+
+        if (gl && glProgram) {
+          gl.viewport(0, 0, glCanvas.width, glCanvas.height);
+          gl.useProgram(glProgram);
+          gl.bindVertexArray(glVao);
+          gl.uniform2f(glUniforms.res, glCanvas.width, glCanvas.height);
+          gl.uniform1f(glUniforms.time, timeMs);
+          gl.uniform1f(glUniforms.energy, energy + keypressPulse * 0.35);
+          gl.uniform1f(glUniforms.peakFlash, peakFlash);
+          gl.uniform1f(glUniforms.unlockRipple, unlockRipple);
+          gl.uniform1f(glUniforms.dissolve, dissolveProgress);
+          gl.uniform1f(glUniforms.errorTint, errorTint);
+          gl.uniform3fv(glUniforms.glowColor, currentPersona.glowColor);
+          gl.drawArrays(gl.TRIANGLES, 0, 6);
+        }
+
+        if (pCtx) {
+          pCtx.clearRect(0, 0, particleCanvas.width, particleCanvas.height);
+          const cx = particleCanvas.width * 0.5, cy = particleCanvas.height * 0.46;
+          const [r, g, b] = currentPersona.glowColor.map((c) => Math.round(c * 255));
+          for (const pt of particles) {
+            const a = pt.angle + timeMs * pt.speed * (1 + energy * 0.8);
+            const rad = pt.radius * (1 + peakFlash * 0.15) * (1 - dissolveProgress * 0.4);
+            pCtx.fillStyle = `rgba(${r}, ${g}, ${b}, ${pt.alpha * (1 - dissolveProgress)})`;
+            pCtx.beginPath();
+            pCtx.arc(cx + Math.cos(a) * rad * 1.35, cy + Math.sin(a) * rad * 0.85, pt.size * (1 + energy * 0.6), 0, Math.PI * 2);
+            pCtx.fill();
+          }
+        }
+
+        rainbowFrame.style.setProperty('--lb-angle', `${((timeMs * 0.045) % 360).toFixed(1)}deg`);
+        rainbowFrame.style.opacity = dissolveProgress > 0.01 ? String(0.9 * (1 - dissolveProgress)) : '';
+
+        let avatarState = isErr ? 'error' : opts.scene === 'unlock-input' ? 'needs-input' : timeMs < currentTiming.mainPeakMs ? 'idle' : timeMs < 1100 ? 'thinking' : (timeMs < 1470 && !isReady) ? 'working' : 'done';
+        avatarCtx.clearRect(0, 0, avatarCanvas.width, avatarCanvas.height);
+
+        if (opts.scene === 'D') {
+          const keys = Object.keys(PERSONAS);
+          const mergeP = clamp((timeMs - 1450) / 550, 0, 1);
+          keys.forEach((k, idx) => {
+            const onsetMs = currentTiming.onsetsMs[idx] || (200 + idx * 180);
+            if (timeMs < onsetMs - 20) return;
+            const entryP = clamp((timeMs - (onsetMs - 20)) / 240, 0, 1);
+            const ang = (idx / keys.length) * Math.PI * 2 - Math.PI * 0.5;
+            const orbitR = (1 - mergeP) * 62;
+            avatarCtx.save();
+            avatarCtx.translate(Math.cos(ang) * orbitR, Math.sin(ang) * orbitR * 0.7);
+            drawSidekickAvatar(avatarCtx, PERSONAS[k], avatarState, timeMs, energy + keypressPulse, k === currentPersona.id ? lerp(0.58, 1, mergeP) : 0.48, k === currentPersona.id ? entryP : entryP * (1 - mergeP));
+            avatarCtx.restore();
+          });
+        } else {
+          const matScale = currentTiming.id === 'untitled' ? clamp(0.84 + (timeMs / 3260) * 0.16, 0.84, 1) : clamp((timeMs - 60) / 280, 0, 1);
+          drawSidekickAvatar(avatarCtx, currentPersona, avatarState, timeMs, energy * 0.65 + peakFlash * 0.6 + keypressPulse, 0.72 + (1 - Math.pow(1 - matScale, 3)) * 0.28, clamp(timeMs / 180, 0, 1) * (1 - dissolveProgress * 0.85));
+        }
+
+        avatarWrap.style.transform = `translate3d(${(flyX + errorShakeX).toFixed(2)}px, ${flyY.toFixed(2)}px, 0) scale(${flyScale.toFixed(3)})`;
+        unlockPill.style.transform = `translate3d(${errorShakeX.toFixed(2)}px, 0, 0) scale(${(1 + keypressPulse * 0.035).toFixed(3)})`;
+
+        const wmP = clamp((timeMs - (currentTiming.id === 'untitled' ? 900 : 360)) / 420, 0, 1);
+        wordmark.style.opacity = String(wmP * (1 - dissolveProgress));
+        wordmark.style.letterSpacing = `${lerp(0.52, 0.34, wmP).toFixed(3)}em`;
+
+        renderQuoteStream(timeMs);
+        quoteContainer.style.opacity = String(1 - dissolveProgress);
+        statusEl.style.opacity = String(clamp((timeMs - 500) / 350, 0, 1) * (1 - dissolveProgress));
+        root.style.opacity = dissolveProgress >= 0.99 ? '0' : '1';
+
+        opts.onFrame?.({
+          currentTimeMs: timeMs,
+          durationMs: clipDur,
+          fps: Math.round(smoothedFps),
+          driftMs: Number(currentDriftMs.toFixed(2)),
+          nextCue: nextCue ? `${nextCue.do} @ ${nextCue.at}ms` : 'end'
+        });
+
+        if (!isLooping && opts.scene !== 'unlock-input' && rawTimeMs >= clipDur) {
+          finishAnimation();
+          return;
+        }
+        rafId = requestAnimationFrame(renderFrame);
+      }
+
+      unlockInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          api.unlockSuccess();
+        } else if (e.key.length === 1 || e.key === 'Backspace') {
+          api.keypress();
+        }
+      });
+
+      const api = {
+        async play(newScene) {
+          if (newScene) opts.scene = newScene;
+          completed = false;
+          root.style.opacity = '1';
+          stage.style.opacity = '1';
+          triggeredCues.clear();
+          transitionStartTimeMs = opts.scene === 'transition' ? 0 : -1;
+          isReady = opts.scene === 'transition' || opts.scene === 'full';
+          currentTiming = resolveTiming();
+          currentPersona = PERSONAS[opts.persona] || PERSONAS.nova;
+          unlockBox.dataset.visible = opts.scene === 'unlock-input' ? 'true' : 'false';
+          if (opts.scene === 'unlock-input') setTimeout(() => unlockInput.focus(), 20);
+          updateStatusText('sidekick');
+          perfStartTimeMs = performance.now();
+          lastFramePerfMs = perfStartTimeMs;
+          try { sourceNode?.stop(); } catch (_) {}
+          sourceNode = null;
+          await startWebAudio();
+          clearTimeout(watchdogTimer);
+          if (opts.scene !== 'coldstart-loop' && opts.scene !== 'unlock-input') {
+            watchdogTimer = setTimeout(() => { if (!completed) finishAnimation(); }, currentTiming.durationMs + 5000);
+          }
+          cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(renderFrame);
+        },
+        ready() {
+          isReady = true;
+          updateStatusText('ready');
+          const nowMs = readClockMs(performance.now());
+          if (opts.scene === 'coldstart-loop') opts.scene = 'transition';
+          if (transitionStartTimeMs < 0) transitionStartTimeMs = nowMs;
+        },
+        error() {
+          errorTriggerMs = performance.now();
+          statusEl.textContent = getLocalePack().unlockError;
+        },
+        keypress() { keypressTriggerMs = performance.now(); },
+        unlockSuccess() {
+          unlockSuccessTriggerMs = readClockMs(performance.now());
+          unlockBox.dataset.visible = 'false';
+          opts.scene = 'unlock-success';
+          isReady = true;
+        },
+        setPersona(id) { opts.persona = id; currentPersona = PERSONAS[id] || PERSONAS.nova; },
+        setRainbow(style) { opts.rainbow = style; rainbowFrame.dataset.rainbow = style; },
+        setLocale(loc) { opts.locale = loc; updateStatusText('sidekick'); },
+        setAudioOptions(ao) {
+          Object.assign(opts.audio, ao);
+          if (gainNode && audioCtx && typeof ao.volume === 'number') {
+            gainNode.gain.setValueAtTime(clamp(ao.volume, 0, 1), audioCtx.currentTime);
+          }
+        },
+        setReducedMotion(val) { opts.reducedMotion = Boolean(val); },
+        skip() {
+          if (gainNode && audioCtx && audioCtx.state === 'running') {
+            const now = audioCtx.currentTime;
+            gainNode.gain.setValueAtTime(gainNode.gain.value, now);
+            gainNode.gain.linearRampToValueAtTime(0.0001, now + 0.08);
+            setTimeout(() => { try { sourceNode?.stop(); } catch (_) {} }, 85);
+          }
+          root.style.opacity = '0';
+          finishAnimation();
+        }
+      };
+      return api;
+    }
+
+    // Wire up Demo UI Controls
+    const hostEl = document.getElementById('startup-host');
+    const targetDockEl = document.querySelector('[data-startup-sidekick-target]');
+    const dbgClip = document.getElementById('dbg-clip');
+    const dbgTime = document.getElementById('dbg-time');
+    const dbgCue = document.getElementById('dbg-cue');
+    const dbgFps = document.getElementById('dbg-fps');
+    const dbgDrift = document.getElementById('dbg-drift');
+    const dbgLastEvent = document.getElementById('dbg-last-event');
+    const dbgProgress = document.getElementById('dbg-progress');
+
+    let readySimTimer = null;
+    let activeScene = 'full';
+
+    const anim = createStartupAnimation(hostEl, {
+      audio: { url: 'audio/welcome-in.mp3', volume: 0.35, enabled: false },
+      scene: 'full',
+      persona: 'nova',
+      locale: 'de',
+      rainbow: 'classic',
+      target: () => targetDockEl,
+      onCue(cue) {
+        dbgLastEvent.textContent = `${cue.do} (${cue.at}ms)`;
+      },
+      onFrame(telemetry) {
+        dbgTime.textContent = `${Math.round(telemetry.currentTimeMs)} / ${telemetry.durationMs} ms`;
+        dbgCue.textContent = telemetry.nextCue;
+        dbgFps.textContent = `${telemetry.fps} fps`;
+        dbgDrift.textContent = `${telemetry.driftMs.toFixed(2)} ms`;
+        const pct = clamp((telemetry.currentTimeMs / telemetry.durationMs) * 100, 0, 100);
+        dbgProgress.style.width = `${pct.toFixed(1)}%`;
+      },
+      onComplete() {
+        hostEl.dataset.hidden = 'true';
+        targetDockEl.dataset.docked = 'true';
+        dbgLastEvent.textContent = 'completed -> browser unlocked';
+        setTimeout(() => { targetDockEl.dataset.docked = 'false'; }, 900);
+      }
+    });
+
+    function runScene(sceneName) {
+      activeScene = sceneName;
+      hostEl.dataset.hidden = 'false';
+      clearTimeout(readySimTimer);
+      const clipId = document.getElementById('ctrl-clip').value;
+      dbgClip.textContent = `${clipId} (${TIMING_DATA[clipId].theme})`;
+      anim.setAudioOptions({
+        url: `audio/${clipId}.mp3`,
+        enabled: document.getElementById('ctrl-sound').checked,
+        volume: parseFloat(document.getElementById('ctrl-volume').value)
+      });
+      anim.play(sceneName);
+
+      const readyMode = document.getElementById('ctrl-ready-Timing').value;
+      if (readyMode === 'early') {
+        readySimTimer = setTimeout(() => anim.ready(), 1600);
+      } else if (readyMode === 'late') {
+        readySimTimer = setTimeout(() => anim.ready(), 4800);
+      }
+    }
+
+    document.querySelectorAll('[data-scene-btn]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-scene-btn]').forEach((b) => { b.dataset.active = 'false'; });
+        btn.dataset.active = 'true';
+        const sc = btn.getAttribute('data-scene-btn');
+        if (sc === 'unlock-success') {
+          document.getElementById('ctrl-clip').value = 'unlock-gesture';
+        }
+        runScene(sc);
+      });
+    });
+
+    document.getElementById('ctrl-clip').addEventListener('change', () => runScene(activeScene));
+    document.getElementById('ctrl-sound').addEventListener('change', (e) => {
+      anim.setAudioOptions({ enabled: e.target.checked });
+      runScene(activeScene);
+    });
+    document.getElementById('ctrl-volume').addEventListener('input', (e) => {
+      anim.setAudioOptions({ volume: parseFloat(e.target.value) });
+    });
+    document.getElementById('ctrl-persona').addEventListener('change', (e) => {
+      anim.setPersona(e.target.value);
+    });
+    document.getElementById('ctrl-rainbow').addEventListener('change', (e) => {
+      anim.setRainbow(e.target.value);
+    });
+    document.getElementById('ctrl-locale').addEventListener('change', (e) => {
+      anim.setLocale(e.target.value);
+    });
+    document.getElementById('ctrl-reduced-motion').addEventListener('change', (e) => {
+      anim.setReducedMotion(e.target.checked);
+      runScene(activeScene);
+    });
+    document.getElementById('ctrl-debug').addEventListener('change', (e) => {
+      document.getElementById('debug-overlay').dataset.visible = e.target.checked ? 'true' : 'false';
+    });
+    document.getElementById('btn-trigger-ready').addEventListener('click', () => anim.ready());
+    document.getElementById('btn-trigger-key').addEventListener('click', () => anim.keypress());
+    document.getElementById('btn-trigger-error').addEventListener('click', () => anim.error());
+    document.getElementById('btn-skip').addEventListener('click', () => anim.skip());
+    document.getElementById('btn-replay-main').addEventListener('click', () => runScene(activeScene));
+
+    // Initial launch
+    runScene('full');
+  </script>
+</body>
+</html>

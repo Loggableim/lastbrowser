@@ -451,6 +451,7 @@ export type ChatComposerProps = {
   emptyQualifiedCatalog?: boolean;
   noActiveModels?: boolean;
   modelCatalogError?: boolean;
+  modelCatalogSlow?: boolean;
   modelCatalogLoading?: boolean;
   connectionNotice?: 'opencode-unreachable' | 'sign-in-expired' | null;
   antigravityCatalogUnavailable?: boolean;
@@ -507,6 +508,7 @@ export function ChatComposer({
   emptyQualifiedCatalog = false,
   noActiveModels = false,
   modelCatalogError=false,
+  modelCatalogSlow=false,
   modelCatalogLoading=false,
   connectionNotice=null,
   antigravityCatalogUnavailable=false,
@@ -662,7 +664,7 @@ export function ChatComposer({
               >
                 {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
                 {!selectedModelVisible && <option value="" disabled title={noActiveModels ? t('settings.panels.providers.noActiveModels') : undefined}>
-                  {modelCatalogLoading&&!connectionNotice ? t('settings.panels.providers.loadingModels') : noActiveModels ? (locale.startsWith('de') ? 'Keine Modelle aktiv' : 'No active models') : t('chat.noManualModels')}
+                  {modelCatalogLoading&&!connectionNotice ? t('settings.panels.providers.loadingModels') : modelCatalogSlow ? t('chat.model') : noActiveModels ? (locale.startsWith('de') ? 'Keine Modelle aktiv' : 'No active models') : t('chat.noManualModels')}
                 </option>}
                 {manualModelPickerOptions(modelOptions).map((group) => (
                   <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false}>
@@ -682,6 +684,10 @@ export function ChatComposer({
         {connectionNotice==='opencode-unreachable'&&onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
       {modelCatalogLoading&&!connectionNotice&&<div className="composer-model-notice" role="status">{t('settings.panels.providers.loadingModels')}</div>}
+      {modelCatalogSlow&&!connectionNotice&&<div className="composer-model-notice" role="status">
+        <span>{t('chat.modelCatalogSlow')}</span>
+        {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
+      </div>}
       {modelCatalogError&&!connectionNotice&&<div className="composer-model-notice" role="alert">
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}

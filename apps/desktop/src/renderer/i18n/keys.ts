@@ -338,6 +338,7 @@ export const desktopTranslationKeys = [
   'chat.interruptedPendingTurn',
   'chat.filterPlaceholder',
   'chat.modelCatalogUnavailable',
+  'chat.modelCatalogSlow',
   'chat.chooseModelManually',
   'chat.chooseModelShort',
   'chat.modelSearch',

@@ -106,6 +106,17 @@ describe('chat composer model guidance', () => {
     expect(failure).toContain(escapeHtml(translations.t('chat.retryModels')));
   });
 
+  it.each(testLocales)('shows the neutral slow-catalog hint with retry instead of "no models" for $locale', ({ locale, catalogLocale }) => {
+    const translations = createDesktopI18n(catalogLocale);
+    const markup = renderComposer(locale, { modelCatalogSlow: true, onRetryModelCatalog: () => undefined });
+
+    expect(markup).toContain('class="composer-model-notice" role="status"');
+    expect(markup).toContain(escapeHtml(translations.t('chat.modelCatalogSlow')));
+    expect(markup).toContain(escapeHtml(translations.t('chat.retryModels')));
+    // While the catalog is slow the selector must not claim that no models exist.
+    expect(markup).not.toContain(escapeHtml(translations.t('chat.noManualModels')));
+  });
+
   it.each(testLocales)('leaves the send button enabled during catalog loading or after a catalog error for $locale when the parent does not block', ({ locale }) => {
     // The parent decides sendBlocked from the chosen model; the composer must not add its own catalog block.
     const loading = renderComposer(locale, { modelCatalogLoading: true, text: 'Sent while the catalog loads' });

@@ -31,6 +31,26 @@ export function quickChatModelGateReason(options: {
   return available ? null : 'model-unavailable';
 }
 
+export type SlowCatalogHint = 'slow-catalog' | null;
+
+/**
+ * Neutral hint shown while the model catalog takes longer than the visible-wait
+ * deadline. It never blocks sending (the gate above already allows a chosen
+ * model) and returns null when the active scope already owns a stronger state:
+ * a connection notice, a loaded catalog, or a genuine catalog failure.
+ */
+export function slowCatalogHint(options: {
+  activeScopeKey: string;
+  loadedCatalogScopeKey: string | null;
+  failedCatalogScopeKey: string | null;
+  slowCatalogScopeKey: string | null;
+  connectionNotice?: 'opencode-unreachable' | 'sign-in-expired' | null;
+}): SlowCatalogHint {
+  if (options.connectionNotice) return null;
+  if (options.loadedCatalogScopeKey === options.activeScopeKey) return null;
+  if (options.failedCatalogScopeKey === options.activeScopeKey) return null;
+  return options.slowCatalogScopeKey === options.activeScopeKey ? 'slow-catalog' : null;
+}
 
 export const quickChatModelGateCopy: Record<DesktopLocaleId, Record<Exclude<QuickChatModelGateReason, null>, string>> = {
   en: { loading: 'Loading this Space’s model list. Sending is paused until the current catalog is ready.', 'catalog-unavailable': 'Could not verify models for this Space. Check provider settings and try again.', 'model-unavailable': 'The selected model is unavailable in this Space. Choose a model from the current catalog.', 'opencode-unreachable': 'OpenCode is not reachable. Sending is paused until the connection returns.', 'sign-in-expired': 'Sign-in expired. Sign in to OpenCode again, then retry.' },

@@ -19,6 +19,25 @@ export function classifyConnectionNotice(input: {
   return null;
 }
 
+export type CatalogNotice = 'slow-catalog' | ConnectionNotice | null;
+
+const TIMEOUT_TEXT = /timed out|timeout/i;
+
+/**
+ * Classifies a catalog request failure. A request timeout means the catalog is
+ * slow, not that the connection is down, so it maps to the neutral slow-catalog
+ * state. Every other error falls back to the real connection classification
+ * (which stays null for a timeout).
+ */
+export function classifyCatalogNotice(input: {
+  error?: unknown;
+  authStates?: readonly string[];
+}): CatalogNotice {
+  const text = input.error instanceof Error ? input.error.message : typeof input.error === 'string' ? input.error : '';
+  if (TIMEOUT_TEXT.test(text)) return 'slow-catalog';
+  return classifyConnectionNotice(input);
+}
+
 export const connectionNoticeCopy: Record<DesktopLocaleId, Record<ConnectionNotice, string>> = {
   en: {
     'opencode-unreachable': 'OpenCode is not reachable. Sending is paused until the connection returns.',

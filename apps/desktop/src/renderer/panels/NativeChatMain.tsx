@@ -1,6 +1,6 @@
 import { isRetiredProvider } from '../retired-providers.js';
 import { CATALOG_VISIBLE_WAIT_MS, MODEL_CATALOG_EVENT, publishModelCatalog, readModelCatalogGroups } from '../model-catalog-prefetch.js';
-import { classifyConnectionNotice, connectionNoticeCopy, type ConnectionNotice } from '../connection-notice.js';
+import { classifyCatalogNotice, classifyConnectionNotice, connectionNoticeCopy, type ConnectionNotice } from '../connection-notice.js';
 import { useStandardChatCompanion } from '../components/CompanionPicker.js';
 import { conversationCompanionAppearance } from '../personality-avatar.js';
 /**
@@ -214,11 +214,12 @@ export function NativeChatMain({
 
   // Discovery runs in the captured profile worker. No global model default is written.
   type CatalogGroup = Omit<ModelPickerOptionGroup,'models'> & {models:Array<ModelPickerOptionGroup['models'][number]>};
-  const [catalogSnapshot, setCatalogSnapshot] = useState<{ viewKey: string; phase: 'loading' | 'ready' | 'error'; groups: CatalogGroup[] }>({ viewKey: modelViewKey, phase: 'loading', groups: [] });
+  const [catalogSnapshot, setCatalogSnapshot] = useState<{ viewKey: string; phase: 'loading' | 'slow' | 'ready' | 'error'; groups: CatalogGroup[] }>({ viewKey: modelViewKey, phase: 'loading', groups: [] });
   const modelCatalog = catalogSnapshot.viewKey === modelViewKey ? catalogSnapshot.groups : [];
   const modelCatalogLoaded = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'ready';
+  const modelCatalogSlow = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'slow';
   const modelCatalogError = catalogSnapshot.viewKey === modelViewKey && catalogSnapshot.phase === 'error';
-  const modelCatalogLoading = ready && !modelCatalogLoaded && !modelCatalogError;
+  const modelCatalogLoading = ready && !modelCatalogLoaded && !modelCatalogError && !modelCatalogSlow;
   // Send gate only: a model chosen earlier (Space selection or the saved Space model) may send while the catalog is unverified.
   const modelChosen = hasChosenChatModel(model) || (!spaceModelSelection && hasChosenChatModel(loadSpaceModel(activeSpacePath || '', window.localStorage)));
   const [catalogStatus, setCatalogStatus] = useState<Record<string, string>>({});
@@ -251,8 +252,9 @@ export function NativeChatMain({
       loadingDeadline = window.setTimeout(() => {
         if (!alive || catalogSettled) return;
         catalogSettled = true;
-        // Slow discovery is not a connection failure: the error phase only offers the retry action.
-        setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] });
+        // Slow discovery is not a connection failure: show the neutral slow-catalog
+        // hint (with retry) instead of any unreachable text and keep sending open.
+        setCatalogSnapshot({ viewKey: modelViewKey, phase: 'slow', groups: [] });
       }, CATALOG_VISIBLE_WAIT_MS);
     }
     setScopedModel(null); setCatalogDefaultModel('');
@@ -341,10 +343,13 @@ export function NativeChatMain({
         settleCatalog();
         if (alive) {
           setCatalogDefaultModel('');
-          const notice = classifyConnectionNotice({ error });
-          setConnectionNotice(notice);
+          const notice = classifyCatalogNotice({ error });
+          setConnectionNotice(notice === 'slow-catalog' ? null : notice);
           if (cachedGroups.length) setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: cachedGroups });
-          else {
+          else if (notice === 'slow-catalog') {
+            setCatalogSnapshot({ viewKey: modelViewKey, phase: 'slow', groups: [] });
+            setCatalogStatus({ antigravity: 'unknown' });
+          } else {
             setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] });
             setCatalogStatus({ antigravity: 'unknown' });
           }
@@ -701,7 +706,7 @@ export function NativeChatMain({
     if (writerProtected) { setStatusMessage(t('spaceAssistant.writerProtected')); return; }
     if (pendingChoice) { setStatusMessage(`${t('chat.model')}: ${pendingChoice.model} · ${t('common.loading')}`); return; }
     if (connectionNotice) { setStatusMessage(connectionNoticeCopy[locale][connectionNotice]); return; }
-    if (modelChoiceMissing) { setStatusMessage(modelCatalogError ? t('chat.modelCatalogUnavailable') : t('settings.panels.providers.loadingModels')); return; }
+    if (modelChoiceMissing) { setStatusMessage(modelCatalogError ? t('chat.modelCatalogUnavailable') : modelCatalogSlow ? t('chat.modelCatalogSlow') : t('settings.panels.providers.loadingModels')); return; }
     if(automaticBlocked||policyPending===policyOperationKey){setStatusMessage(modelPolicyReason(locale,currentPolicy?.response.executionAvailability.reasonCode));return;}
     const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
     const sendEffort = modelReasoningEfforts.includes(requestedEffort) ? requestedEffort : '';
@@ -1050,6 +1055,7 @@ export function NativeChatMain({
           && group.models.some(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)))}
         requestedLunaInCatalog={modelCatalogLoaded ? requestedLunaInCatalog : undefined}
         modelCatalogError={modelCatalogError}
+        modelCatalogSlow={modelCatalogSlow}
         modelCatalogLoading={modelCatalogLoading}
         connectionNotice={connectionNotice}
         antigravityCatalogUnavailable={modelCatalogLoaded && isAntigravityCatalogUnavailable}

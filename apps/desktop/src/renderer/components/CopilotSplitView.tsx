@@ -53,8 +53,8 @@ import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { isModelCatalogCacheCurrent, isModelCatalogResponseCurrent } from '../model-picker-options.js';
 import { CATALOG_VISIBLE_WAIT_MS, publishQuickchatCatalog, readQuickchatCatalog } from '../model-catalog-prefetch.js';
-import { classifyConnectionNotice, type ConnectionNotice } from '../connection-notice.js';
-import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-model-gate.js';
+import { classifyCatalogNotice, classifyConnectionNotice, type ConnectionNotice } from '../connection-notice.js';
+import { quickChatModelGateCopy, quickChatModelGateReason, slowCatalogHint } from '../quick-chat-model-gate.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 import { ChatDraftSubmissionGate } from '../chat-draft-submission.js';
@@ -227,10 +227,13 @@ export function CopilotSplitView({
   const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
   const [modelCapabilitiesLoaded, setModelCapabilitiesLoaded] = useState(false);
   const [modelCatalogFailureScopeKey, setModelCatalogFailureScopeKey] = useState<string | null>(null);
+  const [modelCatalogSlowScopeKey, setModelCatalogSlowScopeKey] = useState<string | null>(null);
+  const [modelCatalogRetry, setModelCatalogRetry] = useState(0);
   const [connectionNotice, setConnectionNotice] = useState<ConnectionNotice | null>(null);
   const modelCatalogLoadedScopeKeyRef = useRef<string | null>(null);
   const modelCatalogCacheScopeKeyRef = useRef<string | null>(null);
   const modelCatalogFailureScopeKeyRef = useRef<string | null>(null);
+  const modelCatalogSlowScopeKeyRef = useRef<string | null>(null);
   const [teamworkEnabled, setTeamworkEnabled] = useState(false);
   const [smartTrackEnabled, setSmartTrackEnabled] = useState(true);
   const orchestrationScope = useMemo(() => ({ browserProfileId, workspacePath,
@@ -287,6 +290,8 @@ export function CopilotSplitView({
       modelCatalogLoadedScopeKeyRef.current = orchestrationScopeKey;
       modelCatalogFailureScopeKeyRef.current = null;
       setModelCatalogFailureScopeKey(null);
+      modelCatalogSlowScopeKeyRef.current = null;
+      setModelCatalogSlowScopeKey(null);
       setConnectionNotice(null);
     } else if (!hasCachedCatalogForScope) {
       setModelList(AVAILABLE_MODELS);
@@ -295,12 +300,16 @@ export function CopilotSplitView({
       modelCatalogLoadedScopeKeyRef.current = null;
       modelCatalogFailureScopeKeyRef.current = null;
       setModelCatalogFailureScopeKey(null);
+      modelCatalogSlowScopeKeyRef.current = null;
+      setModelCatalogSlowScopeKey(null);
     }
-    // Slow discovery is not a connection failure; it only marks the catalog as unverified.
+    // Slow discovery is not a connection failure: mark the neutral slow-catalog
+    // hint (with retry) instead of a catalog error, and keep sending open.
     const loadingDeadline = window.setTimeout(() => {
-      if (!alive || modelCatalogLoadedScopeKeyRef.current === orchestrationScopeKey) return;
-      modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
-      setModelCatalogFailureScopeKey(orchestrationScopeKey);
+      if (!alive || modelCatalogLoadedScopeKeyRef.current === orchestrationScopeKey
+        || modelCatalogFailureScopeKeyRef.current === orchestrationScopeKey) return;
+      modelCatalogSlowScopeKeyRef.current = orchestrationScopeKey;
+      setModelCatalogSlowScopeKey(orchestrationScopeKey);
     }, CATALOG_VISIBLE_WAIT_MS);
     async function loadLiveModels() {
       try {
@@ -310,6 +319,8 @@ export function CopilotSplitView({
           if (!hasCachedCatalogForScope) setModelList(AVAILABLE_MODELS);
           modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
           setModelCatalogFailureScopeKey(orchestrationScopeKey);
+          modelCatalogSlowScopeKeyRef.current = null;
+          setModelCatalogSlowScopeKey(null);
           return;
         }
         const res = (preparedCurrent ? preparedModelSelection : await window.lastbrowser.sidekick.requestWebui({
@@ -325,6 +336,8 @@ export function CopilotSplitView({
           }
           modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
           setModelCatalogFailureScopeKey(orchestrationScopeKey);
+          modelCatalogSlowScopeKeyRef.current = null;
+          setModelCatalogSlowScopeKey(null);
           return;
         }
 
@@ -413,19 +426,32 @@ export function CopilotSplitView({
         modelCatalogLoadedScopeKeyRef.current = orchestrationScopeKey;
         modelCatalogFailureScopeKeyRef.current = null;
         setModelCatalogFailureScopeKey(null);
+        modelCatalogSlowScopeKeyRef.current = null;
+        setModelCatalogSlowScopeKey(null);
       } catch (error) {
         // On discovery failure, retain only built-in orchestrators; cached model IDs
         // must not imply that a provider is configured or currently available.
         if (alive && generation === orchestrationScopeGenerationRef.current
           && isModelCatalogResponseCurrent(orchestrationScopeKey, orchestrationScopeKeyRef.current)) {
-          const notice = classifyConnectionNotice({ error });
-          if (!hasCachedCatalogForScope && !persistedCatalog.length) {
-            setModelList(AVAILABLE_MODELS);
-            setModelCapabilitiesLoaded(false);
-            setConnectionNotice(notice);
+          const notice = classifyCatalogNotice({ error });
+          if (notice === 'slow-catalog') {
+            // A request timeout is a slow catalog, not a catalog failure: mark the
+            // neutral hint and never let a stale failure key shadow it.
+            modelCatalogSlowScopeKeyRef.current = orchestrationScopeKey;
+            setModelCatalogSlowScopeKey(orchestrationScopeKey);
+            modelCatalogFailureScopeKeyRef.current = null;
+            setModelCatalogFailureScopeKey(null);
+          } else {
+            if (!hasCachedCatalogForScope && !persistedCatalog.length) {
+              setModelList(AVAILABLE_MODELS);
+              setModelCapabilitiesLoaded(false);
+              setConnectionNotice(notice);
+            }
+            modelCatalogFailureScopeKeyRef.current = persistedCatalog.length ? null : orchestrationScopeKey;
+            setModelCatalogFailureScopeKey(persistedCatalog.length ? null : orchestrationScopeKey);
+            modelCatalogSlowScopeKeyRef.current = null;
+            setModelCatalogSlowScopeKey(null);
           }
-          modelCatalogFailureScopeKeyRef.current = persistedCatalog.length ? null : orchestrationScopeKey;
-          setModelCatalogFailureScopeKey(persistedCatalog.length ? null : orchestrationScopeKey);
         }
       }
     }
@@ -434,7 +460,7 @@ export function CopilotSplitView({
       alive = false;
       window.clearTimeout(loadingDeadline);
     };
-  }, [orchestrationScope, orchestrationScopeKey, modelPickerOpen, preparedModelSelection, preparedModelSelectionScopeKey, browserProfileId, workspacePath, backendProfileName]);
+  }, [orchestrationScope, orchestrationScopeKey, modelPickerOpen, modelCatalogRetry, preparedModelSelection, preparedModelSelectionScopeKey, browserProfileId, workspacePath, backendProfileName]);
 
   const visibleModelList = useMemo(() => modelList.filter((model) => {
     if (!model.providerId || !isDirectQuickchatProvider(model.providerId)) return false;
@@ -466,6 +492,9 @@ export function CopilotSplitView({
   const modelGateReason = favoriteInvalid ? 'model-unavailable' : quickChatModelGateReason({ selectedModel: automaticCandidate?.id || chosenModelId, selectedProvider: automaticCandidate?.providerId || activeModelProvider,
     activeScopeKey: orchestrationScopeKey, loadedCatalogScopeKey: modelCatalogLoadedScopeKeyRef.current,
     failedCatalogScopeKey: modelCatalogFailureScopeKey, availableModels: visibleModelList, connectionNotice });
+  const slowCatalogVisible = slowCatalogHint({ activeScopeKey: orchestrationScopeKey,
+    loadedCatalogScopeKey: modelCatalogLoadedScopeKeyRef.current, failedCatalogScopeKey: modelCatalogFailureScopeKey,
+    slowCatalogScopeKey: modelCatalogSlowScopeKey, connectionNotice }) === 'slow-catalog';
   const reasoningPreferenceKey = `quickchat:${JSON.stringify([browserProfileId, workspacePath || null, backendProfileName || null, activeModelProvider, activeModelId])}`;
   const [reasoningState, setReasoningState] = useState(() => ({ key: reasoningPreferenceKey, effort: loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage) }));
   const reasoningEffort = reasoningState.key === reasoningPreferenceKey ? reasoningState.effort : loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage);
@@ -1232,7 +1261,11 @@ export function CopilotSplitView({
           <button type="button" onClick={handleAutomaticModel}>{locale === 'de' ? 'Automatisch wählen' : 'Choose Automatic'}</button>
           {favoriteError && <span>{favoriteError}</span>}
         </div>}
-        {modelGateReason && !favoriteInvalid && <div className="copilot-model-gate-notice" role={modelGateReason === 'loading' ? 'status' : 'alert'}>
+        {slowCatalogVisible && <div className="copilot-model-gate-notice" role="status">
+          {t('chat.modelCatalogSlow')}
+          <button type="button" onClick={() => setModelCatalogRetry((value) => value + 1)}>{t('chat.retryModels')}</button>
+        </div>}
+        {modelGateReason && !favoriteInvalid && !slowCatalogVisible && <div className="copilot-model-gate-notice" role={modelGateReason === 'loading' ? 'status' : 'alert'}>
           {quickChatModelGateCopy[locale][modelGateReason]}
         </div>}
         <div className="copilot-model-row" ref={footerModelRef} style={{ position: 'relative' }}>

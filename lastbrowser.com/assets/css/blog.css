@@ -354,6 +354,7 @@
 }
 
 @media (max-width: 760px) {
-  .blog-page .blog-section > h2 { padding-inline: 4px; font-size: 1.25rem; }
+  .blog-page .blog-section { padding-inline: 14px; }
+  .blog-page .blog-section > h2 { font-size: 1.25rem; }
   .blog-page .blog-filter { gap: 8px; }
 }

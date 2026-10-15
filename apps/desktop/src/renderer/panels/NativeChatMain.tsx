@@ -311,7 +311,7 @@ export function NativeChatMain({
           ? rawParsed.filter(group => !isRetiredProvider(group.providerId))
           : rawParsed;
         const groups = discovered.length ? discovered : cachedGroups;
-        const authNotice = classifyConnectionNotice({ authStates: (data.providers || []).map(provider => provider.auth_state) });
+        const authNotice = classifyConnectionNotice({ authStates: (data.providers || []).map(provider => String(provider.auth_state || '')) });
         if (groups.length) publishModelCatalog(modelViewKey, groups);
         setConnectionNotice(authNotice);
         setCatalogSnapshot({ viewKey: modelViewKey, phase: groups.length || !authNotice ? 'ready' : 'error', groups });

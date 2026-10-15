@@ -112,6 +112,7 @@ import {
   type ClosedTab
 } from './tabs.js';
 import { resolveShellBack, resolveShellForward } from './shell-history.js';
+import { resolveWebviewSrc, type WebviewSrcLock } from './webview-src.js';
 import { brandAssets, sidebarIconForPanel } from './brand.js';
 import { categoryLabels, modelNote, providerPresentation, tierLabels } from './provider-presentation.js';
 import {
@@ -1037,6 +1038,9 @@ function AppContent(): JSX.Element {
   const [visitedSites, setVisitedSites] = useState<BrowserVisit[]>(() => loadVisitedSites(window.localStorage));
   const [historyHydratedProfile, setHistoryHydratedProfile] = useState<string | null>(null);
   const historyWriteRevisionRef = useRef(0);
+  const shellNavigationRef = useRef(new Map<string, { token: number; url: string }>());
+  const guestNavigationRef = useRef(new Map<string, string>());
+  const webviewSrcLocksRef = useRef(new Map<string, WebviewSrcLock>());
   const historyHydrationGeneration = useRef(0);
   const historyActiveProfileRef = useRef(activeProfileId);
   historyActiveProfileRef.current = activeProfileId;
@@ -2745,6 +2749,9 @@ function AppContent(): JSX.Element {
     const tabId = options?.tabId ?? activeTab.id;
     const normalized = normalizeNavigationInput(url, searchEngineId);
     if (!options?.keepShellForward) shellForwardUrlRef.current.delete(tabId);
+    const prior = shellNavigationRef.current.get(tabId);
+    shellNavigationRef.current.set(tabId, { token: (prior?.token ?? 0) + 1, url: normalized });
+    guestNavigationRef.current.delete(tabId);
     setTabs((current) => updateTabUrl(current, tabId, normalized));
     setBrowserMode(isAiBrowserHomeUrl(normalized) ? 'home' : 'web');
     setBrowserLoadError('');
@@ -3224,6 +3231,7 @@ function AppContent(): JSX.Element {
   }
 
   function updateUrl(tabId: string, url: string): void {
+    guestNavigationRef.current.set(tabId, url);
     setTabs((current) => updateTabUrl(current, tabId, url));
     if (activeTabIdRef.current === tabId) {
       setAddressValue(isAiBrowserHomeUrl(url) ? '' : url);
@@ -6103,6 +6111,9 @@ function AppContent(): JSX.Element {
                   lastChatTurnUsage={lastChatTurnUsage}
                   nativeModelResolutionNotice={nativeModelResolutionNotice}
                   inactiveModelFallbackNotice={inactiveModelFallbackNotice}
+                  shellNavigationRef={shellNavigationRef}
+                  guestNavigationRef={guestNavigationRef}
+                  webviewSrcLocksRef={webviewSrcLocksRef}
                   webviewStartupReady={windowStartupReady}
                   onTransferredWebviewReady={handleTransferredWebviewReady}
                   pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
@@ -6429,6 +6440,9 @@ function AppContent(): JSX.Element {
               lastChatTurnUsage={lastChatTurnUsage}
               nativeModelResolutionNotice={nativeModelResolutionNotice}
               inactiveModelFallbackNotice={inactiveModelFallbackNotice}
+              shellNavigationRef={shellNavigationRef}
+              guestNavigationRef={guestNavigationRef}
+              webviewSrcLocksRef={webviewSrcLocksRef}
               webviewStartupReady={windowStartupReady}
               onTransferredWebviewReady={handleTransferredWebviewReady}
               pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
@@ -6739,7 +6753,10 @@ function BrowserMain({
   desktopSettings = null,
   lastChatTurnUsage = null,
   nativeModelResolutionNotice = null,
-  inactiveModelFallbackNotice = null
+  inactiveModelFallbackNotice = null,
+  shellNavigationRef,
+  guestNavigationRef,
+  webviewSrcLocksRef
 }: {
   activePanel: LastbrowserPanelId;
   activeSession: DesktopSessionDetail | null;
@@ -6832,6 +6849,9 @@ function BrowserMain({
   lastChatTurnUsage?: { sessionId: string; usage: NativeChatTurnUsage } | null;
   nativeModelResolutionNotice?: { sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null; resolution: NativeModelResolution } | null;
   inactiveModelFallbackNotice?: { sessionId: string; profileId: string; spacePath: string; backendProfileName: string | null } | null;
+  shellNavigationRef: React.MutableRefObject<Map<string, { token: number; url: string }>>;
+  guestNavigationRef: React.MutableRefObject<Map<string, string>>;
+  webviewSrcLocksRef: React.MutableRefObject<Map<string, WebviewSrcLock>>;
 }): JSX.Element {
   const { t } = useDesktopI18n();
   const subscriptionFallbackNotice = nativeModelResolutionNotice && nativeModelResolutionNotice.sessionId === activeSessionId
@@ -7907,7 +7927,26 @@ function BrowserMain({
                       knownSpacePaths
                     )}:${tab.id}:${webviewMountKey}`}
                     ref={getWebviewRefCallback(tab.id)}
-                    src={pendingTransferredTabId === tab.id || transferredTabBootstrapIds.current.has(tab.id) ? 'about:blank' : tab.url}
+                    src={(() => {
+                      const elementKey = `${computeSpacePartition(
+                        keepaliveEntry?.profileId ?? activeProfile.id,
+                        keepaliveEntry?.spacePath ?? activeSpacePath,
+                        tab.incognito,
+                        knownSpacePaths
+                      )}:${tab.id}:${webviewMountKey}`;
+                      if (pendingTransferredTabId === tab.id || transferredTabBootstrapIds.current.has(tab.id)) return 'about:blank';
+                      const shell = shellNavigationRef.current.get(tab.id) ?? null;
+                      const resolved = resolveWebviewSrc({
+                        tabUrl: tab.url,
+                        elementKey,
+                        shellToken: shell?.token ?? 0,
+                        shellUrl: shell?.url ?? null,
+                        guestUrl: guestNavigationRef.current.get(tab.id) ?? null,
+                        previous: webviewSrcLocksRef.current.get(tab.id) ?? null
+                      });
+                      webviewSrcLocksRef.current.set(tab.id, resolved.lock);
+                      return resolved.src;
+                    })()}
                     data-tab-id={tab.id}
                     className="browser-view"
                     style={isAudioKeepalive

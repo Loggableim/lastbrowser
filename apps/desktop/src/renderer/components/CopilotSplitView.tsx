@@ -699,10 +699,10 @@ export function CopilotSplitView({
           {visibleModelList.some((m) => m.category === 'cloud') && <div className="model-group-title">{locale === 'de' ? 'Cloud & entfernte Endpunkte' : 'Cloud & remote endpoints'}</div>}
           {visibleModelList.filter((m) => m.category === 'cloud').map(renderModelItem)}
 
-          {/* 5. Weitere Engines */}
+          {/* 5. Other provider engines */}
           {visibleModelList.some((m) => m.category === 'other') && (
             <>
-              <div className="model-group-title">Weitere Engines</div>
+              <div className="model-group-title">{t('copilot.modelGroupOtherEngines')}</div>
               {visibleModelList.filter((m) => m.category === 'other').map(renderModelItem)}
             </>
           )}

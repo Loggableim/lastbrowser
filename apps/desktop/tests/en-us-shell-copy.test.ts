@@ -16,6 +16,7 @@ describe('en_US shell copy', () => {
       'commands.nav.settings',
       'commands.tabs.new',
       'copilot.modelMenuTitle',
+      'copilot.modelGroupOtherEngines',
       'copilot.quotaAvailable',
       'mail.noAccount'
     ] as const;
@@ -27,6 +28,8 @@ describe('en_US shell copy', () => {
     expect(de.t('commands.nav.settings')).toBe('Einstellungen öffnen');
     expect(en.t('commands.tabs.new')).toBe('New tab');
     expect(en.t('copilot.modelMenuTitle')).toBe('Select AI model');
+    expect(en.t('copilot.modelGroupOtherEngines')).toBe('Other engines');
+    expect(de.t('copilot.modelGroupOtherEngines')).toBe('Weitere Engines');
     expect(en.t('copilot.quotaAvailable', { percent: 40, account: '' })).toBe('40% quota available');
     expect(de.t('copilot.quotaAvailable', { percent: 40, account: ' (work)' })).toBe('40% Kontingent verfügbar (work)');
     expect(en.t('mail.settings')).toBe('Mail settings');
@@ -44,7 +47,9 @@ describe('en_US shell copy', () => {
     expect(renderer('components/CommandPalette.tsx')).toContain("t('commands.nav.settings')");
     expect(renderer('components/CommandPalette.tsx')).not.toContain("title: 'Einstellungen öffnen'");
     expect(renderer('components/CopilotSplitView.tsx')).toContain("t('copilot.modelMenuTitle')");
+    expect(renderer('components/CopilotSplitView.tsx')).toContain("t('copilot.modelGroupOtherEngines')");
     expect(renderer('components/CopilotSplitView.tsx')).not.toContain('KI-Modell auswählen');
+    expect(renderer('components/CopilotSplitView.tsx')).not.toContain('Weitere Engines');
     expect(renderer('panels/NativeMailMain.tsx')).toContain("t('mail.settings')");
     expect(renderer('panels/NativeMailMain.tsx')).not.toContain('Mail-Einstellungen');
   });

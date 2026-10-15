@@ -23,6 +23,13 @@ const actionBarProps = {
 
 describe('tab mute controls', () => {
   it('keeps the action bar, shortcut, and selected tab on one mute handler', () => {
+    const store = new Map<string, string>([['lastbrowser.locale', 'en']]);
+    vi.stubGlobal('localStorage', {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => { store.set(key, value); },
+      removeItem: (key: string) => { store.delete(key); },
+      clear: () => { store.clear(); }
+    });
     const toggleTabMute = vi.fn();
     const firstTab = createTabMuteControl({ id: 'tab-a', isMuted: false }, toggleTabMute);
     const markup = renderToStaticMarkup(
@@ -33,10 +40,10 @@ describe('tab mute controls', () => {
       }))
     );
 
-    expect(markup).toContain('Tab stummschalten (Ctrl+M)');
+    expect(markup).toContain('Mute tab (Ctrl+M)');
     expect(markup).not.toContain('mute-trigger active');
     expect(markup).toContain('aria-pressed="false"');
-    expect(markup).toContain('aria-label="Tab stummschalten"');
+    expect(markup).toContain('aria-label="Mute tab"');
     firstTab.onToggleMute();
     expect(toggleTabMute).toHaveBeenCalledExactlyOnceWith('tab-a');
 
@@ -54,7 +61,7 @@ describe('tab mute controls', () => {
         onToggleMute: secondTab.onToggleMute
       }))
     );
-    expect(mutedMarkup).toContain('Tab entstummen (Ctrl+M)');
+    expect(mutedMarkup).toContain('Unmute tab (Ctrl+M)');
     expect(mutedMarkup).toContain('aria-pressed="true"');
     expect(mutedMarkup).toContain('mute-trigger active');
     const view = { setAudioMuted: vi.fn() };

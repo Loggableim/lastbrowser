@@ -655,13 +655,13 @@ export function FirstRunSetupPane({
         if (merged.some(item => !saved.some(stored => stored.url === item.url))) throw new Error('Bookmark storage unavailable.');
         window.dispatchEvent(new Event('lastbrowser:bookmarks-imported'));
         setImportedBookmarksCount(imported.length);
-        setImportSuccessMsg(`${imported.length} Lesezeichen erfolgreich importiert!`);
+        setImportSuccessMsg(importCopy.fileImported(imported.length));
       } else {
-        setImportSuccessMsg('Keine gültigen Lesezeichen in der Datei gefunden.');
+        setImportSuccessMsg(importCopy.fileEmpty);
       }
     } catch (err) {
       setImportError(true);
-      setImportSuccessMsg('Fehler beim Einlesen der Lesezeichendatei.');
+      setImportSuccessMsg(importCopy.fileReadError);
     }
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
@@ -815,7 +815,7 @@ export function FirstRunSetupPane({
         <header className="first-run-topbar">
           <div className="first-run-topbar-brand">
             <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
-            <span className="first-run-badge">{de ? 'Willkommen' : 'Welcome'}</span>
+            <span className="first-run-badge">{t('firstRun.welcomeBadge')}</span>
           </div>
           <span className="first-run-page-counter" aria-live="polite">{de ? 'Schritt' : 'Step'} {currentIndex + 1} / {pages.length}</span>
         </header>
@@ -930,7 +930,7 @@ export function FirstRunSetupPane({
 
             <p>{importCopy.detected} <strong>{browserDiscovery?.defaultBrowser || importCopy.unknown}</strong></p>
             {browserDiscoveryError && <p role="alert">{browserDiscoveryError}</p>}
-            <div className="setup-browser-grid" role="radiogroup" aria-label="Quell-Browser auswählen">
+            <div className="setup-browser-grid" role="radiogroup" aria-label={importCopy.sourceBrowser}>
               {BROWSER_CHOICES.map((b) => {
                 const isSelected = selectedBrowser === b.id;
                 const discovered = browserDiscovery?.browsers?.find(browser => browser.id === b.id);

@@ -42,7 +42,7 @@ import {
 } from '../workflow-templates.js';
 import type { ScopedModelSelection } from '../independent-contracts.js';
 import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
-import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
+import { CompanionSwitch } from './CompanionPicker.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
 import { isModelActive, useActiveModelRevision } from '../active-model-selection.js';
@@ -80,7 +80,7 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     label: '🤝 Teamwork (Multi-Agent)',
     provider: 'Orchestrator',
     category: 'teamwork',
-    badge: 'Multi-Agent • Konsens & Debatte',
+    badge: 'Multi-agent • Consensus and debate',
     badgeClass: 'teamwork',
     isDefault: false
   },
@@ -90,7 +90,7 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     label: '🎯 Smart Track (Low)',
     provider: 'Orchestrator',
     category: 'teamwork',
-    badge: 'Max. Ersparnis • Schnelle Modelle',
+    badge: 'Maximum savings • Fast models',
     badgeClass: 'teamwork',
     isDefault: false
   },
@@ -99,7 +99,7 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     label: '🎯 Smart Track (Medium)',
     provider: 'Orchestrator',
     category: 'teamwork',
-    badge: 'Ausgewogen • Optimiert für Alltag & Code',
+    badge: 'Balanced • Tuned for everyday use and code',
     badgeClass: 'teamwork',
     isDefault: false
   },
@@ -108,7 +108,7 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
     label: '🎯 Smart Track (High)',
     provider: 'Orchestrator',
     category: 'teamwork',
-    badge: 'Maximale Tiefe • Reasoning & Vorplanung',
+    badge: 'Maximum depth • Reasoning and planning',
     badgeClass: 'teamwork',
     isDefault: false
   }
@@ -178,18 +178,6 @@ export function CopilotSplitView({
   const { t, locale } = useDesktopI18n();
   const companion = useCompanionAppearance();
   const companionName = companion.botName;
-  const [companionPickerOpen, setCompanionPickerOpen] = useState(false);
-  const [companionDraft, setCompanionDraft] = useState<CompanionSelection>({ personality: 'nova', botName: 'Nova' });
-  const companionPickerRef = useRef<HTMLDivElement>(null);
-  const companionTriggerRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setCompanionPickerOpen(false); }, [browserProfileId, workspacePath, backendProfileName, isOpen]);
-  useEffect(() => {
-    if (!companionPickerOpen) return;
-    const outside = (event: PointerEvent) => { if (!companionPickerRef.current?.contains(event.target as Node)) setCompanionPickerOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } };
-    window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape);
-    return () => { window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
-  }, [companionPickerOpen]);
   const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
@@ -368,7 +356,7 @@ export function CopilotSplitView({
             const frac = typeof m.remaining_fraction === 'number' ? m.remaining_fraction : undefined;
             const account = m.account || gAccount;
             const badge = pct !== undefined
-              ? `${pct}% Kontingent verfügbar`
+              ? t('copilot.quotaAvailable', { percent: pct, account: '' })
               : (category === 'gemini' ? 'Live Quota Discovery' : providerLabel);
 
             if (dynamicModels.some(model => model.id === cleanId && model.providerId === identity.provider)) continue;
@@ -580,6 +568,17 @@ export function CopilotSplitView({
     } catch { setFavoriteError(locale === 'de' ? 'Automatische Auswahl konnte nicht gespeichert werden.' : 'Could not save automatic selection.'); }
   }
 
+  function modelBadgeText(m: AvailableModelItem): string {
+    if (m.remainingPercent !== undefined) {
+      return t('copilot.quotaAvailable', { percent: m.remainingPercent, account: m.account ? ` (${m.account})` : '' });
+    }
+    if (m.id === 'teamwork') return t('copilot.badge.teamwork');
+    if (m.id === 'smart-track-low') return t('copilot.badge.smartTrackLow');
+    if (m.id === 'smart-track-medium') return t('copilot.badge.smartTrackMedium');
+    if (m.id === 'smart-track-high') return t('copilot.badge.smartTrackHigh');
+    return m.badge;
+  }
+
   function renderModelItem(m: AvailableModelItem) {
     const isSelected = Boolean(favorite && isProviderModelSelected(m, favorite.model, favorite.provider));
 
@@ -606,9 +605,7 @@ export function CopilotSplitView({
               {quotaBadge}
             </div>
             <span className="model-option-desc">
-              {m.remainingPercent !== undefined
-                ? `${m.remainingPercent}% Kontingent verfügbar${m.account ? ` (${m.account})` : ''}`
-                : m.badge}
+              {modelBadgeText(m)}
             </span>
           </div>
         </div>
@@ -618,7 +615,7 @@ export function CopilotSplitView({
               onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); setModelPickerOpen(false); onOpenSettings('teamwork'); } }}
               role="button"
               tabIndex={0}
-              title="Orchestrierungs-Einstellungen öffnen"
+              title={t('copilot.openOrchestrationSettings')}
               className="model-option-settings-btn"
               style={{
                 padding: '3px 6px',
@@ -649,7 +646,7 @@ export function CopilotSplitView({
     return (
       <div className={`copilot-model-dropdown ${placement}-dropdown`} role="menu">
         <div className="model-dropdown-header">
-          <span className="model-dropdown-title">KI-Modell auswählen</span>
+          <span className="model-dropdown-title">{t('copilot.modelMenuTitle')}</span>
         </div>
 
         <div className="model-dropdown-list">
@@ -788,36 +785,16 @@ export function CopilotSplitView({
     <aside className="copilot-split-panel" aria-label={`${companionName} AI Workspace`}>
       {/* Top Header */}
       <div className="copilot-header">
-        <div ref={companionPickerRef} style={{ position: 'relative' }}>
-        <button type="button" className="copilot-header-brand" ref={companionTriggerRef} aria-label="Space-Persönlichkeit wechseln" aria-haspopup="dialog" aria-expanded={companionPickerOpen}
-          style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}
-          onClick={() => { setCompanionDraft({ personality: companion.personality, botName: companion.botName }); setCompanionPickerOpen(current => !current); }}>
-          <div className="copilot-logo-circle">
-            <img src={companion.avatar} alt="" className="copilot-header-avatar" draggable={false} />
-          </div>
-          <span className="copilot-header-title">{companionName} AI</span>
-        </button>
-        {companionPickerOpen && <section role="dialog" aria-label="Space-Persönlichkeit" style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300, boxSizing: 'border-box', maxWidth: 'calc(100vw - 32px)', padding: 16, borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-primary, #101522)', color: 'var(--text-primary)', zIndex: 1000, boxShadow: '0 12px 32px rgba(0,0,0,.4)' }}>
-          <strong>Persönlichkeit für diesen Space</strong>
-          <CompanionPicker value={companionDraft} onChange={setCompanionDraft} disabled={!companion.loaded || companion.busy} />
-          {companion.error && <p role="alert">{companion.error}</p>}
-          {companion.error && <button type="button" onClick={companion.retry}>{locale.startsWith('de') ? 'Erneut laden' : 'Reload'}</button>}
-          {!companion.loaded && !companion.error && <p role="status">Wird geladen …</p>}
-          <div className="native-card-actions">
-            <button type="button" disabled={!companion.loaded || companion.busy} onClick={async () => { if (await companion.setSelection(companionDraft.personality, companionDraft.botName)) { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } }}>Speichern</button>
-            <button type="button" onClick={() => { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); }}>Abbrechen</button>
-          </div>
-        </section>}
-        </div>
+        <CompanionSwitch />
         <div className="copilot-header-actions">
           {/* Universal Model Picker in Header */}
           <div className="copilot-header-model-wrapper" ref={modelPickerRef} style={{ position: 'relative' }}>
             <button
               type="button"
               className={`copilot-header-model-btn ${modelPickerOpen ? 'active' : ''}`}
-      title={`KI-Engine: ${activeModelItem.label} • Klicken zum Wechseln`}
+      title={t('copilot.engineTooltip', { label: activeModelItem.label })}
               onClick={() => setModelPickerOpen((prev) => !prev)}
-              aria-label="KI-Modell auswählen"
+              aria-label={t('copilot.modelMenuTitle')}
               aria-haspopup="menu"
               aria-expanded={modelPickerOpen}
             >
@@ -833,7 +810,7 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn"
-              title="Teamwork & Agenten-Einstellungen öffnen"
+              title={t('copilot.openTeamworkSettings')}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', padding: '3px 7px', color: 'var(--accent, #6366f1)' }}
               onClick={() => onOpenSettings('teamwork')}
             >
@@ -912,7 +889,7 @@ export function CopilotSplitView({
               <div className="copilot-workflows-list">
                 {filteredWorkflows.length === 0 ? (
                   <div className="workflows-empty-search">
-                    <span>Keine Workflows für „{workflowSearch}“ gefunden.</span>
+                    <span>{t('copilot.workflowsEmpty', { query: workflowSearch })}</span>
                   </div>
                 ) : (
                   filteredWorkflows.map((tmpl) => (
@@ -1136,13 +1113,13 @@ export function CopilotSplitView({
                       {isAssistant && !msg.progress && msg.pending && activeModelItem.id === 'teamwork' && (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '4px 10px', borderRadius: '6px', background: 'rgba(99, 102, 241, 0.12)', color: 'var(--accent, #6366f1)', fontSize: '0.78rem', marginBottom: '0.5rem', border: '1px solid rgba(99, 102, 241, 0.25)' }}>
                           <Users size={13} className="spin" />
-                          <span>Teamwork aktiv: Subagenten debattieren & prüfen...</span>
+                          <span>{t('copilot.teamworkActive')}</span>
                         </div>
                       )}
                       {isAssistant && !msg.progress && msg.pending && activeModelItem.id.startsWith('smart-track') && (
                         <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', padding: '4px 10px', borderRadius: '6px', background: 'rgba(59, 130, 246, 0.12)', color: '#3b82f6', fontSize: '0.78rem', marginBottom: '0.5rem', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
                           <Target size={13} className="spin" />
-                          <span>Smart Track aktiv: Kuriertes Modell wird gestartet...</span>
+                          <span>{t('copilot.smartTrackActive')}</span>
                         </div>
                       )}
                       {isAssistant ? (
@@ -1228,15 +1205,15 @@ export function CopilotSplitView({
           {quickChatModelGateCopy[locale][modelGateReason]}
         </div>}
         <div className="copilot-model-row" ref={footerModelRef} style={{ position: 'relative' }}>
-          <span className="copilot-model-label">Modell:</span>
+          <span className="copilot-model-label">{t('copilot.modelLabel')}</span>
           <div
             className={`copilot-model-pill ${modelPickerOpen ? 'open' : ''}`}
-            title={`Aktive KI-Engine: ${activeModelItem.label} • Klicken zum Wechseln`}
+            title={t('copilot.activeEngineTooltip', { label: activeModelItem.label })}
             onClick={() => setModelPickerOpen((prev) => !prev)}
             onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setModelPickerOpen(previous => !previous); } }}
             role="button"
             tabIndex={0}
-            aria-label="KI-Modell auswählen"
+            aria-label={t('copilot.modelMenuTitle')}
           >
             <span className="model-pill-text">{pickerModelLabel}</span>
             <ChevronDown size={12} className={`model-chevron ${modelPickerOpen ? 'open' : ''}`} />

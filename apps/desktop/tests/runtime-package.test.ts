@@ -73,7 +73,7 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain("'anthropic>=0.39.0'");
     expect(prepareScript).toContain('import anthropic');
     expect(prepareScript).toContain("'--no-compile'");
-    expect(prepareScript).toContain('runtimeSchema: isLinux ? 7 : 6');
+    expect(prepareScript).toContain('runtimeSchema: isLinux ? 8 : 6');
     expect(prepareScript).toContain("'--no-index', '--find-links', wheelhouseDir");
     expect(prepareScript).toContain("import anthropic, requests, uvicorn, yaml");
     expect(prepareScript).toContain('yaml, PIL, psutil');

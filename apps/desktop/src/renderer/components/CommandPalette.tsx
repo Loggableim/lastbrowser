@@ -79,8 +79,8 @@ export function buildSidekickCliCommands(
   t?: (key: any) => string
 ): CommandItem[] {
   const cliCategory = (t ? t('commands.category.cli') : 'Sidekick CLI') as any;
-  const fixDesc = t ? t('commands.fix.desc') : 'Systemzustand, beschädigte Caches und lokale Lockfiles automatisch reparieren';
-  const doctorDesc = t ? t('commands.doctor.desc') : 'Systemdiagnose, Umgebungsvariablen, Python-Engine und API-Konnektivität prüfen';
+  const fixDesc = t ? t('commands.fix.desc') : 'Automatically repair system state, corrupted caches and lockfiles';
+  const doctorDesc = t ? t('commands.doctor.desc') : 'Check system diagnostics, environment variables, Python engine and API connectivity';
 
   return [
     {
@@ -109,7 +109,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-supermemory-index',
       title: '> Sidekick: supermemory index',
-      description: 'Supermemory Vektor-Index mit 3-Tier Fallback (Gemini / Ollama / BM25) neu indizieren',
+      description: t ? t('commands.cli.supermemoryIndex') : 'Reindex the Supermemory vector index with a three-tier fallback (Gemini / Ollama / BM25)',
       category: 'Sidekick CLI',
       icon: <Database size={16} />,
       keywords: ['supermemory', 'index', 'vektor', 'vector', 'embedding', 'reindex', 'suche'],
@@ -122,7 +122,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-supermemory-dump',
       title: '> Sidekick: supermemory dump',
-      description: 'Vollständigen Snapshot der Supermemory Vektor- und Wissensdatenbank exportieren',
+      description: t ? t('commands.cli.supermemoryDump') : 'Export a full snapshot of the Supermemory vector and knowledge database',
       category: 'Sidekick CLI',
       icon: <HardDrive size={16} />,
       keywords: ['supermemory', 'dump', 'export', 'backup', 'snapshot', 'json', 'sqlite'],
@@ -135,7 +135,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-mcp-list',
       title: '> Sidekick: mcp list',
-      description: 'Konfigurierte MCP-Server und deren JSON-RPC Verbindungsstatus (stdio / sse) anzeigen',
+      description: t ? t('commands.cli.mcpList') : 'Show configured MCP servers and their JSON-RPC connection status (stdio / sse)',
       category: 'Sidekick CLI',
       icon: <Server size={16} />,
       keywords: ['mcp', 'list', 'servers', 'stdio', 'sse', 'json-rpc', 'tools'],
@@ -149,7 +149,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-mcp-tools',
       title: '> Sidekick: mcp tools',
-      description: 'Registrierte MCP-Tools und Nova Function-Calling Schemas mit Sicherheitsmodell einsehen',
+      description: t ? t('commands.cli.mcpTools') : 'View registered MCP tools and Nova function-calling schemas with the security model',
       category: 'Sidekick CLI',
       icon: <Code2 size={16} />,
       keywords: ['mcp', 'tools', 'schema', 'nova', 'functions', 'permissions', 'security'],
@@ -163,7 +163,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-config-show',
       title: '> Sidekick: config show',
-      description: 'Aktuelle Sidekick-Konfiguration, Profile und aktive Einstellungen einsehen',
+      description: t ? t('commands.cli.configShow') : 'View the current Sidekick configuration, profiles and active settings',
       category: 'Sidekick CLI',
       icon: <Settings size={16} />,
       keywords: ['config', 'show', 'yaml', 'einstellungen', 'profil', 'parameter'],
@@ -174,7 +174,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-config-edit',
       title: '> Sidekick: config edit',
-      description: 'Konfigurationsdatei config.yaml im Standard-Editor oder Einstellungsfenster öffnen',
+      description: t ? t('commands.cli.configEdit') : 'Open config.yaml in the default editor or the settings window',
       category: 'Sidekick CLI',
       icon: <FileText size={16} />,
       keywords: ['config', 'edit', 'bearbeiten', 'yaml', 'editor', 'anpassen'],
@@ -185,7 +185,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-config-set',
       title: '> Sidekick: config set',
-      description: 'Einen Konfigurationsparameter (Modell, Provider, Fallback, Pfade) festlegen',
+      description: t ? t('commands.cli.configSet') : 'Set a configuration value (model, provider, fallback, paths)',
       category: 'Sidekick CLI',
       icon: <Settings size={16} />,
       keywords: ['config', 'set', 'ändern', 'setzen', 'konfiguration', 'parameter'],
@@ -196,7 +196,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-gateway-start',
       title: '> Sidekick: gateway start',
-      description: 'Messaging Gateway Daemon für externe Kanäle (WhatsApp, Slack, Telegram) im Hintergrund starten',
+      description: t ? t('commands.cli.gatewayStart') : 'Start the messaging gateway daemon for external channels (WhatsApp, Slack, Telegram) in the background',
       category: 'Sidekick CLI',
       icon: <Zap size={16} />,
       keywords: ['gateway', 'start', 'daemon', 'hintergrund', 'service', 'messaging'],
@@ -207,7 +207,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-gateway-stop',
       title: '> Sidekick: gateway stop',
-      description: 'Laufenden Sidekick Gateway Daemon sauber anhalten',
+      description: t ? t('commands.cli.gatewayStop') : 'Stop the running Sidekick gateway daemon cleanly',
       category: 'Sidekick CLI',
       icon: <X size={16} />,
       keywords: ['gateway', 'stop', 'beenden', 'stoppen', 'anhalten', 'kill'],
@@ -218,7 +218,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-gateway-status',
       title: '> Sidekick: gateway status',
-      description: 'Betriebszustand und Verbindungsmetriken des Gateway Daemons abfragen',
+      description: t ? t('commands.cli.gatewayStatus') : 'Query the gateway daemon status and connection metrics',
       category: 'Sidekick CLI',
       icon: <Activity size={16} />,
       keywords: ['gateway', 'status', 'health', 'abfrage', 'daemon', 'ping'],
@@ -229,7 +229,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-gateway-restart',
       title: '> Sidekick: gateway restart',
-      description: 'Gateway Daemon neu starten und alle WebSocket-/Polling-Verbindungen erneuern',
+      description: t ? t('commands.cli.gatewayRestart') : 'Restart the gateway daemon and renew WebSocket and polling connections',
       category: 'Sidekick CLI',
       icon: <RefreshCw size={16} />,
       keywords: ['gateway', 'restart', 'neustart', 'reload', 'erneuern'],
@@ -240,7 +240,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-gateway-install',
       title: '> Sidekick: gateway install',
-      description: 'Sidekick Gateway als persistenten Systemdienst für automatischen Systemstart registrieren',
+      description: t ? t('commands.cli.gatewayInstall') : 'Register the Sidekick gateway as a persistent service that starts with the system',
       category: 'Sidekick CLI',
       icon: <Server size={16} />,
       keywords: ['gateway', 'install', 'service', 'autostart', 'dienst', 'systemd'],
@@ -251,7 +251,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-token-count',
       title: '> Sidekick: token count',
-      description: 'Token-Verbrauch und Kontextfenster-Auslastung der aktuellen Konversation berechnen',
+      description: t ? t('commands.cli.tokenCount') : 'Calculate token use and context-window load for the current conversation',
       category: 'Sidekick CLI',
       icon: <Scale size={16} />,
       keywords: ['token', 'count', 'tokens', 'verbrauch', 'auslastung', 'kontext', 'kosten'],
@@ -262,7 +262,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-rag-update',
       title: '> Sidekick: rag update',
-      description: 'Lokalen RAG-Wissensindex aus Workspace-Dateien und Notizen aktualisieren',
+      description: t ? t('commands.cli.ragUpdate') : 'Update the local RAG knowledge index from workspace files and notes',
       category: 'Sidekick CLI',
       icon: <BookOpen size={16} />,
       keywords: ['rag', 'update', 'wissen', 'retrieval', 'dokumente', 'workspace', 'embed'],
@@ -275,7 +275,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-model-list',
       title: '> Sidekick: model list',
-      description: 'Alle verfügbaren KI-Modelle (Gemini, Claude, GPT, Ollama) auflisten',
+      description: t ? t('commands.cli.modelList') : 'List all available AI models (Gemini, Claude, GPT, Ollama)',
       category: 'Sidekick CLI',
       icon: <Cpu size={16} />,
       keywords: ['model', 'list', 'modelle', 'gemini', 'claude', 'ollama', 'gpt', 'anbieter'],
@@ -286,7 +286,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-model-switch',
       title: '> Sidekick: model switch',
-      description: 'Standard-Inferenzmodell für Nova AI interaktiv wechseln',
+      description: t ? t('commands.cli.modelSwitch') : 'Switch the default inference model for Nova AI',
       category: 'Sidekick CLI',
       icon: <Shuffle size={16} />,
       keywords: ['model', 'switch', 'wechseln', 'auswahl', 'standard', 'umschalten'],
@@ -297,7 +297,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-fallback-list',
       title: '> Sidekick: fallback list',
-      description: 'Aktuelle Provider-Ausfallkette (Fallback Chain) für Ausfallsicherheit anzeigen',
+      description: t ? t('commands.cli.fallbackList') : 'Show the current provider fallback chain',
       category: 'Sidekick CLI',
       icon: <Layers size={16} />,
       keywords: ['fallback', 'list', 'ausfall', 'kette', 'chain', 'provider', 'backup'],
@@ -308,7 +308,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-sessions-list',
       title: '> Sidekick: sessions list',
-      description: 'Alle protokollierten Chat- und Agentensitzungen mit Metadaten auflisten',
+      description: t ? t('commands.cli.sessionsList') : 'List recorded chat and agent sessions with metadata',
       category: 'Sidekick CLI',
       icon: <History size={16} />,
       keywords: ['sessions', 'list', 'sitzungen', 'verlauf', 'historie', 'chats'],
@@ -319,7 +319,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-sessions-browse',
       title: '> Sidekick: sessions browse',
-      description: 'Interaktiver Sitzungs-Browser zum Durchsuchen und Wiederaufnehmen vergangener Aufgaben',
+      description: t ? t('commands.cli.sessionsBrowse') : 'Browse and resume past sessions',
       category: 'Sidekick CLI',
       icon: <Search size={16} />,
       keywords: ['sessions', 'browse', 'durchsuchen', 'wiederaufnahme', 'resume'],
@@ -330,7 +330,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-sessions-rename',
       title: '> Sidekick: sessions rename',
-      description: 'Titel einer bestehenden Agentensitzung für bessere Übersicht umbenennen',
+      description: t ? t('commands.cli.sessionsRename') : 'Rename an existing agent session',
       category: 'Sidekick CLI',
       icon: <FileText size={16} />,
       keywords: ['sessions', 'rename', 'titel', 'umbenennen', 'name', 'sitzung'],
@@ -341,7 +341,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-auth-status',
       title: '> Sidekick: auth status',
-      description: 'Gültigkeit und Quoten aller hinterlegten API-Schlüssel und OAuth-Tokens prüfen',
+      description: t ? t('commands.cli.authStatus') : 'Check validity and quotas of stored API keys and OAuth tokens',
       category: 'Sidekick CLI',
       icon: <ShieldCheck size={16} />,
       keywords: ['auth', 'status', 'token', 'quota', 'guthaben', 'prüfung', 'oauth'],
@@ -352,7 +352,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-auth-list',
       title: '> Sidekick: auth list',
-      description: 'Alle im Schlüsselbund gespeicherten Provider-Anmeldedaten und Pools einsehen',
+      description: t ? t('commands.cli.authList') : 'View stored provider credentials and pools',
       category: 'Sidekick CLI',
       icon: <Shield size={16} />,
       keywords: ['auth', 'list', 'keys', 'schlüssel', 'credentials', 'pool'],
@@ -363,7 +363,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-auth-reset',
       title: '> Sidekick: auth reset',
-      description: 'Erschöpfungsstatus (Rate Limit / Quota Exhaustion) für einen Provider zurücksetzen',
+      description: t ? t('commands.cli.authReset') : 'Reset rate-limit or quota exhaustion for a provider',
       category: 'Sidekick CLI',
       icon: <RotateCcw size={16} />,
       keywords: ['auth', 'reset', 'rate limit', 'entsperren', 'exhaustion', 'zurücksetzen'],
@@ -374,7 +374,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-auth-logout',
       title: '> Sidekick: auth logout',
-      description: 'Gespeicherte Authentifizierungsschlüssel und Anmelde-Tokens sicher aus dem Speicher löschen',
+      description: t ? t('commands.cli.authLogout') : 'Delete stored authentication keys and sign-in tokens',
       category: 'Sidekick CLI',
       icon: <Trash2 size={16} />,
       keywords: ['auth', 'logout', 'abmelden', 'entfernen', 'löschen', 'clear'],
@@ -385,7 +385,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-cron-list',
       title: '> Sidekick: cron list',
-      description: 'Geplante periodische Agenten-Aufgaben, Ausführungszeiten und Trigger anzeigen',
+      description: t ? t('commands.cli.cronList') : 'Show scheduled agent jobs, run times and triggers',
       category: 'Sidekick CLI',
       icon: <Kanban size={16} />,
       keywords: ['cron', 'list', 'zeitplan', 'jobs', 'zeitgesteuert', 'scheduler'],
@@ -396,7 +396,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-cron-status',
       title: '> Sidekick: cron status',
-      description: 'Betriebsbereitschaft des integrierten Cron-Schedulers prüfen',
+      description: t ? t('commands.cli.cronStatus') : 'Check whether the built-in cron scheduler is ready',
       category: 'Sidekick CLI',
       icon: <Activity size={16} />,
       keywords: ['cron', 'status', 'scheduler', 'laufend', 'aktiv', 'trigger'],
@@ -407,7 +407,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-cron-pause',
       title: '> Sidekick: cron pause',
-      description: 'Ausführung aller anstehenden Cron-Jobs vorübergehend unterbrechen',
+      description: t ? t('commands.cli.cronPause') : 'Pause all pending cron jobs',
       category: 'Sidekick CLI',
       icon: <X size={16} />,
       keywords: ['cron', 'pause', 'anhalten', 'unterbrechen', 'pausieren'],
@@ -418,7 +418,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-cron-resume',
       title: '> Sidekick: cron resume',
-      description: 'Pausierte Cron-Jobs und Zeitplaner wieder aufnehmen',
+      description: t ? t('commands.cli.cronResume') : 'Resume paused cron jobs and the scheduler',
       category: 'Sidekick CLI',
       icon: <Zap size={16} />,
       keywords: ['cron', 'resume', 'fortsetzen', 'wiederaufnehmen', 'aktivieren'],
@@ -429,7 +429,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-logs-tail',
       title: '> Sidekick: logs',
-      description: 'Neueste System- und Agenten-Ereignisse aus agent.log in Echtzeit verfolgen',
+      description: t ? t('commands.cli.logs') : 'Follow the latest system and agent events from agent.log',
       category: 'Sidekick CLI',
       icon: <Terminal size={16} />,
       keywords: ['logs', 'tail', 'agent.log', 'protokoll', 'terminal', 'ausgabe'],
@@ -440,7 +440,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-logs-errors',
       title: '> Sidekick: logs errors',
-      description: 'Gefilterte Fehlerprotokolle und Exception-Stacktraces aus errors.log anzeigen',
+      description: t ? t('commands.cli.logsErrors') : 'Show filtered errors and exception stack traces from errors.log',
       category: 'Sidekick CLI',
       icon: <ShieldAlert size={16} />,
       keywords: ['logs', 'errors', 'fehler', 'exception', 'errors.log', 'crash'],
@@ -451,7 +451,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-backup-create',
       title: '> Sidekick: backup create',
-      description: 'Vollständige Sicherung aller Konfigurationen, Memories und Arbeitsstände erstellen',
+      description: t ? t('commands.cli.backupCreate') : 'Create a full backup of configuration, memories and work state',
       category: 'Sidekick CLI',
       icon: <Download size={16} />,
       keywords: ['backup', 'create', 'sicherung', 'export', 'archiv', 'erstellen'],
@@ -462,7 +462,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-backup-restore',
       title: '> Sidekick: backup restore',
-      description: 'Systemzustand und Datenbestände aus einem früheren Sicherungsarchiv wiederherstellen',
+      description: t ? t('commands.cli.backupRestore') : 'Restore system state and data from an earlier backup archive',
       category: 'Sidekick CLI',
       icon: <RotateCcw size={16} />,
       keywords: ['backup', 'restore', 'wiederherstellen', 'archiv', 'import', 'laden'],
@@ -473,7 +473,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-checkpoints-list',
       title: '> Sidekick: checkpoints list',
-      description: 'Automatische Dateisystem-Wiederherstellungspunkte vor Dateiänderungen anzeigen',
+      description: t ? t('commands.cli.checkpointsList') : 'Show automatic filesystem checkpoints taken before file changes',
       category: 'Sidekick CLI',
       icon: <Bookmark size={16} />,
       keywords: ['checkpoints', 'list', 'prüfpunkte', 'wiederherstellung', 'dateien', 'stände'],
@@ -484,7 +484,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-checkpoints-rollback',
       title: '> Sidekick: checkpoints rollback',
-      description: 'Dateisystem auf den unmittelbar vorherigen Sicherheits-Checkpoint zurücksetzen',
+      description: t ? t('commands.cli.checkpointsRollback') : 'Roll the filesystem back to the previous safety checkpoint',
       category: 'Sidekick CLI',
       icon: <RotateCcw size={16} />,
       keywords: ['checkpoints', 'rollback', 'zurücksetzen', 'undo', 'revert', 'sicherheit'],
@@ -495,7 +495,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-skills-list',
       title: '> Sidekick: skills list',
-      description: 'Übersicht aller aktiven und erweiterbaren Agenten-Skills im integrierten Katalog',
+      description: t ? t('commands.cli.skillsList') : 'Show active and extendable agent skills in the built-in catalog',
       category: 'Sidekick CLI',
       icon: <Puzzle size={16} />,
       keywords: ['skills', 'list', 'fähigkeiten', 'katalog', 'prompts', 'werkzeuge'],
@@ -506,7 +506,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-kanban-diagnostics',
       title: '> Sidekick: kanban diagnostics',
-      description: 'Datenbank-Integritätsprüfung für Kanban-Board und Task-Pipelines durchführen',
+      description: t ? t('commands.cli.kanbanDiagnostics') : 'Check database integrity for the kanban board and task pipelines',
       category: 'Sidekick CLI',
       icon: <Kanban size={16} />,
       keywords: ['kanban', 'diagnostics', 'board', 'aufgaben', 'pipeline', 'datenbank'],
@@ -517,7 +517,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-insights-report',
       title: '> Sidekick: insights',
-      description: 'Produktivitäts-Kennzahlen, Token-Statistiken und Agenten-Erfolgsraten einsehen',
+      description: t ? t('commands.cli.insights') : 'View productivity figures, token statistics and agent success rates',
       category: 'Sidekick CLI',
       icon: <Table size={16} />,
       keywords: ['insights', 'analytics', 'metriken', 'statistik', 'bericht', 'produktivität'],
@@ -528,7 +528,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-version',
       title: '> Sidekick: version',
-      description: 'Installierte Engine-Version, Commit-Hash und Umgebungsinformationen abfragen',
+      description: t ? t('commands.cli.version') : 'Query the installed engine version, commit hash and environment information',
       category: 'Sidekick CLI',
       icon: <Terminal size={16} />,
       keywords: ['version', 'build', 'commit', 'info', 'release', 'stand'],
@@ -591,8 +591,8 @@ export function CommandPalette({
       // --- Nova AI ---
       {
         id: 'sidekick-chat',
-        title: 'Nova: Neuer Chat',
-        description: 'Öffnet den KI-Chat-Arbeitsbereich',
+        title: t('commands.nova.newChat'),
+        description: t('commands.nova.newChatDesc'),
         category: 'Nova AI',
         icon: <Sparkles size={16} />,
         keywords: ['ai', 'chat', 'sidekick', 'gpt', 'claude', 'gemini', 'frage', 'dialog'],
@@ -602,8 +602,8 @@ export function CommandPalette({
       },
       {
         id: 'ai-discover-form',
-        title: 'KI-Assistent: Formularfelder analysieren',
-        description: 'Scannt alle Formularfelder, Eingaben und Submit-Buttons der aktuellen Seite',
+        title: t('commands.nova.analyzeForm'),
+        description: t('commands.nova.analyzeFormDesc'),
         category: 'Nova AI',
         icon: <Sparkles size={16} />,
         keywords: ['formular', 'form', 'felder', 'inputs', 'ausfüllen', 'analyse', 'autofill'],
@@ -614,8 +614,8 @@ export function CommandPalette({
       },
       {
         id: 'ai-paginate',
-        title: 'KI-Assistent: Nächste Seite aufrufen (Paginieren)',
-        description: 'Findet den nächsten Seitenlink und blättert live mit visuellem Marker weiter',
+        title: t('commands.nova.paginate'),
+        description: t('commands.nova.paginateDesc'),
         category: 'Nova AI',
         icon: <ExternalLink size={16} />,
         keywords: ['paginieren', 'weiter', 'nächste seite', 'next', 'pagination', 'blättern'],
@@ -626,8 +626,8 @@ export function CommandPalette({
       },
       {
         id: 'ai-abort-automation',
-        title: 'KI-Assistent: Automatisierung abbrechen',
-        description: 'Bricht jede laufende Live-Aktion sofort ab und entfernt visuelle Marker',
+        title: t('commands.nova.abort'),
+        description: t('commands.nova.abortDesc'),
         category: 'Nova AI',
         icon: <X size={16} />,
         shortcut: 'Esc',
@@ -639,8 +639,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-doctor',
-        title: 'Doctor: Systemdiagnose ausführen',
-        description: 'Prüft Status aller KI-Runtimes, Profile und Services',
+        title: t('commands.nova.doctor'),
+        description: t('commands.nova.doctorDesc'),
         category: 'Nova AI',
         icon: <Cpu size={16} />,
         keywords: ['doctor', 'health', 'diagnose', 'system', 'check', 'status', 'prüfen'],
@@ -650,8 +650,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-supermemory',
-        title: 'Supermemory: Reindizieren & Suchen',
-        description: 'Verwaltet Fakten, Kontext und Langzeitgedächtnis',
+        title: t('commands.nova.supermemory'),
+        description: t('commands.nova.supermemoryDesc'),
         category: 'Nova AI',
         icon: <Database size={16} />,
         keywords: ['memory', 'gedächtnis', 'supermemory', 'fakten', 'kontext', 'vektor'],
@@ -661,8 +661,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-profiles',
-        title: 'Profil wechseln / Profile verwalten',
-        description: 'Wechselt Identitäten, isolierte Cookies und Profile',
+        title: t('commands.nova.profiles'),
+        description: t('commands.nova.profilesDesc'),
         category: 'Nova AI',
         icon: <Users size={16} />,
         keywords: ['profil', 'profile', 'identität', 'user', 'persona', 'account'],
@@ -672,8 +672,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-models',
-        title: 'Modell & Provider konfigurieren',
-        description: 'Öffnet KI-Modellauswahl (Claude, OpenAI, Gemini, Ollama)',
+        title: t('commands.nova.models'),
+        description: t('commands.nova.modelsDesc'),
         category: 'Nova AI',
         icon: <Bot size={16} />,
         keywords: ['modell', 'model', 'provider', 'ollama', 'anthropic', 'openai', 'gemini', 'openrouter'],
@@ -683,8 +683,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-terminal',
-        title: 'TUI / Terminal öffnen',
-        description: 'Integriertes Developer-Terminal und Shell starten',
+        title: t('commands.nova.terminal'),
+        description: t('commands.nova.terminalDesc'),
         category: 'Nova AI',
         icon: <Terminal size={16} />,
         keywords: ['terminal', 'tui', 'shell', 'bash', 'cmd', 'powershell', 'cli'],
@@ -694,8 +694,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-agents',
-        title: 'Agenten Dashboard anzeigen',
-        description: 'Autonome Hintergrund-Agenten und Aufgaben steuern',
+        title: t('commands.nova.agents'),
+        description: t('commands.nova.agentsDesc'),
         category: 'Nova AI',
         icon: <Bot size={16} />,
         keywords: ['agent', 'agenten', 'worker', 'subagent', 'aufgaben', 'bot'],
@@ -705,8 +705,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-skills',
-        title: 'Skills verwalten & bearbeiten',
-        description: 'Agent Skills, Tool-Integrationen und Workflows anpassen',
+        title: t('commands.nova.skills'),
+        description: t('commands.nova.skillsDesc'),
         category: 'Nova AI',
         icon: <Puzzle size={16} />,
         keywords: ['skill', 'fähigkeiten', 'mcp', 'tools', 'werkzeuge'],
@@ -716,8 +716,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-kanban',
-        title: 'Kanban Board öffnen',
-        description: 'Aufgaben-Pipeline und Projekt-Board ansehen',
+        title: t('commands.nova.kanban'),
+        description: t('commands.nova.kanbanDesc'),
         category: 'Nova AI',
         icon: <Kanban size={16} />,
         keywords: ['kanban', 'tasks', 'board', 'aufgaben', 'triage', 'todo'],
@@ -727,8 +727,8 @@ export function CommandPalette({
       },
       {
         id: 'sidekick-workspaces',
-        title: 'Workspaces & Spaces durchsuchen',
-        description: 'Lokale Verzeichnisse, Projekte und Arbeitsbereiche öffnen',
+        title: t('commands.nova.workspaces'),
+        description: t('commands.nova.workspacesDesc'),
         category: 'Nova AI',
         icon: <Folder size={16} />,
         keywords: ['workspace', 'spaces', 'verzeichnis', 'projekt', 'dateien'],
@@ -770,8 +770,8 @@ export function CommandPalette({
       // --- Tab Management Tools (Phase 10.4) ---
       {
         id: 'tab-close-duplicates',
-        title: 'Doppelte Tabs schließen',
-        description: 'Findet identische URLs und schließt redundante Tabs',
+        title: t('commands.tabs.closeDuplicates'),
+        description: t('commands.tabs.closeDuplicatesDesc'),
         category: 'Tabs',
         icon: <Copy size={16} />,
         keywords: ['doppelt', 'duplikate', 'duplicate', 'bereinigen', 'clean', 'redundant'],
@@ -781,8 +781,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-sort-by-domain',
-        title: 'Tabs nach Domain sortieren',
-        description: 'Gruppiert offene Tabs alphabetisch nach Hostname / Website',
+        title: t('commands.tabs.sortDomain'),
+        description: t('commands.tabs.sortDomainDesc'),
         category: 'Tabs',
         icon: <ArrowUpDown size={16} />,
         keywords: ['sortieren', 'domain', 'host', 'alphabetisch', 'ordnung', 'group'],
@@ -792,8 +792,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-close-unpinned',
-        title: 'Nicht angepinnte Tabs schließen',
-        description: 'Behält nur angeheftete Tabs und schließt alle anderen',
+        title: t('commands.tabs.closeUnpinned'),
+        description: t('commands.tabs.closeUnpinnedDesc'),
         category: 'Tabs',
         icon: <Trash2 size={16} />,
         keywords: ['unpinned', 'löschen', 'schließen', 'close all', 'nicht angepinnt'],
@@ -803,8 +803,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-bookmark-all',
-        title: 'Lesezeichen-Ordner aus Tabs erstellen',
-        description: 'Speichert alle gültigen offenen Tabs in einem Lesezeichen-Ordner',
+        title: t('commands.tabs.bookmarkFolder'),
+        description: t('commands.tabs.bookmarkFolderDesc'),
         category: 'Tabs',
         icon: <Bookmark size={16} />,
         keywords: ['lesezeichen', 'bookmark', 'ordner', 'speichern', 'folder', 'tabs merken'],
@@ -817,8 +817,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-group-workspace',
-        title: 'Tabs in neuem Workspace bündeln',
-        description: 'Erstellt einen neuen Workspace mit einer Markdown-Übersicht aller aktiven Tabs',
+        title: t('commands.tabs.groupWorkspace'),
+        description: t('commands.tabs.groupWorkspaceDesc'),
         category: 'Tabs',
         icon: <FolderPlus size={16} />,
         keywords: ['workspace', 'space', 'bündeln', 'group', 'projekt', 'tab gruppe'],
@@ -831,8 +831,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-new',
-        title: 'Neuer Tab',
-        description: 'Öffnet einen leeren neuen Tab',
+        title: t('commands.tabs.new'),
+        description: t('commands.tabs.newDesc'),
         category: 'Tabs',
         icon: <Plus size={16} />,
         shortcut: 'Ctrl+T',
@@ -844,8 +844,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-new-incognito',
-        title: 'Neuer Inkognito-Tab',
-        description: 'Öffnet einen privaten Tab ohne Verlaufsspeicherung',
+        title: t('commands.tabs.incognito'),
+        description: t('commands.tabs.incognitoDesc'),
         category: 'Tabs',
         icon: <ShieldCheck size={16} />,
         shortcut: 'Ctrl+Shift+N',
@@ -857,8 +857,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-close-current',
-        title: 'Aktuellen Tab schließen',
-        description: 'Schließt den derzeit aktiven Tab',
+        title: t('commands.tabs.closeCurrent'),
+        description: t('commands.tabs.closeCurrentDesc'),
         category: 'Tabs',
         icon: <X size={16} />,
         shortcut: 'Ctrl+W',
@@ -869,8 +869,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-reopen-closed',
-        title: 'Geschlossenen Tab wiederherstellen',
-        description: 'Öffnet den zuletzt geschlossenen Tab erneut',
+        title: t('commands.tabs.reopen'),
+        description: t('commands.tabs.reopenDesc'),
         category: 'Tabs',
         icon: <RefreshCw size={16} />,
         shortcut: 'Ctrl+Shift+T',
@@ -882,8 +882,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-toggle-pin',
-        title: activeTab?.pinned ? 'Tab lösen (Unpin)' : 'Tab anpinnen (Pin)',
-        description: 'Pinnt den aktuellen Tab links in der Tab-Leiste fest',
+        title: activeTab?.pinned ? t('commands.tabs.unpin') : t('commands.tabs.pin'),
+        description: t('commands.tabs.unpinDesc'),
         category: 'Tabs',
         icon: <Pin size={16} />,
         keywords: ['pin', 'anpinnen', 'festheften', 'fixieren'],
@@ -893,8 +893,8 @@ export function CommandPalette({
       },
       {
         id: 'tab-toggle-mute',
-        title: activeTab?.isMuted ? 'Audio aktivieren (Unmute)' : 'Tab stummschalten (Mute)',
-        description: 'Schaltet die Audioausgabe des Tabs stumm oder aktiv',
+        title: activeTab?.isMuted ? t('commands.tabs.unmute') : t('commands.tabs.mute'),
+        description: t('commands.tabs.unmuteDesc'),
         category: 'Tabs',
         icon: activeTab?.isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />,
         keywords: ['mute', 'stumm', 'lautstärke', 'ton', 'audio', 'sound'],
@@ -906,8 +906,8 @@ export function CommandPalette({
       // --- Navigation & Browser Actions ---
       {
         id: 'nav-downloads',
-        title: 'Downloads anzeigen',
-        description: 'Öffnet die Liste aller heruntergeladenen Dateien',
+        title: t('commands.nav.downloads'),
+        description: t('commands.nav.downloadsDesc'),
         category: 'Navigation',
         icon: <Download size={16} />,
         shortcut: 'Ctrl+J',
@@ -918,8 +918,8 @@ export function CommandPalette({
       },
       {
         id: 'nav-history',
-        title: 'Verlauf anzeigen',
-        description: 'Zeigt die Chronik der besuchten Webseiten',
+        title: t('commands.nav.history'),
+        description: t('commands.nav.historyDesc'),
         category: 'Navigation',
         icon: <History size={16} />,
         shortcut: 'Ctrl+H',
@@ -930,8 +930,8 @@ export function CommandPalette({
       },
       {
         id: 'nav-find',
-        title: 'In Seite suchen',
-        description: 'Öffnet die Textsuche für die aktuelle Webseite',
+        title: t('commands.nav.find'),
+        description: t('commands.nav.findDesc'),
         category: 'Navigation',
         icon: <Search size={16} />,
         shortcut: 'Ctrl+F',
@@ -942,8 +942,8 @@ export function CommandPalette({
       },
       {
         id: 'nav-settings',
-        title: 'Einstellungen öffnen',
-        description: 'Browser-Konfiguration, Themes und Vorlieben anpassen',
+        title: t('commands.nav.settings'),
+        description: t('commands.nav.settingsDesc'),
         category: 'Navigation',
         icon: <Settings size={16} />,
         shortcut: 'Ctrl+,',
@@ -954,8 +954,8 @@ export function CommandPalette({
       },
       {
         id: 'nav-permissions',
-        title: 'Website-Berechtigungen',
-        description: 'Kamera, Mikrofon und Standort-Rechte verwalten',
+        title: t('commands.nav.permissions'),
+        description: t('commands.nav.permissionsDesc'),
         category: 'Navigation',
         icon: <ShieldCheck size={16} />,
         keywords: ['permissions', 'rechte', 'berechtigungen', 'kamera', 'mikrofon'],
@@ -965,8 +965,8 @@ export function CommandPalette({
       },
       {
         id: 'nav-devtools',
-        title: 'Developer Tools umschalten',
-        description: 'Öffnet die Chromium Entwicklerwerkzeuge für Web-Debugging',
+        title: t('commands.nav.devtools'),
+        description: t('commands.nav.devtoolsDesc'),
         category: 'Navigation',
         icon: <Code2 size={16} />,
         shortcut: 'F12',
@@ -978,8 +978,8 @@ export function CommandPalette({
       },
       {
         id: 'nav-fullscreen',
-        title: 'Vollbild umschalten',
-        description: 'Vollbildmodus aktivieren oder verlassen',
+        title: t('commands.nav.fullscreen'),
+        description: t('commands.nav.fullscreenDesc'),
         category: 'Navigation',
         icon: <Maximize size={16} />,
         shortcut: 'F11',
@@ -990,8 +990,8 @@ export function CommandPalette({
       },
       {
         id: 'nav-print',
-        title: 'Aktuelle Seite drucken',
-        description: 'Druckdialog für den aktuellen Tab aufrufen',
+        title: t('commands.nav.print'),
+        description: t('commands.nav.printDesc'),
         category: 'Navigation',
         icon: <Printer size={16} />,
         shortcut: 'Ctrl+P',
@@ -1055,7 +1055,7 @@ export function CommandPalette({
   const tabCommands = useMemo<CommandItem[]>(() => {
     return tabs.map((tItem) => ({
       id: `tab-jump-${tItem.id}`,
-      title: tItem.title || 'Neuer Tab',
+      title: tItem.title || t('commands.tabs.new'),
       description: tItem.url,
       category: t('commands.category.openTabs') as any,
       icon: <ExternalLink size={16} />,

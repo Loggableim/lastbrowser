@@ -42,7 +42,8 @@ class NativeFileIOFence:
         self.broker, self.context = sdk_broker, sdk_broker.context
         self.store = sdk_broker.service.store
         self.policy = execution_policy
-        self.python_executable = str(python_executable or sys.executable)
+        from .worker_host import resolve_worker_python_executable
+        self.python_executable = str(python_executable or resolve_worker_python_executable())
         self._lock = threading.RLock()
         self._settled = threading.Condition(self._lock)
         self._stopping = threading.Event()

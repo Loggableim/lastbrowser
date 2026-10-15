@@ -5,16 +5,38 @@ import { useDesktopI18n } from '../i18n.js';
 export type CompanionSelection = { personality: CompanionPersonality; botName: string };
 const STANDARD_CHAT_COMPANION_KEY = 'lastbrowser.standardChatCompanion.v1';
 
-export function readStandardChatCompanion(): CompanionSelection {
+export const STANDARD_CHAT_COMPANION_EVENT = 'lastbrowser:standard-chat-companion';
+
+export function readStandardChatCompanion(): CompanionSelection & { stored: boolean } {
   try {
     const raw = JSON.parse(window.localStorage.getItem(STANDARD_CHAT_COMPANION_KEY) || '');
     if (raw && typeof raw.personality === 'string' && Object.hasOwn(companionDefaultNames, raw.personality)) {
       const personality = raw.personality as CompanionPersonality;
       const botName = typeof raw.botName === 'string' && raw.botName.trim() ? raw.botName.trim() : companionDefaultNames[personality];
-      return { personality, botName };
+      return { personality, botName, stored: true };
     }
   } catch { /* default */ }
-  return { personality: 'nova', botName: 'Nova' };
+  return { personality: 'nova', botName: 'Nova', stored: false };
+}
+
+export function writeStandardChatCompanion(personality: CompanionPersonality, botName: string): void {
+  const saved = { personality, botName: botName.trim() || companionDefaultNames[personality] };
+  window.localStorage.setItem(STANDARD_CHAT_COMPANION_KEY, JSON.stringify(saved));
+  window.dispatchEvent(new CustomEvent(STANDARD_CHAT_COMPANION_EVENT, { detail: saved }));
+}
+
+export function useStandardChatCompanion(): CompanionSelection & { stored: boolean; avatar: string } {
+  const [value, setValue] = useState(readStandardChatCompanion);
+  useEffect(() => {
+    const sync = () => setValue(readStandardChatCompanion());
+    window.addEventListener(STANDARD_CHAT_COMPANION_EVENT, sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener(STANDARD_CHAT_COMPANION_EVENT, sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+  return { ...value, avatar: personalityAvatar(value.personality) };
 }
 
 export function CompanionPicker({ value, onChange, disabled = false }: { value: CompanionSelection; onChange: (value: CompanionSelection) => void; disabled?: boolean }) {
@@ -64,7 +86,6 @@ export function CompanionSwitch({ compact = false }: { compact?: boolean }) {
       <div className="native-card-actions">
         <button type="button" disabled={!companion.loaded} onClick={() => {
           const botNameToSave = draft.botName.trim() || companionDefaultNames[draft.personality];
-          window.localStorage.setItem(STANDARD_CHAT_COMPANION_KEY, JSON.stringify({ personality: draft.personality, botName: botNameToSave }));
           setOpen(false);
           triggerRef.current?.focus();
           void companion.setSelection(draft.personality, botNameToSave);

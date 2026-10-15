@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { readStandardChatCompanion } from './CompanionPicker.js';
+import { readStandardChatCompanion, useStandardChatCompanion, writeStandardChatCompanion } from './CompanionPicker.js';
 import { companionDefaultNames, personalityAvatar, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 import { DownloadDockTrigger } from '../NativeDownloads.js';
 import {
@@ -295,7 +295,9 @@ export function SidekickSidebar({
   const [personalityTop, setPersonalityTop] = useState(0);
   const companion = useCompanionAppearance();
   const savedCompanion = readStandardChatCompanion();
-  const activePersonality = companion.loaded ? companion.personality : savedCompanion.personality;
+  const standardCompanion = useStandardChatCompanion();
+  const activeChatName = standardCompanion.stored ? standardCompanion.botName : botName;
+  const activePersonality = standardCompanion.stored ? standardCompanion.personality : savedCompanion.personality;
   useEffect(() => {
     if (!personalityOpen) return undefined;
     const place = () => {
@@ -317,10 +319,8 @@ export function SidekickSidebar({
     };
   }, [personalityOpen]);
   const choosePersonality = (personality: CompanionPersonality) => {
-    const botNameToSave = companionDefaultNames[personality];
-    window.localStorage.setItem('lastbrowser.standardChatCompanion.v1', JSON.stringify({ personality, botName: botNameToSave }));
+    writeStandardChatCompanion(personality, companionDefaultNames[personality]);
     setPersonalityOpen(false);
-    if (companion.loaded) void companion.setSelection(personality, botNameToSave);
   };
 
   useEffect(() => {
@@ -338,10 +338,10 @@ export function SidekickSidebar({
   // Preserves panel references: 'browser', 'terminal', 'gmail', 'discord', 'appstore', 'logs', 'settings',
   // and brandAssets: brandAssets.sidebarIcons.appstore, brandAssets.sidebarIcons.settings
   const aiDrawerItems: DrawerItem[] = useMemo(() => [
-    { id: 'chat', title: `${botName} Chat`, desc: t('sidebar.items.chat.desc'), iconSrc: brandAssets.sidebarIcons.chat },
+    { id: 'chat', title: `${activeChatName} Chat`, desc: t('sidebar.items.chat.desc'), iconSrc: brandAssets.sidebarIcons.chat },
     ...(optionalFeaturesLoaded && policy.assistants_enabled ? [{ id: 'agents' as const, title: locale === 'de' ? 'Assistenten' : 'Assistants', desc: locale === 'de' ? 'Zusätzliche Helfer und Aufgaben' : 'Additional helpers and tasks', iconSrc: brandAssets.sidebarIcons.agents }] : []),
     ...(optionalFeaturesLoaded && policy.enabled ? [{ id: 'memory' as const, title: locale === 'de' ? 'Gedächtnis & Wissen' : 'Memory & Knowledge', desc: locale === 'de' ? 'Informationen ansehen und kontrollieren' : 'Review and control saved information', iconSrc: brandAssets.sidebarIcons.memory }] : [])
-  ], [t, botName, locale, optionalFeaturesLoaded, policy.assistants_enabled, policy.enabled]);
+  ], [t, activeChatName, locale, optionalFeaturesLoaded, policy.assistants_enabled, policy.enabled]);
   const AI_DRAWER_ITEMS = aiDrawerItems;
 
   const toolsDrawerItems: DrawerItem[] = useMemo(() => [
@@ -543,7 +543,7 @@ export function SidekickSidebar({
               aria-selected={currentDrawerTab === 'ai'}
               className={`drawer-tab-btn ${currentDrawerTab === 'ai' ? 'active' : ''}`}
               onClick={() => { handleDrawerTabChange('ai'); setPersonalityOpen(true); }}
-              title={`${botName} AI`}
+              title={`${activeChatName} AI`}
             >
               <Sparkles size={13} />
               <span>{t('sidebar.drawer.ai')}</span>
@@ -848,7 +848,7 @@ export function SidekickSidebar({
                 </div>
               )}
 
-              <div className="drawer-section-title" style={{ marginTop: 12 }}>{botName} AI</div>
+              <div className="drawer-section-title" style={{ marginTop: 12 }}>{activeChatName} AI</div>
               <div className="drawer-cards-list">
                 {aiDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;

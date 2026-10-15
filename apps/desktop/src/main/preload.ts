@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { isTrustedPreloadDocumentUrl } from './preload-origin.js';
 
 if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMainWorld('lastbrowser', {
+  opencodeAutoRouter: process.env.LASTBROWSER_OPENCODE_AUTO_ROUTER === '1',
   quickChat: {
     start: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:start', request),
     stop: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:stop', request),

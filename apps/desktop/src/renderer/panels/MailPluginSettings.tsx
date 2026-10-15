@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Mail, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { mailRequest, type MailAccount, type MailConfig } from '../mail-plugin.js';
+import { useDesktopI18n } from '../i18n.js';
+import { shellText } from '../i18n/shell-text.js';
 const empty = (): MailAccount => ({ id: crypto.randomUUID().replaceAll('-', ''), email: '', username: '', provider: 'gmail', imap_host: '', imap_port: 993, imap_security: 'ssl', smtp_host: '', smtp_port: 587, smtp_security: 'starttls' });
 export function MailPluginSettings({ workspace, ready }: { workspace: string; ready: boolean }): JSX.Element {
+  const { locale } = useDesktopI18n();
   const [cfg, setCfg] = useState<MailConfig>({ enabled: false, accounts: {} });
   const [account, setAccount] = useState<MailAccount>(empty);
   const [password, setPassword] = useState('');
@@ -21,14 +24,14 @@ export function MailPluginSettings({ workspace, ready }: { workspace: string; re
     setBusy(true); setError(''); setNotice('');
     try { await action(); } catch (failure) { if (scope.current === current) setError(failure instanceof Error ? failure.message : String(failure)); } finally { if (scope.current === current) setBusy(false); }
   }
-  return <section className="native-work-card mail-plugin-settings" aria-label="Mail-Plugin">
-    <header><Mail size={20}/><strong>Mail-Plugin</strong><span>Konfiguration für diesen Space</span></header>
-    <p>Gmail oder einen anderen Anbieter über IMAP/SMTP verbinden. Konten und Zugangsdaten bleiben auf diesen Space beschränkt.</p>
+  return <section className="native-work-card mail-plugin-settings" aria-label={shellText(locale, "Mail-Plugin", "Mail plugin")}>
+    <header><Mail size={20}/><strong>{shellText(locale, "Mail-Plugin", "Mail plugin")}</strong><span>{shellText(locale, "Konfiguration für diesen Space", "Configuration for this Space")}</span></header>
+    <p>{shellText(locale, "Gmail oder einen anderen Anbieter über IMAP/SMTP verbinden. Konten und Zugangsdaten bleiben auf diesen Space beschränkt.", "Connect Gmail or another provider over IMAP/SMTP. Accounts and credentials stay limited to this Space.")}</p>
     <label><input type="checkbox" checked={cfg.enabled} disabled={!ready || busy} onChange={(event) => {
       const enabled = event.target.checked;
-      void run(async () => { const result = await mailRequest(workspace, 'config', { enabled }) as MailConfig; if (scope.current !== workspace) return; setCfg(result); setNotice(enabled ? 'Mail aktiviert.' : 'Mail deaktiviert.'); });
-    }}/>Mail in diesem Space aktivieren</label>
-    <div className="native-card-actions">{Object.values(cfg.accounts).map((item) => <button key={item.id} type="button" onClick={() => { setAccount(item); setPassword(''); setNotice(''); }}><Mail size={14}/>{item.email}</button>)}<button type="button" onClick={() => { setAccount(empty()); setPassword(''); setNotice(''); }}><Plus size={14}/>Konto hinzufügen</button></div>
+      void run(async () => { const result = await mailRequest(workspace, 'config', { enabled }) as MailConfig; if (scope.current !== workspace) return; setCfg(result); setNotice(enabled ? shellText(locale, "Mail aktiviert.", "Mail enabled.") : shellText(locale, "Mail deaktiviert.", "Mail disabled.")); });
+    }}/>{shellText(locale, "Mail in diesem Space aktivieren", "Enable mail in this Space")}</label>
+    <div className="native-card-actions">{Object.values(cfg.accounts).map((item) => <button key={item.id} type="button" onClick={() => { setAccount(item); setPassword(''); setNotice(''); }}><Mail size={14}/>{item.email}</button>)}<button type="button" onClick={() => { setAccount(empty()); setPassword(''); setNotice(''); }}><Plus size={14}/>{shellText(locale, "Konto hinzufügen", "Add account")}</button></div>
     <form onSubmit={(event) => { event.preventDefault(); void run(async () => {
       const result = await mailRequest(workspace, 'config', { enabled: true, account: { ...account, password } }) as MailConfig;
       if (scope.current !== workspace) return;
@@ -36,23 +39,23 @@ export function MailPluginSettings({ workspace, ready }: { workspace: string; re
       setPassword('');
       await mailRequest(workspace, 'test', { account: account.id });
       if (scope.current !== workspace) return;
-      setNotice('Verbindung erfolgreich: Empfangen und Senden sind angemeldet.');
+      setNotice(shellText(locale, "Verbindung erfolgreich: Empfangen und Senden sind angemeldet.", "Connection succeeded: receiving and sending are signed in."));
     }); }}>
       <div className="settings-field-grid">
-        <label>Anbieter<select value={account.provider} onChange={(event) => setAccount({ ...account, provider: event.target.value as MailAccount['provider'] })}><option value="gmail">Gmail</option><option value="imap">Anderer Anbieter (IMAP/SMTP)</option></select></label>
-        <label>Mailadresse<input type="email" autoComplete="off" required value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })}/></label>
-        <label>{account.provider === 'gmail' ? 'Google-App-Passwort' : 'Passwort'}<input type="password" autoComplete="new-password" value={password} placeholder={account.has_password ? 'Gespeichertes Passwort beibehalten' : ''} required={!account.has_password} onChange={(event) => setPassword(event.target.value)}/></label>
+        <label>{shellText(locale, "Anbieter", "Provider")}<select value={account.provider} onChange={(event) => setAccount({ ...account, provider: event.target.value as MailAccount['provider'] })}><option value="gmail">Gmail</option><option value="imap">{shellText(locale, "Anderer Anbieter (IMAP/SMTP)", "Other provider (IMAP/SMTP)")}</option></select></label>
+        <label>{shellText(locale, "Mailadresse", "Email address")}<input type="email" autoComplete="off" required value={account.email} onChange={(event) => setAccount({ ...account, email: event.target.value })}/></label>
+        <label>{account.provider === 'gmail' ? shellText(locale, "Google-App-Passwort", "Google app password") : shellText(locale, "Passwort", "Password")}<input type="password" autoComplete="new-password" value={password} placeholder={account.has_password ? shellText(locale, "Gespeichertes Passwort beibehalten", "Keep the saved password") : ''} required={!account.has_password} onChange={(event) => setPassword(event.target.value)}/></label>
       </div>
-      {account.provider === 'gmail' ? <p>Ein App-Passwort verwenden. <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">Bei Google erstellen</a>. IMAP und SMTP werden automatisch eingestellt.</p> : <div className="settings-field-grid">
-        <label>Benutzername<input value={account.username || ''} placeholder={account.email} onChange={(event) => setAccount({ ...account, username: event.target.value })}/></label>
+      {account.provider === 'gmail' ? <p>{shellText(locale, "Ein App-Passwort verwenden. ", "Use an app password. ")}<a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer">{shellText(locale, "Bei Google erstellen", "Create one at Google")}</a>{shellText(locale, ". IMAP und SMTP werden automatisch eingestellt.", ". IMAP and SMTP are configured automatically.")}</p> : <div className="settings-field-grid">
+        <label>{shellText(locale, "Benutzername", "Username")}<input value={account.username || ''} placeholder={account.email} onChange={(event) => setAccount({ ...account, username: event.target.value })}/></label>
         {(['imap', 'smtp'] as const).map((kind) => <fieldset key={kind}><legend>{kind.toUpperCase()}</legend>
-          <label>Server<input required value={account[`${kind}_host`] || ''} onChange={(event) => setAccount({ ...account, [`${kind}_host`]: event.target.value })}/></label>
-          <label>Port<input type="number" min={1} max={65535} required value={account[`${kind}_port`]} onChange={(event) => setAccount({ ...account, [`${kind}_port`]: Number(event.target.value) })}/></label>
-          <label>Verschlüsselung<select value={account[`${kind}_security`]} onChange={(event) => setAccount({ ...account, [`${kind}_security`]: event.target.value })}><option value="ssl">TLS</option><option value="starttls">STARTTLS</option></select></label>
+          <label>{shellText(locale, "Server", "Server")}<input required value={account[`${kind}_host`] || ''} onChange={(event) => setAccount({ ...account, [`${kind}_host`]: event.target.value })}/></label>
+          <label>{shellText(locale, "Port", "Port")}<input type="number" min={1} max={65535} required value={account[`${kind}_port`]} onChange={(event) => setAccount({ ...account, [`${kind}_port`]: Number(event.target.value) })}/></label>
+          <label>{shellText(locale, "Verschlüsselung", "Encryption")}<select value={account[`${kind}_security`]} onChange={(event) => setAccount({ ...account, [`${kind}_security`]: event.target.value })}><option value="ssl">TLS</option><option value="starttls">STARTTLS</option></select></label>
         </fieldset>)}
       </div>}
-      <div className="native-card-actions"><button type="submit" disabled={!ready || busy}><RefreshCw size={14}/>{busy ? 'Verbindung wird geprüft…' : 'Speichern und Verbindung testen'}</button>
-        {cfg.accounts[account.id] && <button type="button" disabled={busy} onClick={() => { if (window.confirm('Dieses Mailkonto aus diesem Space entfernen?')) void run(async () => { const result = await mailRequest(workspace, 'config', { remove: account.id }) as MailConfig; if (scope.current !== workspace) return; setCfg(result); setAccount(empty()); setPassword(''); }); }}><Trash2 size={14}/>Konto entfernen</button>}
+      <div className="native-card-actions"><button type="submit" disabled={!ready || busy}><RefreshCw size={14}/>{busy ? shellText(locale, "Verbindung wird geprüft…", "Checking connection…") : shellText(locale, "Speichern und Verbindung testen", "Save and test connection")}</button>
+        {cfg.accounts[account.id] && <button type="button" disabled={busy} onClick={() => { if (window.confirm(shellText(locale, "Dieses Mailkonto aus diesem Space entfernen?", "Remove this mail account from this Space?"))) void run(async () => { const result = await mailRequest(workspace, 'config', { remove: account.id }) as MailConfig; if (scope.current !== workspace) return; setCfg(result); setAccount(empty()); setPassword(''); }); }}><Trash2 size={14}/>{shellText(locale, "Konto entfernen", "Remove account")}</button>}
       </div>
     </form>
     {error && <div role="alert" className="workspace-error">{error}</div>}{notice && <p role="status">{notice}</p>}

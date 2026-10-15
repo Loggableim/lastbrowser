@@ -67,6 +67,7 @@ import { clearProviderChatEvidence, getProviderChatEvidence, isProviderModelQual
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { ProviderBetaCatalogToggle } from './ProviderBetaCatalogToggle.js';
 import { LocalAiSetupPane } from './LocalAiSetupPane.js';
+import { shellText } from '../i18n/shell-text.js';
 import {
   OnboardingStatus,
   canSubmitCloudSetup,
@@ -349,13 +350,13 @@ export function FirstRunSetupPane({
           if (response.error) throw new Error(response.error);
           return { models: response.models || [], configured: false };
         }
-        if (!browserProfileId || !backendProfileName) throw new Error('Das aktive Browserprofil wird noch vorbereitet. Bitte erneut laden.');
+        if (!browserProfileId || !backendProfileName) throw new Error(shellText(locale, "Das aktive Browserprofil wird noch vorbereitet. Bitte erneut laden.", "The active browser profile is still being prepared. Please reload."));
         const scopeSelection = { browserProfileId, workspacePath: workspacePath || null, backendProfileName };
         const client = new IndependentAssistantClient(window.lastbrowser.independent);
         const resolved = await client.request({ schemaVersion: 1, operation: 'resolveScope',
           payload: { browserProfileId, workspacePath: workspacePath || null }, backendProfileName });
         if (!resolved.ok) throw new Error(resolved.error.message);
-        if (resolved.value.scope.browserProfileId !== browserProfileId) throw new Error('Modellkatalog gehört zu einem anderen Profil.');
+        if (resolved.value.scope.browserProfileId !== browserProfileId) throw new Error(shellText(locale, "Modellkatalog gehört zu einem anderen Profil.", "The model catalog belongs to another profile."));
         const [catalog, auth] = await Promise.all([
           client.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get', includeCatalog: true } }),
           window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection }) as Promise<{ providers?: Array<{ id: string; has_key?: boolean; oauth_connected?: boolean; provider_available?: boolean }> }>
@@ -363,14 +364,14 @@ export function FirstRunSetupPane({
         if (!catalog.ok) throw new Error(catalog.error.message);
         if (catalog.value.scope.browserProfileId !== resolved.value.scope.browserProfileId
           || catalog.value.scope.backendProfileId !== resolved.value.scope.backendProfileId
-          || catalog.value.scope.spaceId !== resolved.value.scope.spaceId) throw new Error('Modellkatalog-Profil hat sich geändert.');
+          || catalog.value.scope.spaceId !== resolved.value.scope.spaceId) throw new Error(shellText(locale, "Modellkatalog-Profil hat sich geändert.", "The model catalog profile changed."));
         const group = catalog.value.groups?.find(item => item.provider_id === provider);
         const credentials = auth.providers?.find(item => item.id === provider);
         const configured = credentials?.provider_available !== false && Boolean(credentials?.has_key || credentials?.oauth_connected || (group?.configured && activeProviderOption?.keyOptional));
         return { models: group ? [...group.models, ...(group.extra_models || [])] : [], configured };
       };
       const result = await Promise.race([readCatalog(), new Promise<never>((_, reject) => {
-        deadline = setTimeout(() => reject(new Error('Modellliste antwortet nicht. Bitte erneut laden oder den Browser ohne KI starten.')), 20000);
+        deadline = setTimeout(() => reject(new Error(shellText(locale, "Modellliste antwortet nicht. Bitte erneut laden oder den Browser ohne KI starten.", "The model list is not responding. Reload or start the browser without AI."))), 20000);
       })]);
       if (!current()) return [];
       const available = [...new Map(result.models.map(item => {
@@ -382,7 +383,7 @@ export function FirstRunSetupPane({
       setModelCatalogKey(capturedKey);
       setLiveProviderModels(previous => ({ ...previous, [provider]: available }));
       setModel(previous => available.some(item => item.id === previous) ? previous : available[0]?.id || '');
-      if (!available.length) setModelProbeError(oauthProviderId ? 'Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.' : 'Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.');
+      if (!available.length) setModelProbeError(oauthProviderId ? shellText(locale, "Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.", "No models came back from the connected account. Check the sign-in and reload.") : shellText(locale, "Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.", "No models came back. Check saved credentials or enter a key and reload."));
       return available;
     } catch (cause) {
       if (current()) {
@@ -444,7 +445,7 @@ export function FirstRunSetupPane({
         setOAuthState((current) => ({
           ...current,
           status: 'pending',
-          message: `Verbindung kurz unterbrochen; erneuter Versuch läuft. (${pollError instanceof Error ? pollError.message : String(pollError)})`
+          message: shellText(locale, `Verbindung kurz unterbrochen; erneuter Versuch läuft. (${pollError instanceof Error ? pollError.message : String(pollError)})`, `Connection dropped briefly; retrying. (${pollError instanceof Error ? pollError.message : String(pollError)})`)
         }));
         transientFailures += 1;
         timer = window.setTimeout(() => void poll(), Math.min(15000, Math.max(3000, 1000 * 2 ** Math.min(transientFailures, 4))));
@@ -490,7 +491,7 @@ export function FirstRunSetupPane({
 
       const verificationUri = String(response.verification_uri || response.auth_url || '');
       const userCode = String(response.user_code || '');
-      if (!flowId || !verificationUri) throw new Error('Sidekick lieferte einen unvollständigen Anmelde-Flow.');
+      if (!flowId || !verificationUri) throw new Error(shellText(locale, "Sidekick lieferte einen unvollständigen Anmelde-Flow.", "Sidekick returned an incomplete sign-in flow."));
 
       setOAuthState({
         status: 'pending',
@@ -750,7 +751,7 @@ export function FirstRunSetupPane({
       setOAuthState((current) => ({
         ...current,
         status: current.status === 'idle' ? 'error' : current.status,
-        message: `Bitte verbinde zuerst dein ${activeProviderOption?.label || 'Konto'}, bevor du startest.`
+        message: shellText(locale, `Bitte verbinde zuerst dein ${activeProviderOption?.label || 'Konto'}, bevor du startest.`, `Connect your ${activeProviderOption?.label || 'account'} before you start.`)
       }));
       return;
     }
@@ -864,7 +865,7 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number"><HardDrive size={14} /></span>
               <div>
-                <h2>Sidekick-Installation gefunden</h2>
+                <h2>{shellText(locale, "Sidekick-Installation gefunden", "Sidekick installation found")}</h2>
                 <p>
                   Eine bestehende Sidekick-Installation wurde erkannt
                   {standaloneReport.homeDir ? ` (${standaloneReport.homeDir})` : ''}.
@@ -875,8 +876,8 @@ export function FirstRunSetupPane({
             <div className="standalone-migration-options">
               {([
                 { key: 'spaces' as const, label: 'Spaces & Workspaces', available: standaloneReport.components.spaces },
-                { key: 'supermemory' as const, label: 'Erinnerungen (Supermemory)', available: standaloneReport.components.supermemory },
-                { key: 'profiles' as const, label: 'Profile & Konfiguration', available: standaloneReport.components.profiles }
+                { key: 'supermemory' as const, label: shellText(locale, "Erinnerungen (Supermemory)", "Memories (Supermemory)"), available: standaloneReport.components.supermemory },
+                { key: 'profiles' as const, label: shellText(locale, "Profile & Konfiguration", "Profiles and configuration"), available: standaloneReport.components.profiles }
               ]).map((item) => (
                 <label key={item.key} className={`standalone-migration-option ${item.available ? '' : 'unavailable'}`}>
                   <input
@@ -886,7 +887,7 @@ export function FirstRunSetupPane({
                     onChange={(e) => setMigrateItems((prev) => ({ ...prev, [item.key]: e.target.checked }))}
                   />
                   <span>{item.label}</span>
-                  {!item.available && <small>nicht gefunden</small>}
+                  {!item.available && <small>{shellText(locale, "nicht gefunden", "not found")}</small>}
                 </label>
               ))}
             </div>
@@ -899,18 +900,18 @@ export function FirstRunSetupPane({
                   onClick={runStandaloneMigration}
                 >
                   {migrationState === 'running' ? <Loader2 size={14} className="spin" /> : <Download size={14} />}
-                  <span>{migrationState === 'running' ? 'Importiere…' : 'Daten übernehmen'}</span>
+                  <span>{migrationState === 'running' ? shellText(locale, "Importiere…", "Importing…") : shellText(locale, "Daten übernehmen", "Import data")}</span>
                 </button>
               )}
               {migrationState === 'done' && (
                 <span className="standalone-migration-success">
                   <CheckCircle2 size={14} /> Übernommen: {migrationResult?.copied?.join(', ') || '—'}
-                  {migrationResult?.skipped?.length ? ` · Übersprungen: ${migrationResult.skipped.join(', ')}` : ''}
+                  {migrationResult?.skipped?.length ? shellText(locale, ` · Übersprungen: ${migrationResult.skipped.join(', ')}`, ` · Skipped: ${migrationResult.skipped.join(', ')}`) : ''}
                 </span>
               )}
               {migrationState === 'error' && (
                 <span className="standalone-migration-error">
-                  Fehler: {migrationResult?.errors?.join('; ') || 'unbekannt'}
+                  Fehler: {migrationResult?.errors?.join('; ') || shellText(locale, "unbekannt", "unknown")}
                 </span>
               )}
             </div>
@@ -1059,7 +1060,7 @@ export function FirstRunSetupPane({
               <span className="setup-step-number">{browserOnly ? '3' : '5'}</span>
               <div>
                 <h2>LastBrowser als Windows Standard-Browser</h2>
-                <p>Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit LastBrowser.</p>
+                <p>{shellText(locale, "Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit LastBrowser.", "Open web pages, HTML files, and links from external apps such as Outlook, Teams, or Discord in LastBrowser by default.")}</p>
               </div>
             </div>
 
@@ -1106,7 +1107,7 @@ export function FirstRunSetupPane({
               </div>
             </div>
 
-            <div className="setup-pinned-grid" role="group" aria-label="Pinned Web Apps auswählen">
+            <div className="setup-pinned-grid" role="group" aria-label={shellText(locale, "Pinned Web Apps auswählen", "Choose pinned web apps")}>
               {PRESET_PINNED_APPS.map((app) => {
                 const isSelected = selectedAppIds.includes(app.id);
                 return (
@@ -1308,8 +1309,8 @@ export function FirstRunSetupPane({
                         <span>
                           {activeProviderOption.id === 'google-gemini-cli'
                             ? t('firstRun.oauthPromptSystemBrowser')
-                            : 'Klicke unten, um das Anmeldefenster zu öffnen.'}
-                          {activeProviderOption.id === 'google-gemini-cli' && ' Kein API-Key oder Kreditkarte nötig.'}
+                            : shellText(locale, "Klicke unten, um das Anmeldefenster zu öffnen.", "Click below to open the sign-in window.")}
+                          {activeProviderOption.id === 'google-gemini-cli' && shellText(locale, " Kein API-Key oder Kreditkarte nötig.", " No API key or credit card required.")}
                         </span>
                       </div>
                       <button
@@ -1327,7 +1328,7 @@ export function FirstRunSetupPane({
                           {activeProviderOption.id === 'google-gemini-cli'
                             ? t('firstRun.oauthOpenSystemBrowser')
                             : activeProviderOption.id === 'anthropic'
-                              ? 'Claude Code-Konto auf diesem Gerät verbinden'
+                              ? shellText(locale, "Claude Code-Konto auf diesem Gerät verbinden", "Connect a Claude Code account on this device")
                               : `Mit ${activeProviderOption.label} anmelden`}
                         </span>
                       </button>
@@ -1371,7 +1372,7 @@ export function FirstRunSetupPane({
                       )}
                       {oauthState.userCode && (
                         <div className="device-code-wrap">
-                          <span>Bestätigungscode:</span>
+                          <span>{shellText(locale, "Bestätigungscode:", "Confirmation code:")}</span>
                           <button type="button" className="code-badge" onClick={copyCodexCode}>
                             <code>{oauthState.userCode}</code>
                             <ClipboardCopy size={13} />
@@ -1389,7 +1390,7 @@ export function FirstRunSetupPane({
                 {provider === 'anthropic' && (
                   <div className="api-key-panel">
                     <label className="input-group">
-                      <span className="input-label">Anthropic API-Schlüssel (Alternative zu Claude Code)</span>
+                      <span className="input-label">{shellText(locale, "Anthropic API-Schlüssel (Alternative zu Claude Code)", "Anthropic API key (alternative to Claude Code)")}</span>
                       <input
                         type="password"
                         value={apiKey}
@@ -1397,12 +1398,12 @@ export function FirstRunSetupPane({
                           setApiKey(event.target.value);
                           setModelProbeError('');
                         }}
-                        placeholder="Anthropic API-Key einfügen"
+                        placeholder={shellText(locale, "Anthropic API-Key einfügen", "Paste Anthropic API key")}
                         className="key-input"
                       />
                       <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                         <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
-                          {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
+                          {modelProbeLoading ? 'Modelle werden geladen…' : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
                         </button>
                         {modelProbeError && <p role="alert">{modelProbeError}</p>}
                       </div>
@@ -1415,7 +1416,7 @@ export function FirstRunSetupPane({
               <div className="api-key-panel">
                 <label className="input-group">
                   <span className="input-label">
-                    {activeProviderOption?.id === 'openrouter' ? 'OpenRouter API-Schlüssel' : (activeProviderOption?.keyOptional ? 'API-Schlüssel (Optional bei lokalem Betrieb)' : 'API-Schlüssel')}
+                    {activeProviderOption?.id === 'openrouter' ? shellText(locale, "OpenRouter API-Schlüssel", "OpenRouter API key") : (activeProviderOption?.keyOptional ? shellText(locale, "API-Schlüssel (Optional bei lokalem Betrieb)", "API key (optional for a local server)") : shellText(locale, "API-Schlüssel", "API key"))}
                   </span>
                   <input
                     type="password"
@@ -1426,10 +1427,10 @@ export function FirstRunSetupPane({
                     }}
                     placeholder={
                       activeProviderOption?.keyOptional
-                        ? 'Leer lassen für lokalen Server (z. B. Ollama auf Port 11434)'
+                        ? shellText(locale, "Leer lassen für lokalen Server (z. B. Ollama auf Port 11434)", "Leave empty for a local server (for example Ollama on port 11434)")
                         : activeProviderOption?.id === 'openrouter'
-                          ? 'OpenRouter-Key einfügen (sk-or-...)'
-                        : `API-Key für ${activeProviderOption?.label || 'Provider'} einfügen`
+                          ? shellText(locale, "OpenRouter-Key einfügen (sk-or-...)", "Paste OpenRouter key (sk-or-...)")
+                        : shellText(locale, `API-Key für ${activeProviderOption?.label || 'Provider'} einfügen`, `Paste API key for ${activeProviderOption?.label || 'provider'}`)
                     }
                     className="key-input"
                   />
@@ -1446,7 +1447,7 @@ export function FirstRunSetupPane({
                   {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
                     <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                       <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
-                        {modelProbeLoading ? 'Modelle werden geladen…' : 'Verfügbare Modelle laden'}
+                        {modelProbeLoading ? 'Modelle werden geladen…' : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
                       </button>
                       {modelProbeError && <p role="alert">{modelProbeError}</p>}
                     </div>
@@ -1474,7 +1475,7 @@ export function FirstRunSetupPane({
                     <small className="field-hint">
                       {provider === 'alibaba'
                         ? t('settings.panels.providers.alibabaBaseUrlHint')
-                        : `Für Standard (${activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.`}
+                        : shellText(locale, `Für Standard (${activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.`, `Leave empty for the default (${activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}). Enter a URL here for Ollama Cloud or a remote server.`)}
                     </small>
                   </label>
                 )}
@@ -1487,7 +1488,7 @@ export function FirstRunSetupPane({
               {modelProbeError && models.length > 0 && <p role="alert">{modelProbeError}</p>}
               {models.length === 0 ? (
                 <div className="field-hint">
-                  <p>{modelProbeLoading ? 'Modelle werden geladen …' : modelProbeError || (oauthProviderId ? 'Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.' : 'Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.')}</p>
+                  <p>{modelProbeLoading ? 'Modelle werden geladen …' : modelProbeError || (oauthProviderId ? shellText(locale, "Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.", "Connect your account and load the model list. No API key is required.") : shellText(locale, "Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.", "Load models with saved credentials, or enter an API key."))}</p>
                   <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>Modelle neu laden</button>
                 </div>
               ) : <div className="models-pills-row">
@@ -1529,8 +1530,8 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">1</span>
               <div>
-                <h2>Persönlichkeit für diesen Space</h2>
-                <p>Dein Begleiter prägt den Schnellchat und den Antwortstil normaler Chats. Deren Basis-Profil und Werkzeuge bleiben erhalten.</p>
+                <h2>{shellText(locale, "Persönlichkeit für diesen Space", "Personality for this Space")}</h2>
+                <p>{shellText(locale, "Dein Begleiter prägt den Schnellchat und den Antwortstil normaler Chats. Deren Basis-Profil und Werkzeuge bleiben erhalten.", "Your companion shapes Quick Chat and the tone of ordinary chats. Their base profile and tools stay in place.")}</p>
               </div>
             </div>
 
@@ -1549,7 +1550,7 @@ export function FirstRunSetupPane({
                   maxLength={32}
                   className="assistant-name-input"
                 />
-                <div className="name-preset-chips" role="group" aria-label="Namensvorschläge">
+                <div className="name-preset-chips" role="group" aria-label={shellText(locale, "Namensvorschläge", "Name suggestions")}>
                   {BOT_NAME_PRESETS.map((preset) => {
                     const isPresetActive = selectedBotPreset === preset.name;
                     return (
@@ -1574,7 +1575,7 @@ export function FirstRunSetupPane({
               <img src={personalityAvatar(personality)} alt="" style={{ width: 80, height: 80, objectFit: 'contain' }} />
               <div><strong>{effectiveBotName}</strong><p>{PERSONALITY_PROFILES.find(profile => profile.id === personality)?.name}</p></div>
             </div>
-            <div className="personality-cards-grid" role="radiogroup" aria-label="Persönlichkeitsprofil auswählen">
+            <div className="personality-cards-grid" role="radiogroup" aria-label={shellText(locale, "Persönlichkeitsprofil auswählen", "Choose a personality")}>
               {PERSONALITY_PROFILES.map((profile) => {
                 const isSelected = personality === profile.id;
                 return (

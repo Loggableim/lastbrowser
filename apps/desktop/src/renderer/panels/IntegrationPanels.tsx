@@ -22,6 +22,8 @@ import {
   Hash
 } from 'lucide-react';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
+import { shellText } from '../i18n/shell-text.js';
+import { useDesktopI18n } from '../i18n.js';
 import {
   type ServiceStatus,
   type AnyRecord,
@@ -279,6 +281,7 @@ export function NativeGatewayMain({
 }: {
   serviceStatus: ServiceStatus | null;
 }): JSX.Element {
+  const { locale } = useDesktopI18n();
   const ready = isReady(serviceStatus);
   const [gatewayStatus, setGatewayStatus] = useState<{
     running: boolean;
@@ -374,7 +377,7 @@ export function NativeGatewayMain({
         icon={<Radio size={21} />}
         title="Messaging Gateway Daemon"
         kicker="Multi-Platform Relay"
-        detail="Multi-Platform Chat Gateway Daemon mit Windows System Tray für 24/7 Hintergrundempfang."
+        detail={shellText(locale, "Multi-Platform Chat Gateway Daemon mit Windows System Tray für 24/7 Hintergrundempfang.", "Multi-platform chat gateway daemon with a Windows system tray for round-the-clock background delivery.")}
         loading={loading}
         ready={ready}
         onRefresh={refreshStatus}
@@ -420,7 +423,7 @@ export function NativeGatewayMain({
                 disabled={loading || !ready}
               >
                 <Play size={13} style={{ marginRight: '4px' }} />
-                Gateway starten
+                {shellText(locale, 'Gateway starten', 'Start gateway')}
               </button>
             ) : (
               <button
@@ -430,7 +433,7 @@ export function NativeGatewayMain({
                 disabled={loading}
               >
                 <Square size={13} style={{ marginRight: '4px' }} />
-                Gateway stoppen
+                {shellText(locale, 'Gateway stoppen', 'Stop gateway')}
               </button>
             )}
 
@@ -441,18 +444,18 @@ export function NativeGatewayMain({
               disabled={loading || !gatewayStatus.running}
             >
               <RefreshCw size={13} style={{ marginRight: '4px' }} />
-              Neu starten
+              {shellText(locale, 'Neu starten', 'Restart')}
             </button>
           </div>
         </header>
 
         <p style={{ fontSize: '12px', color: 'var(--muted, #888)', marginTop: '8px', marginBottom: 0 }}>
-          🔔 <strong>System Tray Integration:</strong> Der Gateway-Daemon bleibt auch bei geschlossenem Browserfenster im Windows System Tray aktiv. Eingehende Nachrichten auf verknüpften Kanälen werden rund um die Uhr verarbeitet.
+          🔔 <strong>{shellText(locale, 'System Tray Integration:', 'System tray integration:')}</strong> {shellText(locale, 'Der Gateway-Daemon bleibt auch bei geschlossenem Browserfenster im Windows System Tray aktiv. Eingehende Nachrichten auf verknüpften Kanälen werden rund um die Uhr verarbeitet.', 'The gateway daemon stays in the Windows system tray after the browser window closes. Incoming messages on linked channels are processed around the clock.')}
         </p>
       </div>
 
       <div style={{ marginBottom: '12px' }}>
-        <h3 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 10px 0' }}>Unterstützte Messenger & Protokolle</h3>
+        <h3 style={{ fontSize: '14px', fontWeight: 600, margin: '0 0 10px 0' }}>{shellText(locale, "Unterstützte Messenger & Protokolle", "Supported messengers and protocols")}</h3>
         <div
           style={{
             display: 'grid',

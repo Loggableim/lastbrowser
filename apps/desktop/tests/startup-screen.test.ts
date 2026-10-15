@@ -104,6 +104,28 @@ describe('startup screen copy and motion rules', () => {
       for (const style of ['Klassischer Rainbow-Flow', 'Sanfter Aurora-Flow', 'Umlaufendes Lichtband']) expect(german).toContain(style);
     } finally { vi.unstubAllGlobals(); }
   });
+  it('keeps the compact startup popover closed until the gear is used', () => {
+    try {
+      vi.stubGlobal('navigator', { language: 'en' });
+      vi.stubGlobal('localStorage', { getItem: () => null });
+      // Only the gear is present; no panel is rendered over the launch animation.
+      const closed = renderWithI18n(createElement(StartupPreferencesPanel, { compact: true }));
+      expect(closed).toContain('startup-preferences-gear');
+      expect(closed).not.toContain('startup-preferences-panel');
+      expect(closed).not.toContain('id="startup-preferences-popover"');
+      // The inline settings card stays expanded and never adds a startup gear.
+      const inline = renderWithI18n(createElement(StartupPreferencesPanel, { compact: false }));
+      expect(inline).toContain('startup-preferences-panel');
+      expect(inline).not.toContain('startup-preferences-gear');
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it('prevents the startup panel content from clipping or scrolling sideways', () => {
+    const styles = readFileSync(path.join(sourceRoot, 'StartupScreen.css'), 'utf8');
+    expect(styles).toContain('grid-template-columns:minmax(0,1fr)');
+    expect(styles).toContain('overflow-x:hidden');
+    expect(styles).toContain('max-width:100%');
+    expect(styles).toContain('overflow-wrap:anywhere');
+  });
   it('covers every current app locale with seven quotes and all eight real phase labels', () => {
     expect(startupLocaleIds).toEqual(desktopLocaleIds);
     for (const locale of desktopLocaleIds) {

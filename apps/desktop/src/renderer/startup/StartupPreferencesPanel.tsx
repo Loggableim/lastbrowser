@@ -12,7 +12,12 @@ export function StartupPreferencesPanel({ compact = false }: { compact?: boolean
   const rainbowDescriptions = { classic: c('Alle Regenbogenfarben fließen gleichmäßig um den Rahmen.', 'All rainbow colors flow evenly around the frame.'), aurora: c('Weiche Cyan-, Violett- und Rosatöne bewegen sich langsam hin und zurück.', 'Soft cyan, violet and pink hues drift slowly back and forth.'), orbit: c('Ein heller Lichtbogen umrundet einen ruhigen, dunklen Rahmen.', 'A bright arc circles a calm, dark frame.') };
   const preferences = useStartupPreferences();
   const sounds = useStartupSounds();
-  const [open, setOpen] = useState(!compact);
+  // The popover is closed on mount in every context so it can never open itself
+  // over the launch animation. The gear is the only entry point.
+  const [open, setOpen] = useState(false);
+  // The inline variant is the visible settings card and stays expanded; only the
+  // compact startup variant is gated behind the gear.
+  const expanded = compact ? open : true;
   type Preview = { id: number; animation: StartupPreferences['animation']; durationMs: number; soundId: string | null };
   const [preview, setPreview] = useState<Preview | null>(null);
   const previewValue = useRef<Preview | null>(null);
@@ -111,7 +116,7 @@ export function StartupPreferencesPanel({ compact = false }: { compact?: boolean
   const previewTheme = getSoundOpeningTheme(preview?.soundId ?? undefined);
   return <div ref={root} className={compact ? 'startup-preferences-trigger' : 'startup-preferences-inline'}>
     {compact && <button ref={trigger} type="button" className="startup-preferences-gear" aria-label={c("Startanimation und Sound einstellen", "Configure startup animation and sound")} title={c("Startanimation und Sound", "Startup animation and sound")} aria-expanded={open} aria-controls="startup-preferences-popover" onClick={() => setOpen(value => !value)}><Settings size={17} /></button>}
-    {open && <div ref={panel} id={compact ? 'startup-preferences-popover' : undefined} className="startup-preferences-panel" role={compact ? 'dialog' : 'group'} aria-label={c("Startanimation und Sound", "Startup animation and sound")}>
+    {expanded && <div ref={panel} id={compact ? 'startup-preferences-popover' : undefined} className="startup-preferences-panel" role={compact ? 'dialog' : 'group'} aria-label={c("Startanimation und Sound", "Startup animation and sound")}>
       <div className="startup-preferences-heading"><strong>{c("Startanimation & Sound", "Startup animation & sound")}</strong>{compact && <button type="button" aria-label={c("Schließen", "Close")} onClick={close}><X size={15} /></button>}</div>
       <small>{c('Mit aktiviertem Sound erhält jeder der fünf Sounds seine eigene Startanimation. Bewegung und Dauer folgen der Audiowiedergabe.', 'When sound is enabled, each of the five sounds has its own opening animation. Movement and duration follow audio playback.')}</small>
       <label>{c('Animation ohne Sound', 'Silent opening animation')}<select value={preferences.animation} onChange={event => update({ animation: event.target.value as StartupPreferences['animation'] })}>{startupAnimations.map(item => <option key={item.id} value={item.id}>{locale.startsWith('de') ? item.label : animationNames[item.id]} · {item.duration} ms</option>)}</select></label>

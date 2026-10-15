@@ -198,7 +198,7 @@ export type LocalStoreRuntimeCapability = Readonly<{state:'unavailable';reasonCo
   contextTokens:number;maxOutputTokens:number;parallelRequests:1}>;
 export type ScopedModelEntry = Readonly<{ id: string; label: string; supportsIndependent: boolean; reasoning_efforts?: readonly string[];
   modelSource?: 'explicit_config'|'local_catalog'; deploymentKind?:'local'|'cloud'|'remote'|'unknown';
-  contextLength?:number|null;contextLengthSource?:'local_catalog'|'unknown';localRuntime?:LocalStoreRuntimeCapability;
+  contextLength?:number|null;contextLengthSource?:'live_catalog'|'local_catalog'|'official_model_docs'|'catalog'|'provided_catalog'|'models_dev'|'explicit_config'|'unknown';localRuntime?:LocalStoreRuntimeCapability;
   nativeAvailability?: NativeModelAvailability }>;
 export type ScopedModelGroup = Readonly<{ provider: string; provider_id: string; deployment?: 'local' | 'cloud' | 'remote' | 'unknown'; deploymentKind?:'local'|'cloud'|'remote'|'unknown'; configured: boolean; models: readonly ScopedModelEntry[]; extra_models?: readonly ScopedModelEntry[] }>;
 export type ScopedModelProvider = Readonly<{id:string;display_name:string;has_key:boolean;oauth_connected:boolean;auth_state:string;provider_available:boolean;models:readonly string[]}>;

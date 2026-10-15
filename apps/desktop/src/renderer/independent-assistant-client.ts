@@ -292,7 +292,7 @@ const isModelEntry: Guard<ScopedModelEntry> = (v): v is ScopedModelEntry => isIn
   && boolean(v.supportsIndependent) && optional(v.reasoning_efforts, values => list(values, ref))
   && optional(v.deploymentKind,value=>oneOf(value,['local','cloud','remote','unknown']))
   && optional(v.contextLength,value=>nullable(value,revision))
-  && optional(v.contextLengthSource,value=>oneOf(value,['local_catalog','unknown']))
+  && optional(v.contextLengthSource,value=>oneOf(value,['live_catalog','local_catalog','official_model_docs','catalog','provided_catalog','models_dev','explicit_config','unknown']))
   && optional(v.localRuntime,isLocalStoreRuntimeCapability)
   && optional(v.nativeAvailability, isNativeModelAvailability);
 const isModelGroup: Guard<ScopedModelGroup> = (v): v is ScopedModelGroup => isIndependentRecord(v) && ref(v.provider) && text(v.provider_id)

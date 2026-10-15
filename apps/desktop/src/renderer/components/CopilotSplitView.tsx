@@ -42,7 +42,7 @@ import {
 } from '../workflow-templates.js';
 import type { ScopedModelSelection } from '../independent-contracts.js';
 import { messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
-import { CompanionPicker, type CompanionSelection } from './CompanionPicker.js';
+import { CompanionSwitch } from './CompanionPicker.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
 import { isModelActive, useActiveModelRevision } from '../active-model-selection.js';
@@ -178,18 +178,6 @@ export function CopilotSplitView({
   const { t, locale } = useDesktopI18n();
   const companion = useCompanionAppearance();
   const companionName = companion.botName;
-  const [companionPickerOpen, setCompanionPickerOpen] = useState(false);
-  const [companionDraft, setCompanionDraft] = useState<CompanionSelection>({ personality: 'nova', botName: 'Nova' });
-  const companionPickerRef = useRef<HTMLDivElement>(null);
-  const companionTriggerRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => { setCompanionPickerOpen(false); }, [browserProfileId, workspacePath, backendProfileName, isOpen]);
-  useEffect(() => {
-    if (!companionPickerOpen) return;
-    const outside = (event: PointerEvent) => { if (!companionPickerRef.current?.contains(event.target as Node)) setCompanionPickerOpen(false); };
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } };
-    window.addEventListener('pointerdown', outside); window.addEventListener('keydown', escape);
-    return () => { window.removeEventListener('pointerdown', outside); window.removeEventListener('keydown', escape); };
-  }, [companionPickerOpen]);
   const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
@@ -797,27 +785,7 @@ export function CopilotSplitView({
     <aside className="copilot-split-panel" aria-label={`${companionName} AI Workspace`}>
       {/* Top Header */}
       <div className="copilot-header">
-        <div ref={companionPickerRef} style={{ position: 'relative' }}>
-        <button type="button" className="copilot-header-brand" ref={companionTriggerRef} aria-label={t('copilot.personalitySwitch')} aria-haspopup="dialog" aria-expanded={companionPickerOpen}
-          style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer' }}
-          onClick={() => { setCompanionDraft({ personality: companion.personality, botName: companion.botName }); setCompanionPickerOpen(current => !current); }}>
-          <div className="copilot-logo-circle">
-            <img src={companion.avatar} alt="" className="copilot-header-avatar" draggable={false} />
-          </div>
-          <span className="copilot-header-title">{companionName} AI</span>
-        </button>
-        {companionPickerOpen && <section role="dialog" aria-label={t('copilot.personalityDialog')} style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300, boxSizing: 'border-box', maxWidth: 'calc(100vw - 32px)', padding: 16, borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-primary, #101522)', color: 'var(--text-primary)', zIndex: 1000, boxShadow: '0 12px 32px rgba(0,0,0,.4)' }}>
-          <strong>{t('copilot.personalityTitle')}</strong>
-          <CompanionPicker value={companionDraft} onChange={setCompanionDraft} disabled={!companion.loaded || companion.busy} />
-          {companion.error && <p role="alert">{companion.error}</p>}
-          {companion.error && <button type="button" onClick={companion.retry}>{locale.startsWith('de') ? 'Erneut laden' : 'Reload'}</button>}
-          {!companion.loaded && !companion.error && <p role="status">{t('copilot.loading')}</p>}
-          <div className="native-card-actions">
-            <button type="button" disabled={!companion.loaded || companion.busy} onClick={async () => { if (await companion.setSelection(companionDraft.personality, companionDraft.botName)) { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); } }}>{t('common.save')}</button>
-            <button type="button" onClick={() => { setCompanionPickerOpen(false); companionTriggerRef.current?.focus(); }}>{t('common.cancel')}</button>
-          </div>
-        </section>}
-        </div>
+        <CompanionSwitch />
         <div className="copilot-header-actions">
           {/* Universal Model Picker in Header */}
           <div className="copilot-header-model-wrapper" ref={modelPickerRef} style={{ position: 'relative' }}>

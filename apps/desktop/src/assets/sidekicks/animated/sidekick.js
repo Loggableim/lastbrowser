@@ -6,7 +6,8 @@ const FACES = {
   orion: { accent: '#ff9a1f', extra: 'monocle' },
   patch: { accent: '#ff4d4d', extra: 'headset' },
   spark: { accent: '#b06bff', extra: 'spark' },
-  zen: { accent: '#7fd0ff', extra: 'book' }
+  zen: { accent: '#7fd0ff', extra: 'book' },
+  custom: { accent: '#9aa4b8', extra: 'plus' }
 };
 
 function svg(kind) {
@@ -16,7 +17,8 @@ function svg(kind) {
     monocle: '<circle class="accent" cx="118" cy="124" r="28" fill="none" stroke="#ff9a1f" stroke-width="6"/><circle cx="104" cy="124" r="4" fill="#ff9a1f"/>',
     headset: '<path class="accent" d="M70 78h140a46 46 0 0 1 0 70" fill="none" stroke="#ff4d4d" stroke-width="10" stroke-linecap="round"/><circle cx="62" cy="150" r="16" fill="#ff4d4d"/><path class="tool" d="M214 168l18 18" stroke="#d7dde8" stroke-width="6" stroke-linecap="round"/>',
     spark: '<path class="accent" d="M78 70h120a28 28 0 0 1 0 36H96z" fill="#8d4dff"/><g class="sparks"><circle cx="214" cy="86" r="4" fill="#ffe56b"/><circle cx="228" cy="104" r="3" fill="#ff8ad4"/><circle cx="206" cy="108" r="2" fill="#9ad4ff"/></g>',
-    book: '<circle class="accent" cx="118" cy="126" r="22" fill="none" stroke="#ffb020" stroke-width="4"/><circle cx="168" cy="126" r="22" fill="none" stroke="#ffb020" stroke-width="4"/><path d="M140 126h6" stroke="#ffb020" stroke-width="4"/><g class="book"><path d="M196 176h36v22h-36z" fill="#f4efe4"/><path d="M214 176v22" stroke="#7aa2ff" stroke-width="2"/></g>'
+    book: '<circle class="accent" cx="118" cy="126" r="22" fill="none" stroke="#ffb020" stroke-width="4"/><circle cx="168" cy="126" r="22" fill="none" stroke="#ffb020" stroke-width="4"/><path d="M140 126h6" stroke="#ffb020" stroke-width="4"/><g class="book"><path d="M196 176h36v22h-36z" fill="#f4efe4"/><path d="M214 176v22" stroke="#7aa2ff" stroke-width="2"/></g>',
+    plus: '<circle class="accent" cx="214" cy="188" r="18" fill="#243044"/><path class="plus" d="M214 178v20M204 188h20" stroke="#d7dde8" stroke-width="4" stroke-linecap="round"/>'
   }[face.extra];
   return `<svg viewBox="0 0 280 280" aria-hidden="true">
     <g class="body">

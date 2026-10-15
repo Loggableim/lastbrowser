@@ -14,6 +14,7 @@
 .sidekick-patch[data-state="working"] .tool { animation: sidekick-tool 0.7s ease-in-out infinite; }
 .sidekick-spark[data-state="working"] .sparks { animation: sidekick-spark 0.8s ease-in-out infinite; }
 .sidekick-zen .body { animation-duration: 6.4s; }
+.sidekick-custom[data-state="working"] .plus { animation: sidekick-tool 0.7s ease-in-out infinite; }
 .sidekick-paused .body, .sidekick-paused .tool, .sidekick-paused .sparks,
 .sidekick-reduced .body, .sidekick-reduced .tool, .sidekick-reduced .sparks { animation: none; }
 @keyframes sidekick-idle { 50% { transform: translateY(-6px); } }

@@ -2,7 +2,9 @@ import { IndependentAssistantClient } from './independent-assistant-client.js';
 import { mapScopedModelPickerOptions, type ModelPickerOptionGroup } from './model-picker-options.js';
 
 export const MODEL_CATALOG_EVENT = 'lastbrowser:model-catalog-ready';
+export const CATALOG_VISIBLE_WAIT_MS = 12000;
 const STORAGE_KEY = 'lastbrowser.chatModelCatalog.v1';
+const QUICKCHAT_CATALOG_KEY = 'lastbrowser.quickchatModelCatalog.v1';
 
 export function readModelCatalogGroups(viewKey: string): ModelPickerOptionGroup[] {
   try {
@@ -25,6 +27,24 @@ export function publishModelCatalog(viewKey: string, groups: ModelPickerOptionGr
 
 export function clearModelCatalog(): void {
   try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+}
+
+export function readQuickchatCatalog<T>(scopeKey: string): T[] {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(QUICKCHAT_CATALOG_KEY) || '');
+    if (raw?.scopeKey === scopeKey && Array.isArray(raw.models)) return raw.models as T[];
+  } catch {
+    // A damaged Quickchat cache falls through to the live catalog request.
+  }
+  return [];
+}
+
+export function publishQuickchatCatalog(scopeKey: string, models: readonly unknown[]): void {
+  try {
+    window.localStorage.setItem(QUICKCHAT_CATALOG_KEY, JSON.stringify({ scopeKey, models }));
+  } catch {
+    // The in-memory list still paints the open picker.
+  }
 }
 
 export async function prefetchModelCatalog(input: {

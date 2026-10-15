@@ -7819,6 +7819,8 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
                 delete_cli_session(sid)
             except Exception:
                 logger.debug("Failed to delete CLI session %s", sid)
+        if not _models.unlink_owned_session_files(sid):
+            return j(handler, {"ok": False, "error": "session_file_remains", "deleted": False}, status=500)
         return j(handler, {"ok": True, **worktree_retained})
 
     if parsed.path == "/api/session/clear":

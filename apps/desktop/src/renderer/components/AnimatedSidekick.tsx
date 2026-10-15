@@ -67,5 +67,7 @@ export function AnimatedSidekick({
     return <img src={personalityAvatar(fallbackPersonality[persona])} alt="" width={size} height={size} />;
   }
 
-  return <div ref={host} role="img" aria-label={label} data-sidekick-state={state} />;
+  // The engine builds the persona SVG only into an empty host and never clears
+  // it, so a new persona needs a fresh host element (key), not a reused one.
+  return <div key={mini ? `${persona}-mini` : persona} ref={host} role="img" aria-label={label} data-sidekick-state={state} />;
 }

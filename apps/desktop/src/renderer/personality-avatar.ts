@@ -17,9 +17,14 @@ export function personalityAvatar(personality: unknown): string {
     ? personalityAvatars[personality as CompanionPersonality] : personalityAvatars.nova;
 }
 const STANDARD_CHAT_COMPANION_KEY = 'lastbrowser.standardChatCompanion.v1';
+export const STANDARD_CHAT_COMPANION_EVENT = 'lastbrowser:standard-chat-companion';
 type CompanionRecord = { key: string; personality: CompanionPersonality; botName: string; scope: IndependentScope; revision: number };
+// Mirrors the Space companion into the sidebar's standard-chat selection and
+// notifies same-window listeners (the sidebar icon listens for this event).
 function writeStandardChatCompanion(personality: CompanionPersonality, botName: string) {
-  window.localStorage.setItem(STANDARD_CHAT_COMPANION_KEY, JSON.stringify({ personality, botName }));
+  const saved = { personality, botName };
+  window.localStorage.setItem(STANDARD_CHAT_COMPANION_KEY, JSON.stringify(saved));
+  window.dispatchEvent(new CustomEvent(STANDARD_CHAT_COMPANION_EVENT, { detail: saved }));
 }
 function surfaceCompanionError(message: string) {
   const showToast = (window as unknown as { showToast?: (message: string) => void }).showToast;
@@ -81,6 +86,9 @@ export function CompanionAppearanceProvider({ children, browserProfileId, worksp
     refreshGeneration.current++;
     setError('');
     setAppearance({ ...committed, personality, botName: trimmed });
+    // Sidebar icon, dock and standard-chat header read the standard selection,
+    // so the header choice must reach them at once (reverted in the catch below).
+    writeStandardChatCompanion(personality, trimmed);
     try {
       const result = await companionRequestDeadline(client.request({ schemaVersion: 1, operation: 'companion', scope: committed.scope, payload: { action: 'set', personality, botName: trimmed, expectedRevision: committed.revision, clientRequestId: crypto.randomUUID() } }));
       if (lifecycle !== generation.current || keyRef.current !== requestKey || selectionId !== selectionGeneration.current) return false;

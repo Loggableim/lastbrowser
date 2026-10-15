@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { companionDefaultNames, personalityAvatar, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
+import { companionDefaultNames, personalityAvatar, STANDARD_CHAT_COMPANION_EVENT, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 import { useDesktopI18n } from '../i18n.js';
 
 export type CompanionSelection = { personality: CompanionPersonality; botName: string };
 const STANDARD_CHAT_COMPANION_KEY = 'lastbrowser.standardChatCompanion.v1';
 
-export const STANDARD_CHAT_COMPANION_EVENT = 'lastbrowser:standard-chat-companion';
+export { STANDARD_CHAT_COMPANION_EVENT };
 
 export function readStandardChatCompanion(): CompanionSelection & { stored: boolean } {
   try {

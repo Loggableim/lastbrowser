@@ -1,0 +1,54 @@
+LastBrowser
+Copyright (c) 2026 LastBrowser Project and Contributors
+
+This product includes software developed by the LastBrowser Project
+(https://lastbrowser.com / https://github.com/Loggableim/lastbrowser).
+
+========================================================================
+Origin & Derived Works Notice
+========================================================================
+
+Portions of this software (specifically the Sidekick backend service under
+`services/sidekick/`) are derived from:
+- Hermes Agent by Nous Research (https://github.com/NousResearch)
+  Copyright (c) 2025 Nous Research
+  Licensed under the MIT License.
+- Sidekick Agent
+  Copyright (c) 2025 Sidekick
+  Licensed under the MIT License.
+
+========================================================================
+Third-Party Bundled Software & Libraries
+========================================================================
+
+- llama.cpp
+  Copyright (c) 2023-2025 Georgi Gerganov and llama.cpp contributors
+  Licensed under the MIT License.
+
+- LLVM OpenMP Runtime (libomp)
+  Copyright (c) 1997-2025 LLVM Team / Intel Corporation
+  Licensed under the Apache License v2.0 with LLVM Exceptions.
+
+- CastLabs Electron Shell (Widevine CDM Integration)
+  Copyright (c) 2013-2025 GitHub Inc. and CastLabs Technologies
+  Licensed under the MIT License.
+
+- Ghostery Adblocker Engine (@ghostery/adblocker-electron)
+  Copyright (c) Ghostery, Inc. and contributors
+  Licensed under the Mozilla Public License 2.0 (MPL-2.0).
+  Combined with LastBrowser as a Larger Work pursuant to MPL-2.0 Section 3.3.
+
+- Atkinson Hyperlegible Font
+  Copyright (c) 2020-2021 Braille Institute of America
+  Licensed under the SIL Open Font License, Version 1.1.
+
+- Lexend Font Family
+  Copyright (c) 2019-2021 Thomas Jockin and Lexend Authors
+  Licensed under the SIL Open Font License, Version 1.1.
+
+- OpenDyslexic Font
+  Copyright (c) 2011-2025 Abbie Gonzalez
+  Licensed under the SIL Open Font License, Version 1.1 / Bitstream Vera.
+
+For full license texts and complete dependency inventories, please refer to
+THIRD-PARTY-LICENSES.md.

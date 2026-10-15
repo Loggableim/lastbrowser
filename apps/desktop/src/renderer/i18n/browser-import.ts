@@ -17,7 +17,11 @@ export function browserImportCopy(locale: string) {
     empty: 'Keine ausgewählten Browserdaten gefunden.', failed: 'Import fehlgeschlagen. Quellbrowser schließen und erneut versuchen, oder eine Lesezeichendatei auswählen.',
     defaultPending: 'Windows-Einstellungen sind geöffnet. Wähle LastBrowser als Standard für HTTP und HTTPS; der Status wird beim Zurückkehren erneut geprüft.',
     defaultFailed: 'Windows-Standardeinstellungen konnten nicht geöffnet werden.', defaultActive: 'LastBrowser ist dein Standardbrowser.',
-    defaultRecommend: 'LastBrowser ist noch nicht dein Standardbrowser. Du kannst ihn in den Windows-Einstellungen als Standard für Weblinks festlegen.'
+    defaultRecommend: 'LastBrowser ist noch nicht dein Standardbrowser. Du kannst ihn in den Windows-Einstellungen als Standard für Weblinks festlegen.',
+    sourceBrowser: 'Quell-Browser auswählen',
+    fileImported: (count: number) => `${count} Lesezeichen erfolgreich importiert!`,
+    fileEmpty: 'Keine gültigen Lesezeichen in der Datei gefunden.',
+    fileReadError: 'Fehler beim Einlesen der Lesezeichendatei.'
   } : {
     detected: 'Windows default browser:', unknown: 'Not detected', profile: 'Browser profile', noProfile: 'No supported profile found',
     capabilities: 'Select a browser profile and its available data types. Passwords are imported separately from an explicitly exported CSV file into the encrypted password vault.',
@@ -36,6 +40,10 @@ export function browserImportCopy(locale: string) {
     empty: 'No selected browser data found.', failed: 'Import failed. Close the source browser and retry, or select an exported bookmark file.',
     defaultPending: 'Windows settings are open. Choose LastBrowser for HTTP and HTTPS; its status will be checked again when you return.',
     defaultFailed: 'Could not open Windows default app settings.', defaultActive: 'LastBrowser is your default browser.',
-    defaultRecommend: 'LastBrowser is not your default browser yet. You can make it the default for web links in Windows settings.'
+    defaultRecommend: 'LastBrowser is not your default browser yet. You can make it the default for web links in Windows settings.',
+    sourceBrowser: 'Choose source browser',
+    fileImported: (count: number) => `Imported ${count} bookmarks.`,
+    fileEmpty: 'No valid bookmarks found in the file.',
+    fileReadError: 'Could not read the bookmark file.'
   };
 }

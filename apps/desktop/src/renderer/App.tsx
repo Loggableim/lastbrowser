@@ -1,4 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { clearModelCatalog, prefetchModelCatalog } from './model-catalog-prefetch.js';
 import {
   BarChart3,
   Bot,
@@ -1915,6 +1916,23 @@ function AppContent(): JSX.Element {
     saveSearchEngineId(window.localStorage, searchEngineId);
     void window.lastbrowser?.browser?.setSearchEngine?.(searchEngineId);
   }, [searchEngineId]);
+  useEffect(() => {
+    if (!sidekickApiReady) return undefined;
+    let alive = true;
+    const viewKey = JSON.stringify([activeProfileId, activeSpacePath || null, activeBackendProfileName || null]);
+    const run = () => {
+      void prefetchModelCatalog({
+        viewKey,
+        browserProfileId: activeProfileId,
+        workspacePath: activeSpacePath || null,
+        backendProfileName: activeBackendProfileName || undefined
+      }).catch(() => undefined);
+    };
+    run();
+    const onSettings = () => { if (alive) { clearModelCatalog(); run(); } };
+    window.addEventListener('lastbrowser:settings-changed', onSettings);
+    return () => { alive = false; window.removeEventListener('lastbrowser:settings-changed', onSettings); };
+  }, [sidekickApiReady, activeProfileId, activeSpacePath, activeBackendProfileName]);
 
   /** Drop a single entry from the history panel. */
   async function removeHistoryEntry(url: string): Promise<void> {

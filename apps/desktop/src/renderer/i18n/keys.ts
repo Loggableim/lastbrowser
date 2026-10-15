@@ -1728,6 +1728,12 @@ export const desktopTranslationKeys = [
   , "commands.cli.kanbanDiagnostics"
   , "commands.cli.insights"
   , "commands.cli.version"
+  , 'sidebar.companion.menu'
+  , 'sidebar.companion.nova'
+  , 'sidebar.companion.analytical'
+  , 'sidebar.companion.developer'
+  , 'sidebar.companion.creative'
+  , 'sidebar.companion.mentor'
 ] as const;
 
 export type DesktopTranslationKey = (typeof desktopTranslationKeys)[number];

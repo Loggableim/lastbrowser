@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CompanionSwitch } from './CompanionPicker.js';
+import { readStandardChatCompanion } from './CompanionPicker.js';
+import { companionDefaultNames, personalityAvatar, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 import { DownloadDockTrigger } from '../NativeDownloads.js';
 import {
   Archive,
@@ -287,6 +288,40 @@ export function SidekickSidebar({
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const [spacePickerOpen, setSpacePickerOpen] = useState(false);
   const spacePickerRef = useRef<HTMLDivElement | null>(null);
+  const [personalityOpen, setPersonalityOpen] = useState(false);
+  const personalityRef = useRef<HTMLDivElement | null>(null);
+  const expandedInnerRef = useRef<HTMLDivElement | null>(null);
+  const drawerTabsShellRef = useRef<HTMLDivElement | null>(null);
+  const [personalityTop, setPersonalityTop] = useState(0);
+  const companion = useCompanionAppearance();
+  const savedCompanion = readStandardChatCompanion();
+  const activePersonality = companion.loaded ? companion.personality : savedCompanion.personality;
+  useEffect(() => {
+    if (!personalityOpen) return undefined;
+    const place = () => {
+      const shell = drawerTabsShellRef.current;
+      const host = expandedInnerRef.current;
+      if (!shell || !host) return;
+      setPersonalityTop(shell.getBoundingClientRect().bottom - host.getBoundingClientRect().top);
+    };
+    place();
+    const outside = (event: PointerEvent) => { if (!personalityRef.current?.contains(event.target as Node)) setPersonalityOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setPersonalityOpen(false); };
+    window.addEventListener('resize', place);
+    document.addEventListener('pointerdown', outside);
+    document.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('resize', place);
+      document.removeEventListener('pointerdown', outside);
+      document.removeEventListener('keydown', escape);
+    };
+  }, [personalityOpen]);
+  const choosePersonality = async (personality: CompanionPersonality) => {
+    const botNameToSave = companionDefaultNames[personality];
+    if (companion.loaded) await companion.setSelection(personality, botNameToSave);
+    window.localStorage.setItem('lastbrowser.standardChatCompanion.v1', JSON.stringify({ personality, botName: botNameToSave }));
+    setPersonalityOpen(false);
+  };
 
   useEffect(() => {
     if (!spacePickerOpen) return;
@@ -396,7 +431,7 @@ export function SidekickSidebar({
           </div>
         ) : null
       ) : (
-        <div className="sidekick-expanded-inner">
+        <div className="sidekick-expanded-inner" ref={expandedInnerRef} style={{ position: 'relative' }}>
           {/* Top Workspace Picker Header */}
           <div className="expanded-top-bar" ref={spacePickerRef} style={{ position: 'relative' }}>
             <div
@@ -486,7 +521,7 @@ export function SidekickSidebar({
           </div>
 
           {/* Variante B: Segmented Multi-Tier Drawer Tabs */}
-          <div className="sidebar-drawer-tabs-shell">
+          <div className="sidebar-drawer-tabs-shell" ref={drawerTabsShellRef}>
             <button type="button" className="sidebar-drawer-scroll-control" aria-label={`${t('sidebar.drawer.sections')}: ${t('common.back')}`} title={`${t('sidebar.drawer.sections')}: ${t('common.back')}`} disabled={drawerTabIndex <= 0} onClick={() => stepDrawerTab(-1)}>
               <ChevronLeft size={15} aria-hidden="true" />
             </button>
@@ -507,7 +542,7 @@ export function SidekickSidebar({
               role="tab"
               aria-selected={currentDrawerTab === 'ai'}
               className={`drawer-tab-btn ${currentDrawerTab === 'ai' ? 'active' : ''}`}
-              onClick={() => handleDrawerTabChange('ai')}
+              onClick={() => { handleDrawerTabChange('ai'); setPersonalityOpen(true); }}
               title={`${botName} AI`}
             >
               <Sparkles size={13} />
@@ -817,24 +852,12 @@ export function SidekickSidebar({
               <div className="drawer-cards-list">
                 {aiDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;
-                  if (item.id === 'chat') {
-                    return (
-                      <div key={item.id} className={`sidebar-drawer-card ${isCurrent ? 'is-active' : ''}`} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <button type="button" onClick={() => onSelectPanel?.('chat')} title={item.desc} style={{ display: 'flex', flex: 1, alignItems: 'center', gap: 8, background: 'transparent', border: 0, color: 'inherit', textAlign: 'left', cursor: 'pointer', minWidth: 0 }}>
-                          <div className="drawer-card-icon-box"><img src={item.iconSrc} alt="" className="drawer-popart-icon" /></div>
-                          <div className="drawer-card-text"><span className="drawer-card-title">{item.title}</span><span className="drawer-card-desc">{item.desc}</span></div>
-                        </button>
-                        <CompanionSwitch compact />
-                        {isCurrent && <span className="drawer-active-dot" />}
-                      </div>
-                    );
-                  }
                   return (
                     <button
                       key={item.id}
                       type="button"
                       className={`sidebar-drawer-card ${isCurrent ? 'is-active' : ''}`}
-                      onClick={() => onSelectPanel?.(item.id)}
+                      onClick={() => { onSelectPanel?.(item.id); if (item.id === 'chat') setPersonalityOpen(true); }}
                       title={item.desc}
                     >
                       <div className="drawer-card-icon-box">
@@ -972,6 +995,23 @@ export function SidekickSidebar({
               <span>{t('sidebar.drawer.zenMode')}</span>
             </button>
           </div>
+          {personalityOpen && <div ref={personalityRef} className="sidebar-personality-flyout" role="dialog" aria-label={t('sidebar.companion.menu')} style={{ position: 'absolute', left: 0, right: 0, top: personalityTop, bottom: 0, zIndex: 30, overflow: 'auto', background: 'var(--bg-primary, #101522)', borderInlineStart: '1px solid var(--border-color)', padding: 12, display: 'grid', alignContent: 'start', gap: 8 }}>
+            <strong>{t('sidebar.companion.menu')}</strong>
+            {(Object.keys(companionDefaultNames) as CompanionPersonality[]).map(personality => {
+              const selected = activePersonality === personality;
+              const description = {
+                nova: 'sidebar.companion.nova',
+                analytical: 'sidebar.companion.analytical',
+                developer: 'sidebar.companion.developer',
+                creative: 'sidebar.companion.creative',
+                mentor: 'sidebar.companion.mentor'
+              } as const;
+              return <button key={personality} type="button" aria-pressed={selected} disabled={companion.busy} onClick={() => void choosePersonality(personality)} style={{ display: 'grid', gridTemplateColumns: '52px 1fr', gap: 10, alignItems: 'center', textAlign: 'left', padding: 8, borderRadius: 10, border: selected ? '2px solid var(--accent-primary, #38bdf8)' : '2px solid transparent', background: 'var(--bg-hover, rgba(255,255,255,.04))', color: 'inherit', cursor: 'pointer' }}>
+                <img src={personalityAvatar(personality)} alt="" width={52} height={52} style={{ objectFit: 'contain' }} />
+                <span><strong>{companionDefaultNames[personality]}</strong><span style={{ display: 'block', fontSize: 12, lineHeight: 1.4 }}>{t(description[personality])}</span></span>
+              </button>;
+            })}
+          </div>}
         </div>
       )}
     </aside>

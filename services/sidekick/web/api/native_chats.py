@@ -617,7 +617,9 @@ def run_native_chat(context: NativeChatContext, args, kwargs, *, python_executab
         if command:
             handle.send_control(command)
     def exited(handle):
-        if handle.is_alive:
+        # A persistent worker is idle, not running: its turn is quiescent and was
+        # confirmed by relay_native_chat before this release point.
+        if handle.is_alive and not handle.turn_quiescent:
             raise RuntimeError("Native worker exit is not confirmed")
         with _lock:
             entry.settled = True

@@ -1,5 +1,6 @@
 """Parent-owned native chat process; writer release is deliberately external."""
 from __future__ import annotations
+import hashlib
 import os
 import logging
 import queue
@@ -115,6 +116,20 @@ class NativeChatHandle(WorkerHandle):
         self._control_serial = 0
         self.requested_stop: str | None = None
         self.before_stop = before_stop
+        # Persistent workers serve several turns of one pool key; the serial above continues across them.
+        self.turns = 1
+        self.turn_quiescent = False
+        self.fingerprint: str | None = None
+        self.pool_key = None
+        self.idle_timer = None
+
+    def rebind_turn(self, context, *, before_stop=None):
+        """Idle reuse only: bind the next turn's context and per-turn stop state."""
+        self.context = context
+        self.before_stop = before_stop
+        self.requested_stop = None
+        self.turn_quiescent = False
+        self.turns += 1
 
     def _stop_parent_io(self, reason):
         if self.before_stop is not None:
@@ -157,7 +172,28 @@ class NativeChatHost:
         self.python_executable = canonical_path(python_executable or resolve_worker_python_executable())
         self.sidekick_root = Path(__file__).resolve().parents[2]
 
-    def start(self, args, kwargs, *, runtime_env=None, before_stop=None) -> NativeChatHandle:
+    def pool_key(self):
+        context = self.context
+        provider = context.provider_capture.provider.provider if context.provider_capture is not None else None
+        return (str(canonical_path(context.profile_home)), str(canonical_path(context.space_root)),
+                context.selection_mode, provider)
+
+    def _fingerprint(self, env) -> str:
+        """Every spawn-time input. A changed value starts a fresh worker, never a reused one."""
+        payload = {"env": env, "cwd": self.context.workspace,
+                   "python": str(self.python_executable), "root": str(self.sidekick_root)}
+        return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+    def prepare(self, args, kwargs, *, runtime_env=None):
+        """Reuse path: the same verification, turn encoding and fingerprint as start()."""
+        verify_native_context(self.context)
+        turn = encode_turn(self.context, args, kwargs)
+        env = build_native_environment(self.context, runtime_env=runtime_env)
+        frame = {"kind": "bootstrap", "schemaVersion": 1, "persistent": True,
+            "context": self.context.model_dump(mode="json", by_alias=True), "turn": turn}
+        return frame, self._fingerprint(env)
+
+    def start(self, args, kwargs, *, runtime_env=None, before_stop=None, persistent=False) -> NativeChatHandle:
         handle, process = None, None
         stage = "context_verification"
         try:
@@ -177,8 +213,10 @@ class NativeChatHost:
                 close_fds=True, **options)
             stage = "worker_handle_init"
             handle = NativeChatHandle(process, self.context, before_stop=before_stop)
+            handle.fingerprint = self._fingerprint(env)
+            handle.pool_key = self.pool_key()
             stage = "bootstrap_send"
-            handle.send({"kind": "bootstrap", "schemaVersion": 1,
+            handle.send({"kind": "bootstrap", "schemaVersion": 1, "persistent": persistent,
                 "context": self.context.model_dump(mode="json", by_alias=True), "turn": turn})
             return handle
         except BaseException as exc:
@@ -192,6 +230,100 @@ class NativeChatHost:
             finally:
                 raise NativeChatStartError(diagnostic=_start_diagnostic(
                     stage=stage, exc=exc, process=process, handle=handle)) from exc
+
+
+# Measured default; LASTBROWSER_CHAT_PERSISTENT_WORKER=1 or 0 always overrides it.
+# Experimental and OFF: the second turn of a reused worker fails in bind_context,
+# because the policy, SDK, file, browser and auto/teamwork bridges are process-global
+# and bind once per process (see native_chat_policy.bind_native_policy). Each of them
+# needs a release hook at the turn boundary before the flag can be enabled.
+_PERSISTENT_WORKER_DEFAULT = False
+
+
+def persistent_worker_enabled() -> bool:
+    raw = os.environ.get("LASTBROWSER_CHAT_PERSISTENT_WORKER", "").strip()
+    if raw == "":
+        return _PERSISTENT_WORKER_DEFAULT
+    return raw == "1"
+
+
+def _retire_worker(handle) -> None:
+    """Terminate an idle or unusable worker; it has no turn left to report to."""
+    handle.before_stop = None
+    handle.turn_quiescent = False
+    try:
+        handle.terminate(grace_seconds=0, hard_seconds=1)
+    except Exception:
+        logger.warning("native_chat_worker_retire_failed")
+
+
+class _NativeWorkerPool:
+    """At most one idle persistent worker per Profile Home, Space and provider.
+
+    A worker is reused only with an identical spawn fingerprint (environment,
+    workspace, interpreter, session). Idle workers expire after the TTL.
+    """
+    idle_ttl_seconds = 120.0
+    max_turns = 64
+
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._idle = {}
+
+    def take(self, key, fingerprint):
+        with self._lock:
+            entry = self._idle.pop(key, None)
+        if entry is None:
+            return None
+        handle, held_fingerprint = entry
+        timer, handle.idle_timer = handle.idle_timer, None
+        if timer is not None:
+            timer.cancel()
+        if (held_fingerprint != fingerprint or handle.turns >= self.max_turns or not handle.is_alive
+                or handle.transport_error is not None or not handle._events.empty()):
+            _retire_worker(handle)
+            return None
+        return handle
+
+    def give_back(self, key, handle):
+        with self._lock:
+            previous = self._idle.pop(key, None)
+            self._idle[key] = (handle, handle.fingerprint)
+        if previous is not None:
+            _retire_worker(previous[0])
+        timer = threading.Timer(self.idle_ttl_seconds, self._expire, args=(key, handle))
+        timer.daemon = True
+        handle.idle_timer = timer
+        timer.start()
+
+    def _expire(self, key, handle):
+        with self._lock:
+            entry = self._idle.get(key)
+            if entry is None or entry[0] is not handle:
+                return
+            del self._idle[key]
+        _retire_worker(handle)
+
+
+NATIVE_WORKER_POOL = _NativeWorkerPool()
+
+
+def _take_persistent_worker(host, args, kwargs, before_stop):
+    """Return an idle worker bound to this turn, or None for a fresh spawn."""
+    try:
+        frame, fingerprint = host.prepare(args, kwargs)
+    except Exception:
+        return None  # start() repeats the same verification and reports its diagnostics.
+    handle = NATIVE_WORKER_POOL.take(host.pool_key(), fingerprint)
+    if handle is None:
+        return None
+    try:
+        handle.rebind_turn(host.context, before_stop=before_stop)
+        handle.send(frame)
+    except Exception:
+        _retire_worker(handle)  # No turn started yet, so a fresh worker can run it.
+        return None
+    return handle
 
 
 def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
@@ -213,11 +345,14 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
         if on_start_failed:
             on_start_failed(_start_diagnostic(stage="host_init", exc=exc))
         raise
-    try:
-        handle = host.start(args, kwargs, before_stop=before_stop)
-    except NativeChatStartError as exc:
-        if on_start_failed: on_start_failed(exc.diagnostic)
-        raise
+    persistent = persistent_worker_enabled() and kwargs.get("native_goal_retry") is None
+    handle = _take_persistent_worker(host, args, kwargs, before_stop) if persistent else None
+    if handle is None:
+        try:
+            handle = host.start(args, kwargs, before_stop=before_stop, persistent=persistent)
+        except NativeChatStartError as exc:
+            if on_start_failed: on_start_failed(exc.diagnostic)
+            raise
     logger.info("native_chat_phase stream=%s stage=spawn_sent elapsed_ms=%.1f",
         context.stream_id, (time.monotonic() - phase_start) * 1000)
     sequence = 0
@@ -227,6 +362,8 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
     rpc_work, rpc_done = queue.Queue(16), queue.Queue(16)
     rpc_stopped = threading.Event()
     rpc_pending = set()
+    turn_end = None
+    reusable = False
     def serve_rpc():
         while not rpc_stopped.is_set():
             try:
@@ -329,25 +466,43 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
                     logger.info("native_chat_phase stream=%s stage=worker_finished elapsed_ms=%.1f",
                         context.stream_id, (time.monotonic() - phase_start) * 1000)
                 put(message["kind"], {key: value for key, value in message.items() if key != "kind"})
+                if persistent and message["kind"] == "worker_finished":
+                    # The worker stays alive for the next turn; nothing more belongs to this turn.
+                    turn_end = message
+                    break
             else:
                 raise WorkerError("native_chat_unknown_message")
     finally:
         rpc_stopped.set()
         try:
             handle._stop_parent_io(handle.requested_stop or "cancel")
+            reusable = bool(persistent and turn_end is not None and turn_end.get("reusable") is True
+                and handle.is_alive and handle.transport_error is None and handle._events.empty())
         finally:
-            handle.terminate(grace_seconds=0 if handle.requested_stop else 1, hard_seconds=3)
-        if handle.is_alive:
+            if not reusable:
+                handle.terminate(grace_seconds=0 if handle.requested_stop else 1, hard_seconds=3)
+        if handle.is_alive and not reusable:
             # Root must not release the writer if OS termination was unconfirmed.
             raise WorkerError("native_chat_exit_not_confirmed")
-        if on_exit:
-            on_exit(handle)
+        if reusable:
+            # Idle worker: no engine thread, no pending RPC and no stream state for this turn.
+            handle.turn_quiescent = True
+        try:
+            if on_exit:
+                on_exit(handle)
+        except BaseException:
+            if reusable:
+                _retire_worker(handle)
+            raise
+        if reusable:
+            NATIVE_WORKER_POOL.give_back(handle.pool_key, handle)
+    exit_code = 0 if reusable else handle.returncode
     if handle.requested_stop:
-        put("worker_exit", context.envelope("worker_exit", status="paused" if handle.requested_stop == "pause" else "cancelled", returncode=handle.returncode))
-    elif handle.returncode != 0:
+        put("worker_exit", context.envelope("worker_exit", status="paused" if handle.requested_stop == "pause" else "cancelled", returncode=exit_code))
+    elif exit_code != 0:
         raise WorkerError("native_chat_worker_failed")
     elif judge_retry is not None:
         if goal_result is None or on_goal_result is None:
             raise WorkerError("native_goal_retry_result_missing")
         on_goal_result(goal_result)
-    return 3 if judge_retry is not None and handle.requested_stop else handle.returncode
+    return 3 if judge_retry is not None and handle.requested_stop else exit_code

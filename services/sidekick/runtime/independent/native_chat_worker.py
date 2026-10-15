@@ -21,6 +21,9 @@ _RPC_METHODS = frozenset({"auto_validate", "auto_policy", "auto_claim", "auto_ob
 _RPC_KEYS = frozenset({"decision", "claim", "claimId", "receiptRefs", "model", "provider", "headers", "status", "usage", "deliveredDelta", "outputTokens", "inputTokensUpperBound", "inputBoundSource", "requestPurpose", "acknowledged", "state", "requirements", "errorCode"})
 _stage = "bootstrap"
 _failure_sink = None
+# Stream-scoped process registries that one finished turn may not leave behind.
+_TURN_STREAM_REGISTRIES = ("STREAMS", "CANCEL_FLAGS", "STREAM_PARTIAL_TEXT", "STREAM_REASONING_TEXT",
+    "STREAM_LIVE_TOOL_CALLS", "STREAM_GOAL_RELATED", "STREAM_GOAL_CLAIMS")
 
 
 def validate_rpc_payload(method, payload):
@@ -187,12 +190,25 @@ class _Channel:
     def __init__(self):
         self.queue = queue.Queue(MAX_EVENTS)
         self.overflow = threading.Event()
+
     def put_nowait(self, item):
         try:
             self.queue.put_nowait(item)
         except queue.Full:
             self.overflow.set()
             raise
+
+
+def _clear_finished_turn(context) -> None:
+    """A persistent worker keeps its process, never the finished turn's stream state."""
+    from web.api import config
+    from web.api.models import SESSIONS
+    SESSIONS.pop(context.session_id, None)
+    with config.STREAMS_LOCK:
+        for name in _TURN_STREAM_REGISTRIES:
+            registry = getattr(config, name, None)
+            if isinstance(registry, dict):
+                registry.pop(context.stream_id, None)
 
 
 def main():
@@ -211,105 +227,134 @@ def main():
             raise WorkerError("native_chat_message_too_large")
         with write_lock:
             protocol_output.write(encoded); protocol_output.flush()
-    line = sys.stdin.readline(MAX_LINE_BYTES + 1)
-    if not line or not line.endswith("\n") or len(line.encode("utf-8")) > MAX_LINE_BYTES:
-        return 2
-    initial = json.loads(line)
-    if initial.get("kind") != "bootstrap" or initial.get("schemaVersion") != 1:
-        return 2
-    context = NativeChatContext.model_validate(initial["context"])
-    def failure_sink(exc):
-        # Only allowlisted static diagnostics; never provider exception text.
-        reasons = {"Configured path is not available":"configured_path_unavailable",
-            "An absolute, broker-resolved path is required":"absolute_path_required",
-            "Native chat selection policy changed":"selection_policy_changed",
-            "Native chat metadata cannot be verified":"session_metadata_unavailable",
-            "Native chat owner metadata is unavailable":"session_owner_unavailable",
-            "Native chat binding changed":"binding_changed"}
-        emit(context.envelope("worker_fault", stage=_stage, errorType=type(exc).__name__,
-            errorCode=reasons.get(str(exc), "worker_adapter_failed")))
-    _failure_sink = failure_sink
-    if context.selection_mode == "fixed" and context.provider_capture is None and not context.teamwork:
-        _stage = "fixed_capture"
-        raise WorkerError("native_fixed_provider_capture_missing")
-    _stage = "bind_context"
-    bind_native_context(context)
-    _stage = "decode_turn"
-    args, kwargs = decode_turn(context, initial["turn"])
-    judge_retry = "native_goal_retry" in kwargs
-    from web.api import config
-    from web.api.models import Session, SESSIONS
-    from .chat_binding import _OWN_WRITERS
-    from contextvars import copy_context
-    # Load without stale-stream repair: the actual Parent writer is alive.
-    actual_path = Path(context.sessions_dir) / (context.session_id + ".json")
-    if not actual_path.is_file() or actual_path.is_symlink():
-        raise WorkerError("native_chat_saved_session_missing")
-    session = Session(**json.loads(actual_path.read_text("utf-8")))
-    if (session.session_id != context.session_id or (session.profile or "default") != context.profile_name
-        or session.space_scope != context.scope.model_dump(mode="json", by_alias=True)
-        or session.active_stream_id != context.stream_id):
-        raise WorkerError("native_chat_saved_session_mismatch")
-    if Path(session.workspace).resolve() != Path(context.workspace).resolve():
-        raise WorkerError("native_chat_saved_workspace_mismatch")
-    SESSIONS[context.session_id] = session
-    channel, stopped, finished = _Channel(), threading.Event(), threading.Event()
-    config.STREAMS[context.stream_id] = channel
-    bridge = ExactPendingBridge(context)
-    rpc = NativeRPC(context, emit, stopped)
-    # Purpose-owned SDK integration installed by the same private builder.
-    # AUTO cannot silently use an unproven client or a second compute pool.
-    teamwork_turn = str(args[2]).strip().lower() == "teamwork" or str(kwargs.get("mode") or "").strip().lower() == "teamwork"
-    if str(args[2]).strip().lower() == "auto":
-        raise WorkerError("native_chat_pseudo_model_forbidden")
-    if teamwork_turn:
-        _stage = "teamwork_install"
-        from .native_teamwork import install_native_teamwork_bridge
-        install_native_teamwork_bridge(context, rpc)
-    elif context.selection_mode == "auto":
-        _stage = "auto_install"
-        from .native_chat_auto import install_native_auto_bridge
-        install_native_auto_bridge(context, rpc)
-    else:
-        _stage = "fixed_install"
-        from .native_sdk_broker import install_native_sdk_bridge
-        install_native_sdk_bridge(context, rpc)
-    if judge_retry:
-        def cancel_stream(_stream_id):
-            return None
-    elif teamwork_turn:
-        # Teamwork models receive no browser or file tool bridge. The ordinary
-        # SSE cancellation boundary still owns the whole turn.
-        from web.api.streaming import _run_agent_streaming, cancel_stream
-    else:
-        from .native_file_io import install_native_file_bridge
-        install_native_file_bridge(context, rpc)
-        from .native_browser_bridge import install_native_browser_bridge
-        install_native_browser_bridge(context, rpc)
-        from web.api.streaming import _run_agent_streaming, cancel_stream
-    stop_command = [None]
+
+    # The single stdin owner. Bootstrap frames start the next turn; every other
+    # frame goes to the running turn's handler. Any frame while idle, EOF or a
+    # framing error ends the worker after the current turn.
+    frames = queue.Queue()
+    router_lock = threading.Lock()
+    active_turn = [None]
     control_sequence = [0]
-    def interrupt():
-        # Controls can arrive before core creates its CANCEL_FLAGS entry.
-        stopped.set()
-        cancel_stream(context.stream_id)
-    def controls():
-        try:
-            while not finished.is_set():
-                raw = sys.stdin.readline(MAX_LINE_BYTES + 1)
-                if not raw:
-                    interrupt(); return
-                if not raw.endswith("\n") or len(raw.encode("utf-8")) > MAX_LINE_BYTES:
-                    interrupt(); return
-                message = json.loads(raw)
+
+    def read_frames():
+        while True:
+            raw = sys.stdin.readline(MAX_LINE_BYTES + 1)
+            message = None
+            if raw and raw.endswith("\n") and len(raw.encode("utf-8")) <= MAX_LINE_BYTES:
+                try:
+                    message = json.loads(raw)
+                except ValueError:
+                    message = None
+            if not isinstance(message, dict):
+                with router_lock:
+                    handler = active_turn[0]
+                if handler is not None:
+                    handler(None)
+                frames.put(None)
+                return
+            if message.get("kind") == "bootstrap":
+                frames.put(message)
+                continue
+            with router_lock:
+                handler = active_turn[0]
+            if handler is None or not handler(message):
+                frames.put(None)
+                return
+
+    threading.Thread(target=read_frames, name="NativeChatStdin", daemon=True).start()
+
+    def run_turn(initial):
+        global _stage, _failure_sink
+        persistent = initial.get("persistent") is True
+        context = NativeChatContext.model_validate(initial["context"])
+        def failure_sink(exc):
+            # Only allowlisted static diagnostics; never provider exception text.
+            reasons = {"Configured path is not available":"configured_path_unavailable",
+                "An absolute, broker-resolved path is required":"absolute_path_required",
+                "Native chat selection policy changed":"selection_policy_changed",
+                "Native chat metadata cannot be verified":"session_metadata_unavailable",
+                "Native chat owner metadata is unavailable":"session_owner_unavailable",
+                "Native chat binding changed":"binding_changed"}
+            emit(context.envelope("worker_fault", stage=_stage, errorType=type(exc).__name__,
+                errorCode=reasons.get(str(exc), "worker_adapter_failed")))
+        _failure_sink = failure_sink
+        if context.selection_mode == "fixed" and context.provider_capture is None and not context.teamwork:
+            _stage = "fixed_capture"
+            raise WorkerError("native_fixed_provider_capture_missing")
+        _stage = "bind_context"
+        bind_native_context(context)
+        _stage = "decode_turn"
+        args, kwargs = decode_turn(context, initial["turn"])
+        judge_retry = "native_goal_retry" in kwargs
+        from web.api import config
+        from web.api.models import Session, SESSIONS
+        from .chat_binding import _OWN_WRITERS
+        from contextvars import copy_context
+        # Load without stale-stream repair: the actual Parent writer is alive.
+        actual_path = Path(context.sessions_dir) / (context.session_id + ".json")
+        if not actual_path.is_file() or actual_path.is_symlink():
+            raise WorkerError("native_chat_saved_session_missing")
+        session = Session(**json.loads(actual_path.read_text("utf-8")))
+        if (session.session_id != context.session_id or (session.profile or "default") != context.profile_name
+            or session.space_scope != context.scope.model_dump(mode="json", by_alias=True)
+            or session.active_stream_id != context.stream_id):
+            raise WorkerError("native_chat_saved_session_mismatch")
+        if Path(session.workspace).resolve() != Path(context.workspace).resolve():
+            raise WorkerError("native_chat_saved_workspace_mismatch")
+        SESSIONS[context.session_id] = session
+        channel, stopped, finished = _Channel(), threading.Event(), threading.Event()
+        config.STREAMS[context.stream_id] = channel
+        bridge = ExactPendingBridge(context)
+        rpc = NativeRPC(context, emit, stopped)
+        # Purpose-owned SDK integration installed by the same private builder.
+        # AUTO cannot silently use an unproven client or a second compute pool.
+        teamwork_turn = str(args[2]).strip().lower() == "teamwork" or str(kwargs.get("mode") or "").strip().lower() == "teamwork"
+        if str(args[2]).strip().lower() == "auto":
+            raise WorkerError("native_chat_pseudo_model_forbidden")
+        if teamwork_turn:
+            _stage = "teamwork_install"
+            from .native_teamwork import install_native_teamwork_bridge
+            install_native_teamwork_bridge(context, rpc)
+        elif context.selection_mode == "auto":
+            _stage = "auto_install"
+            from .native_chat_auto import install_native_auto_bridge
+            install_native_auto_bridge(context, rpc)
+        else:
+            _stage = "fixed_install"
+            from .native_sdk_broker import install_native_sdk_bridge
+            install_native_sdk_bridge(context, rpc)
+        if judge_retry:
+            def cancel_stream(_stream_id):
+                return None
+        elif teamwork_turn:
+            # Teamwork models receive no browser or file tool bridge. The ordinary
+            # SSE cancellation boundary still owns the whole turn.
+            from web.api.streaming import _run_agent_streaming, cancel_stream
+        else:
+            from .native_file_io import install_native_file_bridge
+            install_native_file_bridge(context, rpc)
+            from .native_browser_bridge import install_native_browser_bridge
+            install_native_browser_bridge(context, rpc)
+            from web.api.streaming import _run_agent_streaming, cancel_stream
+        stop_command = [None]
+        faults = []
+        def interrupt():
+            # Controls can arrive before core creates its CANCEL_FLAGS entry.
+            stopped.set()
+            cancel_stream(context.stream_id)
+        def handle_frame(message):
+            """Frames for this turn only. False means this turn stops reading."""
+            if message is None:
+                faults.append("transport"); interrupt(); return False
+            try:
                 context.validate_envelope(message)
                 if message.get("kind") == "rpc_reply":
-                    rpc.resolve(message); continue
+                    rpc.resolve(message); return True
                 if message.get("kind") != "control":
-                    interrupt(); return
+                    faults.append("protocol"); interrupt(); return False
                 serial = message.get("controlSequence")
                 if type(serial) is not int or serial != control_sequence[0] + 1:
-                    emit(context.envelope("control_ack", accepted=False, code="stale_control")); continue
+                    emit(context.envelope("control_ack", accepted=False, code="stale_control")); return True
                 control_sequence[0] = serial
                 command = message.get("command")
                 if command in {"cancel", "pause"}:
@@ -323,110 +368,134 @@ def main():
                         requestId=message.get("requestId"), controlSequence=serial))
                 else:
                     emit(context.envelope("control_ack", accepted=False, code="unknown_control", controlSequence=serial))
-        except Exception:
-            interrupt()
-    failure = []
-    def run():
-        global _stage
-        try:
-            config.set_session_dir(context.sessions_dir)
-            if not stopped.is_set():
-                actual_args, actual_kwargs = args, kwargs
-                if teamwork_turn:
-                    # The Parent has already fixed every Teamwork role/model
-                    # pair. Do not route this virtual model through ordinary
-                    # AUTO/FIXED single-model selection.
+                return True
+            except Exception:
+                faults.append("control"); interrupt(); return False
+        failure = []
+        def run():
+            global _stage
+            try:
+                config.set_session_dir(context.sessions_dir)
+                if not stopped.is_set():
                     actual_args, actual_kwargs = args, kwargs
-                elif context.selection_mode == "auto":
-                    # RPC requires the separate stdin reader to be running.
-                    from .native_chat_auto import prepare_native_auto_turn
-                    _stage = "auto_prepare"
-                    actual_args, actual_kwargs = prepare_native_auto_turn(args, kwargs)
-                    from .native_chat_auto import get_bound_native_auto_bridge
-                    auto_bridge = get_bound_native_auto_bridge()
-                    if auto_bridge is None or auto_bridge.decision is None:
-                        raise WorkerError("native_auto_decision_missing")
-                    if not judge_retry:
-                        from .native_model_resolution import publish_native_model_resolution
-                        selected = auto_bridge.decision.selected_model
-                        publish_native_model_resolution(context, selected, selected)
-                    if not judge_retry:
-                        # Safe user-visible routing receipt: public_view deliberately
-                        # excludes the captured RunContext and any prompt/provider secrets.
-                        channel.put_nowait(("auto_route", auto_bridge.decision.public_view()))
-                else:
-                    from .native_sdk_broker import prepare_native_fixed_turn
-                    _stage = "fixed_prepare"
-                    actual_args, actual_kwargs = prepare_native_fixed_turn(args, kwargs)
-                    if context.provider_capture is not None and not judge_retry:
-                        from .native_model_resolution import publish_native_model_resolution
-                        from .model_selection import ModelPair
-                        selected = ModelPair(provider=context.provider_capture.provider.provider,
-                            model=context.provider_capture.provider.model)
-                        publish_native_model_resolution(context, selected, selected)
-                _stage = "engine"
-                if judge_retry:
-                    _stage = "goal_judge_retry"
-                    from .native_goal_retry import run_native_goal_retry
-                    run_native_goal_retry(context, kwargs["native_goal_retry"],
-                        execution_policy=kwargs["execution_policy"],
-                        put=lambda event, data: channel.put_nowait((event, data)))
-                else:
-                    _run_agent_streaming(*actual_args, **actual_kwargs)
-        except BaseException as exc:
-            failure.append(type(exc).__name__)
-            if not stopped.is_set():
-                _failure_sink(exc)
-        finally:
-            if context.selection_mode == 'fixed' and getattr(context.provider_capture, 'local_runtime', None) is not None:
-                from .native_sdk_broker import get_bound_native_sdk_bridge
-                local_bridge = get_bound_native_sdk_bridge()
-                if local_bridge is not None:
-                    try:
-                        local_bridge.close()
-                    except BaseException as exc:
-                        failure.append(type(exc).__name__)
-                        if not stopped.is_set():
-                            _failure_sink(exc)
-            finished.set()
-    token = _OWN_WRITERS.set((context.writer_lease_id,))
-    try:
-        engine_context = copy_context()
-    finally:
-        _OWN_WRITERS.reset(token)
-    reader = threading.Thread(target=controls, name="NativeChatControl", daemon=True)
-    engine = threading.Thread(target=lambda: engine_context.run(run), name="NativeChatEngine", daemon=True)
-    reader.start(); engine.start()
-    observed = []
-    def observe_plain_thread():
-        from web.api import profiles
-        observed.append({"profileName": profiles.get_active_profile_name(),
-            "profileHome": str(profiles.get_active_profile_home()),
-            "sessionsDir": str(config.get_session_dir())})
-    auxiliary = threading.Thread(target=observe_plain_thread, name="NativeChatSourceObservation")
-    auxiliary.start(); auxiliary.join(timeout=1)
-    emit(context.envelope("worker_ready", pid=os.getpid(), auxiliarySources=observed))
-    sequence, stop_at = 0, None
-    while engine.is_alive() or not channel.queue.empty():
-        if stopped.is_set():
-            stop_at = stop_at or time.monotonic()
-            # Repeat to close the pre-start CANCEL_FLAGS race.
-            cancel_stream(context.stream_id)
-            if time.monotonic() - stop_at > 2:
-                return 3  # Job exit, never a false graceful engine completion.
-        if channel.overflow.is_set():
-            interrupt(); return 4
+                    if teamwork_turn:
+                        # The Parent has already fixed every Teamwork role/model
+                        # pair. Do not route this virtual model through ordinary
+                        # AUTO/FIXED single-model selection.
+                        actual_args, actual_kwargs = args, kwargs
+                    elif context.selection_mode == "auto":
+                        # RPC requires the separate stdin reader to be running.
+                        from .native_chat_auto import prepare_native_auto_turn
+                        _stage = "auto_prepare"
+                        actual_args, actual_kwargs = prepare_native_auto_turn(args, kwargs)
+                        from .native_chat_auto import get_bound_native_auto_bridge
+                        auto_bridge = get_bound_native_auto_bridge()
+                        if auto_bridge is None or auto_bridge.decision is None:
+                            raise WorkerError("native_auto_decision_missing")
+                        if not judge_retry:
+                            from .native_model_resolution import publish_native_model_resolution
+                            selected = auto_bridge.decision.selected_model
+                            publish_native_model_resolution(context, selected, selected)
+                        if not judge_retry:
+                            # Safe user-visible routing receipt: public_view deliberately
+                            # excludes the captured RunContext and any prompt/provider secrets.
+                            channel.put_nowait(("auto_route", auto_bridge.decision.public_view()))
+                    else:
+                        from .native_sdk_broker import prepare_native_fixed_turn
+                        _stage = "fixed_prepare"
+                        actual_args, actual_kwargs = prepare_native_fixed_turn(args, kwargs)
+                        if context.provider_capture is not None and not judge_retry:
+                            from .native_model_resolution import publish_native_model_resolution
+                            from .model_selection import ModelPair
+                            selected = ModelPair(provider=context.provider_capture.provider.provider,
+                                model=context.provider_capture.provider.model)
+                            publish_native_model_resolution(context, selected, selected)
+                    _stage = "engine"
+                    if judge_retry:
+                        _stage = "goal_judge_retry"
+                        from .native_goal_retry import run_native_goal_retry
+                        run_native_goal_retry(context, kwargs["native_goal_retry"],
+                            execution_policy=kwargs["execution_policy"],
+                            put=lambda event, data: channel.put_nowait((event, data)))
+                    else:
+                        _run_agent_streaming(*actual_args, **actual_kwargs)
+            except BaseException as exc:
+                failure.append(type(exc).__name__)
+                if not stopped.is_set():
+                    _failure_sink(exc)
+            finally:
+                if context.selection_mode == 'fixed' and getattr(context.provider_capture, 'local_runtime', None) is not None:
+                    from .native_sdk_broker import get_bound_native_sdk_bridge
+                    local_bridge = get_bound_native_sdk_bridge()
+                    if local_bridge is not None:
+                        try:
+                            local_bridge.close()
+                        except BaseException as exc:
+                            failure.append(type(exc).__name__)
+                            if not stopped.is_set():
+                                _failure_sink(exc)
+                finished.set()
+        token = _OWN_WRITERS.set((context.writer_lease_id,))
         try:
-            event, data = channel.queue.get(timeout=.05)
-        except queue.Empty:
-            continue
-        if event in {"approval", "clarify"}:
-            data = bridge.bind(event, data)
-        sequence += 1
-        emit(context.envelope("native_event", sequence=sequence, event=event, data=data))
-    engine.join(timeout=.1)
-    emit(context.envelope("worker_finished", status="stopped" if stopped.is_set() else "finished", failed=bool(failure)))
-    return 1 if failure else 0
+            engine_context = copy_context()
+        finally:
+            _OWN_WRITERS.reset(token)
+        engine = threading.Thread(target=lambda: engine_context.run(run), name="NativeChatEngine", daemon=True)
+        observed = []
+        def observe_plain_thread():
+            from web.api import profiles
+            observed.append({"profileName": profiles.get_active_profile_name(),
+                "profileHome": str(profiles.get_active_profile_home()),
+                "sessionsDir": str(config.get_session_dir())})
+        with router_lock:
+            active_turn[0] = handle_frame
+        try:
+            engine.start()
+            auxiliary = threading.Thread(target=observe_plain_thread, name="NativeChatSourceObservation")
+            auxiliary.start(); auxiliary.join(timeout=1)
+            emit(context.envelope("worker_ready", pid=os.getpid(), auxiliarySources=observed))
+            sequence, stop_at = 0, None
+            while engine.is_alive() or not channel.queue.empty():
+                if stopped.is_set():
+                    stop_at = stop_at or time.monotonic()
+                    # Repeat to close the pre-start CANCEL_FLAGS race.
+                    cancel_stream(context.stream_id)
+                    if time.monotonic() - stop_at > 2:
+                        return 3, False  # Job exit, never a false graceful engine completion.
+                if channel.overflow.is_set():
+                    interrupt()
+                    return 4, False
+                try:
+                    event, data = channel.queue.get(timeout=.05)
+                except queue.Empty:
+                    continue
+                if event in {"approval", "clarify"}:
+                    data = bridge.bind(event, data)
+                sequence += 1
+                emit(context.envelope("native_event", sequence=sequence, event=event, data=data))
+            engine.join(timeout=.1)
+        finally:
+            with router_lock:
+                active_turn[0] = None
+        failed = bool(failure)
+        # Reuse only a turn that ended cleanly with its engine gone and no protocol fault.
+        reusable = persistent and not failed and not faults and not engine.is_alive()
+        emit(context.envelope("worker_finished", status="stopped" if stopped.is_set() else "finished",
+            failed=failed, reusable=reusable))
+        _clear_finished_turn(context)
+        return (1 if failed else 0), reusable
+
+    turns = 0
+    while True:
+        initial = frames.get()
+        if initial is None:
+            return 2 if turns == 0 else 0
+        if initial.get("kind") != "bootstrap" or initial.get("schemaVersion") != 1:
+            return 2
+        turns += 1
+        code, reusable = run_turn(initial)
+        if code != 0 or not reusable:
+            return code
 
 
 if __name__ == "__main__":

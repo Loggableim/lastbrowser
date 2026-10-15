@@ -1,0 +1,360 @@
+/* ==========================================================================
+   Lastbrowser - Blog (Tech-Magazin)
+   Styles for the blog overview and the article pages.
+   Scope: every rule is nested under .blog-page (body class) and reuses the
+   design tokens from main.css / components.css. No global styles of other
+   pages are touched.
+   ========================================================================== */
+
+/* --- Page header / hero ------------------------------------------------ */
+.blog-page .section-header { margin-bottom: 34px; }
+
+.blog-page .section-header h1 {
+  font-size: clamp(30px, 5vw, 46px);
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  margin-bottom: 14px;
+}
+
+/* --- Feature-voting info card ----------------------------------------- */
+.blog-page .blog-info-card {
+  max-width: 720px;
+  margin: 0 auto 32px;
+  padding: 20px 24px;
+  text-align: center;
+  background: var(--card-bg);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+}
+
+.blog-page .blog-info-card strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+
+.blog-page .blog-info-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.7;
+}
+
+.blog-page .blog-info-card p + p {
+  margin-top: 6px;
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+/* --- Category filter --------------------------------------------------- */
+.blog-page .blog-filter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin: 26px 0 4px;
+}
+
+.blog-page .blog-filter button {
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 9px 18px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--stroke);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.blog-page .blog-filter button:hover {
+  border-color: var(--cyan);
+  color: var(--cyan);
+}
+
+.blog-page .blog-filter button.active {
+  border-color: var(--cyan);
+  background: var(--panel-hover);
+  color: var(--cyan);
+}
+
+.blog-page .blog-filter button:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* --- Sections & headers ------------------------------------------------ */
+.blog-page .blog-section { scroll-margin-top: 90px; }
+
+.blog-page .blog-section > h2 {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 44px 0 0;
+  font-size: clamp(20px, 2.4vw, 26px);
+  letter-spacing: -0.02em;
+}
+
+.blog-page .blog-section > h2::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  min-width: 30px;
+  background: linear-gradient(90deg, var(--stroke), transparent);
+}
+
+.blog-page .blog-count {
+  flex: 0 0 auto;
+  padding: 2px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  color: var(--subtle);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* --- Card grid --------------------------------------------------------- */
+.blog-page .blog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  align-items: stretch;
+  gap: 24px;
+  margin: 22px 0 0;
+}
+
+.blog-page .blog-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--card-bg);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.25s ease;
+}
+
+.blog-page .blog-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--cyan);
+  box-shadow: var(--shadow-lg);
+}
+
+.blog-page .blog-card-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  padding: 24px;
+}
+
+.blog-page .blog-card .badge {
+  align-self: flex-start;
+  margin-bottom: 12px;
+}
+
+.blog-page .blog-card h3 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.blog-page .blog-card h3 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.blog-page .blog-card h3 a:hover {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.blog-page .blog-card p {
+  flex: 0 0 auto;
+  margin: 0 0 18px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.blog-page .blog-card .blog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--stroke);
+  color: var(--subtle);
+  font-size: 12px;
+}
+
+.blog-page .blog-more {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+.blog-page .blog-more:hover {
+  text-decoration: underline;
+}
+
+/* --- Empty-state section ---------------------------------------------- */
+.blog-page .blog-empty {
+  margin: 22px 0 10px;
+  padding: 26px;
+  text-align: center;
+  border: 1px dashed var(--stroke);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  font-size: 14px;
+}
+
+/* Hide a section that only contains the placeholder text (markup kept). */
+.blog-page .blog-section:has(.blog-empty):not(:has(.blog-card)) { display: none; }
+.blog-page .blog-section.blog-section--empty { display: none; }
+
+/* --- Inline code ------------------------------------------------------- */
+.blog-page code {
+  font-size: 0.9em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--stroke);
+  background: var(--panel);
+  color: var(--cyan);
+}
+
+/* ==========================================================================
+   Article pages
+   ========================================================================== */
+.blog-page .article-wrap {
+  max-width: 70ch;
+  margin: 0 auto;
+}
+
+.blog-page .article-wrap > .badge {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 16px;
+  text-decoration: none;
+}
+
+.blog-page .article-wrap > h1 {
+  margin: 0 0 14px;
+  font-size: clamp(26px, 4.2vw, 40px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+}
+
+.blog-page .article-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 26px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--stroke);
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.blog-page .article-notice {
+  margin: 0 0 30px;
+  padding: 16px 18px;
+  border: 1px solid var(--stroke);
+  border-left: 3px solid var(--yellow);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.blog-page .article-notice strong { color: var(--text); }
+
+.blog-page .article-body { color: var(--muted); }
+
+.blog-page .article-body p {
+  margin: 0 0 18px;
+  line-height: 1.75;
+}
+
+.blog-page .article-body h2 {
+  margin: 2.2em 0 0.7em;
+  font-size: clamp(20px, 2.4vw, 24px);
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  scroll-margin-top: 90px;
+}
+
+.blog-page .article-body > h2:first-child { margin-top: 0; }
+
+.blog-page .article-body ul {
+  margin: 0 0 18px;
+  padding-left: 22px;
+  line-height: 1.75;
+}
+
+.blog-page .article-body li { margin-bottom: 8px; }
+
+.blog-page .article-body strong { color: var(--text); }
+
+.blog-page .article-cta {
+  position: relative;
+  margin: 46px 0 10px;
+  padding: 28px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  overflow: hidden;
+}
+
+.blog-page .article-cta::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--cyan), var(--electricBlue), var(--magenta));
+}
+
+.blog-page .article-cta h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+
+.blog-page .article-cta p {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.blog-page .article-cta p:last-child { margin-bottom: 0; }
+
+/* ==========================================================================
+   Responsive
+   ========================================================================== */
+@media (max-width: 760px) {
+  .blog-page .blog-grid { grid-template-columns: 1fr; }
+  .blog-page .blog-info-card { padding: 18px; }
+  .blog-page .blog-section > h2 { margin-top: 36px; }
+  .blog-page .article-wrap > h1 { font-size: clamp(24px, 7vw, 32px); }
+  .blog-page .article-cta { padding: 22px; }
+}
+
+@media (max-width: 760px) {
+  .blog-page .blog-section { padding-inline: 14px; }
+  .blog-page .blog-section > h2 { font-size: 1.25rem; }
+  .blog-page .blog-filter { gap: 8px; }
+}

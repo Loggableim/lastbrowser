@@ -22,22 +22,10 @@
 <link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <link rel="stylesheet" href="/assets/css/docs.css">
+<link rel="stylesheet" href="/assets/css/blog.css">
 <script src="/assets/js/theme.js"></script>
-<style>
-.blog-filter { display: flex; flex-wrap: wrap; gap: 10px; margin: 26px 0 10px; }
-.blog-filter button { font: inherit; font-weight: 700; font-size: 13px; padding: 9px 16px; border-radius: var(--radius-pill); border: 1px solid var(--stroke); background: transparent; color: var(--muted); cursor: pointer; }
-.blog-filter button:hover { border-color: var(--cyan); color: var(--cyan); }
-.blog-filter button.active { border-color: var(--cyan); background: rgba(0, 229, 255, 0.1); color: var(--cyan); }
-.blog-section { scroll-margin-top: 90px; }
-.blog-section h2 { margin: 34px 0 0; font-size: 22px; }
-.blog-section h2:first-child { margin-top: 0; }
-.blog-empty { border: 1px dashed var(--stroke); border-radius: var(--radius-lg); padding: 22px; color: var(--muted); margin: 22px 0 10px; }
-.blog-card h3 a { color: inherit; text-decoration: none; }
-.blog-card h3 a:hover { color: var(--cyan); }
-.blog-more { display: inline-block; margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--cyan); text-decoration: none; }
-</style>
 </head>
-<body>
+<body class="blog-page">
 <a href="#main" class="skip-link">Zum Inhalt springen</a>
 
 <nav>
@@ -93,7 +81,7 @@
     <p>News und Updates zum Browser, jeden Donnerstag ein Feature im Detail und Hintergründe zu Architektur, Datenschutz und lokaler KI.</p>
   </div>
 
-  <section class="roadmap-voting-info" aria-label="Wie funktioniert Feature-Voting?">
+  <section class="roadmap-voting-info blog-info-card" aria-label="Wie funktioniert Feature-Voting?">
     <strong>Wie funktioniert Feature-Voting?</strong>
     <p>Jeden Donnerstag stellen wir ein geplantes Feature im Detail vor. Du entscheidest mit: Auf der <a href="/roadmap/">Roadmap</a> kannst du für die Funktionen abstimmen, die für dich Priorität haben.</p>
     <p>Die Abstimmung hilft bei der Priorisierung und ist keine Release-Zusage.</p>
@@ -308,6 +296,26 @@
     });
   });
   apply('all');
+})();
+
+(function () {
+  document.querySelectorAll('.blog-section').forEach(function (section) {
+    var cards = section.querySelectorAll('.blog-card');
+    if (!cards.length) {
+      section.classList.add('blog-section--empty');
+      var button = document.querySelector('.blog-filter [data-filter="' + section.getAttribute('data-category') + '"]');
+      if (button) button.hidden = true;
+      return;
+    }
+    var title = section.querySelector('h2');
+    if (title) {
+      var count = document.createElement('span');
+      count.className = 'blog-count';
+      count.setAttribute('aria-hidden', 'true');
+      count.textContent = cards.length;
+      title.appendChild(count);
+    }
+  });
 })();
 </script>
 </body>

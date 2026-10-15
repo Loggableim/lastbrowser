@@ -9,8 +9,8 @@ export const startupAnimations = [
 export type StartupAnimation = typeof startupAnimations[number]['id'];
 export const startupRainbowStyles = ['classic', 'aurora', 'orbit'] as const;
 export type StartupRainbowStyle = typeof startupRainbowStyles[number];
-export type StartupPreferences = { animation: StartupAnimation; soundEnabled: boolean; volume: number; soundId: string; randomSound: boolean; rainbow: boolean; rainbowStyle: StartupRainbowStyle };
-export const defaultStartupPreferences: StartupPreferences = { animation: 'awakening', soundEnabled: false, volume: 0.35, soundId: 'asset:welcome-in', randomSound: false, rainbow: true, rainbowStyle: 'classic' };
+export type StartupPreferences = { animation: StartupAnimation; soundEnabled: boolean; volume: number; soundId: string; randomSound: boolean; rainbow: boolean; rainbowStyle: StartupRainbowStyle; eventFeed: boolean };
+export const defaultStartupPreferences: StartupPreferences = { animation: 'awakening', soundEnabled: false, volume: 0.35, soundId: 'asset:welcome-in', randomSound: false, rainbow: true, rainbowStyle: 'classic', eventFeed: true };
 const key = 'lastbrowser.startup-preferences.v1';
 const changed = 'lastbrowser:startup-preferences';
 function validated(value: unknown): StartupPreferences {
@@ -19,7 +19,8 @@ function validated(value: unknown): StartupPreferences {
     soundEnabled: v.soundEnabled === true, volume: typeof v.volume === 'number' && Number.isFinite(v.volume) ? Math.min(1, Math.max(0, v.volume)) : 0.35,
     soundId: typeof v.soundId === 'string' && /^(asset|local):[a-zA-Z0-9_-]{1,100}$/.test(v.soundId) ? v.soundId : 'asset:welcome-in',
     randomSound: v.randomSound === true, rainbow: v.rainbow !== false,
-    rainbowStyle: startupRainbowStyles.some(style => style === v.rainbowStyle) ? v.rainbowStyle! : 'classic' };
+    rainbowStyle: startupRainbowStyles.some(style => style === v.rainbowStyle) ? v.rainbowStyle! : 'classic',
+    eventFeed: v.eventFeed !== false };
 }
 let sessionPreferences: StartupPreferences | null = null;
 export function readStartupPreferences(): StartupPreferences {

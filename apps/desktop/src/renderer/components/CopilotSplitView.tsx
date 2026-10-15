@@ -711,17 +711,10 @@ export function CopilotSplitView({
           {visibleModelList.some((m) => m.category === 'cloud') && <div className="model-group-title">{locale === 'de' ? 'Cloud & entfernte Endpunkte' : 'Cloud & remote endpoints'}</div>}
           {visibleModelList.filter((m) => m.category === 'cloud').map(renderModelItem)}
 
-<<<<<<< HEAD
-          {/* 5. Other engines */}
-          {visibleModelList.some((m) => m.category === 'other') && (
-            <>
-              <div className="model-group-title">{t('copilot.otherEngines')}</div>
-=======
           {/* 5. Other provider engines */}
           {visibleModelList.some((m) => m.category === 'other') && (
             <>
               <div className="model-group-title">{t('copilot.modelGroupOtherEngines')}</div>
->>>>>>> 6b56c7a5 (fix(i18n): localize model menu Other engines group (8 locales))
               {visibleModelList.filter((m) => m.category === 'other').map(renderModelItem)}
             </>
           )}

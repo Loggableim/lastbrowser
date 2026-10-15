@@ -305,7 +305,6 @@ import { readShowUntestedProviderBetas, useShowUntestedProviderBetas } from './p
 import { useActiveModelRevision } from './active-model-selection.js';
 import { chooseQuickchatModel } from './quickchat-automatic.js';
 import { readQuickchatFavorite, readQuickchatFavoriteState, setQuickchatFavorite, QUICKCHAT_FAVORITE_CHANGED_EVENT } from './quickchat-preferences.js';
-import { prefetchModelCatalog } from './model-catalog-prefetch.js';
 import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
 import { ChatDraftSubmissionGate, isDefiniteChatStartRejection, type ChatDraftSubmission } from './chat-draft-submission.js';
@@ -2763,21 +2762,6 @@ function AppContent(): JSX.Element {
       alive = false;
     };
   }, [activeSessionId, refreshWorkspace, status?.sidekick, workspacePanelCollapsed, workspacePath, workspaceRefreshNonce]);
-
-  useEffect(() => {
-    if (status?.sidekick !== 'ready' || !activeProfileId || !sidekickApiReady) return;
-    const viewKey = JSON.stringify([
-      activeProfileId,
-      activeSpacePath || '',
-      activeBackendProfileName || 'default'
-    ]);
-    void prefetchModelCatalog({
-      viewKey,
-      browserProfileId: activeProfileId,
-      workspacePath: activeSpacePath || null,
-      ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {})
-    });
-  }, [activeBackendProfileName, activeProfileId, activeSpacePath, sidekickApiReady, status?.sidekick]);
 
   function navigate(url: string, options?: { keepShellForward?: boolean; tabId?: string }): void {
     const tabId = options?.tabId ?? activeTab.id;

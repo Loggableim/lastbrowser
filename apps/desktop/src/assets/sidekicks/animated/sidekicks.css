@@ -1,0 +1,811 @@
+
+    /* Host Element Base */
+    .sidekick-host {
+      display: inline-block;
+      width: 128px;
+      height: 128px;
+      position: relative;
+      user-select: none;
+      -webkit-user-select: none;
+      flex-shrink: 0;
+    }
+
+    .sidekick-host.sidekick-mini,
+    .sidekick-host.nova-mini,
+    .sidekick-host.orion-mini,
+    .sidekick-host.patch-mini,
+    .sidekick-host.spark-mini,
+    .sidekick-host.zen-mini,
+    .sidekick-host.custom-mini {
+      width: 40px;
+      height: 40px;
+    }
+
+    .sidekick-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      overflow: visible;
+    }
+
+    /* Shared Transition & GPU hints on animated layers only */
+    .sidekick-svg .glow-default,
+    .sidekick-svg .glow-done,
+    .sidekick-svg .glow-error,
+    .sidekick-svg .ring-base,
+    .sidekick-svg .ring-runner,
+    .sidekick-svg .ring-done,
+    .sidekick-svg .ring-error,
+    .sidekick-svg .sidekick-rig,
+    .sidekick-svg .face-gaze,
+    .sidekick-svg .eye-left,
+    .sidekick-svg .eye-right,
+    .sidekick-svg .eye-normal,
+    .sidekick-svg .eye-happy,
+    .sidekick-svg .eye-half,
+    .sidekick-svg .mouth-smile,
+    .sidekick-svg .mouth-small,
+    .sidekick-svg .mouth-sad,
+    .sidekick-svg .thinking-dots,
+    .sidekick-svg .badge-group,
+    .sidekick-svg .badge-done,
+    .sidekick-svg .badge-input,
+    .sidekick-svg .badge-error {
+      transition: transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 240ms cubic-bezier(0.22, 1, 0.36, 1);
+      will-change: transform, opacity;
+    }
+
+    /* Transform Origins */
+    .sidekick-svg .sidekick-rig,
+    .sidekick-svg .ring-runner,
+    .sidekick-svg .glow-default,
+    .sidekick-svg .glow-done,
+    .sidekick-svg .glow-error {
+      transform-origin: 64px 64px;
+    }
+
+    .sidekick-svg .eye-left,
+    .sidekick-svg .eye-right {
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+
+    .sidekick-svg .badge-done,
+    .sidekick-svg .badge-input,
+    .sidekick-svg .badge-error {
+      transform-origin: 96px 94px;
+      opacity: 0;
+      transform: scale(0.4);
+    }
+
+    /* Default Layer Opacities */
+    .sidekick-svg .glow-default { opacity: 0.55; }
+    .sidekick-svg .glow-done,
+    .sidekick-svg .glow-error { opacity: 0; }
+
+    .sidekick-svg .ring-base { opacity: 0.25; }
+    .sidekick-svg .ring-runner {
+      opacity: 0;
+      stroke-dasharray: 88 264;
+      stroke-dashoffset: 0;
+    }
+    .sidekick-svg .ring-done,
+    .sidekick-svg .ring-error { opacity: 0; }
+
+    /* Face Expression Variants */
+    .sidekick-svg .eye-normal { opacity: 1; }
+    .sidekick-svg .eye-happy,
+    .sidekick-svg .eye-half { opacity: 0; }
+
+    .sidekick-svg .mouth-smile { opacity: 1; }
+    .sidekick-svg .mouth-small,
+    .sidekick-svg .mouth-sad { opacity: 0; }
+
+    /* Random Blink Class (140ms via JS in idle) */
+    .sidekick-host.is-blinking .sidekick-svg .eye-left,
+    .sidekick-host.is-blinking .sidekick-svg .eye-right {
+      transform: scaleY(0.12);
+    }
+
+    /* Thinking Dots Base */
+    .sidekick-svg .thinking-dots {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    .sidekick-svg .thinking-dots .dot {
+      transform-box: fill-box;
+      transform-origin: center;
+    }
+
+    /* Universal Status Cues Across All Personas */
+    /* THINKING */
+    .sidekick-host[data-state="thinking"] .sidekick-svg .thinking-dots {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .sidekick-host[data-state="thinking"] .sidekick-svg .thinking-dots .dot-1 {
+      animation: lb-dot-pulse 1.35s ease-in-out 0s infinite;
+    }
+    .sidekick-host[data-state="thinking"] .sidekick-svg .thinking-dots .dot-2 {
+      animation: lb-dot-pulse 1.35s ease-in-out 0.22s infinite;
+    }
+    .sidekick-host[data-state="thinking"] .sidekick-svg .thinking-dots .dot-3 {
+      animation: lb-dot-pulse 1.35s ease-in-out 0.44s infinite;
+    }
+    .sidekick-host[data-state="thinking"] .sidekick-svg .mouth-smile { opacity: 0; }
+    .sidekick-host[data-state="thinking"] .sidekick-svg .mouth-small { opacity: 1; }
+
+    /* WORKING */
+    .sidekick-host[data-state="working"] .sidekick-svg .ring-runner {
+      opacity: 1;
+    }
+
+    /* DONE */
+    .sidekick-host[data-state="done"] .sidekick-svg .glow-default { opacity: 0; }
+    .sidekick-host[data-state="done"] .sidekick-svg .glow-done { opacity: 0.85; }
+    .sidekick-host[data-state="done"] .sidekick-svg .ring-done { opacity: 1; }
+    .sidekick-host[data-state="done"] .sidekick-svg .eye-normal { opacity: 0; }
+    .sidekick-host[data-state="done"] .sidekick-svg .eye-happy { opacity: 1; }
+    .sidekick-host[data-state="done"] .sidekick-svg .badge-done {
+      opacity: 1;
+      transform: scale(1);
+      transition: transform 380ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 200ms ease;
+    }
+
+    /* NEEDS-INPUT */
+    .sidekick-host[data-state="needs-input"] .sidekick-svg .ring-base {
+      opacity: 0.6;
+    }
+    .sidekick-host[data-state="needs-input"] .sidekick-svg .mouth-smile { opacity: 0; }
+    .sidekick-host[data-state="needs-input"] .sidekick-svg .mouth-small { opacity: 1; }
+    .sidekick-host[data-state="needs-input"] .sidekick-svg .badge-input {
+      opacity: 1;
+      transform: scale(1);
+      animation: lb-badge-pulse 1.5s ease-in-out infinite;
+    }
+
+    /* ERROR */
+    .sidekick-host[data-state="error"] .sidekick-svg .glow-default { opacity: 0; }
+    .sidekick-host[data-state="error"] .sidekick-svg .glow-error { opacity: 0.85; }
+    .sidekick-host[data-state="error"] .sidekick-svg .ring-error { opacity: 1; }
+    .sidekick-host[data-state="error"] .sidekick-svg .mouth-smile { opacity: 0; }
+    .sidekick-host[data-state="error"] .sidekick-svg .mouth-sad { opacity: 1; }
+    .sidekick-host[data-state="error"] .sidekick-svg .badge-error {
+      opacity: 1;
+      transform: scale(1);
+      transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 180ms ease;
+    }
+
+    /* Shared Keyframes */
+    @keyframes lb-dot-pulse {
+      0%, 100% { transform: translateY(0) scale(0.85); opacity: 0.45; }
+      50% { transform: translateY(-4px) scale(1.18); opacity: 1; }
+    }
+
+    @keyframes lb-ring-spin {
+      0% { transform: rotate(0deg); stroke-dashoffset: 0; }
+      100% { transform: rotate(360deg); stroke-dashoffset: -352; }
+    }
+
+    @keyframes lb-badge-pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.12); }
+    }
+
+    /* ========================================================================
+       1. NOVA — Friendly All-Rounder (Reference Rhythm)
+       ======================================================================== */
+    .nova-host[data-state="idle"] .nova-svg .nova-rig {
+      animation: nova-breathe 3.6s ease-in-out infinite;
+    }
+    .nova-host[data-state="idle"] .nova-svg .glow-default {
+      animation: nova-glow-idle 3.6s ease-in-out infinite;
+    }
+    .nova-host[data-state="thinking"] .nova-svg .face-gaze {
+      animation: nova-eyes-drift 2.8s ease-in-out infinite;
+    }
+    .nova-host[data-state="thinking"] .nova-svg .glow-default {
+      animation: nova-glow-think 2.4s ease-in-out infinite;
+    }
+    .nova-host[data-state="working"] .nova-svg .ring-runner {
+      animation: lb-ring-spin 1.25s linear infinite;
+    }
+    .nova-host[data-state="working"] .nova-svg .nova-rig {
+      animation: nova-bob 0.65s ease-in-out infinite;
+    }
+    .nova-host[data-state="working"] .nova-svg .nova-ear-light {
+      animation: nova-light-blink 0.65s ease-in-out 0s infinite;
+    }
+    .nova-host[data-state="working"] .nova-svg .nova-trim-light {
+      animation: nova-light-blink 0.65s ease-in-out 0.32s infinite;
+    }
+    .nova-host[data-state="done"] .nova-svg .nova-rig {
+      animation: nova-done-hop 680ms cubic-bezier(0.22, 1, 0.36, 1) 1;
+    }
+    .nova-host[data-state="needs-input"] .nova-svg .nova-rig {
+      transform: rotate(8deg) translateY(-1px);
+    }
+    .nova-host[data-state="error"] .nova-svg .nova-rig {
+      animation: nova-error-shake 300ms cubic-bezier(0.36, 0.07, 0.19, 0.97) 1;
+    }
+
+    @keyframes nova-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+    @keyframes nova-glow-idle {
+      0%, 100% { opacity: 0.45; transform: scale(0.98); }
+      50% { opacity: 0.72; transform: scale(1.03); }
+    }
+    @keyframes nova-eyes-drift {
+      0%, 100% { transform: translate(0, 0); }
+      30% { transform: translate(-4px, -4px); }
+      70% { transform: translate(4px, -3px); }
+    }
+    @keyframes nova-glow-think {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 0.85; }
+    }
+    @keyframes nova-bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3.5px); }
+    }
+    @keyframes nova-light-blink {
+      0%, 100% { opacity: 0.35; }
+      50% { opacity: 1; }
+    }
+    @keyframes nova-done-hop {
+      0% { transform: translateY(0) scale(1, 1); }
+      22% { transform: translateY(3px) scale(1.06, 0.94); }
+      52% { transform: translateY(-9px) scale(0.96, 1.05); }
+      78% { transform: translateY(2px) scale(1.02, 0.98); }
+      100% { transform: translateY(0) scale(1, 1); }
+    }
+    @keyframes nova-error-shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-6px); }
+      40% { transform: translateX(6px); }
+      60% { transform: translateX(-4px); }
+      80% { transform: translateX(4px); }
+    }
+
+    /* ========================================================================
+       2. ORION — Thorough, Structured (Calm, deliberate, symmetric)
+       ======================================================================== */
+    .orion-svg .orion-constellation,
+    .orion-svg .orion-scanline {
+      opacity: 0;
+      transition: opacity 240ms ease, transform 240ms ease;
+      will-change: transform, opacity;
+      transform-origin: 48px 57px;
+    }
+    .orion-svg .orion-constellation {
+      transform-origin: 64px 64px;
+    }
+    .orion-host[data-state="idle"] .orion-svg .orion-rig {
+      animation: orion-breathe 4.2s ease-in-out infinite;
+    }
+    .orion-host[data-state="idle"] .orion-svg .glow-default {
+      animation: orion-glow 4.2s ease-in-out infinite;
+    }
+    .orion-host[data-state="thinking"] .orion-svg .orion-constellation {
+      opacity: 1;
+      animation: orion-orbit 3.6s ease-in-out infinite;
+    }
+    .orion-host[data-state="thinking"] .orion-svg .orion-scanline {
+      opacity: 0.9;
+      animation: orion-scan 2.2s ease-in-out infinite;
+    }
+    .orion-host[data-state="thinking"] .orion-svg .face-gaze {
+      animation: orion-gaze-scan 3.2s ease-in-out infinite;
+    }
+    .orion-host[data-state="working"] .orion-svg .ring-runner {
+      /* Segmented checklist ring that fills & advances clockwise */
+      stroke-dasharray: 22 7.33;
+      animation: orion-ring-steps 1.8s linear infinite;
+    }
+    .orion-host[data-state="working"] .orion-svg .orion-rig {
+      animation: orion-steady-pulse 1.2s ease-in-out infinite;
+    }
+    .orion-host[data-state="working"] .orion-svg .orion-scanline {
+      opacity: 0.75;
+      animation: orion-scan 1.2s ease-in-out infinite;
+    }
+    .orion-host[data-state="done"] .orion-svg .orion-rig {
+      /* Composed nod, no wild hop */
+      animation: orion-composed-nod 640ms ease-in-out 1;
+    }
+    .orion-host[data-state="needs-input"] .orion-svg .orion-rig {
+      /* Straight, attentive look + small raise */
+      transform: translateY(-3px) rotate(2deg);
+    }
+    .orion-host[data-state="error"] .orion-svg .orion-rig {
+      /* Minimal, controlled shake (smaller amplitude) */
+      animation: orion-controlled-shake 280ms ease-in-out 1;
+    }
+
+    @keyframes orion-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.016); }
+    }
+    @keyframes orion-glow {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 0.7; }
+    }
+    @keyframes orion-orbit {
+      0%, 100% { transform: rotate(-6deg) translateY(0); }
+      50% { transform: rotate(6deg) translateY(-2px); }
+    }
+    @keyframes orion-scan {
+      0%, 100% { transform: translateY(-8px); opacity: 0.3; }
+      50% { transform: translateY(8px); opacity: 0.95; }
+    }
+    @keyframes orion-gaze-scan {
+      0%, 100% { transform: translate(0, -1px); }
+      33% { transform: translate(-2.5px, -2px); }
+      66% { transform: translate(2.5px, -2px); }
+    }
+    @keyframes orion-ring-steps {
+      0% { transform: rotate(-90deg); stroke-dashoffset: 352; }
+      100% { transform: rotate(270deg); stroke-dashoffset: 0; }
+    }
+    @keyframes orion-steady-pulse {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2px); }
+    }
+    @keyframes orion-composed-nod {
+      0% { transform: translateY(0); }
+      38% { transform: translateY(4px) scale(1.01, 0.985); }
+      75% { transform: translateY(-1.5px); }
+      100% { transform: translateY(0); }
+    }
+    @keyframes orion-controlled-shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-3px); }
+      50% { transform: translateX(3px); }
+      75% { transform: translateX(-1.5px); }
+    }
+
+    /* ========================================================================
+       3. PATCH — Precise, Technical (Mechanical, crisp, steps(), glitch)
+       ======================================================================== */
+    .patch-svg .patch-code-glyph,
+    .patch-svg .patch-scanlines,
+    .patch-svg .patch-prompt {
+      opacity: 0;
+      transition: opacity 150ms ease;
+      will-change: transform, opacity;
+    }
+    .patch-svg .patch-gear {
+      transform-box: fill-box;
+      transform-origin: center;
+      will-change: transform;
+    }
+    .patch-svg .patch-led-bar {
+      transform-box: fill-box;
+      transform-origin: left center;
+      will-change: transform, opacity;
+    }
+    .patch-host[data-state="idle"] .patch-svg .patch-rig {
+      animation: patch-breathe 3.2s ease-in-out infinite;
+    }
+    .patch-host[data-state="idle"] .patch-svg .patch-led-bar {
+      animation: patch-led-idle 1.6s steps(2, end) infinite;
+    }
+    /* Thinking: blinking </> glyph + visor scanlines, hide standard dots for clean view */
+    .patch-host[data-state="thinking"] .patch-svg .thinking-dots {
+      opacity: 0;
+    }
+    .patch-host[data-state="thinking"] .patch-svg .patch-code-glyph {
+      opacity: 1;
+      animation: patch-cursor-blink 0.9s steps(2, end) infinite;
+    }
+    .patch-host[data-state="thinking"] .patch-svg .patch-scanlines {
+      opacity: 0.55;
+    }
+    .patch-host[data-state="thinking"] .patch-svg .face-gaze {
+      animation: patch-step-gaze 2.0s steps(3, end) infinite;
+    }
+    /* Working: gear rotates, LED bar ticks in steps, crisp bob 0.5s */
+    .patch-host[data-state="working"] .patch-svg .ring-runner {
+      stroke-dasharray: 44 44;
+      animation: lb-ring-spin 1.0s linear infinite;
+    }
+    .patch-host[data-state="working"] .patch-svg .patch-rig {
+      animation: patch-bob 0.5s ease-in-out infinite;
+    }
+    .patch-host[data-state="working"] .patch-svg .patch-gear {
+      animation: patch-gear-turn 0.8s steps(6, end) infinite;
+    }
+    .patch-host[data-state="working"] .patch-svg .patch-led-bar {
+      animation: patch-led-progress 0.75s steps(4, end) infinite;
+    }
+    .patch-host[data-state="working"] .patch-svg .patch-scanlines {
+      opacity: 0.45;
+    }
+    /* Done: crisp click-in scale 0.96 -> 1.04 -> 1 */
+    .patch-host[data-state="done"] .patch-svg .patch-rig {
+      animation: patch-click-in 420ms cubic-bezier(0.22, 1, 0.36, 1) 1;
+    }
+    /* Needs-input: terminal prompt _ blink */
+    .patch-host[data-state="needs-input"] .patch-svg .patch-rig {
+      transform: rotate(5deg);
+    }
+    .patch-host[data-state="needs-input"] .patch-svg .patch-prompt {
+      opacity: 1;
+      animation: patch-cursor-blink 0.8s steps(2, end) infinite;
+    }
+    /* Error: 2-3 frame offset glitch jitter (~250ms) */
+    .patch-host[data-state="error"] .patch-svg .patch-rig {
+      animation: patch-glitch 250ms steps(2, end) 1;
+    }
+
+    @keyframes patch-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.015); }
+    }
+    @keyframes patch-led-idle {
+      0%, 100% { opacity: 0.55; }
+      50% { opacity: 1; }
+    }
+    @keyframes patch-cursor-blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.15; }
+    }
+    @keyframes patch-step-gaze {
+      0%, 100% { transform: translate(0, 0); }
+      33% { transform: translate(-3px, -2px); }
+      66% { transform: translate(3px, -2px); }
+    }
+    @keyframes patch-bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2.5px); }
+    }
+    @keyframes patch-gear-turn {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(180deg); }
+    }
+    @keyframes patch-led-progress {
+      0% { transform: scaleX(0.25); opacity: 0.7; }
+      100% { transform: scaleX(1.05); opacity: 1; }
+    }
+    @keyframes patch-click-in {
+      0% { transform: scale(1); }
+      30% { transform: scale(0.96); }
+      68% { transform: scale(1.04); }
+      100% { transform: scale(1); }
+    }
+    @keyframes patch-glitch {
+      0% { transform: translate(0, 0); }
+      20% { transform: translate(-5px, 2px) skewX(-3deg); }
+      45% { transform: translate(5px, -2px) skewX(3deg); }
+      70% { transform: translate(-3px, -1px); }
+      100% { transform: translate(0, 0); }
+    }
+
+    /* ========================================================================
+       4. SPARK — Creative, Playful (Bouncy, elastic, overshoot)
+       ======================================================================== */
+    .spark-svg .spark-idea,
+    .spark-svg .spark-orbit,
+    .spark-svg .spark-burst {
+      opacity: 0;
+      transition: opacity 220ms ease, transform 220ms ease;
+      transform-origin: 64px 64px;
+      will-change: transform, opacity;
+    }
+    .spark-svg .spark-idle-twinkle {
+      transform-box: fill-box;
+      transform-origin: center;
+      will-change: transform, opacity;
+    }
+    .spark-host[data-state="idle"] .spark-svg .spark-rig {
+      animation: spark-idle-sway 3.4s ease-in-out infinite;
+    }
+    .spark-host[data-state="idle"] .spark-svg .spark-idle-twinkle {
+      animation: spark-twinkle 2.8s ease-in-out infinite;
+    }
+    /* Thinking: lightbulb + sparkles pop above head + slight head bob */
+    .spark-host[data-state="thinking"] .spark-svg .spark-idea {
+      opacity: 1;
+      animation: spark-idea-pop 1.6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+    }
+    .spark-host[data-state="thinking"] .spark-svg .spark-rig {
+      animation: spark-think-bob 1.6s ease-in-out infinite;
+    }
+    .spark-host[data-state="thinking"] .spark-svg .face-gaze {
+      animation: nova-eyes-drift 2.4s ease-in-out infinite;
+    }
+    /* Working: confetti/spark particles orbit around head */
+    .spark-host[data-state="working"] .spark-svg .ring-runner {
+      animation: lb-ring-spin 1.1s linear infinite;
+    }
+    .spark-host[data-state="working"] .spark-svg .spark-rig {
+      animation: spark-work-bounce 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) infinite;
+    }
+    .spark-host[data-state="working"] .spark-svg .spark-orbit {
+      opacity: 1;
+      animation: spark-orbit-spin 2.2s linear infinite;
+    }
+    /* Done: big squash & stretch hop + sparkle burst */
+    .spark-host[data-state="done"] .spark-svg .spark-rig {
+      animation: spark-big-hop 740ms cubic-bezier(0.34, 1.56, 0.64, 1) 1;
+    }
+    .spark-host[data-state="done"] .spark-svg .spark-burst {
+      opacity: 1;
+      animation: spark-burst-pop 700ms cubic-bezier(0.34, 1.56, 0.64, 1) 1;
+    }
+    /* Needs-input: curious wiggly tilt */
+    .spark-host[data-state="needs-input"] .spark-svg .spark-rig {
+      animation: spark-curious-wiggle 2.2s ease-in-out infinite;
+    }
+    /* Error: cartoon "boing" elastic shake */
+    .spark-host[data-state="error"] .spark-svg .spark-rig {
+      animation: spark-boing-error 420ms cubic-bezier(0.34, 1.56, 0.64, 1) 1;
+    }
+
+    @keyframes spark-idle-sway {
+      0%, 100% { transform: rotate(-1.5deg) scale(1); }
+      50% { transform: rotate(2deg) scale(1.022); }
+    }
+    @keyframes spark-twinkle {
+      0%, 70%, 100% { transform: scale(0.3) rotate(0deg); opacity: 0; }
+      85% { transform: scale(1.15) rotate(45deg); opacity: 1; }
+    }
+    @keyframes spark-idea-pop {
+      0%, 100% { transform: translateY(2px) scale(0.92); }
+      50% { transform: translateY(-4px) scale(1.08); }
+    }
+    @keyframes spark-think-bob {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      50% { transform: translateY(-3px) rotate(-2deg); }
+    }
+    @keyframes spark-work-bounce {
+      0%, 100% { transform: translateY(0) scale(1.02, 0.98); }
+      50% { transform: translateY(-5px) scale(0.98, 1.03); }
+    }
+    @keyframes spark-orbit-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    @keyframes spark-big-hop {
+      0% { transform: translateY(0) scale(1, 1); }
+      18% { transform: translateY(5px) scale(1.12, 0.88); }
+      48% { transform: translateY(-14px) scale(0.92, 1.1) rotate(3deg); }
+      76% { transform: translateY(3px) scale(1.05, 0.95); }
+      100% { transform: translateY(0) scale(1, 1); }
+    }
+    @keyframes spark-burst-pop {
+      0% { transform: scale(0.5); opacity: 0; }
+      40% { transform: scale(1.12); opacity: 1; }
+      100% { transform: scale(1.25); opacity: 0; }
+    }
+    @keyframes spark-curious-wiggle {
+      0%, 100% { transform: rotate(9deg) translateY(-1px); }
+      50% { transform: rotate(13deg) translateY(-3px); }
+    }
+    @keyframes spark-boing-error {
+      0% { transform: translateX(0) scale(1, 1); }
+      20% { transform: translateX(-9px) scale(1.08, 0.92) rotate(-5deg); }
+      45% { transform: translateX(8px) scale(0.94, 1.06) rotate(4deg); }
+      70% { transform: translateX(-4px) scale(1.03, 0.97); }
+      100% { transform: translateX(0) scale(1, 1); }
+    }
+
+    /* ========================================================================
+       5. ZEN — Patient, Clear (Slow, soft, fluid, no shake even in error)
+       ======================================================================== */
+    .zen-svg .zen-ripples {
+      opacity: 0;
+      transform-origin: 64px 64px;
+      will-change: transform, opacity;
+    }
+    .zen-host[data-state="idle"] .zen-svg .zen-rig {
+      animation: zen-breathe 6.0s ease-in-out infinite;
+    }
+    .zen-host[data-state="idle"] .zen-svg .glow-default {
+      animation: zen-glow-fade 6.0s ease-in-out infinite;
+    }
+    /* Thinking: concentric ripples + half-closed eyes */
+    .zen-host[data-state="thinking"] .zen-svg .thinking-dots {
+      opacity: 0;
+    }
+    .zen-host[data-state="thinking"] .zen-svg .eye-normal { opacity: 0; }
+    .zen-host[data-state="thinking"] .zen-svg .eye-half { opacity: 1; }
+    .zen-host[data-state="thinking"] .zen-svg .zen-ripples {
+      opacity: 1;
+    }
+    .zen-host[data-state="thinking"] .zen-svg .zen-ripple-1 {
+      transform-origin: 64px 64px;
+      animation: zen-ripple-expand 3.2s ease-out 0s infinite;
+    }
+    .zen-host[data-state="thinking"] .zen-svg .zen-ripple-2 {
+      transform-origin: 64px 64px;
+      animation: zen-ripple-expand 3.2s ease-out 1.6s infinite;
+    }
+    /* Working: slow continuous ring flow (~2.5s) and gentle float */
+    .zen-host[data-state="working"] .zen-svg .ring-runner {
+      stroke-dasharray: 140 212;
+      animation: lb-ring-spin 2.5s linear infinite;
+    }
+    .zen-host[data-state="working"] .zen-svg .zen-rig {
+      animation: zen-float 2.5s ease-in-out infinite;
+    }
+    /* Done: soft glow bloom + smile, no hop */
+    .zen-host[data-state="done"] .zen-svg .glow-done {
+      animation: zen-bloom 1.4s ease-out 1;
+    }
+    .zen-host[data-state="done"] .zen-svg .zen-rig {
+      transform: translateY(-1.5px);
+    }
+    /* Needs-input: eyes open gently + soft halo pulse */
+    .zen-host[data-state="needs-input"] .zen-svg .zen-rig {
+      transform: rotate(3.5deg);
+    }
+    .zen-host[data-state="needs-input"] .zen-svg .glow-default {
+      animation: zen-halo-pulse 2.4s ease-in-out infinite;
+    }
+    /* Error: NO shake, just a slow dim and red ring */
+    .zen-host[data-state="error"] .zen-svg .zen-rig {
+      opacity: 0.78;
+      transform: scale(0.99);
+      transition: opacity 600ms ease, transform 600ms ease;
+    }
+
+    @keyframes zen-breathe {
+      0%, 100% { transform: scale(1) translateY(0); }
+      50% { transform: scale(1.014) translateY(-1.5px); }
+    }
+    @keyframes zen-glow-fade {
+      0%, 100% { opacity: 0.35; transform: scale(0.97); }
+      50% { opacity: 0.75; transform: scale(1.04); }
+    }
+    @keyframes zen-ripple-expand {
+      0% { transform: scale(0.55); opacity: 0.85; }
+      100% { transform: scale(1.12); opacity: 0; }
+    }
+    @keyframes zen-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-3px); }
+    }
+    @keyframes zen-bloom {
+      0% { transform: scale(0.9); opacity: 0.3; }
+      50% { transform: scale(1.08); opacity: 1; }
+      100% { transform: scale(1); opacity: 0.85; }
+    }
+    @keyframes zen-halo-pulse {
+      0%, 100% { opacity: 0.45; transform: scale(1); }
+      50% { opacity: 0.9; transform: scale(1.05); }
+    }
+
+    /* ========================================================================
+       6. CUSTOM AGENT — Neutral, Configurable (Balanced, gear/slider turns)
+       ======================================================================== */
+    .custom-svg .custom-gear {
+      transform-box: fill-box;
+      transform-origin: center;
+      will-change: transform;
+    }
+    .custom-svg .custom-slider-thumb {
+      will-change: transform;
+      transition: transform 240ms ease;
+    }
+    .custom-host[data-state="idle"] .custom-svg .custom-rig {
+      animation: custom-breathe 3.8s ease-in-out infinite;
+    }
+    .custom-host[data-state="thinking"] .custom-svg .face-gaze {
+      animation: custom-eyes-drift 3.0s ease-in-out infinite;
+    }
+    .custom-host[data-state="thinking"] .custom-svg .custom-slider-thumb {
+      animation: custom-slider-slide 2.4s ease-in-out infinite;
+    }
+    .custom-host[data-state="working"] .custom-svg .ring-runner {
+      animation: lb-ring-spin 1.35s linear infinite;
+    }
+    .custom-host[data-state="working"] .custom-svg .custom-rig {
+      animation: custom-bob 0.72s ease-in-out infinite;
+    }
+    .custom-host[data-state="working"] .custom-svg .custom-gear {
+      animation: custom-gear-rotate 1.8s linear infinite;
+    }
+    .custom-host[data-state="working"] .custom-svg .custom-slider-thumb {
+      animation: custom-slider-slide 1.35s ease-in-out infinite;
+    }
+    .custom-host[data-state="done"] .custom-svg .custom-rig {
+      animation: custom-done-hop 650ms cubic-bezier(0.22, 1, 0.36, 1) 1;
+    }
+    .custom-host[data-state="needs-input"] .custom-svg .custom-rig {
+      transform: rotate(6deg);
+    }
+    .custom-host[data-state="error"] .custom-svg .custom-rig {
+      animation: custom-error-shake 290ms cubic-bezier(0.36, 0.07, 0.19, 0.97) 1;
+    }
+
+    @keyframes custom-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.016); }
+    }
+    @keyframes custom-eyes-drift {
+      0%, 100% { transform: translate(0, 0); }
+      35% { transform: translate(-3px, -3px); }
+      70% { transform: translate(3px, -2px); }
+    }
+    @keyframes custom-bob {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-2.5px); }
+    }
+    @keyframes custom-gear-rotate {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(180deg); }
+    }
+    @keyframes custom-slider-slide {
+      0%, 100% { transform: translateX(-4px); }
+      50% { transform: translateX(4px); }
+    }
+    @keyframes custom-done-hop {
+      0% { transform: translateY(0) scale(1, 1); }
+      25% { transform: translateY(2px) scale(1.04, 0.96); }
+      55% { transform: translateY(-6px) scale(0.97, 1.03); }
+      100% { transform: translateY(0) scale(1, 1); }
+    }
+    @keyframes custom-error-shake {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-4.5px); }
+      50% { transform: translateX(4.5px); }
+      75% { transform: translateX(-2.5px); }
+    }
+
+    /* ========================================================================
+       MINI MODE (40x40 Pin-Bar):
+       Rig stays still, thinking overlays hidden, badge scaled 1.22x
+       ======================================================================== */
+    .sidekick-host.sidekick-mini .sidekick-svg .sidekick-rig,
+    .sidekick-host.sidekick-mini .sidekick-svg .face-gaze {
+      animation: none !important;
+      transform: none !important;
+    }
+    .sidekick-host.sidekick-mini .sidekick-svg .thinking-dots,
+    .sidekick-host.sidekick-mini .sidekick-svg .orion-constellation,
+    .sidekick-host.sidekick-mini .sidekick-svg .orion-scanline,
+    .sidekick-host.sidekick-mini .sidekick-svg .patch-code-glyph,
+    .sidekick-host.sidekick-mini .sidekick-svg .patch-prompt,
+    .sidekick-host.sidekick-mini .sidekick-svg .spark-idea,
+    .sidekick-host.sidekick-mini .sidekick-svg .spark-orbit,
+    .sidekick-host.sidekick-mini .sidekick-svg .spark-burst,
+    .sidekick-host.sidekick-mini .sidekick-svg .zen-ripples {
+      opacity: 0 !important;
+      animation: none !important;
+    }
+    .sidekick-host.sidekick-mini[data-state="done"] .sidekick-svg .badge-done,
+    .sidekick-host.sidekick-mini[data-state="needs-input"] .sidekick-svg .badge-input,
+    .sidekick-host.sidekick-mini[data-state="error"] .sidekick-svg .badge-error {
+      transform: scale(1.22) !important;
+    }
+
+    /* ========================================================================
+       PERFORMANCE: OFFSCREEN PAUSE & PREFERS-REDUCED-MOTION
+       ======================================================================== */
+    .sidekick-host.is-offscreen .sidekick-svg * {
+      animation-play-state: paused !important;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sidekick-host .sidekick-svg * {
+        animation: none !important;
+        transition: none !important;
+      }
+      .sidekick-host[data-state="working"] .sidekick-svg .ring-runner {
+        opacity: 1;
+      }
+    }
+
+    /* UI Simulation Class for Reduced Motion */
+    body.simulate-reduced-motion .sidekick-host .sidekick-svg * {
+      animation: none !important;
+      transition: none !important;
+    }
+    body.simulate-reduced-motion .sidekick-host[data-state="working"] .sidekick-svg .ring-runner {
+      opacity: 1;
+    }
+  

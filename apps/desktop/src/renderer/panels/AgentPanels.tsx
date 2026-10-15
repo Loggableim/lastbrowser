@@ -1,4 +1,5 @@
 import React, { FormEvent, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
+import { AnimatedSidekick } from '../components/AnimatedSidekick.js';
 import {
   Bot,
   Brain,
@@ -380,7 +381,7 @@ function ScopedAgentsMain({ profile, serviceStatus, activeContextItem }: { profi
 
   return (
     <section className="browser-main native-rest-main agents-main">
-      <NativeHeader icon={<Bot size={21} />} title={t('agentPanels.agents')} kicker={t('agentPanels.agents')} detail={t('agentPanels.agentDetail')} loading={agentsState.loading} ready={ready} onRefresh={agentsState.refresh} />
+      <NativeHeader icon={<AnimatedSidekick persona="custom" color={typeof selectedAgent?.color === 'string' ? selectedAgent.color : '#00e5ff'} mini label={t('agentPanels.agents')} />} title={t('agentPanels.agents')} kicker={t('agentPanels.agents')} detail={t('agentPanels.agentDetail')} loading={agentsState.loading} ready={ready} onRefresh={agentsState.refresh} />
       <div className="native-card-actions insights-tabs">
         {[
           ['Dashboard', t('agentPanels.dashboard')],
@@ -423,7 +424,7 @@ function ScopedAgentsMain({ profile, serviceStatus, activeContextItem }: { profi
           </section>
           {agents.map((agent) => (
             <button key={idOf(agent)} type="button" className={`integration-row ${idOf(agent) === selectedSlug ? 'active' : ''}`} onClick={() => setSelectedSlug(idOf(agent))}>
-              <img src={brandAssets.sidebarIcons.agents} alt="" />
+              <AnimatedSidekick persona="custom" color={typeof agent.color === 'string' ? agent.color : '#00e5ff'} mini label={titleOf(agent)} />
               <span>{titleOf(agent)}</span>
               <small>{idOf(agent)} {currentAgentId === idOf(agent) ? t('agentPanels.active') : ''}</small>
             </button>

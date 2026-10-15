@@ -23,6 +23,7 @@ import {
 } from '../stores/usePinnedAppStore.js';
 import { renderAppIcon } from './PinnedAppGrid.js';
 import { useDesktopI18n } from '../i18n.js';
+import { shellText } from '../i18n/shell-text.js';
 import { useStandardChatCompanion } from './CompanionPicker.js';
 import { canDragFloatingDock, createDockAutoHideController, resolveDockOrientationForPanel } from '../dock-auto-hide.js';
 import type { BrowserTab } from '../tabs.js';
@@ -69,7 +70,7 @@ export function NovaDock({
   tabs = [],
   onPinTabAsApp
 }: NovaDockProps): React.JSX.Element {
-  const { t } = useDesktopI18n();
+  const { t, locale } = useDesktopI18n();
   const standardCompanion = useStandardChatCompanion();
   const shownName = standardCompanion.stored ? standardCompanion.botName : botName;
   const shownAvatar = standardCompanion.stored ? standardCompanion.avatar : brandAssets.sidekickAvatar;
@@ -517,14 +518,14 @@ export function NovaDock({
                 type="button"
                 className="nova-dock-btn add-btn"
                 onClick={onAddPinnedApp}
-                aria-label="App anheften"
+                aria-label={shellText(locale, "App anheften", "Pin an app")}
               >
                 <div className="pinned-dock-icon-wrapper">
                   <Plus size={14} />
                 </div>
               </button>
               <div className={`nova-dock-label-pill ${labelPlacementClass}`} style={getLabelStyle(addAppIndex ?? 0)}>
-                <span className="label-text">App anheften</span>
+                <span className="label-text">{shellText(locale, "App anheften", "Pin an app")}</span>
               </div>
             </div>
           )}

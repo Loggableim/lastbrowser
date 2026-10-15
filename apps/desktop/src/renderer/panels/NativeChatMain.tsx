@@ -1,7 +1,8 @@
 import { isRetiredProvider } from '../retired-providers.js';
-import { CATALOG_VISIBLE_WAIT_MS, publishModelCatalog, readModelCatalogGroups } from '../model-catalog-prefetch.js';
-import { classifyConnectionNotice, connectionNoticeCopy, type ConnectionNotice } from '../connection-notice.js';
-import { useStandardChatCompanion } from '../components/CompanionPicker.js';
+import { CATALOG_VISIBLE_WAIT_MS, MODEL_CATALOG_EVENT, chatModelCatalogViewKey, publishModelCatalog, readModelCatalogGroups } from '../model-catalog-prefetch.js';
+import { classifyConnectionNotice, connectionNoticeCopy, noticeFromProviderRows, resolveCatalogConnectionNotice, type ConnectionNotice, type ProviderConnectionRow } from '../connection-notice.js';
+import { useStandardChatCompanion, writeStandardChatCompanion } from '../components/CompanionPicker.js';
+import { companionDefaultNames, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 /**
  * Native chat panel for Lastbrowser.
  *
@@ -153,6 +154,7 @@ export function NativeChatMain({
 }: NativeChatMainProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
   const standardCompanion = useStandardChatCompanion();
+  const companionAppearance = useCompanionAppearance();
   const activeModelRevision = useActiveModelRevision();
   const providerEvidenceRevision = useProviderChatEvidenceRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
@@ -180,8 +182,8 @@ export function NativeChatMain({
   const workspace = activeSession?.workspace || activeSpacePath || 'default';
   const setSelectedModel = useChatStore((state) => state.setSelectedModel);
   const setSelectedModelProvider = useChatStore((state) => state.setSelectedModelProvider);
-  const modelViewKey = JSON.stringify([activeBrowserProfileId, activeSpacePath,
-    activeBackendProfileName || (activeSession as any)?.profile || 'default']);
+  const modelViewKey = chatModelCatalogViewKey({ browserProfileId: activeBrowserProfileId, workspacePath: activeSpacePath,
+    backendProfileName: activeBackendProfileName || (activeSession as any)?.profile });
   const modelViewKeyRef = useRef(modelViewKey); modelViewKeyRef.current = modelViewKey;
   const modelClient = useMemo(() => new IndependentAssistantClient(window.lastbrowser.independent), []);
   const [scopedModel, setScopedModel] = useState<{ viewKey: string; selection: ScopedModelSelection } | null>(null);
@@ -236,16 +238,20 @@ export function NativeChatMain({
     } else {
       setCatalogSnapshot({ viewKey: modelViewKey, phase: 'loading', groups: [] });
     }
+    // A slow catalog is not an unreachable OpenCode. After the wait window keep the
+    // generic retry state and let the live request publish a real notice when it lands.
     const loadingDeadline = window.setTimeout(() => {
       if (!alive) return;
-      setCatalogSnapshot(current => {
-        if (current.viewKey === modelViewKey && current.phase === 'loading') {
-          setConnectionNotice('opencode-unreachable');
-          return { viewKey: modelViewKey, phase: 'error', groups: [] };
-        }
-        return current;
-      });
+      setCatalogSnapshot(current => current.viewKey === modelViewKey && current.phase === 'loading'
+        ? { viewKey: modelViewKey, phase: 'error', groups: [] }
+        : current);
     }, CATALOG_VISIBLE_WAIT_MS);
+    const onCatalog = (event: Event) => {
+      const detail = (event as CustomEvent<{ viewKey?: string; groups?: CatalogGroup[] }>).detail;
+      if (!detail || detail.viewKey !== modelViewKey || !Array.isArray(detail.groups)) return;
+      setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: detail.groups });
+    };
+    window.addEventListener(MODEL_CATALOG_EVENT, onCatalog);
     setScopedModel(null); setCatalogDefaultModel('');
     const load = async () => {
       try {
@@ -311,19 +317,23 @@ export function NativeChatMain({
               activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
         setCatalogDefaultModel((selectedModelQualified && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) ? selectionForView.model : '');
         if (selectedModelQualified && selectionForView.model && activeSpacePath && (!isAntigravityCatalogUnverified || !isSelectedAntigravity)) saveSpaceModel(activeSpacePath, selectionForView.model, window.localStorage, selectionForView.provider);
-        const groups = isAntigravityCatalogUnverified
+        const discovered = isAntigravityCatalogUnverified
           ? rawParsed.filter(group => !isRetiredProvider(group.providerId))
           : rawParsed;
+        const groups = discovered.length ? discovered : cachedGroups;
         if (groups.length) publishModelCatalog(modelViewKey, groups);
-        const authNotice = classifyConnectionNotice({ authStates: ((data as { providers?: Array<{ auth_state?: string }> }).providers || []).map(provider => provider.auth_state) });
-        setConnectionNotice(groups.length ? null : authNotice);
+        const providerRows = ((data as { providers?: readonly ProviderConnectionRow[] }).providers || []);
+        const authNotice = noticeFromProviderRows(providerRows) || classifyConnectionNotice({ authStates: providerRows.map(provider => String(provider.auth_state || '')) });
+        setConnectionNotice(authNotice);
         setCatalogSnapshot({ viewKey: modelViewKey, phase: groups.length || !authNotice ? 'ready' : 'error', groups });
       } catch (error) {
         if (alive) {
           setCatalogDefaultModel('');
-          const notice = classifyConnectionNotice({ error }) || (cachedGroups.length ? null : 'opencode-unreachable');
+          const notice = noticeFromProviderRows((error as { providers?: readonly ProviderConnectionRow[] })?.providers) || resolveCatalogConnectionNotice({ error });
           setConnectionNotice(notice);
-          if (cachedGroups.length) setCatalogSnapshot({ viewKey: modelViewKey, phase: 'ready', groups: cachedGroups });
+          // A failed discovery is distinct from an empty or unqualified catalog:
+          // keep any cached rows selectable but surface the retryable error state.
+          if (cachedGroups.length) setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: cachedGroups });
           else {
             setCatalogSnapshot({ viewKey: modelViewKey, phase: 'error', groups: [] });
             setCatalogStatus({ antigravity: 'unknown' });
@@ -332,8 +342,8 @@ export function NativeChatMain({
       }
     };
     void load();
-    return () => { alive = false; window.clearTimeout(loadingDeadline); };
-  }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, activeSession?.model, requestedChatDefault, t, activeModelRevision]);
+    return () => { alive = false; window.clearTimeout(loadingDeadline); window.removeEventListener(MODEL_CATALOG_EVENT, onCatalog); };
+  }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, requestedChatDefault, t, activeModelRevision]);
 
   /** Change only this bound Space preference; executing runs keep their captured model. */
   const commitComposerModelChoice = useCallback((selection: string) => {
@@ -884,6 +894,24 @@ export function NativeChatMain({
           <div className="native-chat-title-copy">
             <h1>{activeSession ? sessionTitle(activeSession) : t('chat.newSession')}</h1>
             {standardCompanion.stored && <span className="native-chat-space-context">{standardCompanion.botName} AI</span>}
+            <label className="native-chat-space-context">
+              <select
+                aria-label="Sidekick"
+                value={companionAppearance.loaded ? companionAppearance.personality : standardCompanion.personality}
+                disabled={!companionAppearance.loaded || companionAppearance.busy}
+                onChange={event => {
+                  const personality = event.target.value as CompanionPersonality;
+                  const botName = companionDefaultNames[personality];
+                  void companionAppearance.setSelection(personality, botName).then(saved => {
+                    if (saved) writeStandardChatCompanion(personality, botName);
+                  });
+                }}
+              >
+                {(Object.keys(companionDefaultNames) as CompanionPersonality[]).map(personality => (
+                  <option key={personality} value={personality}>{companionDefaultNames[personality]}</option>
+                ))}
+              </select>
+            </label>
             <span className="native-chat-space-context">{activeSession ? ((activeSession.workspace || activeSpacePath).split(/[\\/]/).filter(Boolean).at(-1) || t('chat.workspace')) : t('chat.kicker')}</span>
             {activeSessionId && <span className="native-chat-session-id">{shortSessionId(activeSessionId)}</span>}
           </div>

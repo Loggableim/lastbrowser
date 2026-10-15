@@ -6,6 +6,15 @@ export const CATALOG_VISIBLE_WAIT_MS = 12000;
 const STORAGE_KEY = 'lastbrowser.chatModelCatalog.v1';
 const QUICKCHAT_CATALOG_KEY = 'lastbrowser.quickchatModelCatalog.v1';
 
+/** One canonical view key so the startup prefetch and the standard picker share a cache. */
+export function chatModelCatalogViewKey(input: {
+  browserProfileId: string;
+  workspacePath: string;
+  backendProfileName?: string | null;
+}): string {
+  return JSON.stringify([input.browserProfileId, input.workspacePath, input.backendProfileName || 'default']);
+}
+
 export function readModelCatalogGroups(viewKey: string): ModelPickerOptionGroup[] {
   try {
     const raw = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || '');

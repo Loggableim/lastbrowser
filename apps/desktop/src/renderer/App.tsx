@@ -203,8 +203,9 @@ import {
   workspacePanelCollapsedStorageKey
 } from './shell-state.js';
 import { canCallSidekickApi } from './runtime-readiness.js';
-import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
-import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
+import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, retainStartupShell, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
+import { startupScreenCopy, resolveStartupLocale, startupFailureMessage } from './startup/startup-screen-copy.js';
+import { chatModelCatalogViewKey, clearModelCatalog, prefetchModelCatalog } from './model-catalog-prefetch.js';
 import { StartupScreen } from './startup/StartupScreen.js';
 import { FirstLaunchCompletion } from './startup/FirstLaunchCompletion.js';
 import { chooseStartupSound, playStartupSound, readStartupPreferences, startupAnimations, useStartupPreferences, type StartupSound } from './startup/startup-preferences.js';
@@ -1543,8 +1544,9 @@ function AppContent(): JSX.Element {
     logged_in: accessAuthChecked && !accessAuthRequired
   });
   useEffect(() => {
-    setStartupReadyAcknowledged(startupPhase === 'ready' && startupAuthAllowsShell);
-  }, [startupPhase, startupAuthAllowsShell]);
+    if (!startupAuthAllowsShell) return;
+    setStartupReadyAcknowledged(current => retainStartupShell(current, startupPhase, startupFailureStage));
+  }, [startupPhase, startupAuthAllowsShell, startupFailureStage]);
   useEffect(() => {
     pendingStartupSoundRef.current = null;
     stopStartupSoundRef.current?.();
@@ -1915,6 +1917,28 @@ function AppContent(): JSX.Element {
     saveSearchEngineId(window.localStorage, searchEngineId);
     void window.lastbrowser?.browser?.setSearchEngine?.(searchEngineId);
   }, [searchEngineId]);
+
+  // Prefetch the scoped model catalog once the shell is usable so the standard chat
+  // picker opens from `lastbrowser.chatModelCatalog.v1` instead of an empty live load.
+  useEffect(() => {
+    if (!sidekickApiReady) return undefined;
+    let alive = true;
+    const backendProfileName = activeBackendProfileName || (activeSession as any)?.profile || '';
+    const viewKey = chatModelCatalogViewKey({ browserProfileId: activeProfileId, workspacePath: activeSpacePath,
+      backendProfileName });
+    const run = () => {
+      void prefetchModelCatalog({
+        viewKey,
+        browserProfileId: activeProfileId,
+        workspacePath: activeSpacePath || null,
+        backendProfileName: backendProfileName || undefined
+      }).catch(() => undefined);
+    };
+    run();
+    const onSettings = () => { if (alive) { clearModelCatalog(); run(); } };
+    window.addEventListener('lastbrowser:settings-changed', onSettings);
+    return () => { alive = false; window.removeEventListener('lastbrowser:settings-changed', onSettings); };
+  }, [sidekickApiReady, activeProfileId, activeSpacePath, activeBackendProfileName, activeSession]);
 
   /** Drop a single entry from the history panel. */
   async function removeHistoryEntry(url: string): Promise<void> {
@@ -5631,9 +5655,7 @@ function AppContent(): JSX.Element {
 
   const startupCopy = startupScreenCopy[resolveStartupLocale(locale)];
   const startupError = startupFailureStage
-    ? startupFailureStage === 'session' && !accessAuthRequired && accessAuthError
-      ? accessAuthError
-      : startupCopy.errorDescription
+    ? startupFailureMessage(startupFailureStage === 'session' && !accessAuthRequired ? accessAuthError : '', startupCopy)
     : null;
   const accessAuthForm = accessAuthRequired && !startupFailureStage ? (
     <section className="startup-screen__auth" aria-labelledby="startup-auth-title">

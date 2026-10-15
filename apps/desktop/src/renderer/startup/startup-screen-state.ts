@@ -44,6 +44,20 @@ export function getStartupFailureStage(
   return blockingStartupStages(policy).find((stage) => signals[stage] === 'error') ?? null;
 }
 
+/**
+ * Once the shell is up, a pending flap (a model write that stalls the health
+ * probe) must not replace it with the startup screen. A real failed stage does.
+ */
+export function retainStartupShell(
+  acknowledged: boolean,
+  phase: StartupPhaseId,
+  failureStage: keyof StartupReadinessSignals | null
+): boolean {
+  if (phase === 'ready') return true;
+  if (failureStage) return false;
+  return acknowledged;
+}
+
 /** Real, non-blocking work that can still be reported after the shell is usable. */
 export function getStartupBackgroundPhase(signals: StartupReadinessSignals, policy: StartupAuthPolicy): StartupPhaseId | null {
   if (!isStartupReady(signals, policy)) return null;

@@ -477,6 +477,14 @@ def _provider_model_catalog(scope, catalog, groups):
     return {"schemaVersion": 1, "scope": scope.model_dump(mode="json", by_alias=True), "providers": providers}
 
 
+def _annotate_catalog_providers(providers):
+    try:
+        from cli.opencode_device import annotate_opencode_providers
+        return annotate_opencode_providers(providers)
+    except Exception:
+        return providers
+
+
 def _response(scope, revision, model, provider, catalog, *, profile_home=None, account_id=None):
     from runtime.quickchat_metrics import read_latency_summaries
     group, entry = _entry(catalog, model, provider)
@@ -495,7 +503,7 @@ def _response(scope, revision, model, provider, catalog, *, profile_home=None, a
             "groups": groups,
             "providerModelCatalog": _provider_model_catalog(scope, catalog, groups),
             "quickchatLatency": read_latency_summaries(profile_home) if profile_home is not None else {"schemaVersion": 1, "models": []},
-            "providers": catalog.get("providers", [])}
+            "providers": _annotate_catalog_providers(catalog.get("providers", []))}
 
 
 def handle_model_selection(store, resolver, manager, scope: Scope, payload: dict[str, Any]) -> dict:

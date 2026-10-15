@@ -52,8 +52,8 @@ import { isDirectQuickchatProvider } from '../quickchat-automatic.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { isModelCatalogCacheCurrent, isModelCatalogResponseCurrent } from '../model-picker-options.js';
-import { CATALOG_VISIBLE_WAIT_MS, publishQuickchatCatalog, readQuickchatCatalog } from '../model-catalog-prefetch.js';
-import { classifyConnectionNotice, type ConnectionNotice } from '../connection-notice.js';
+import { publishQuickchatCatalog, readQuickchatCatalog } from '../model-catalog-prefetch.js';
+import { classifyConnectionNotice, noticeFromProviderRows, resolveCatalogConnectionNotice, type ConnectionNotice, type ProviderConnectionRow } from '../connection-notice.js';
 import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-model-gate.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
@@ -303,12 +303,6 @@ export function CopilotSplitView({
       modelCatalogFailureScopeKeyRef.current = null;
       setModelCatalogFailureScopeKey(null);
     }
-    const loadingDeadline = window.setTimeout(() => {
-      if (!alive || modelCatalogLoadedScopeKeyRef.current === orchestrationScopeKey) return;
-      setConnectionNotice('opencode-unreachable');
-      modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
-      setModelCatalogFailureScopeKey(orchestrationScopeKey);
-    }, CATALOG_VISIBLE_WAIT_MS);
     async function loadLiveModels() {
       try {
         const preparedCurrent = preparedModelSelection && preparedModelSelectionScopeKey === JSON.stringify([browserProfileId, workspacePath || null, backendProfileName || null])
@@ -414,7 +408,8 @@ export function CopilotSplitView({
         setModelList(nextModelList);
         setModelCapabilitiesLoaded(true);
         publishQuickchatCatalog(orchestrationScopeKey, nextModelList);
-        const authNotice = classifyConnectionNotice({ authStates: ((res as { providers?: ReadonlyArray<{ auth_state?: string }> }).providers || []).map(provider => String(provider.auth_state || '')) });
+        const providerRows = (res as { providers?: readonly ProviderConnectionRow[] }).providers;
+        const authNotice = noticeFromProviderRows(providerRows) || classifyConnectionNotice({ authStates: (providerRows || []).map(provider => String(provider.auth_state || '')) });
         setConnectionNotice(authNotice);
         modelCatalogCacheScopeKeyRef.current = orchestrationScopeKey;
         modelCatalogLoadedScopeKeyRef.current = orchestrationScopeKey;
@@ -425,11 +420,12 @@ export function CopilotSplitView({
         // must not imply that a provider is configured or currently available.
         if (alive && generation === orchestrationScopeGenerationRef.current
           && isModelCatalogResponseCurrent(orchestrationScopeKey, orchestrationScopeKeyRef.current)) {
-          const notice = classifyConnectionNotice({ error }) || 'opencode-unreachable';
+          const notice = noticeFromProviderRows((error as { providers?: readonly ProviderConnectionRow[] })?.providers) || resolveCatalogConnectionNotice({ error });
+          if (notice) setConnectionNotice(notice);
+          else if (!hasCachedCatalogForScope && !persistedCatalog.length) setConnectionNotice(null);
           if (!hasCachedCatalogForScope && !persistedCatalog.length) {
             setModelList(AVAILABLE_MODELS);
             setModelCapabilitiesLoaded(false);
-            setConnectionNotice(notice);
           }
           modelCatalogFailureScopeKeyRef.current = persistedCatalog.length ? null : orchestrationScopeKey;
           setModelCatalogFailureScopeKey(persistedCatalog.length ? null : orchestrationScopeKey);
@@ -439,7 +435,6 @@ export function CopilotSplitView({
     void loadLiveModels();
     return () => {
       alive = false;
-      window.clearTimeout(loadingDeadline);
     };
   }, [orchestrationScope, orchestrationScopeKey, modelPickerOpen, preparedModelSelection, preparedModelSelectionScopeKey, browserProfileId, workspacePath, backendProfileName]);
 

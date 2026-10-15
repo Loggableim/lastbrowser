@@ -4747,7 +4747,15 @@ def handle_get(handler, parsed) -> bool:
         return _handle_events_sse(handler, parsed)
 
     if parsed.path == "/api/models":
-        return j(handler, get_available_models())
+        payload = get_available_models()
+        if isinstance(payload, dict):
+            try:
+                from cli.opencode_device import annotate_opencode_providers
+                payload = dict(payload)
+                payload["providers"] = annotate_opencode_providers(payload.get("providers") or [])
+            except Exception:
+                logger.debug("OpenCode provider notice was not attached", exc_info=True)
+        return j(handler, payload)
 
     if parsed.path == "/api/models/live":
         return _handle_live_models(handler, parsed)

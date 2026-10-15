@@ -58,3 +58,11 @@ export const startupScreenCopy: Record<StartupLocaleId, StartupScreenCopy> = {
 export function resolveStartupLocale(locale: string): StartupLocaleId {
   return (startupLocaleIds as readonly string[]).includes(locale) ? locale as StartupLocaleId : 'en';
 }
+
+/** Transport details must never leak into the friendly, localized startup error screen. */
+const TRANSIENT_STARTUP_ERROR = /timed?\s*out|timeout|fetch failed|network|econnrefused|econnreset|enotfound|eai_again|unreachable|not reachable|service is not ready|socket hang up|opencode\.ai/i;
+
+export function startupFailureMessage(raw: string | null | undefined, copy: StartupScreenCopy): string {
+  const text = typeof raw === 'string' ? raw.trim() : '';
+  return text && !TRANSIENT_STARTUP_ERROR.test(text) ? text : copy.errorDescription;
+}

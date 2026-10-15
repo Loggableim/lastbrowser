@@ -305,3 +305,20 @@ def test_catalog_errors_preserve_workspace_mismatch_reason(home):
     device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": value}})
     with pytest.raises(device.DeviceError, match="workspace_binding_changed"):
         device.discovered_models("opencode-go")
+
+
+def test_unreachable_open_code_is_named_while_a_cached_login_stays_connected(home, monkeypatch):
+    device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": config()}})
+    monkeypatch.setattr(device, "connection_state", lambda timeout=1.0: "unreachable")
+    rows = device.annotate_opencode_providers([{"id": "opencode-go", "auth_state": "connected"}])
+    assert rows[0]["connection_state"] == "unreachable"
+    assert rows[0]["auth_state"] == "connected"
+
+
+def test_a_stored_but_unusable_login_is_expired_even_when_the_host_answers(home, monkeypatch):
+    device._write(home, {"opencode-go": {"refresh_in_flight": True}})
+    monkeypatch.setattr(device, "connection_state", lambda timeout=1.0: "ok")
+    rows = device.annotate_opencode_providers([])
+    assert rows[0]["id"] == "opencode-go"
+    assert rows[0]["auth_state"] == "expired"
+    assert rows[0]["connection_state"] == "ok"

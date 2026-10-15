@@ -40,6 +40,7 @@ export type DesktopSessionSummary = {
   project_id?: string | null;
   tags?: string[];
   is_cli_session?: boolean;
+  read_only?: boolean;
   session_source?: string;
   raw_source?: string;
   source_tag?: string;

@@ -874,7 +874,15 @@ function registerIpc(): void {
     return result;
   });
   ipcMain.handle('lastbrowser:sidekick:renameSession', async (event, request) => renameSession(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath') as { sessionId: string; title: string }));
-  ipcMain.handle('lastbrowser:sidekick:deleteSession', async (event, request) => deleteSession(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath') as { sessionId: string }));
+  ipcMain.handle('lastbrowser:sidekick:deleteSession', async (event, request) => {
+    const scoped = await boundChatRequest(event, request, 'workspacePath') as { sessionId: string };
+    try {
+      return await deleteSession(requireWebuiUrl(), scoped);
+    } catch (error) {
+      // A refused or failed deletion is an answer the sidebar shows on its own row, not an IPC fault.
+      return { ok: false, deleted: false, error: error instanceof Error ? error.message : String(error) };
+    }
+  });
   ipcMain.handle('lastbrowser:sidekick:duplicateSession', async (event, request) => duplicateSession(requireWebuiUrl(), await boundChatRequest(event, request, 'workspacePath') as { sessionId: string }));
   ipcMain.handle('lastbrowser:sidekick:getDraft', async (event, request) => {
     const scoped = await boundChatRequest(event, typeof request === 'string' ? { sessionId: request } : request, 'workspacePath');

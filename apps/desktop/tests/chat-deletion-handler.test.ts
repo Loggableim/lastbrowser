@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import ts from 'typescript';
-import { sessionDeletionSucceeded, sessionListResponseMatchesScope, mergeSessionListSnapshot } from '../src/renderer/session-list-scope.js';
+import { sessionDeletionFailureMessage, sessionDeletionSucceeded, sessionListResponseMatchesScope, mergeSessionListSnapshot } from '../src/renderer/session-list-scope.js';
 
 // Execute the actual handler, with controlled React state and IPC scheduling.
 // This proves its delayed-response decisions, not mounted DOM or disk persistence.
@@ -34,9 +34,9 @@ function fixture(handlerName = 'deleteNativeSession') {
     locale: 'de', sessionTitle: () => 'Chat', window: { confirm, prompt: () => 'Renamed', lastbrowser: {
       sidekick: { deleteSession, renameSession: deleteSession, duplicateSession: deleteSession } } },
     setSessions: (update: (current: typeof rows) => typeof rows) => { rows = update(rows); },
-    setSessionError, setActiveSessionId, setActiveSession, setActivePanel, sessionDeletionSucceeded, sessionListResponseMatchesScope };
+    setSessionError, setActiveSessionId, setActiveSession, setActivePanel, sessionDeletionSucceeded, sessionDeletionFailureMessage, sessionListResponseMatchesScope };
   const remove = new Function(...Object.keys(bindings), `${compiled}; return ${handlerName};`)(...Object.values(bindings)) as
-    (session: { session_id: string }, confirmation: string) => Promise<void>;
+    (session: { session_id: string }, confirmation: string) => Promise<unknown>;
   return { remove, complete, fail, refs, deleteSession, confirm, setSessionError, setActiveSessionId, setActiveSession, setActivePanel, rows: () => rows };
 }
 

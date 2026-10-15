@@ -1038,13 +1038,16 @@ class IndependentStore:
                 (value["revision"], canonical_json(value), lease_id))
             return value
 
-    def acquire_chat_writer(self, scope: Scope, session_id: str, owner_ref: str, owner_generation: str) -> dict[str, Any]:
-        return self._acquire_session_writer(scope, session_id, owner_ref, owner_generation, "legacy_chat")
+    def acquire_chat_writer(self, scope: Scope, session_id: str, owner_ref: str, owner_generation: str, *,
+                            owner_identity: dict[str, Any] | None = None) -> dict[str, Any]:
+        return self._acquire_session_writer(scope, session_id, owner_ref, owner_generation, "legacy_chat",
+                                            owner_identity=owner_identity)
 
     def acquire_session_projection(self, scope: Scope, session_id: str, owner_ref: str, owner_generation: str) -> dict[str, Any]:
         return self._acquire_session_writer(scope, session_id, owner_ref, owner_generation, "independent_projection")
 
-    def _acquire_session_writer(self, scope: Scope, session_id: str, owner_ref: str, owner_generation: str, owner_kind: str) -> dict[str, Any]:
+    def _acquire_session_writer(self, scope: Scope, session_id: str, owner_ref: str, owner_generation: str, owner_kind: str,
+                                owner_identity: dict[str, Any] | None = None) -> dict[str, Any]:
         """Ordinary native turns share the same atomic writer reservation.
 
         Request ownership is explicit. No independent run or tool authority is
@@ -1066,6 +1069,8 @@ class IndependentStore:
                      "runId": None, "ownerKind": owner_kind, "ownerRef": owner_ref,
                      "ownerGeneration": owner_generation, "revision": 1,
                      "expiresAt": "2099-01-01T00:00:00Z", "state": "active"}
+            # hostPid/hostCreationIdentity prove the owner's exit later; without them a lease is never presumed dead.
+            value.update(owner_identity or {})
             self._conn.execute("INSERT INTO ia_resource_leases VALUES(?,?,?,?,?,?,?,?,?)", (value["leaseId"], resource_key, self._scope(scope), None, owner_generation, 1, value["expiresAt"], "active", canonical_json(value)))
             return value
 
@@ -1090,6 +1095,19 @@ class IndependentStore:
             if not row or row["owner_generation"] != owner_generation or expected_revision is not None and row["revision"] != expected_revision:
                 raise RevisionConflict("Lease owner or revision changed")
             self._conn.execute("UPDATE ia_resource_leases SET state='released',revision=revision+1 WHERE lease_id=?", (lease_id,))
+
+    def expire_stale_session_writer(self, lease_id: str, *, owner_generation: str) -> bool:
+        """Retire a chat-writer lease whose owning backend process is gone.
+
+        Only run-less ``session_writer:`` leases of the given generation
+        qualify. The caller proves the owner is gone before calling this.
+        """
+        with self.transaction():
+            row = self._one("SELECT * FROM ia_resource_leases WHERE lease_id=? AND state='active'", (lease_id,))
+            if row is None or row["run_id"] is not None or not str(row["resource_key"]).startswith("session_writer:") or row["owner_generation"] != owner_generation:
+                return False
+            self._conn.execute("UPDATE ia_resource_leases SET state='stale',revision=revision+1 WHERE lease_id=?", (lease_id,))
+            return True
 
     def save_checkpoint(self, run_id: str, state: dict[str, Any], *, safe_boundary: bool = True, journal_watermark: str | None = None) -> dict[str, Any]:
         with self.transaction():

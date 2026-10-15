@@ -64,6 +64,24 @@ def native_chat_exit_confirmed(context: NativeChatContext) -> bool:
         return entry.settled if entry is not None and entry.context == context else _settled.get(context.stream_id) == context
 
 
+def native_writer_owner_gone(lease: dict) -> bool:
+    """True only when a retained native writer's worker process has already exited.
+
+    A writer is retained until exit is confirmed; once the OS reports the worker
+    gone, nothing can still write through that lease.
+    """
+    stream_id = str(lease.get("ownerRef") or "")
+    with _lock:
+        entry = _active.get(stream_id)
+        if entry is None or entry.settled or entry.handle is None:
+            return False
+        if entry.context.writer_lease_id != lease.get("leaseId"):
+            return False
+        alive = getattr(entry.handle, "is_alive", None)
+        alive = alive() if callable(alive) else alive
+        return alive is False
+
+
 def abandon_unstarted_native_chat(context: NativeChatContext) -> bool:
     """Root Thread.start failure only; cannot abandon a created process."""
     with _lock:

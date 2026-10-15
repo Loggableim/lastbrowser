@@ -867,14 +867,47 @@ def _load_gateway_session_identity_map() -> dict[str, dict]:
     return mapping.copy()
 
 
-def _guard_native_session_writer(handler, session):
+SESSION_FILE_REMAINS_MESSAGE = (
+    "The chat file could not be removed from disk, so the chat was kept. "
+    "Close any program that holds it and try again."
+)
+
+
+def _session_storage_directories(session) -> list[Path]:
+    """Every directory that may hold this session's JSON, Space folders included."""
+    from web.api.config import SESSION_DIR as _LEGACY_SESSION_DIR
+    candidates: list[Path] = [Path(get_session_dir()), Path(_LEGACY_SESSION_DIR)]
+    try:
+        from web.api.space_engine import get_all_workspaces
+        candidates.extend(Path(workspace.sessions_dir) for workspace in get_all_workspaces())
+    except Exception:
+        logger.debug("Could not list Space session directories", exc_info=True)
+    if getattr(session, "space_scope", None) is not None:
+        try:
+            candidates.append(Path(session.path).parent)
+        except Exception:
+            logger.debug("Could not resolve the Space session directory", exc_info=True)
+    unique: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            resolved = candidate
+        if str(resolved) not in seen:
+            seen.add(str(resolved))
+            unique.append(resolved)
+    return unique
+
+
+def _guard_native_session_writer(handler, session, *, deleting: bool = False):
     """Return True after a scoped mutation was refused; legacy stays unchanged."""
     from runtime.independent.chat_binding import assert_session_writer_available
     from runtime.independent.store import ResourceBusy
     from runtime.independent.scope import ScopeError
     from web.api.profiles import get_active_profile_name
     try:
-        assert_session_writer_available(session, actor=str(get_active_profile_name() or "default"))
+        assert_session_writer_available(session, actor=str(get_active_profile_name() or "default"), deleting=deleting)
     except ResourceBusy:
         bad(handler, "This task chat has an independent writer. Stop its run before changing its transcript.", 409)
         return True
@@ -6774,10 +6807,14 @@ def handle_post(handler, parsed) -> bool:
         except KeyError:
             return _handle_post_parsed(handler, parsed, body, diag)
         try:
-            with native_chat_writer(session, actor=str(get_active_profile_name() or "default"), owner_ref=uuid.uuid4().hex):
+            with native_chat_writer(session, actor=str(get_active_profile_name() or "default"), owner_ref=uuid.uuid4().hex,
+                                    deleting=parsed.path == "/api/session/delete"):
                 return _handle_post_parsed(handler, parsed, body, diag)
         except (StoreError, PermissionError, ValueError) as exc:
-            return j(handler, {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied")}, status=409)
+            refusal = {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied")}
+            if parsed.path == "/api/session/delete":
+                refusal.update(ok=False, deleted=False)
+            return j(handler, refusal, status=409)
     return _handle_post_parsed(handler, parsed, body, diag)
 
 
@@ -7707,7 +7744,7 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
         except KeyError:
             goal_session = None
         if goal_session is not None:
-            if _guard_native_session_writer(handler, goal_session):
+            if _guard_native_session_writer(handler, goal_session, deleting=True):
                 return
             try:
                 from web.api.profiles import get_profile_home
@@ -7762,7 +7799,7 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
         is_messaging_session = _is_messaging_session_id(sid)
         worktree_retained = _worktree_retained_payload_for_session_id(sid)
         from web.api import models as _models
-        _models._mark_session_deleted(sid)
+        storage_dirs = _session_storage_directories(goal_session)
         # Delete from WebUI session store (single dict pop â€” GIL-safe)
         deleted_session = SESSIONS.pop(sid, None)
         if deleted_session is not None:
@@ -7770,25 +7807,25 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
                 deleted_session._deleted = True
             except Exception:
                 pass
-        target_dirs: list[Path] = []
-        try:
-            from web.api.config import SESSION_DIR as _LEGACY_SESSION_DIR
-
-            for candidate in (get_session_dir(), Path(_LEGACY_SESSION_DIR)):
+        # Tombstone before the file goes, so a concurrent reload cannot
+        # resurrect it. A failed removal rolls the tombstone back below.
+        _models._mark_session_deleted(sid)
+        if not _models.unlink_owned_session_files(sid, extra_dirs=storage_dirs):
+            _models._unmark_session_deleted(sid)
+            if deleted_session is not None:
                 try:
-                    resolved = Path(candidate).resolve()
+                    deleted_session._deleted = False
                 except Exception:
-                    resolved = Path(candidate)
-                if all(str(resolved) != str(existing) for existing in target_dirs):
-                    target_dirs.append(resolved)
-
-            for session_dir in target_dirs:
-                _models._SESSION_LIST_CACHE.pop(session_dir, None)
-                _models._SESSION_LIST_CACHE_AT.pop(session_dir, None)
-                _models._SESSION_INDEX_PRUNE_AT.pop(session_dir, None)
-        except Exception:
-            pass
-        for session_dir in target_dirs:
+                    pass
+                SESSIONS[sid] = deleted_session
+            logger.error("Session file for %s could not be removed; the chat was kept", sid)
+            return j(handler, {"ok": False, "deleted": False, "error": SESSION_FILE_REMAINS_MESSAGE,
+                               "error_code": "session_file_remains"}, status=500)
+        # The file is gone. Only now clear the derived state, Space folders included.
+        _models._SESSION_LIST_CACHE.clear()
+        _models._SESSION_LIST_CACHE_AT.clear()
+        _models._SESSION_INDEX_PRUNE_AT.clear()
+        for session_dir in storage_dirs:
             try:
                 (session_dir / "_index.json").unlink(missing_ok=True)
             except Exception:
@@ -7796,17 +7833,6 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
         # Evict cached agent so turn count doesn't leak into a recycled session
         from web.api.config import _evict_session_agent
         _evict_session_agent(sid)
-        for session_dir in target_dirs:
-            try:
-                p = (session_dir / f"{sid}.json").resolve()
-                p.relative_to(session_dir.resolve())
-            except Exception:
-                continue
-            try:
-                p.unlink(missing_ok=True)
-                p.with_suffix('.json.bak').unlink(missing_ok=True)
-            except Exception:
-                logger.debug("Failed to unlink session file %s", p)
         # Prune the per-session agent lock so deleted sessions don't leak
         # Lock entries in SESSION_AGENT_LOCKS forever.
         with SESSION_AGENT_LOCKS_LOCK:
@@ -7825,8 +7851,6 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
                 delete_cli_session(sid)
             except Exception:
                 logger.debug("Failed to delete CLI session %s", sid)
-        if not _models.unlink_owned_session_files(sid):
-            return j(handler, {"ok": False, "error": "session_file_remains", "deleted": False}, status=500)
         return j(handler, {"ok": True, **worktree_retained})
 
     if parsed.path == "/api/session/clear":

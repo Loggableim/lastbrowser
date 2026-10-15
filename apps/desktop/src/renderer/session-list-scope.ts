@@ -16,6 +16,28 @@ export function sessionDeletionSucceeded(result: unknown): boolean {
   return !response.error && response.ok !== false && response.deleted !== false;
 }
 
+/** What one deletion attempt reports back to the sidebar row that requested it. */
+export type SessionDeleteOutcome = { deleted: boolean; message: string };
+
+/**
+ * The text shown next to a row whose deletion was refused. Backend messages are
+ * shown as sent; the one raw code without wording gets a localized sentence.
+ */
+export function sessionDeletionFailureMessage(result: unknown, locale: string): string {
+  const fallback = locale === 'de' ? 'Chat konnte nicht gelöscht werden.' : 'Chat could not be deleted.';
+  if (!result || typeof result !== 'object') return fallback;
+  const response = result as Record<string, unknown>;
+  const error = typeof response.error === 'string' ? response.error.trim() : '';
+  if (error === 'goal_state_unavailable') {
+    return locale === 'de'
+      ? 'Das Ziel dieses Chats konnte nicht gelöscht werden. Bitte erneut versuchen.'
+      : 'The goal of this chat could not be cleared. Please try again.';
+  }
+  if (error) return error;
+  const message = typeof response.message === 'string' ? response.message.trim() : '';
+  return message || fallback;
+}
+
 /** A resolved profile belongs to its original UI selection, even before effects reset it. */
 export function resolveSessionBackendProfile(
   requestedScope: SessionListScope | null,

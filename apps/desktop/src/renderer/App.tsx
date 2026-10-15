@@ -295,7 +295,7 @@ import { AddressBar } from './components/AddressBar.js';
 import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
 import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepaliveEntry } from './space-audio-keepalive.js';
 import { isCurrentSpaceDirectorySnapshot, resolveCanonicalSpacePath, resolveExistingSpaceBackendProfile, resolveRefreshedActiveSpacePath } from './space-paths.js';
-import { mergeSessionListSnapshot, resolveSessionBackendProfile, resolveSessionListSelection, sessionListResponseMatchesScope, sessionDeletionSucceeded, sameSessionListScope, type SessionListScope } from './session-list-scope.js';
+import { mergeSessionListSnapshot, resolveSessionBackendProfile, resolveSessionListSelection, sessionListResponseMatchesScope, sessionDeletionFailureMessage, sessionDeletionSucceeded, sameSessionListScope, type SessionDeleteOutcome, type SessionListScope } from './session-list-scope.js';
 import { createAndLoadScopedSession } from './scoped-session-creation.js';
 import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
@@ -4838,8 +4838,8 @@ function AppContent(): JSX.Element {
     }
   }
 
-  async function deleteNativeSession(session: DesktopSessionSummary, confirmation?: 'sidebar-inline-confirmed'): Promise<void> {
-    if (confirmation !== 'sidebar-inline-confirmed' && !window.confirm(`Delete "${sessionTitle(session)}"?`)) return;
+  async function deleteNativeSession(session: DesktopSessionSummary, confirmation?: 'sidebar-inline-confirmed'): Promise<SessionDeleteOutcome> {
+    if (confirmation !== 'sidebar-inline-confirmed' && !window.confirm(`Delete "${sessionTitle(session)}"?`)) return { deleted: false, message: '' };
     const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };
     try {
       const result = await window.lastbrowser.sidekick.deleteSession({ sessionId: session.session_id, ...sessionScope });
@@ -4847,8 +4847,12 @@ function AppContent(): JSX.Element {
         profile: activeProfileIdRef.current,
         workspacePath: activeSpacePathRef.current,
         backendProfileName: activeBackendProfileNameRef.current
-      })) return;
-      if (!sessionDeletionSucceeded(result)) throw new Error(locale === 'de' ? 'Chat konnte nicht gelöscht werden.' : 'Chat could not be deleted.');
+      })) return { deleted: false, message: '' };
+      if (!sessionDeletionSucceeded(result)) {
+        const message = sessionDeletionFailureMessage(result, locale);
+        setSessionError(message);
+        return { deleted: false, message };
+      }
       removedSessionIdsRef.current.add(session.session_id);
       const remaining = sessionsRef.current.filter((item) => item.session_id !== session.session_id);
       setSessions((current) => current.filter((item) => item.session_id !== session.session_id));
@@ -4858,20 +4862,24 @@ function AppContent(): JSX.Element {
         setActiveSessionId(nextActiveId);
       }
       setSessionError('');
+      return { deleted: true, message: '' };
     } catch (error) {
       if (!sessionListResponseMatchesScope(sessionScope, {
         profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current,
         backendProfileName: activeBackendProfileNameRef.current
-      })) return;
-      setSessionError(error instanceof Error ? error.message : String(error));
+      })) return { deleted: false, message: '' };
+      const message = error instanceof Error ? error.message : String(error);
+      setSessionError(message);
+      return { deleted: false, message };
     }
   }
 
-  async function deleteSelectedNativeSessions(selected: DesktopSessionSummary[]): Promise<{ deletedIds: string[]; failedIds: string[] }> {
+  async function deleteSelectedNativeSessions(selected: DesktopSessionSummary[]): Promise<{ deletedIds: string[]; failedIds: string[]; errors: Record<string, string> }> {
     const sessionScope: SessionListScope = { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName };
     const ids = Array.from(new Set(selected.map(session => session.session_id)));
     const deletedIds: string[] = [];
     const failedIds: string[] = [];
+    const errors: Record<string, string> = {};
     const currentScope = () => sessionListResponseMatchesScope(sessionScope, {
       profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current, backendProfileName: activeBackendProfileNameRef.current
     });
@@ -4879,9 +4887,14 @@ function AppContent(): JSX.Element {
       if (!currentScope()) { failedIds.push(...ids.filter(id => !deletedIds.includes(id) && !failedIds.includes(id))); break; }
       try {
         const result = await window.lastbrowser.sidekick.deleteSession({ sessionId, ...sessionScope });
-        if (!sessionDeletionSucceeded(result)) failedIds.push(sessionId);
-        else deletedIds.push(sessionId);
-      } catch { failedIds.push(sessionId); }
+        if (!sessionDeletionSucceeded(result)) {
+          failedIds.push(sessionId);
+          errors[sessionId] = sessionDeletionFailureMessage(result, locale);
+        } else deletedIds.push(sessionId);
+      } catch (error) {
+        failedIds.push(sessionId);
+        errors[sessionId] = error instanceof Error ? error.message : String(error);
+      }
     }
     if (currentScope()) {
       const deleted = new Set(deletedIds);
@@ -4895,7 +4908,7 @@ function AppContent(): JSX.Element {
       }
       setSessionError(failedIds.length ? (locale === 'de' ? `${failedIds.length} Chat(s) konnten nicht gelöscht werden. Sie bleiben markiert.` : `${failedIds.length} chat(s) could not be deleted. They remain selected.`) : '');
     }
-    return { deletedIds, failedIds };
+    return { deletedIds, failedIds, errors };
   }
 
   async function duplicateNativeSession(session: DesktopSessionSummary): Promise<void> {
@@ -6086,7 +6099,7 @@ function AppContent(): JSX.Element {
                   onArchiveSession={archiveNativeSession}
                   sessionScopeKey={`${activeProfileId}::${activeBackendProfileName || ''}`}
                   onDeleteSessions={deleteSelectedNativeSessions}
-                  onDeleteSession={session => void deleteNativeSession(session, 'sidebar-inline-confirmed')}
+                  onDeleteSession={session => deleteNativeSession(session, 'sidebar-inline-confirmed')}
                   splitTabIds={splitTabIds}
                   onAddSplitTab={addSplitTab}
                   onRemoveSplitTab={removeSplitTab}
@@ -6180,7 +6193,7 @@ function AppContent(): JSX.Element {
                   onArchiveSession={archiveNativeSession}
                   sessionScopeKey={`${activeProfileId}::${activeBackendProfileName || ''}`}
                   onDeleteSessions={deleteSelectedNativeSessions}
-                  onDeleteSession={session => void deleteNativeSession(session, 'sidebar-inline-confirmed')}
+                  onDeleteSession={session => deleteNativeSession(session, 'sidebar-inline-confirmed')}
               splitTabIds={splitTabIds}
               onAddSplitTab={addSplitTab}
               onRemoveSplitTab={removeSplitTab}

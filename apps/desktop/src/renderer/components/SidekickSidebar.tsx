@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { readStandardChatCompanion, useStandardChatCompanion } from './CompanionPicker.js';
 import type { SidekickMotion } from '../sidekick-motion.js';
 import { enginePersona } from '../sidekick-motion.js';
+import type { SessionDeleteOutcome } from '../session-list-scope.js';
+import { nextSessionDeleteStep, pruneSessionDeleteErrors, settleSessionDeleteArm, settleSessionDeleteErrors, type SessionDeleteArm } from '../session-delete-arm.js';
 import { AnimatedSidekick } from './AnimatedSidekick.js';
 import { companionDefaultNames, personalityAvatar, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 import { DownloadDockTrigger } from '../NativeDownloads.js';
@@ -112,8 +114,8 @@ export interface SidekickSidebarProps {
   onSelectSession?: (sessionId: string) => void;
   onPinSession?: (session: DesktopSessionSummary) => void;
   onArchiveSession?: (session: DesktopSessionSummary) => void;
-  onDeleteSession?: (session: DesktopSessionSummary) => void;
-  onDeleteSessions?: (sessions: DesktopSessionSummary[]) => Promise<{ deletedIds: string[]; failedIds: string[] }>;
+  onDeleteSession?: (session: DesktopSessionSummary) => Promise<SessionDeleteOutcome>;
+  onDeleteSessions?: (sessions: DesktopSessionSummary[]) => Promise<{ deletedIds: string[]; failedIds: string[]; errors?: Record<string, string> }>;
   sessionScopeKey?: string;
   researchToolbar?: React.ReactNode;
   /** Callback when a new session is requested */
@@ -193,7 +195,10 @@ export function SidekickSidebar({
   const { t, locale } = useDesktopI18n();
   const terminalEnabled = useTerminalEnabled();
   const { policy, loaded: optionalFeaturesLoaded } = useOptionalAiPolicy(activeSpacePath);
-  const [deleteArm, setDeleteArm] = useState<{ sessionId: string; scope: string; expiresAt: number } | null>(null);
+  const [deleteArm, setDeleteArm] = useState<SessionDeleteArm | null>(null);
+  // Refused deletions keep their row, and the backend's message stays next to it.
+  const [deleteErrors, setDeleteErrors] = useState<Record<string, string>>({});
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [selectedChatIds, setSelectedChatIds] = useState<string[]>([]);
   const selectionAnchor = useRef<string | null>(null);
   const [batchDeleting, setBatchDeleting] = useState(false);
@@ -201,39 +206,64 @@ export function SidekickSidebar({
   const currentSelectionScope = useRef(selectionScope);
   currentSelectionScope.current = selectionScope;
   const recentChatKey = sessions.filter(session => !session.archived).sort((left, right) => Number(Boolean(right.pinned)) - Number(Boolean(left.pinned))).slice(0, 5).map(session => session.session_id).join('|');
-  useEffect(() => { setSelectedChatIds([]); selectionAnchor.current = null; setDeleteArm(null); setBatchDeleting(false); }, [selectionScope]);
+  useEffect(() => { setSelectedChatIds([]); selectionAnchor.current = null; setDeleteArm(null); setDeleteErrors({}); setBatchDeleting(false); }, [selectionScope]);
   useEffect(() => {
     const available = new Set(recentChatKey.split('|'));
     setSelectedChatIds(current => current.filter(id => available.has(id)));
     if (selectionAnchor.current && !available.has(selectionAnchor.current)) selectionAnchor.current = null;
-    setDeleteArm(null);
+    // A pinned refusal survives list refreshes while its row is still listed.
+    setDeleteArm(current => (current?.pinned && available.has(current.sessionId) ? current : null));
+    setDeleteErrors(current => pruneSessionDeleteErrors(current, available));
   }, [recentChatKey]);
   useEffect(() => {
-    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setSelectedChatIds([]); setDeleteArm(null); selectionAnchor.current = null; } };
+    const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { setSelectedChatIds([]); setDeleteArm(null); setDeleteErrors({}); selectionAnchor.current = null; } };
     window.addEventListener('keydown', escape);
     return () => window.removeEventListener('keydown', escape);
   }, []);
   const deleteScope = `${sessionScopeKey}::${activeSpacePath}::${activeSessionId || ''}::${activePanel}`;
-  useEffect(() => { setDeleteArm(null); }, [deleteScope, drawerTab, mode]);
+  // Context changes (another chat, Space, panel) end any pending confirmation and message.
+  const currentDeleteScope = useRef(deleteScope);
+  currentDeleteScope.current = deleteScope;
+  useEffect(() => { setDeleteArm(null); setDeleteErrors({}); }, [deleteScope, drawerTab, mode]);
   useEffect(() => {
-    if (!deleteArm) return;
+    // Only an unconfirmed, unpinned arm times out; a refusal or an attempt in flight keeps it.
+    if (!deleteArm || deleteArm.pinned || deletingId) return;
     const timer = window.setTimeout(() => setDeleteArm(null), Math.max(0, deleteArm.expiresAt - Date.now()));
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') setDeleteArm(null); };
     window.addEventListener('keydown', escape);
     return () => { window.clearTimeout(timer); window.removeEventListener('keydown', escape); };
-  }, [deleteArm]);
+  }, [deleteArm, deletingId]);
   const deleteConfirmationLabel = locale === 'de' ? 'Sicher? Zum Löschen erneut klicken.' : 'Sure? Click again to delete.';
+  const deleteFailedLabel = locale === 'de' ? 'Löschen fehlgeschlagen' : 'Delete failed';
   function requestSessionDelete(event: React.MouseEvent<HTMLButtonElement>, session: DesktopSessionSummary) {
     event.preventDefault(); event.stopPropagation();
-    if (deleteArm?.sessionId === session.session_id && deleteArm.scope === deleteScope && Date.now() < deleteArm.expiresAt) {
-      setDeleteArm(null);
-      onDeleteSession?.(session);
-    } else setDeleteArm({ sessionId: session.session_id, scope: deleteScope, expiresAt: Date.now() + 5000 });
+    const sessionId = session.session_id;
+    const step = nextSessionDeleteStep(deleteArm, sessionId, deleteScope, Date.now());
+    setDeleteArm(step.arm);
+    const removeSession = onDeleteSession;
+    if (!step.confirm || !removeSession) return;
+    // The arm stays until the attempt settles: success clears it, a refusal pins it beside its message.
+    const scope = deleteScope;
+    setDeletingId(sessionId);
+    setDeleteErrors(current => settleSessionDeleteErrors(current, sessionId, { deleted: false, message: '' }));
+    void (async () => {
+      let outcome: SessionDeleteOutcome;
+      try {
+        outcome = await removeSession(session);
+      } catch (error) {
+        outcome = { deleted: false, message: error instanceof Error ? error.message : String(error) };
+      }
+      setDeletingId(current => (current === sessionId ? null : current));
+      if (currentDeleteScope.current !== scope) return;
+      setDeleteArm(current => settleSessionDeleteArm(current, sessionId, outcome));
+      setDeleteErrors(current => settleSessionDeleteErrors(current, sessionId, outcome));
+    })();
   }
   function selectChat(event: React.MouseEvent<HTMLButtonElement> | React.KeyboardEvent<HTMLButtonElement>, session: DesktopSessionSummary) {
     event.stopPropagation();
     if (batchDeleting) return;
     setDeleteArm(null);
+    setDeleteErrors({});
     if (event.shiftKey) {
       const ids = recentSessions.map(item => item.session_id);
       const index = ids.indexOf(session.session_id);
@@ -252,13 +282,17 @@ export function SidekickSidebar({
     event.preventDefault(); event.stopPropagation();
     if (!onDeleteSessions || batchDeleting || !selectedChatIds.length) return;
     if (deleteArm?.sessionId !== '__batch' || deleteArm.scope !== deleteScope || Date.now() >= deleteArm.expiresAt) {
-      setDeleteArm({ sessionId: '__batch', scope: deleteScope, expiresAt: Date.now() + 5000 }); return;
+      setDeleteArm({ sessionId: '__batch', scope: deleteScope, expiresAt: Date.now() + 5000, pinned: false }); return;
     }
     const scope = selectionScope;
     setDeleteArm(null); setBatchDeleting(true);
     try {
-      const result = await onDeleteSessions(recentSessions.filter(session => selectedChatIds.includes(session.session_id)));
-      if (currentSelectionScope.current === scope) setSelectedChatIds(result.failedIds);
+      // Read-only imports have no delete route, so they are never sent.
+      const result = await onDeleteSessions(recentSessions.filter(session => selectedChatIds.includes(session.session_id) && !session.read_only));
+      if (currentSelectionScope.current === scope) {
+        setSelectedChatIds(result.failedIds);
+        setDeleteErrors(current => ({ ...current, ...(result.errors ?? {}) }));
+      }
     } finally { if (currentSelectionScope.current === scope) setBatchDeleting(false); }
   }
   const archiveLabel = ({ de: 'Archivieren', en: 'Archive', es: 'Archivar', fr: 'Archiver', it: 'Archivia', 'pt-BR': 'Arquivar', ru: 'Архивировать', ja: 'アーカイブ' })[locale];
@@ -824,9 +858,12 @@ export function SidekickSidebar({
                     {recentSessions.map((session) => {
                       const isActive = session.session_id === activeSessionId && activePanel === 'chat';
                       const deleteArmed = deleteArm?.sessionId === session.session_id && deleteArm.scope === deleteScope;
+                      const deleteError = deleteErrors[session.session_id];
+                      const deleting = deletingId === session.session_id;
                       return (
-                        <div key={session.session_id} className={`sidebar-session-item ${isActive ? 'is-active' : ''} ${selectedChatIds.includes(session.session_id) ? 'is-selected' : ''}`}
-                          onPointerLeave={() => setDeleteArm(current => current?.sessionId === session.session_id ? null : current)}>
+                        <React.Fragment key={session.session_id}>
+                        <div className={`sidebar-session-item ${isActive ? 'is-active' : ''} ${selectedChatIds.includes(session.session_id) ? 'is-selected' : ''}`}
+                          onPointerLeave={() => setDeleteArm(current => current?.sessionId === session.session_id && !current.pinned ? null : current)}>
                           <button type="button" className="sidebar-session-open"
                             aria-pressed={selectedChatIds.includes(session.session_id)} disabled={batchDeleting}
                             onClick={event => selectChat(event, session)}
@@ -846,12 +883,14 @@ export function SidekickSidebar({
                               onClick={event => { event.stopPropagation(); setDeleteArm(null); onPinSession(session); }}>{session.pinned ? <PinOff size={13} /> : <Pin size={13} />}</button>}
                             {onArchiveSession && <button type="button" className="sidebar-session-action" title={archiveLabel}
                               aria-label={archiveLabel} onClick={event => { event.stopPropagation(); setDeleteArm(null); onArchiveSession(session); }}><Archive size={13} /></button>}
-                            {onDeleteSession && <button type="button" className={`sidebar-session-action is-delete ${deleteArmed ? 'is-armed' : ''}`}
+                            {onDeleteSession && !session.read_only && <button type="button" className={`sidebar-session-action is-delete ${deleteArmed ? 'is-armed' : ''}`} disabled={deleting}
                               title={deleteArmed ? deleteConfirmationLabel : t('common.delete')}
                               aria-label={deleteArmed ? deleteConfirmationLabel : t('common.delete')}
                               onClick={event => requestSessionDelete(event, session)}>{deleteArmed ? <span aria-hidden="true">?</span> : <Trash2 size={13} />}</button>}
                           </div>
                         </div>
+                        {deleteError && <div className="sidebar-session-error" role="alert">{deleteFailedLabel}: {deleteError}</div>}
+                        </React.Fragment>
                       );
                     })}
                   </div>

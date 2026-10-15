@@ -10,3 +10,4 @@
 .sidebar-chat-selection { display: flex; align-items: center; justify-content: space-between; min-height: 28px; padding-inline: 8px; font-size: 11px; color: var(--text-secondary); }
 .sidebar-session-action:focus-visible, .sidebar-session-open:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: -2px; }
 @media (hover: none) { .sidebar-session-actions { width: 72px; opacity: 1; pointer-events: auto; } }
+.sidebar-session-error { margin: 0 8px 4px 28px; font-size: 11px; line-height: 1.35; color: var(--danger, #f87171); overflow-wrap: anywhere; }

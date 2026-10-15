@@ -54,6 +54,14 @@ def _is_session_deleted(session_id: str) -> bool:
         return session_id in _DELETED_SESSION_IDS
 
 
+def _unmark_session_deleted(session_id: str) -> None:
+    """Roll back a tombstone whose file removal failed, so the chat stays loadable."""
+    if not session_id:
+        return
+    with _DELETED_SESSION_IDS_LOCK:
+        _DELETED_SESSION_IDS.discard(session_id)
+
+
 def read_importable_agent_session_rows(db_path, limit=CLI_VISIBLE_SESSION_LIMIT, log=None, exclude_sources=None):
     """Cached wrapper for the CLI bridge scanner used by WebUI sidebar/detail paths."""
     key = (
@@ -3150,12 +3158,13 @@ def count_conversation_rounds(sid: str, since: float | None = None) -> int:
 CONVERSATION_ROUND_THRESHOLD = 10
 
 
-def unlink_owned_session_files(sid: str) -> bool:
+def unlink_owned_session_files(sid: str, extra_dirs=()) -> bool:
     """Remove every JSON copy of this session, including a Space-owned file.
 
     The request session directory is not always the directory ``Session.path``
     writes. A delete that misses that file comes back as ``New chat`` on the
-    next process. Returns True only when none of those files remain.
+    next process. ``extra_dirs`` adds directories the caller resolved for this
+    session. Returns True only when none of those files remain.
     """
     if not sid or not all(c in "0123456789abcdefghijklmnopqrstuvwxyz_" for c in sid):
         return False
@@ -3166,6 +3175,7 @@ def unlink_owned_session_files(sid: str) -> bool:
             paths.append(Path(workspace.sessions_dir) / f"{sid}.json")
     except Exception:
         pass
+    paths.extend(Path(directory) / f"{sid}.json" for directory in extra_dirs)
     for path in paths:
         try:
             resolved = path.resolve()

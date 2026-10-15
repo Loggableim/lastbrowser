@@ -530,14 +530,6 @@ export function ChatComposer({
   const selectedModelVisible = modelOptions.some(group => group.providerId === modelProvider
     && group.models.some(entry => parseProviderModelId(entry.id, group.providerId).model === model));
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
-  const displayedModelQualified=automaticPolicy?.active?Boolean(automaticPolicy.qualified):modelQualified;
-  const displayedQualificationLabel=!automaticPolicy?.active&&modelProvider==='local-store'
-    ? displayedModelQualified?(locale.startsWith('de')?'Gerät und Werkzeugaufrufe geprüft':'Device and tool calls verified')
-      :(locale.startsWith('de')?'Lokale Ausführung noch nicht bestätigt':'Local execution not yet verified')
-    : displayedModelQualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested');
-  const qualificationScope=automaticPolicy?.active
-    ? `AUTO · ${(automaticPolicy.allowedModels||[]).map(pair=>`${modelOptions.find(group=>group.providerId===pair.provider)?.provider||pair.provider} · ${pair.model}`).join(', ')||t('settings.panels.providers.betaUntested')}`
-    : `${modelProviderLabel || modelProvider || 'AUTO'} · ${model || 'default'} · ${browserProfileId || profile} / ${backendProfileName}`;
 
   const [showSlashDropdown, setShowSlashDropdown] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
@@ -628,19 +620,10 @@ export function ChatComposer({
                 <Layers size={13} />
                 <span>{t('browser.chrome.tabs')}</span>
               </button>
-          {modelOptions.length>0&&emptyQualifiedCatalog&&!showUntestedBetas&&<div className="composer-beta-catalog-opt-in">
-              <span role="status">{t('settings.panels.providers.betaCatalogEmpty')}</span>
-              <ProviderBetaCatalogToggle />
+          {(emptyQualifiedCatalog || antigravityCatalogUnavailable) && <div className="composer-model-notice" role="status">
+            <span>{locale.startsWith('de') ? 'Keine wählbaren Modelle im Katalog.' : 'No selectable models in the catalog.'}</span>
+            {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
           </div>}
-          <span className={`composer-model-qualification ${displayedModelQualified?'qualified':'untested'}`} role="status"
-            title={`${displayedQualificationLabel} · ${qualificationScope}`}>
-            {displayedQualificationLabel}
-          </span>
-          {antigravityCatalogRelevant&&(antigravityCatalogUnavailable||antigravityCatalogUnknown||antigravityCatalogReady)&&<span className={`composer-model-qualification ${antigravityCatalogReady?'qualified':'untested'}`} role="status">
-            {t(antigravityCatalogUnavailable?'settings.panels.providers.antigravityCatalogUnavailableShort'
-              :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknownShort'
-                :'settings.panels.providers.antigravityCatalogReadyShort')}
-          </span>}
           <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
             aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
             aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
@@ -666,18 +649,18 @@ export function ChatComposer({
           </details>
         </div>
         <div className="composer-toolbar-group composer-model-group">
-          <label className="composer-model composer-current-model" title={`${model || 'default'} · ${modelProvider || 'current'}`}>
+          <label className="composer-model composer-current-model" title={noActiveModels ? t('settings.panels.providers.noActiveModels') : `${model || 'default'} · ${modelProvider || 'current'}`}>
               <Cpu size={13} />
               <select
                 aria-label={`${t('chat.model')}: ${model || 'default'}`}
-                title={`${model || 'default'} · ${modelProvider || 'current'}`}
+                title={noActiveModels ? t('settings.panels.providers.noActiveModels') : `${model || 'default'} · ${modelProvider || 'current'}`}
                 value={AI_ORCHESTRATION_ENABLED && automaticPolicy?.active?'__lastbrowser_auto_policy__':selectedModelVisible?qualifyModelForProvider(model, modelProvider):''}
                 disabled={!ready}
                 onChange={(event) => onModelChange(event.target.value)}
               >
                 {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
-                {!selectedModelVisible && <option value="" disabled>
-                  {modelCatalogLoading ? t('settings.panels.providers.loadingModels') : noActiveModels ? t('settings.panels.providers.noActiveModels') : t('chat.noManualModels')}
+                {!selectedModelVisible && <option value="" disabled title={noActiveModels ? t('settings.panels.providers.noActiveModels') : undefined}>
+                  {modelCatalogLoading ? t('settings.panels.providers.loadingModels') : noActiveModels ? (locale.startsWith('de') ? 'Keine Modelle aktiv' : 'No active models') : t('chat.noManualModels')}
                 </option>}
                 {manualModelPickerOptions(modelOptions).map((group) => (
                   <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false}>
@@ -698,20 +681,11 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {betaSelectionBlocked&&!modelCatalogLoading&&!modelCatalogError&&!emptyQualifiedCatalog&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
+      {betaSelectionBlocked&&!modelCatalogLoading&&!modelCatalogError&&!emptyQualifiedCatalog&&!antigravityCatalogUnavailable&&<div className="composer-model-notice" role="status">{multiAgentBetaBlocked
         ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</div>}
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
         onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>
         <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>
-        <p className="composer-requested-model-status" role="status">
-          {requestedDefaultModel==='gpt-6-luna'?'GPT-6 Luna':requestedDefaultModel} · {requestedDefaultProviderLabel} · {t('settings.panels.providers.requestedChatDefault')} · {requestedDefaultQualified&&requestedDefaultAvailable?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
-          {requestedDefaultUnavailableReason?` · ${requestedDefaultUnavailableReason}`:''}
-        </p>
-        {(antigravityCatalogUnavailable||antigravityCatalogUnknown||antigravityCatalogReady)&&<p className="composer-model-notice" role="status">
-          {t(antigravityCatalogUnavailable?'settings.panels.providers.antigravityCatalogUnavailable'
-            :antigravityCatalogUnknown?'settings.panels.providers.antigravityCatalogUnknown'
-              :'settings.panels.providers.antigravityCatalogReady')}
-        </p>}
         {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
           {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);
@@ -730,7 +704,11 @@ export function ChatComposer({
               {!local&&entry.qualified?` · ${expiry}`:''}{unavailable?` · ${t('chat.modelUnavailableInSpace')}`:entry.supportsIndependent===false?` · ${t('chat.modelIndependentUnsupported')}`:''}</small>
           </button>;})}
         </fieldset>)}
-        {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">{t('chat.noManualModels')}</p>}
+        {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">
+          {t('chat.noManualModels')}
+          {' '}
+          {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
+        </p>}
       </section>}
       <div className="composer-input-row">
         {showSlashDropdown&&commandContext&&onCommandAction&&<SlashCommandMenu locale={locale} query={slashFilter} capabilities={commandCapabilities}

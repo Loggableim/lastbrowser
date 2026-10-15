@@ -247,6 +247,12 @@
   box-sizing: border-box;
   width: 100%;
   min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--lb-border);
+  border-radius: 8px;
+  color: var(--lb-text);
+  background: var(--lb-bg);
+  opacity: 1;
 }
 
 .chat-composer .composer-manual-models fieldset {
@@ -418,7 +424,8 @@
   outline: 2px solid var(--lb-accent);
   outline-offset: 2px;
 }
-.chat-composer .composer-more { position: relative; }
+.chat-composer .composer-more { position: relative; z-index: 30; }
+.chat-transcript.chat-empty-state { position: relative; z-index: 1; }
 .chat-composer .composer-send { align-self: end; border-color: var(--lb-accent-border); border-radius: 8px; background: var(--lb-accent); color: var(--lb-accent-text); }
 .chat-composer .composer-send.stop { background: var(--lb-accent-soft); color: var(--lb-text); }
 .chat-composer .composer-sidekick { width: 23px; height: 23px; object-fit: contain; flex: 0 0 auto; }
@@ -450,9 +457,9 @@
 .chat-composer .composer-current-model select optgroup { color: var(--lb-text) !important; background: var(--lb-bg-alt) !important; }
 .chat-composer .composer-more-content {
   position: absolute;
-  z-index: 4;
+  z-index: 40;
   left: 0;
-  bottom: calc(100% + 8px);
+  top: calc(100% + 6px);
   display: flex;
   flex-wrap: wrap;
   align-items: center;

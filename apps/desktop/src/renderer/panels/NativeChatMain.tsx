@@ -236,16 +236,6 @@ export function NativeChatMain({
     } else {
       setCatalogSnapshot({ viewKey: modelViewKey, phase: 'loading', groups: [] });
     }
-    const loadingDeadline = window.setTimeout(() => {
-      if (!alive) return;
-      setCatalogSnapshot(current => {
-        if (current.viewKey === modelViewKey && current.phase === 'loading') {
-          setConnectionNotice('opencode-unreachable');
-          return { viewKey: modelViewKey, phase: 'error', groups: [] };
-        }
-        return current;
-      });
-    }, CATALOG_VISIBLE_WAIT_MS);
     setScopedModel(null); setCatalogDefaultModel('');
     const onCatalog = (event: Event) => {
       const detail = (event as CustomEvent<{ viewKey?: string; groups?: CatalogGroup[] }>).detail;
@@ -260,7 +250,7 @@ export function NativeChatMain({
         }, backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || undefined });
         if (!resolved.ok) throw new Error(resolved.error.message);
         const result = await modelClient.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope,
-          payload: { action: 'get', includeCatalog: false } });
+          payload: { action: 'get', includeCatalog: true } });
         if (!result.ok) throw new Error(result.error.message);
         if (!alive) return;
         let data = result.value;
@@ -269,7 +259,7 @@ export function NativeChatMain({
           ...((data as any).catalog_status || {})
         };
         const reportedAntigravityStatus = String(statusMap.antigravity || '').trim().toLowerCase();
-        statusMap.antigravity = 'unavailable';
+        if (!reportedAntigravityStatus) statusMap.antigravity = 'unknown';
         setCatalogStatus(statusMap);
         const cataloguedData = { ...data, catalog_status: statusMap };
         const isAntigravityCatalogUnavailable = String(statusMap.antigravity || '').toLowerCase() === 'unavailable';
@@ -339,7 +329,7 @@ export function NativeChatMain({
       }
     };
     void load();
-    return () => { alive = false; window.clearTimeout(loadingDeadline); window.removeEventListener(MODEL_CATALOG_EVENT, onCatalog); };
+    return () => { alive = false; window.removeEventListener(MODEL_CATALOG_EVENT, onCatalog); };
   }, [ready, activeSpacePath, activeBrowserProfileId, modelViewKey, modelClient, modelCatalogRetry, showUntestedBetas, activeBackendProfileName, activeSession?.profile, activeSession?.model, requestedChatDefault, t, activeModelRevision]);
 
   /** Change only this bound Space preference; executing runs keep their captured model. */

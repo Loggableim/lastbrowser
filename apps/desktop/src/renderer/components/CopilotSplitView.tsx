@@ -52,6 +52,8 @@ import { isDirectQuickchatProvider } from '../quickchat-automatic.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { isModelCatalogCacheCurrent, isModelCatalogResponseCurrent } from '../model-picker-options.js';
+import { CATALOG_VISIBLE_WAIT_MS, publishQuickchatCatalog, readQuickchatCatalog } from '../model-catalog-prefetch.js';
+import { classifyConnectionNotice, type ConnectionNotice } from '../connection-notice.js';
 import { quickChatModelGateCopy, quickChatModelGateReason } from '../quick-chat-model-gate.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, resolveReasoningModel, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
@@ -220,6 +222,7 @@ export function CopilotSplitView({
   const [modelList, setModelList] = useState<AvailableModelItem[]>(AVAILABLE_MODELS);
   const [modelCapabilitiesLoaded, setModelCapabilitiesLoaded] = useState(false);
   const [modelCatalogFailureScopeKey, setModelCatalogFailureScopeKey] = useState<string | null>(null);
+  const [connectionNotice, setConnectionNotice] = useState<ConnectionNotice | null>(null);
   const modelCatalogLoadedScopeKeyRef = useRef<string | null>(null);
   const modelCatalogCacheScopeKeyRef = useRef<string | null>(null);
   const modelCatalogFailureScopeKeyRef = useRef<string | null>(null);
@@ -271,14 +274,29 @@ export function CopilotSplitView({
     let alive = true;
     const generation = orchestrationScopeGenerationRef.current;
     const hasCachedCatalogForScope = isModelCatalogCacheCurrent(modelCatalogCacheScopeKeyRef.current, orchestrationScopeKey);
-    if (!hasCachedCatalogForScope) {
+    const persistedCatalog = readQuickchatCatalog<AvailableModelItem>(orchestrationScopeKey);
+    if (persistedCatalog.length) {
+      setModelList(persistedCatalog);
+      setModelCapabilitiesLoaded(true);
+      modelCatalogCacheScopeKeyRef.current = orchestrationScopeKey;
+      modelCatalogLoadedScopeKeyRef.current = orchestrationScopeKey;
+      modelCatalogFailureScopeKeyRef.current = null;
+      setModelCatalogFailureScopeKey(null);
+      setConnectionNotice(null);
+    } else if (!hasCachedCatalogForScope) {
       setModelList(AVAILABLE_MODELS);
       setModelCapabilitiesLoaded(false);
       modelCatalogCacheScopeKeyRef.current = null;
+      modelCatalogLoadedScopeKeyRef.current = null;
+      modelCatalogFailureScopeKeyRef.current = null;
+      setModelCatalogFailureScopeKey(null);
     }
-    modelCatalogLoadedScopeKeyRef.current = null;
-    modelCatalogFailureScopeKeyRef.current = null;
-    setModelCatalogFailureScopeKey(null);
+    const loadingDeadline = window.setTimeout(() => {
+      if (!alive || modelCatalogLoadedScopeKeyRef.current === orchestrationScopeKey) return;
+      setConnectionNotice('opencode-unreachable');
+      modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
+      setModelCatalogFailureScopeKey(orchestrationScopeKey);
+    }, CATALOG_VISIBLE_WAIT_MS);
     async function loadLiveModels() {
       try {
         const preparedCurrent = preparedModelSelection && preparedModelSelectionScopeKey === JSON.stringify([browserProfileId, workspacePath || null, backendProfileName || null])
@@ -383,27 +401,33 @@ export function CopilotSplitView({
         ];
         setModelList(nextModelList);
         setModelCapabilitiesLoaded(true);
+        publishQuickchatCatalog(orchestrationScopeKey, nextModelList);
+        const authNotice = classifyConnectionNotice({ authStates: ((res as { providers?: ReadonlyArray<{ auth_state?: string }> }).providers || []).map(provider => String(provider.auth_state || '')) });
+        setConnectionNotice(authNotice);
         modelCatalogCacheScopeKeyRef.current = orchestrationScopeKey;
         modelCatalogLoadedScopeKeyRef.current = orchestrationScopeKey;
         modelCatalogFailureScopeKeyRef.current = null;
         setModelCatalogFailureScopeKey(null);
-      } catch {
+      } catch (error) {
         // On discovery failure, retain only built-in orchestrators; cached model IDs
         // must not imply that a provider is configured or currently available.
         if (alive && generation === orchestrationScopeGenerationRef.current
           && isModelCatalogResponseCurrent(orchestrationScopeKey, orchestrationScopeKeyRef.current)) {
-          if (!hasCachedCatalogForScope) {
+          const notice = classifyConnectionNotice({ error }) || 'opencode-unreachable';
+          if (!hasCachedCatalogForScope && !persistedCatalog.length) {
             setModelList(AVAILABLE_MODELS);
             setModelCapabilitiesLoaded(false);
+            setConnectionNotice(notice);
           }
-          modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
-          setModelCatalogFailureScopeKey(orchestrationScopeKey);
+          modelCatalogFailureScopeKeyRef.current = persistedCatalog.length ? null : orchestrationScopeKey;
+          setModelCatalogFailureScopeKey(persistedCatalog.length ? null : orchestrationScopeKey);
         }
       }
     }
     void loadLiveModels();
     return () => {
       alive = false;
+      window.clearTimeout(loadingDeadline);
     };
   }, [orchestrationScope, orchestrationScopeKey, modelPickerOpen, preparedModelSelection, preparedModelSelectionScopeKey, browserProfileId, workspacePath, backendProfileName]);
 
@@ -434,7 +458,7 @@ export function CopilotSplitView({
   const automaticCandidate = !favorite && !favoriteInvalid ? visibleModelList.find(model => model.providerId && !isMultiAgentModelSelection({ model: model.id, provider: model.providerId })) : undefined;
   const modelGateReason = favoriteInvalid ? 'model-unavailable' : quickChatModelGateReason({ selectedModel: automaticCandidate?.id || activeModelId, selectedProvider: automaticCandidate?.providerId || activeModelProvider,
     activeScopeKey: orchestrationScopeKey, loadedCatalogScopeKey: modelCatalogLoadedScopeKeyRef.current,
-    failedCatalogScopeKey: modelCatalogFailureScopeKey, availableModels: visibleModelList });
+    failedCatalogScopeKey: modelCatalogFailureScopeKey, availableModels: visibleModelList, connectionNotice });
   const reasoningPreferenceKey = `quickchat:${JSON.stringify([browserProfileId, workspacePath || null, backendProfileName || null, activeModelProvider, activeModelId])}`;
   const [reasoningState, setReasoningState] = useState(() => ({ key: reasoningPreferenceKey, effort: loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage) }));
   const reasoningEffort = reasoningState.key === reasoningPreferenceKey ? reasoningState.effort : loadChatReasoningEffort(reasoningPreferenceKey, window.localStorage);
@@ -1193,7 +1217,7 @@ export function CopilotSplitView({
       <div className="copilot-footer">
         {!AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection({ model: activeModelId, provider: activeModelProvider })
           && <div className="copilot-model-gate-notice" role="status">{t('settings.panels.providers.multiAgentBetaRequired')}</div>}
-        {modelCapabilitiesLoaded && visibleModelList.length === 0 && <div className="copilot-model-gate-notice" role="status">
+        {modelCapabilitiesLoaded && visibleModelList.length === 0 && !connectionNotice && <div className="copilot-model-gate-notice" role="status">
           {t('settings.panels.providers.noActiveModels')} {onOpenSettings && <button type="button" onClick={() => onOpenSettings('providers')}>{t('settings.panels.providers.openActiveModels')}</button>}
         </div>}
         {favoriteInvalid && <div className="copilot-model-gate-notice" role="alert">

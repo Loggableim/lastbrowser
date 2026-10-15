@@ -71,10 +71,12 @@ describe('chat composer model guidance', () => {
     const translations = createDesktopI18n(catalogLocale);
     const noActiveModels = escapeHtml(translations.t('settings.panels.providers.noActiveModels'));
     const { start: modelSelectStart, end: modelSelectEnd } = modelSelectBounds(markup, translations.t('chat.model'));
-    const noActiveModelsIndex = markup.indexOf(noActiveModels);
+    const shortLabel = escapeHtml(locale.startsWith('de') ? 'Keine Modelle aktiv' : 'No active models');
+    const shortIndex = markup.indexOf(shortLabel);
 
-    expect(noActiveModelsIndex).toBeGreaterThan(modelSelectStart);
-    expect(noActiveModelsIndex).toBeLessThan(modelSelectEnd);
+    expect(shortIndex).toBeGreaterThan(modelSelectStart);
+    expect(shortIndex).toBeLessThan(modelSelectEnd);
+    expect(markup).toContain(`title="${noActiveModels}"`);
     expect(markup).not.toContain('class="composer-model-notice"');
   });
 
@@ -84,13 +86,14 @@ describe('chat composer model guidance', () => {
       modelOptions: [{ provider: 'MiMo', providerId: 'xiaomi', models: [{ id: 'mimo-v2.6-flash', label: 'MiMo V2.6 Flash' }] }],
     });
     const moreMenu = markup.indexOf('class="composer-more-content"');
+    const statusNotice = markup.indexOf('class="composer-model-notice" role="status"');
     const betaToggle = markup.indexOf('data-testid="provider-beta-catalog-toggle"');
 
-    const betaInfo = markup.indexOf('class="composer-beta-catalog-opt-in"');
     expect(moreMenu).toBeGreaterThanOrEqual(0);
-    expect(betaInfo).toBeGreaterThan(moreMenu);
-    expect(betaToggle).toBeGreaterThan(moreMenu);
-    expect(markup).not.toContain('class="composer-model-notice composer-beta-catalog-opt-in"');
+    expect(statusNotice).toBeGreaterThan(moreMenu);
+    expect(betaToggle).toBeGreaterThan(statusNotice);
+    expect(markup.split('data-testid="provider-beta-catalog-toggle"').length - 1).toBe(1);
+    expect(markup).not.toContain('class="composer-beta-catalog-opt-in"');
   });
 
   it.each(testLocales)('retains loading and catalog-error states with localized retry action for $locale', ({ locale, catalogLocale }) => {

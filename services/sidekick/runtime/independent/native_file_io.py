@@ -266,6 +266,13 @@ def install_native_file_bridge(context, rpc):
         return _bound_bridge
 
 
+def release_native_file_bridge():
+    """Turn boundary of a persistent worker: the next turn installs its own bridge."""
+    global _bound_bridge
+    with _binding_lock:
+        _bound_bridge = None
+
+
 def native_file_dispatch(name, arguments, policy, *, tool_call_id=None, task_id=None):
     if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") != "1" or name not in FILE_TOOLS: return None
     if _bound_bridge is None: raise PolicyDenied("native_file_parent_broker_required")

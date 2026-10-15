@@ -211,6 +211,34 @@ def _clear_finished_turn(context) -> None:
                 registry.pop(context.stream_id, None)
 
 
+def _release_turn_bindings(session_id: str) -> bool:
+    """Persistent turn boundary: every process-global binding of the turn is released.
+
+    The session's cached AIAgent is closed first: it owns SDK clients wrapped by
+    this turn's bridge, and a process-per-turn worker would have torn it down at exit.
+    Returns False when any release failed; the caller then retires the worker.
+    """
+    from web.api.config import SESSION_AGENT_CACHE, SESSION_AGENT_CACHE_LOCK
+    from . import (native_browser_bridge, native_chat_auto, native_chat_policy,
+        native_file_io, native_sdk_broker, native_teamwork)
+    released = True
+    try:
+        with SESSION_AGENT_CACHE_LOCK:
+            cached = SESSION_AGENT_CACHE.pop(session_id, None)
+        if cached is not None:
+            cached[0].close()
+    except Exception:
+        released = False
+    for release in (native_chat_auto.release_native_auto_bridge, native_teamwork.release_native_teamwork_bridge,
+            native_sdk_broker.release_native_sdk_bridge, native_file_io.release_native_file_bridge,
+            native_browser_bridge.release_native_browser_bridge, native_chat_policy.release_native_policy):
+        try:
+            release()
+        except Exception:
+            released = False
+    return released
+
+
 def main():
     global _stage, _failure_sink
     protocol_output = sys.stdout
@@ -480,6 +508,10 @@ def main():
         failed = bool(failure)
         # Reuse only a turn that ended cleanly with its engine gone and no protocol fault.
         reusable = persistent and not failed and not faults and not engine.is_alive()
+        if reusable:
+            # worker_finished(reusable=True) promises an idle worker: no turn binding,
+            # bridge or SDK client may survive into the next bootstrap frame.
+            reusable = _release_turn_bindings(context.session_id)
         emit(context.envelope("worker_finished", status="stopped" if stopped.is_set() else "finished",
             failed=failed, reusable=reusable))
         _clear_finished_turn(context)

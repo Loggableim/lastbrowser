@@ -400,6 +400,15 @@ def install_native_sdk_bridge(context, rpc):
         return bridge
 
 
+def release_native_sdk_bridge():
+    """Turn boundary of a persistent worker: close this turn's fixed SDK bridge and forget it."""
+    global _bound_bridge
+    with _bind_lock:
+        bridge, _bound_bridge = _bound_bridge, None
+    if bridge is not None:
+        bridge.close()
+
+
 def get_bound_native_sdk_bridge():
     return _bound_bridge if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1" else None
 

@@ -697,6 +697,14 @@ def install_native_auto_bridge(context, rpc) -> NativeAutoBridge:
     return _BRIDGE
 
 
+def release_native_auto_bridge() -> None:
+    """Turn boundary of a persistent worker: close this turn's SDK clients and forget it."""
+    global _BRIDGE
+    bridge, _BRIDGE = _BRIDGE, None
+    if bridge is not None:
+        bridge.close()
+
+
 def get_bound_native_auto_bridge() -> NativeAutoBridge | None:
     if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") != "1":
         return None

@@ -25,6 +25,12 @@ def bind_native_policy(context: NativeChatContext) -> None:
     _context = context
 
 
+def release_native_policy() -> None:
+    """Turn boundary of a persistent worker: the next accepted turn binds afresh."""
+    global _context
+    _context = None
+
+
 def has_bound_native_policy() -> bool:
     context=_context
     if context is None or os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") != "1":

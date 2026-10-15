@@ -834,5 +834,14 @@ def install_native_teamwork_bridge(context, rpc):
         return _BRIDGE
 
 
+def release_native_teamwork_bridge():
+    """Turn boundary of a persistent worker: close this turn's teamwork bridge and forget it."""
+    global _BRIDGE
+    with _BIND_LOCK:
+        bridge, _BRIDGE = _BRIDGE, None
+    if bridge is not None:
+        bridge.close()
+
+
 def get_bound_native_teamwork_bridge():
     return _BRIDGE if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1" else None

@@ -53,6 +53,13 @@ def install_native_browser_bridge(context, rpc):
         return _bound_bridge
 
 
+def release_native_browser_bridge():
+    """Turn boundary of a persistent worker: the next turn installs its own bridge."""
+    global _bound_bridge
+    with _lock:
+        _bound_bridge = None
+
+
 def has_bound_native_browser_bridge(context):
     from .native_chat_policy import get_bound_native_context
     return (_bound_bridge is not None and _bound_bridge.context == context

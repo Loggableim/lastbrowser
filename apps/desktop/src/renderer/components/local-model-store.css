@@ -195,3 +195,11 @@
 .local-model-media-result { display:grid; gap:10px; padding:14px; margin-top:12px; border:1px solid var(--store-border); border-radius:12px; }
 .local-model-media-result img,.local-model-media-result video { display:block; width:auto; max-width:100%; max-height:420px; object-fit:contain; border-radius:8px; }
 .local-model-media-result a { color:var(--accent-color,#22d3ee); text-decoration:underline; overflow-wrap:anywhere; }
+.local-model-install-live { position:sticky; top:0; z-index:3; display:grid; gap:8px; margin-bottom:12px; }
+.local-model-install-live:empty { display:none; }
+.local-model-install-live-item { display:grid; gap:6px; padding:10px 12px; border:1px solid color-mix(in srgb,var(--store-accent) 35%,var(--store-border)); border-radius:10px; background:var(--store-surface,#0b1627); }
+.local-model-install-live-item p { font-size:13px; color:inherit; }
+.local-model-install-live-item progress { width:100%; height:8px; }
+.local-model-install-live-item span { font-size:12px; color:var(--store-muted); }
+.local-model-install-live-item button { justify-self:start; min-height:32px; }
+.local-model-install-panel .local-model-install-live { position:static; margin:8px 0 0; }

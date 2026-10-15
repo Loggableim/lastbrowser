@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.57-demo.3",
+  "version": "0.1.57-demo.4",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",

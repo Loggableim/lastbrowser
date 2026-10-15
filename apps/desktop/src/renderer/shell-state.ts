@@ -86,6 +86,7 @@ export type DesktopChatMessage = {
   chatStreamId?: string;
   chatStreamSessionId?: string;
   smartTrack?: unknown;
+  latencyPlaceholder?: boolean;
 };
 
 export type ComposerDraft = {

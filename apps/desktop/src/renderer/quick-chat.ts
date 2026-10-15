@@ -1,8 +1,10 @@
 import type { DesktopChatMessage } from './shell-state.js';
-import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, finishLiveChatMessageWithError, readLiveChatDelta, readNativeChatStreamError } from './chat-live-stream.js';
+import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, finishLiveChatMessageWithError, finishStoppedLiveChatMessage, readLiveChatDelta, readNativeChatStreamError } from './chat-live-stream.js';
 import { isChatCompletionConfirmed } from './chat-completion.js';
 import { isNativeChatProgressEvent, isNativeChatStreamWaitExpired } from './chat-stream-timeout.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
+import { buildChatLatencyPlaceholderAssistant, pickChatLatencyPlaceholderKey } from './chat-perceived-latency-stream.js';
+import { createDesktopI18n, resolveDesktopLocale } from './i18n.js';
 
 type QuickChatClient = Pick<Window['lastbrowser']['sidekick'], 'startChat' | 'getSession' | 'onChatStreamEvent' | 'subscribeChatStream' | 'unsubscribeChatStream' | 'getStreamStatus' | 'cancelStream'>;
 export type QuickChatScope = { profile: string; workspace: string };
@@ -63,8 +65,15 @@ export class QuickChat {
     const owner = ++this.generation;
     this.stopRequested = false;
     const current = () => this.generation === owner;
+    const { t } = createDesktopI18n(resolveDesktopLocale({
+      settingsLanguage: window.localStorage.getItem('language') || '',
+      browserLanguage: navigator.language,
+    }));
+    const latencySentence = t(pickChatLatencyPlaceholderKey());
     this.update({ busy: true, error: '', draft: '', messages: [
-      ...this.state.messages, { role: 'user', content: text }, { role: 'assistant', content: '', pending: true }
+      ...this.state.messages,
+      { role: 'user', content: text },
+      buildChatLatencyPlaceholderAssistant(latencySentence),
     ] });
     let streamId: string | null = null;
     let ended = false;
@@ -91,7 +100,9 @@ export class QuickChat {
       } else if (event.event === 'stream_end' || event.event === 'cancel') {
         ended = true;
         cancelled = event.event === 'cancel';
-        this.update({ messages: finishLiveChatMessage(this.state.messages) });
+        this.update({ messages: cancelled
+          ? finishStoppedLiveChatMessage(this.state.messages, streamId ?? undefined)
+          : finishLiveChatMessage(this.state.messages, streamId ?? undefined) });
       } else if (event.event) {
         const delta = readLiveChatDelta(event.event, event.data);
         const progress = describeOrchestrationProgress(event.event, event.data);

@@ -1,3 +1,9 @@
+import {
+  isClearablePendingStreamPlaceholder,
+  restoredChatLatencyPlaceholderText,
+  shouldDiscardPlaceholderContent,
+} from './chat-perceived-latency-stream.js';
+
 export type LiveChatMessage = {
   role?: string;
   content?: string;
@@ -9,6 +15,7 @@ export type LiveChatMessage = {
   chatStreamSessionId?: string;
   teamwork?: unknown;
   isPartial?: boolean;
+  latencyPlaceholder?: boolean;
 };
 
 export type RestoredChatStream = {
@@ -131,7 +138,12 @@ export function restorePendingChatTurn<T extends LiveChatMessage>(
   if (lastAfterUser?.role === 'assistant' && (lastAfterUser.pending || lastAfterUser.streaming)) {
     return withUser;
   }
-  return [...withUser, { role: 'assistant', content: 'Working on it...', pending: true } as T];
+  return [...withUser, {
+    role: 'assistant',
+    content: restoredChatLatencyPlaceholderText(),
+    pending: true,
+    latencyPlaceholder: true,
+  } as T];
 }
 
 /** Preserve an unfinished user turn but release its pending UI state when the backend has no stream to resume. */
@@ -211,7 +223,7 @@ export function preserveInFlightChatMessages<T extends LiveChatMessage>(
   const hasSnapshotOutput = snapshot.slice(snapshotUserIndex + 1).some((message) =>
     message.role === 'assistant'
       && Boolean(message.content?.trim())
-      && message.content !== 'Working on it...');
+      && !shouldDiscardPlaceholderContent(message));
   return hasSnapshotOutput ? snapshot : [...snapshot, pendingAssistant];
 }
 
@@ -263,7 +275,9 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
 
   const current = messages[index];
   const next = [...messages];
-  const pendingContent = current.pending || current.content === 'Working on it...' ? '' : current.content || '';
+  const pendingContent = current.pending && (isClearablePendingStreamPlaceholder(current) || !current.content?.trim())
+    ? ''
+    : current.content || '';
   const pendingReasoning = current.reasoning || '';
   const waitingForAnswer = event === 'reasoning' && pendingContent.trim().length === 0;
   next[index] = {
@@ -273,7 +287,7 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
     // hidden reasoning details in settings.
     pending: waitingForAnswer ? current.pending : false,
     streaming: true,
-    ...(event === 'token' ? { progress: undefined } : {}),
+    ...(event === 'token' ? { progress: undefined, latencyPlaceholder: undefined } : {}),
     ...(event === 'token'
       ? { content: `${pendingContent}${text}` }
       : { content: pendingContent, reasoning: `${pendingReasoning}${text}` }),
@@ -293,7 +307,7 @@ export function finishStoppedLiveChatMessage<T extends LiveChatMessage>(messages
   return messages.flatMap(message => {
     if (message.role !== 'assistant' || !(message.pending || message.streaming)
       || (streamId && message.chatStreamId !== streamId)) return [message];
-    const content = message.pending && message.content === 'Working on it...' ? '' : message.content;
+    const content = message.pending && isClearablePendingStreamPlaceholder(message) ? '' : message.content;
     if (!content?.trim() && !message.reasoning?.trim()) return [];
     return [{ ...message, content, pending: false, streaming: false, progress: undefined }];
   });
@@ -328,7 +342,7 @@ export function finishLiveChatMessageWithError<T extends LiveChatMessage>(
 ): T[] {
   return messages.map((message) => {
     if (!(message.pending || message.streaming || message.progress) || streamId && message.chatStreamId !== streamId) return message;
-    const hasPartialOutput = Boolean(message.content && message.content !== 'Working on it...') || Boolean(message.reasoning);
+    const hasPartialOutput = Boolean(message.content && !shouldDiscardPlaceholderContent(message)) || Boolean(message.reasoning);
     return {
       ...message,
       content: hasPartialOutput ? message.content : `Sidekick could not respond: ${error}`,

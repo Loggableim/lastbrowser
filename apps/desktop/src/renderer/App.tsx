@@ -66,6 +66,7 @@ import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from './acces
 import { fetchAccessAuthStatusWithRetry } from './access-auth-status.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishStoppedLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
+import { buildChatLatencyPlaceholderAssistant, countsAsVisibleStreamOutput, fallbackFinishedAssistantContent, pickChatLatencyPlaceholderKey, shouldFinalizeInFlightAssistant } from './chat-perceived-latency-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
 import { ChatUiOwnership } from './chat-ui-ownership.js';
 import { playChatCompletionSound } from './notification-sound.js';
@@ -1291,7 +1292,7 @@ function AppContent(): JSX.Element {
   const [sidekickBusy, setSidekickBusy] = useState(false);
   const [sidekickMotion, setSidekickMotion] = useState<SidekickMotion>('idle');
   const latestAssistant = [...chatMessages].reverse().find((message) => message.role === 'assistant');
-  const sidekickSawToken = Boolean(latestAssistant?.streaming && latestAssistant.content && latestAssistant.content !== 'Working on it...');
+  const sidekickSawToken = Boolean(latestAssistant?.streaming && countsAsVisibleStreamOutput(latestAssistant));
   const sidekickToolRunning = Array.isArray(latestAssistant?.tool_calls) && latestAssistant.tool_calls.length > 0;
   const sidekickNeedsInput = Boolean(latestAssistant?.grill_question);
   useEffect(() => {
@@ -2715,14 +2716,14 @@ function AppContent(): JSX.Element {
           setChatMessages((messages) => finishLiveChatMessage(messages, restored.streamId));
           setMessages((messages) => finishLiveChatMessage(messages, restored.streamId));
         } else {
-          setChatMessages((messages) => messages.map((message) => (message.pending || message.streaming || message.content === 'Working on it...')
+          setChatMessages((messages) => messages.map((message) => (shouldFinalizeInFlightAssistant(message)
             && message.chatStreamId === restored.streamId
-            ? { ...message, content: answer || (message.content === 'Working on it...' ? 'Sidekick finished.' : message.content || 'Sidekick finished.'), pending: false, streaming: false, progress: undefined }
-            : message));
-          setMessages((messages) => messages.map((message) => (message.pending || message.streaming || message.content === 'Working on it...')
+            ? { ...message, content: fallbackFinishedAssistantContent(message, answer), pending: false, streaming: false, progress: undefined, latencyPlaceholder: undefined }
+            : message)));
+          setMessages((messages) => messages.map((message) => (shouldFinalizeInFlightAssistant(message)
             && message.chatStreamId === restored.streamId
-            ? { ...message, content: answer || (message.content === 'Working on it...' ? 'Sidekick finished.' : message.content || 'Sidekick finished.'), pending: false, streaming: false, progress: undefined }
-            : message));
+            ? { ...message, content: fallbackFinishedAssistantContent(message, answer), pending: false, streaming: false, progress: undefined, latencyPlaceholder: undefined }
+            : message)));
         }
         if (streamResult.goalError) setChatError(streamResult.goalError);
         void refreshSessions();
@@ -4460,16 +4461,18 @@ function AppContent(): JSX.Element {
     }
 
     const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
+    const latencySentence = t(pickChatLatencyPlaceholderKey());
+    const pendingAssistant = buildChatLatencyPlaceholderAssistant(latencySentence);
     setLastChatTurnUsage(null);
     setChatMessages((current) => [
       ...current,
       ...(!submission ? [visibleUserMessage] : []),
-      { role: 'assistant', content: 'Working on it...', pending: true }
+      pendingAssistant,
     ]);
     setMessages((current) => [
       ...current,
       ...(!submission ? [{ id: crypto.randomUUID(), role: 'user' as const, content: displayText }] : []),
-      { id: crypto.randomUUID(), role: 'assistant', content: 'Working on it...', pending: true }
+      { id: crypto.randomUUID(), ...pendingAssistant },
     ]);
     const uiTurnOwner = beginChatUiTurn(turnContext.sessionId || null);
     if (turnContext.sessionId) bindChatUiTurnSession(uiTurnOwner, turnContext.sessionId);
@@ -4555,6 +4558,16 @@ function AppContent(): JSX.Element {
         else if (guardedStart.reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'));
         else if (guardedStart.reason === 'model_unavailable') setChatError(t('chat.modelUnavailableInSpace'));
         else if (guardedStart.reason === 'model_unqualified') setChatError(t('settings.panels.providers.betaCatalogEmpty'));
+        const startFailure = guardedStart.reason === 'multi_agent_beta_required'
+          ? t('settings.panels.providers.multiAgentBetaRequired')
+          : guardedStart.reason === 'no_active_models'
+            ? t('settings.panels.providers.noActiveModels')
+            : guardedStart.reason === 'model_unqualified'
+              ? t('settings.panels.providers.betaCatalogEmpty')
+              : t('chat.modelUnavailableInSpace');
+        setChatMessages((current) => finishLiveChatMessageWithError(current, startFailure));
+        setMessages((current) => finishLiveChatMessageWithError(current, startFailure));
+        setChatRunState('error');
         return false;
       }
       const response = guardedStart.response;
@@ -4695,12 +4708,8 @@ function AppContent(): JSX.Element {
       });
       if (activeTurnIsCurrent()) {
         setChatError(messageText);
-        setChatMessages((current) => current.map((item) => (
-          item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false, progress: undefined } : item
-        )));
-        setMessages((current) => current.map((item) => (
-          item.pending ? { ...item, content: `Sidekick could not respond: ${messageText}`, pending: false, progress: undefined } : item
-        )));
+        setChatMessages((current) => finishLiveChatMessageWithError(current, messageText));
+        setMessages((current) => finishLiveChatMessageWithError(current, messageText));
         setChatRunState('error');
       }
     } finally {
@@ -5144,8 +5153,9 @@ function AppContent(): JSX.Element {
     quickChatErrorScopeKeyRef.current = capturedScopeKey;
     setQuickChatBusy(true);
     setQuickChatErrorForScope(capturedScopeKey, '');
+    const quickChatLatencySentence = t(pickChatLatencyPlaceholderKey());
     updateQuickChatMessagesForScope(capturedScopeKey, current => [...current,
-      { id: crypto.randomUUID(), role: 'assistant', content: 'Working on it...', pending: true, streaming: true }
+      { id: crypto.randomUUID(), ...buildChatLatencyPlaceholderAssistant(quickChatLatencySentence, { streaming: true }) },
     ]);
     quickChatBufferedEventsRef.current = [];
     quickChatStoppedStreamIdRef.current = null;

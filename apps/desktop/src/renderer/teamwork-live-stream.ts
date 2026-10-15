@@ -50,6 +50,7 @@ export type TeamworkLiveMessage = Readonly<{
   chatStreamId?: string;
   chatStreamSessionId?: string;
   teamwork?: unknown;
+  latencyPlaceholder?: boolean;
 }>;
 
 const stages = new Set<TeamworkStage>(['grounding', 'planning', 'debate', 'critic', 'synthesizing', 'single_provider']);
@@ -143,7 +144,7 @@ function withPlanStatus(planned: TeamworkDraft[], completed: TeamworkDraft): Tea
 }
 
 function hasPartialOutput(message: TeamworkLiveMessage, metadata: TeamworkMetadata): boolean {
-  return Boolean(message.content?.trim() && message.content !== 'Working on it...')
+  return Boolean(message.content?.trim() && message.content !== 'Working on it...' && !message.latencyPlaceholder)
     || Boolean(message.reasoning?.trim())
     || Boolean(metadata.drafts?.some((draft) => draft.status !== 'planned' && draft.content.trim()));
 }

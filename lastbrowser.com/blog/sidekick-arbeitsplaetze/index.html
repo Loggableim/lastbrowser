@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtuelle Arbeitsplätze für Sidekicks – LastBrowser Blog</title>
+<meta name="description" content="Geplantes Feature: Isolierte virtuelle Arbeitsplätze für Sidekicks, damit Aufträge im Hintergrund laufen und das Arbeitsprotokoll einsehbar bleibt. Eine Idee zum Abstimmen.">
+<meta property="og:title" content="Virtuelle Arbeitsplätze für Sidekicks">
+<meta property="og:description" content="Isolierte virtuelle Maschinen mit Browser, Dateien und Werkzeugen für Hintergrundaufträge. Eine Idee zum Abstimmen.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lastbrowser.com/blog/sidekick-arbeitsplaetze/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/blog/sidekick-arbeitsplaetze/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<script src="/assets/js/theme.js"></script>
+<style>
+.article-wrap { max-width: 780px; margin: 0 auto; }
+.article-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; color: var(--subtle); font-size: 13px; margin: 14px 0 24px; }
+.article-notice { border: 1px solid rgba(255, 200, 0, 0.4); background: rgba(255, 200, 0, 0.08); border-radius: var(--radius-md); padding: 16px 18px; margin: 24px 0; font-size: 14px; line-height: 1.6; }
+.article-body h2 { margin: 34px 0 12px; font-size: 22px; }
+.article-body p { color: var(--muted); line-height: 1.75; margin-bottom: 16px; }
+.article-body ul { color: var(--muted); line-height: 1.75; margin: 0 0 16px 22px; }
+.article-body li { margin-bottom: 8px; }
+.article-cta { border: 1px solid var(--stroke); background: var(--card-bg); border-radius: var(--radius-lg); padding: 26px; margin: 42px 0 10px; }
+.article-cta h2 { margin: 0 0 12px; font-size: 20px; }
+.article-cta p { color: var(--muted); line-height: 1.7; margin-bottom: 18px; }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Virtuelle Arbeitsplätze für Sidekicks",
+  "description": "Isolierte virtuelle Maschinen mit Browser, Dateien und Werkzeugen für Hintergrundaufträge. Eine Idee zum Abstimmen.",
+  "datePublished": "2026-10-15",
+  "dateModified": "2026-10-15",
+  "inLanguage": "de",
+  "articleSection": "Feature-Voting",
+  "author": { "@type": "Organization", "name": "LastBrowser" },
+  "publisher": { "@type": "Organization", "name": "LastBrowser", "logo": { "@type": "ImageObject", "url": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png" } },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": "https://lastbrowser.com/blog/sidekick-arbeitsplaetze/" },
+  "image": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png"
+}
+</script>
+</head>
+<body>
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="40" height="40">
+      <div><strong>LastBrowser</strong><span>Blog</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container" style="padding: 60px 0 80px;">
+  <article class="article-wrap">
+    <a class="badge badge-cyan" href="/blog/#feature-voting" style="align-self:flex-start;margin-bottom:12px;">Feature-Voting</a>
+    <h1>Virtuelle Arbeitsplätze für Sidekicks</h1>
+    <div class="article-meta">
+      <span>📅 15. Oktober 2026</span>
+      <span>·</span>
+      <span>⏱️ 5 Min. Lesezeit</span>
+    </div>
+
+    <div class="article-notice">
+      <strong>Geplant / Idee – noch nicht in LastBrowser verfügbar, keine Release-Zusage.</strong> Dieser Beitrag beschreibt ein Konzept zum Abstimmen, keine fertige Funktion.
+    </div>
+
+    <div class="article-body">
+      <p>
+        Ein Sidekick, der im Hintergrund eine längere Aufgabe erledigt, soll dich nicht dabei beobachten müssen, wie er in deinen offenen Tabs herumklickt. Dafür braucht er einen eigenen Ort zum Arbeiten. Die Idee: ein isolierter virtueller Arbeitsplatz pro Auftrag – mit eigenem Browser, eigenen Dateien und den Werkzeugen, die die Aufgabe braucht.
+      </p>
+
+      <h2>Zielbild</h2>
+      <p>
+        Für einen Hintergrundauftrag öffnet LastBrowser eine virtuelle Maschine, in der ein Sidekick arbeitet. Darin stehen ihm ein Browser, ein eigener Dateibereich und ausgewählte Werkzeuge zur Verfügung. Deine aktiven Tabs bleiben unberührt. Ergebnisse und Arbeitsprotokoll bleiben für dich einsehbar, damit du nicht blind vertrauen musst.
+      </p>
+      <p>
+        Der Arbeitsplatz ist nicht dazu da, den Bildschirm zu übernehmen. Er ist ein abgetrennter Raum, in dem der Sidekick Schritte ausführt, Seiten liest, Dateien ablegt und Zwischenstände sammelt. Am Ende bekommst du ein Ergebnis und eine nachvollziehbare Liste, was passiert ist.
+      </p>
+
+      <h2>Warum</h2>
+      <p>
+        Zwei Dinge sprechen dafür. Erstens die <strong>Sicherheit</strong>: Wenn ein Sidekick im Hintergrund arbeitet und dabei selbstständig handelt, will man ihn nicht direkt an den eigenen Ordner, das eigene Konto oder die offene Sitzung lassen. Eine abgeschottete Umgebung begrenzt, was schiefgehen kann.
+      </p>
+      <p>
+        Zweitens die <strong>Transparenz</strong>. Hintergrundarbeit ist nur dann angenehm, wenn man nachvollziehen kann, was der Sidekick getan hat. Ein sichtbares Arbeitsprotokoll und ein Ergebnis, das man prüfen kann, sind der Unterschied zwischen einem Werkzeug und einer Blackbox.
+      </p>
+      <p>
+        Ein dritter Punkt ist die Wiederholbarkeit. Wenn ein Auftrag in einem eigenen Arbeitsplatz läuft, lässt er sich sauber starten, beobachten und abbrechen. Du musst nicht raten, in welchem Tab gerade etwas passiert, und du kannst denselben Ablauf später erneut anstoßen, ohne deine offene Sitzung neu aufzubauen.
+      </p>
+
+      <h2>Wie es aussehen könnte</h2>
+      <p>
+        Ein Auftrag bekommt seinen eigenen Arbeitsplatz. Darin kann der Sidekick Seiten öffnen und auslesen, ohne den aktiven Tab zu wechseln. Das passt zu einer Umgebung, in der Hintergrundarbeit nicht den Vordergrund blockiert.
+      </p>
+      <ul>
+        <li>Der Arbeitsplatz bringt einen Browser, einen eigenen Dateibereich und die für den Auftrag freigegebenen Werkzeuge mit.</li>
+        <li>Schritte und Zwischenstände werden als Arbeitsprotokoll festgehalten und bleiben einsehbar.</li>
+        <li>Vor kritischen Aktionen – etwa ein Formular absenden oder eine Datei überschreiben – pausiert der Sidekick und bittet um Freigabe.</li>
+        <li>Teilaufgaben lassen sich als Liste oder Board verfolgen, vom Start bis zum Abschluss.</li>
+        <li>Über die MCP-Anbindungen im Hub kann ein Arbeitsplatz auch lokale Dateien oder freigegebene Dienste nutzen, wenn du das erlaubst.</li>
+      </ul>
+      <p>
+        Der Arbeitsplatz soll sich anfühlen wie ein Space, den man für eine Aufgabe aufmacht und danach wieder schließt: eigener Kontext, eigene Grenzen, ein klarer Anfang und ein klares Ende.
+      </p>
+      <p>
+        Wichtig ist die Abgrenzung. Ein Arbeitsplatz ist kein zweiter Browser, den du dauernd im Blick behalten musst. Er läuft für seinen Auftrag, meldet sich, wenn er eine Entscheidung von dir braucht, und übergibt am Ende ein Ergebnis. Läuft etwas schief, kannst du den Arbeitsplatz verwerfen, ohne dass dein eigener Browser, deine Dateien oder deine Anmeldungen davon berührt werden. Genau diese Trennung macht Hintergrundarbeit erst alltagstauglich.
+      </p>
+
+      <h2>Offene Fragen</h2>
+      <ul>
+        <li>Wie stark muss die Isolation sein – eine eigene virtuelle Maschine, ein Container oder eine leichtere Abschottung?</li>
+        <li>Welche Werkzeuge und Konten bekommt ein Arbeitsplatz, und wie werden diese Rechte pro Auftrag begrenzt?</li>
+        <li>Wie lange lebt ein Arbeitsplatz, und was passiert mit seinen Dateien und Zwischenständen nach dem Auftrag?</li>
+        <li>Wo wird das Arbeitsprotokoll gespeichert, und bleibt es vollständig lokal?</li>
+        <li>Wie viele Arbeitsplätze dürfen gleichzeitig laufen, ohne den Rechner auszubremsen?</li>
+      </ul>
+    </div>
+
+    <div class="article-cta">
+      <h2>Stimme ab</h2>
+      <p>
+        Wenn du virtuelle Arbeitsplätze für Sidekicks möchtest, gib dem Feature auf der Roadmap deine Stimme. Die Abstimmung hilft bei der Priorisierung und ist keine Release-Zusage.
+      </p>
+      <div class="btn-group">
+        <a class="btn btn-primary" href="https://lastbrowser.com/roadmap/#sidekick-vm">Jetzt abstimmen</a>
+      </div>
+      <p style="margin-top:18px;margin-bottom:0;">Schreib uns: <a href="mailto:hello@lastbrowser.com">hello@lastbrowser.com</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="36" height="36">
+        <div><strong>LastBrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Browser für Windows und Linux (Linux ist Preview) mit vertikalen Tabs, Spaces, Terminal und Sidekick mit lokalen Modellen oder eigenem Key. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:hello@lastbrowser.com" style="color:inherit;text-decoration:underline;">hello@lastbrowser.com</a></span>
+      <nav class="footer-social-links" aria-label="Social media">
+          <a href="https://x.com/lastbrowser" target="_blank" rel="noopener noreferrer" aria-label="X"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68L14.54 10.98l9.452 11.867h-7.406l-5.8-7.584-6.64 7.584H.464l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.606h2.039L6.486 3.132h-2.19z"/></svg><span>X</span></a>
+          <a href="https://bsky.app/profile/lastbrowser.bsky.social" target="_blank" rel="noopener noreferrer" aria-label="Bluesky"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M5.36 2.25c2.72 2.04 5.65 6.17 6.64 8.39.99-2.22 3.92-6.35 6.64-8.39 1.96-1.47 5.14-2.61 5.14 1.01 0 .72-.41 6.07-.65 6.94-.83 2.99-3.84 3.76-6.52 3.3 4.69.79 5.89 3.41 3.31 6.03-4.9 4.99-7.04-1.25-7.59-2.84-.1-.3-.15-.44-.33-.44s-.23.14-.33.44c-.55 1.59-2.69 7.83-7.59 2.84-2.58-2.62-1.38-5.24 3.31-6.03-2.68.46-5.69-.31-6.52-3.3C.63 9.33.22 3.98.22 3.26c0-3.62 3.18-2.48 5.14-1.01Z"/></svg><span>Bluesky</span></a>
+        </nav>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">LastBrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">LastBrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">LastBrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">LastBrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">LastBrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">LastBrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Blog</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:hello@lastbrowser.com">hello@lastbrowser.com</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 LastBrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows &amp; Linux (Linux ist Preview)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js?v=linux56-20261014"></script>
+</body>
+</html>

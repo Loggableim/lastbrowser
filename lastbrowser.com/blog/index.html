@@ -3,26 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tech-Magazin &amp; Engineering Blog – Lastbrowser</title>
-<meta name="description" content="Tiefe technische Einblicke in die Architektur von Lastbrowser: ConPTY Terminal, Local-First KI, Castlabs Widevine DRM L3 und Web-Sicherheit.">
-<meta property="og:title" content="Lastbrowser Tech-Magazin">
-<meta property="og:description" content="Engineering-Artikel über ConPTY, Local-First AI und Castlabs Widevine DRM.">
+<title>LastBrowser Blog – News, Feature-Voting &amp; Hintergründe</title>
+<meta name="description" content="Der Blog von LastBrowser: News und Updates, jeden Donnerstag ein Feature im Detail zum Abstimmen und Hintergründe zu Architektur, Datenschutz und lokaler KI.">
+<meta property="og:title" content="LastBrowser Blog">
+<meta property="og:description" content="News und Updates, Feature-Voting und Hintergründe zu LastBrowser.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lastbrowser.com/blog/">
 <meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
 <link rel="icon" type="image/x-icon" href="/favicon.ico">
 <link rel="canonical" href="https://lastbrowser.com/blog/">
-<link rel="alternate" hreflang="de" href="https://lastbrowser.com/blog/">
-<link rel="alternate" hreflang="en" href="https://lastbrowser.com/en/blog/">
-<link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/blog/">
 
 <link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/main.css">
-<link rel="stylesheet" href="/assets/css/components.css">
+<link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
 <link rel="stylesheet" href="/assets/css/comparison.css">
 <link rel="stylesheet" href="/assets/css/docs.css">
 <script src="/assets/js/theme.js"></script>
+<style>
+.blog-filter { display: flex; flex-wrap: wrap; gap: 10px; margin: 26px 0 10px; }
+.blog-filter button { font: inherit; font-weight: 700; font-size: 13px; padding: 9px 16px; border-radius: var(--radius-pill); border: 1px solid var(--stroke); background: transparent; color: var(--muted); cursor: pointer; }
+.blog-filter button:hover { border-color: var(--cyan); color: var(--cyan); }
+.blog-filter button.active { border-color: var(--cyan); background: rgba(0, 229, 255, 0.1); color: var(--cyan); }
+.blog-section { scroll-margin-top: 90px; }
+.blog-section h2 { margin: 34px 0 0; font-size: 22px; }
+.blog-section h2:first-child { margin-top: 0; }
+.blog-empty { border: 1px dashed var(--stroke); border-radius: var(--radius-lg); padding: 22px; color: var(--muted); margin: 22px 0 10px; }
+.blog-card h3 a { color: inherit; text-decoration: none; }
+.blog-card h3 a:hover { color: var(--cyan); }
+.blog-more { display: inline-block; margin-top: 4px; font-size: 13px; font-weight: 700; color: var(--cyan); text-decoration: none; }
+</style>
 </head>
 <body>
 <a href="#main" class="skip-link">Zum Inhalt springen</a>
@@ -30,8 +40,8 @@
 <nav>
   <div class="container inner">
     <a href="/" class="logo">
-      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
-      <div><strong>Lastbrowser</strong><span>Tech-Magazin</span></div>
+      <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="40" height="40">
+      <div><strong>LastBrowser</strong><span>Blog</span></div>
     </a>
     <div class="nav-links">
       <a href="/features/">Features</a>
@@ -43,18 +53,6 @@
       <a href="/download/">Download</a>
     </div>
     <div class="nav-actions">
-      <div class="lang-picker">
-        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
-        <div class="lang-menu">
-          <a href="/blog/" class="active" data-lang="de">🇩🇪 Deutsch</a>
-          <a href="/en/blog/" data-lang="en">🇬🇧 English</a>
-          <a href="/es/blog/" data-lang="es">🇪🇸 Español</a>
-          <a href="/fr/blog/" data-lang="fr">🇫🇷 Français</a>
-          <a href="/it/blog/" data-lang="it">🇮🇹 Italiano</a>
-          <a href="/pt/blog/" data-lang="pt">🇵🇹 Português</a>
-          <a href="/ja/blog/" data-lang="ja">🇯🇵 日本語</a>
-        </div>
-      </div>
       <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
       <a href="/download/" class="btn btn-primary btn-sm">Download</a>
       <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
@@ -75,72 +73,147 @@
 
 <main id="main" class="container" style="padding: 60px 0 80px;">
   <div class="section-header">
-    <div class="pill-badge">Engineering Deep-Dives</div>
-    <h1>Lastbrowser <span class="grad">Tech-Magazin</span></h1>
-    <p>Hintergründe zu Architektur-Entscheidungen, Performance-Tuning und Datenschutz-Mechanismen.</p>
+    <div class="pill-badge">Blog</div>
+    <h1>LastBrowser <span class="grad">Blog</span></h1>
+    <p>News und Updates zum Browser, jeden Donnerstag ein Feature im Detail und Hintergründe zu Architektur, Datenschutz und lokaler KI.</p>
   </div>
 
-  <div class="blog-grid">
-    <!-- Article 1: Chromium + ConPTY -->
-    <article class="blog-card">
-      <div class="blog-card-body">
-        <span class="badge badge-purple" style="align-self:flex-start;margin-bottom:12px;">Architecture</span>
-        <h3>Warum Chromium + ConPTY das ideale Duo für Windows-Entwickler ist</h3>
-        <p>
-          Bisher mussten Programmierer ständig zwischen Browser und Windows Terminal wechseln. Wir erläutern, wie Lastbrowser die native Windows ConPTY-API über node-pty direkt in den Electron-Renderer einbettet – inklusive IPC-Kommunikation und automatischer Terminal-Doctor-Analyse.
-        </p>
-        <div class="blog-meta">
-          <span>📅 28. September 2026</span>
-          <span>·</span>
-          <span>⏱️ 6 Min. Lesezeit</span>
-        </div>
-      </div>
-    </article>
+  <section class="roadmap-voting-info" aria-label="Wie funktioniert Feature-Voting?">
+    <strong>Wie funktioniert Feature-Voting?</strong>
+    <p>Jeden Donnerstag stellen wir ein geplantes Feature im Detail vor. Du entscheidest mit: Auf der <a href="/roadmap/">Roadmap</a> kannst du für die Funktionen abstimmen, die für dich Priorität haben.</p>
+    <p>Die Abstimmung hilft bei der Priorisierung und ist keine Release-Zusage.</p>
+  </section>
 
-    <!-- Article 2: Local-First AI -->
-    <article class="blog-card">
-      <div class="blog-card-body">
-        <span class="badge badge-cyan" style="align-self:flex-start;margin-bottom:12px;">Privacy &amp; Security</span>
-        <h3>Local-First AI: Warum Browser-Daten niemals auf fremde Server gehören</h3>
-        <p>
-          Der Browser ist der intimste Ort auf Ihrem Rechner: Verträge, E-Mails, Kontoauszüge und Passwörter laufen darüber. Erfahren Sie, warum Lastbrowser auf ein radikales Local-First-Prinzip setzt, API-Keys per DPAPI verschlüsselt und die Ausführung lokaler Ollama-LLMs priorisiert.
-        </p>
-        <div class="blog-meta">
-          <span>📅 22. September 2026</span>
-          <span>·</span>
-          <span>⏱️ 8 Min. Lesezeit</span>
-        </div>
-      </div>
-    </article>
-
-    <!-- Article 3: Castlabs Widevine DRM L3 -->
-    <article class="blog-card">
-      <div class="blog-card-body">
-        <span class="badge badge-green" style="align-self:flex-start;margin-bottom:12px;">Multimedia &amp; DRM</span>
-        <h3>Wie Lastbrowser mit Castlabs Electron Widevine DRM L3 nahtlos streamt</h3>
-        <p>
-          Viele alternative Browser scheitern an geschützten Medienstreams auf Spotify, Netflix und Disney+. Ein technischer Blick darauf, wie Lastbrowser über Castlabs Electron und <code>components.whenReady()</code> das offizielle Widevine CDM v4.10 initialisiert, ohne die Stabilität zu gefährden.
-        </p>
-        <div class="blog-meta">
-          <span>📅 15. September 2026</span>
-          <span>·</span>
-          <span>⏱️ 5 Min. Lesezeit</span>
-        </div>
-      </div>
-    </article>
+  <div class="blog-filter" role="group" aria-label="Blog-Kategorien filtern">
+    <button type="button" data-filter="all" class="active" aria-pressed="true">Alle</button>
+    <button type="button" data-filter="news" aria-pressed="false">News &amp; Updates</button>
+    <button type="button" data-filter="feature-voting" aria-pressed="false">Feature-Voting</button>
+    <button type="button" data-filter="hintergrund" aria-pressed="false">Hintergrund</button>
   </div>
+
+  <section id="feature-voting" class="blog-section" data-category="feature-voting" aria-labelledby="feature-voting-title">
+    <h2 id="feature-voting-title">Feature-Voting</h2>
+    <div class="blog-grid">
+      <article class="blog-card" data-category="feature-voting">
+        <div class="blog-card-body">
+          <span class="badge badge-cyan" style="align-self:flex-start;margin-bottom:12px;">Feature-Voting</span>
+          <h3><a href="/blog/volksai-pool/">VolksAI: Lokale Modelle teilen statt Cloud mieten</a></h3>
+          <p>
+            Ein Pool, in dem Nutzer die Rechenzeit ihrer lokalen Modelle aus Ollama, llama.cpp oder LM Studio teilen. Der Vermittler sieht den Prompt nicht, der Host schon – diese Grenze steht vor dem Senden in Klartext.
+          </p>
+          <div class="blog-meta">
+            <span>📅 15. Oktober 2026</span>
+            <span>·</span>
+            <span>⏱️ 5 Min. Lesezeit</span>
+          </div>
+          <a class="blog-more" href="/blog/volksai-pool/">Beitrag lesen →</a>
+        </div>
+      </article>
+
+      <article class="blog-card" data-category="feature-voting">
+        <div class="blog-card-body">
+          <span class="badge badge-cyan" style="align-self:flex-start;margin-bottom:12px;">Feature-Voting</span>
+          <h3><a href="/blog/sidekick-arbeitsplaetze/">Virtuelle Arbeitsplätze für Sidekicks</a></h3>
+          <p>
+            Isolierte virtuelle Maschinen mit Browser, Dateien und Werkzeugen, in denen Sidekicks Aufträge im Hintergrund erledigen. Ergebnisse und Arbeitsprotokoll bleiben für dich einsehbar.
+          </p>
+          <div class="blog-meta">
+            <span>📅 15. Oktober 2026</span>
+            <span>·</span>
+            <span>⏱️ 5 Min. Lesezeit</span>
+          </div>
+          <a class="blog-more" href="/blog/sidekick-arbeitsplaetze/">Beitrag lesen →</a>
+        </div>
+      </article>
+
+      <article class="blog-card" data-category="feature-voting">
+        <div class="blog-card-body">
+          <span class="badge badge-cyan" style="align-self:flex-start;margin-bottom:12px;">Feature-Voting</span>
+          <h3><a href="/blog/semantische-verlaufssuche/">Semantische Verlaufssuche</a></h3>
+          <p>
+            Besuchte Seiten nicht nach URL oder Titel, sondern nach Inhalt wiederfinden. Die Suche im Verlauf versteht, worum es auf einer Seite ging, und bringt sie über die Bedeutung zurück.
+          </p>
+          <div class="blog-meta">
+            <span>📅 15. Oktober 2026</span>
+            <span>·</span>
+            <span>⏱️ 5 Min. Lesezeit</span>
+          </div>
+          <a class="blog-more" href="/blog/semantische-verlaufssuche/">Beitrag lesen →</a>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="news" class="blog-section" data-category="news" aria-labelledby="news-title">
+    <h2 id="news-title">News &amp; Updates</h2>
+    <div class="blog-grid">
+      <article class="blog-card" data-category="news">
+        <div class="blog-card-body">
+          <span class="badge badge-purple" style="align-self:flex-start;margin-bottom:12px;">Architecture</span>
+          <h3>Warum ConPTY das ideale Duo für Windows-Entwickler ist</h3>
+          <p>
+            Bisher mussten Programmierer ständig zwischen Browser und Windows Terminal wechseln. Wir erläutern, wie LastBrowser die native Windows ConPTY-API über node-pty direkt in den Electron-Renderer einbettet – inklusive IPC-Kommunikation und automatischer Terminal-Doctor-Analyse.
+          </p>
+          <div class="blog-meta">
+            <span>📅 28. September 2026</span>
+            <span>·</span>
+            <span>⏱️ 6 Min. Lesezeit</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="blog-card" data-category="news">
+        <div class="blog-card-body">
+          <span class="badge badge-cyan" style="align-self:flex-start;margin-bottom:12px;">Privacy &amp; Security</span>
+          <h3>Local-First AI: Warum Browser-Daten niemals auf fremde Server gehören</h3>
+          <p>
+            Der Browser ist der intimste Ort auf Ihrem Rechner: Verträge, E-Mails, Kontoauszüge und Passwörter laufen darüber. Erfahren Sie, warum LastBrowser auf ein radikales Local-First-Prinzip setzt, API-Keys per DPAPI verschlüsselt und die Ausführung lokaler Ollama-LLMs priorisiert.
+          </p>
+          <div class="blog-meta">
+            <span>📅 22. September 2026</span>
+            <span>·</span>
+            <span>⏱️ 8 Min. Lesezeit</span>
+          </div>
+        </div>
+      </article>
+
+      <article class="blog-card" data-category="news">
+        <div class="blog-card-body">
+          <span class="badge badge-green" style="align-self:flex-start;margin-bottom:12px;">Multimedia &amp; DRM</span>
+          <h3>Wie LastBrowser mit Castlabs Electron Widevine DRM L3 nahtlos streamt</h3>
+          <p>
+            Viele alternative Browser scheitern an geschützten Medienstreams auf Spotify, Netflix und Disney+. Ein technischer Blick darauf, wie LastBrowser über Castlabs Electron und <code>components.whenReady()</code> das offizielle Widevine CDM v4.10 initialisiert, ohne die Stabilität zu gefährden.
+          </p>
+          <div class="blog-meta">
+            <span>📅 15. September 2026</span>
+            <span>·</span>
+            <span>⏱️ 5 Min. Lesezeit</span>
+          </div>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <section id="hintergrund" class="blog-section" data-category="hintergrund" aria-labelledby="hintergrund-title">
+    <h2 id="hintergrund-title">Hintergrund</h2>
+    <div class="blog-empty">Bald hier: Hintergründe und Einordnungen.</div>
+  </section>
 </main>
 
 <footer>
   <div class="container footer-grid">
     <div class="footer-brand">
       <div class="logo">
-        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
-        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+        <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="36" height="36">
+        <div><strong>LastBrowser</strong><span>AI-Native Browser</span></div>
       </div>
-      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <p>Der moderne Browser für Windows und Linux (Linux ist Preview) mit vertikalen Tabs, Spaces, Terminal und Sidekick mit lokalen Modellen oder eigenem Key. 100% Local-First.</p>
       <div style="margin-top:14px;">
-        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:hello@lastbrowser.com" style="color:inherit;text-decoration:underline;">hello@lastbrowser.com</a></span>
+      <nav class="footer-social-links" aria-label="Social media">
+          <a href="https://x.com/lastbrowser" target="_blank" rel="noopener noreferrer" aria-label="X"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68L14.54 10.98l9.452 11.867h-7.406l-5.8-7.584-6.64 7.584H.464l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.606h2.039L6.486 3.132h-2.19z"/></svg><span>X</span></a>
+          <a href="https://bsky.app/profile/lastbrowser.bsky.social" target="_blank" rel="noopener noreferrer" aria-label="Bluesky"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M5.36 2.25c2.72 2.04 5.65 6.17 6.64 8.39.99-2.22 3.92-6.35 6.64-8.39 1.96-1.47 5.14-2.61 5.14 1.01 0 .72-.41 6.07-.65 6.94-.83 2.99-3.84 3.76-6.52 3.3 4.69.79 5.89 3.41 3.31 6.03-4.9 4.99-7.04-1.25-7.59-2.84-.1-.3-.15-.44-.33-.44s-.23.14-.33.44c-.55 1.59-2.69 7.83-7.59 2.84-2.58-2.62-1.38-5.24 3.31-6.03-2.68.46-5.69-.31-6.52-3.3C.63 9.33.22 3.98.22 3.26c0-3.62 3.18-2.48 5.14-1.01Z"/></svg><span>Bluesky</span></a>
+        </nav>
       </div>
     </div>
     <div class="footer-col">
@@ -157,12 +230,12 @@
     <div class="footer-col">
       <h4>Vergleiche (VS)</h4>
       <ul>
-        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
-        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
-        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
-        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
-        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
-        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+        <li><a href="/vs/arc/">LastBrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">LastBrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">LastBrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">LastBrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">LastBrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">LastBrowser vs. Opera One</a></li>
       </ul>
     </div>
     <div class="footer-col">
@@ -170,7 +243,7 @@
       <ul>
         <li><a href="/docs/">Dokumentation</a></li>
         <li><a href="/shortcuts/">Tastenkürzel</a></li>
-        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/blog/">Blog</a></li>
         <li><a href="/security/">Security Whitepaper</a></li>
         <li><a href="/releases/">Release-Archiv</a></li>
         <li><a href="/press/">Presse-Kit</a></li>
@@ -183,20 +256,44 @@
         <li><a href="/privacy/">Datenschutzerklärung</a></li>
         <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
         <li><a href="/support/">Support-Portal</a></li>
-        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+        <li><a href="mailto:hello@lastbrowser.com">hello@lastbrowser.com</a></li>
       </ul>
     </div>
   </div>
   <div class="container footer-bottom">
-    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div>&copy; 2026 LastBrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
     <div style="display:flex;gap:14px;align-items:center;">
-      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>Windows &amp; Linux (Linux ist Preview)</span>
       <span>·</span>
       <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
     </div>
   </div>
 </footer>
 
-<script src="/assets/js/app.js"></script>
+<script>
+(function () {
+  var buttons = document.querySelectorAll('.blog-filter [data-filter]');
+  var sections = document.querySelectorAll('.blog-section');
+  if (!buttons.length || !sections.length) return;
+  function apply(filter) {
+    sections.forEach(function (section) {
+      var category = section.getAttribute('data-category');
+      section.hidden = !(filter === 'all' || category === filter);
+    });
+  }
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      buttons.forEach(function (other) {
+        var on = other === button;
+        other.classList.toggle('active', on);
+        other.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+      apply(button.getAttribute('data-filter'));
+    });
+  });
+  apply('all');
+})();
+</script>
+<script src="/assets/js/app.js?v=linux56-20261014"></script>
 </body>
 </html>

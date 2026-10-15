@@ -238,9 +238,14 @@ def new_session(token: str, bridge: str) -> str:
 
 def row_meta(turn: dict[str, Any]) -> dict[str, Any]:
     ttft = turn.get("ttft_ms")
+    broker = turn.get("broker_ready_ms")
+    broker_to_first = None
+    if ttft is not None and broker is not None:
+        broker_to_first = round(ttft - broker, 2)
     return {
         "http_status": turn.get("http_status"),
         "error_code": turn.get("error_code"),
+        "broker_to_first_ms": broker_to_first,
         "outlier_over_12s": bool(ttft is not None and ttft > 12_000),
         "is_409": turn.get("http_status") == 409,
     }
@@ -280,17 +285,7 @@ def main() -> None:
         token, bridge = auth()
         quick_id = uuid.uuid4().hex
         cold = measure_turn(token, bridge, start_quickchat(token, bridge, quick_id, PROMPT), quick_id=quick_id)
-        rows.append(
-            {
-                "surface": "Quickchat",
-                "temperature": "cold",
-                "run": run,
-                "model": MODEL,
-                "catalog_from_cache": False,
-                **cold,
-                **row_meta(cold),
-            }
-        )
+        rows.append({"surface": "Quickchat", "temperature": "cold", "run": run, "model": MODEL, "catalog_from_cache": False, **cold, **row_meta(cold)})
         warm = measure_turn(
             token,
             bridge,
@@ -345,13 +340,41 @@ def main() -> None:
         )
         print(f"run {run}/{RUNS} done", flush=True)
 
+    def summarize(surface: str, temp: str) -> dict[str, Any]:
+        import statistics
+
+        sub = [r for r in rows if r["surface"] == surface and r["temperature"] == temp]
+        ttfts = [r["ttft_ms"] for r in sub if r.get("ttft_ms") is not None]
+        b2f = [r["broker_to_first_ms"] for r in sub if r.get("broker_to_first_ms") is not None]
+        return {
+            "n": len(ttfts),
+            "409_count": sum(1 for r in sub if r.get("is_409")),
+            "outlier_over_12s": sum(1 for r in sub if r.get("outlier_over_12s")),
+            "median_ttft_ms": statistics.median(ttfts) if ttfts else None,
+            "median_broker_to_first_ms": statistics.median(b2f) if b2f else None,
+        }
+
+    summaries = {
+        "Quickchat_cold": summarize("Quickchat", "cold"),
+        "Quickchat_warm": summarize("Quickchat", "warm"),
+        "Standard_cold": summarize("Standard chat", "cold"),
+        "Standard_warm": summarize("Standard chat", "warm"),
+        "reference_note": "Quickchat medians are the reference; Standard minus Quickchat ≈ extra standard-chat path cost.",
+    }
+    qc = summaries["Quickchat_cold"].get("median_ttft_ms")
+    sc = summaries["Standard_cold"].get("median_ttft_ms")
+    if qc is not None and sc is not None:
+        summaries["standard_minus_quickchat_cold_median_ms"] = round(sc - qc, 2)
+
     out = {
         "meta": {
             "git_commit": os.environ.get("TTFT_GIT_COMMIT", "73de30bc"),
             "auto_router": "off",
+            "ttft_metric": "native_chat_phase stage=first_text elapsed_ms",
             "fast_ttft": FAST,
             "electron_managed_restart": ELECTRON_RESTART,
         },
+        "summaries": summaries,
         "rows": rows,
     }
     path = Path(os.environ.get("OUTPUT_JSON", "/tmp/opencode-ttft-cold-warm.json"))

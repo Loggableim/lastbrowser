@@ -16,6 +16,15 @@ export function personalityAvatar(personality: unknown): string {
   return typeof personality === 'string' && Object.hasOwn(personalityAvatars, personality)
     ? personalityAvatars[personality as CompanionPersonality] : personalityAvatars.nova;
 }
+const STANDARD_CHAT_COMPANION_KEY = 'lastbrowser.standardChatCompanion.v1';
+type CompanionRecord = { key: string; personality: CompanionPersonality; botName: string; scope: IndependentScope; revision: number };
+function writeStandardChatCompanion(personality: CompanionPersonality, botName: string) {
+  window.localStorage.setItem(STANDARD_CHAT_COMPANION_KEY, JSON.stringify({ personality, botName }));
+}
+function surfaceCompanionError(message: string) {
+  const showToast = (window as unknown as { showToast?: (message: string) => void }).showToast;
+  if (typeof showToast === 'function') showToast(message);
+}
 type Appearance = { personality: CompanionPersonality; botName: string; loaded: boolean; busy: boolean; error: string; retry: () => void; setSelection: (personality: CompanionPersonality, botName: string) => Promise<boolean> };
 const defaultAppearance: Appearance = { personality: 'nova', botName: 'Nova', loaded: false, busy: false, error: '', retry: () => {}, setSelection: async () => false };
 export const CompanionAppearanceContext = createContext<Appearance>(defaultAppearance);
@@ -23,17 +32,21 @@ export function CompanionAppearanceProvider({ children, browserProfileId, worksp
   const [client] = useState(() => new IndependentAssistantClient(window.lastbrowser.independent));
   const key = JSON.stringify([browserProfileId, workspacePath, backendProfileName]);
   const keyRef = useRef(key); keyRef.current = key;
-  const [appearance, setAppearance] = useState<{ key: string; personality: CompanionPersonality; botName: string; scope: IndependentScope; revision: number } | null>(null);
+  const [appearance, setAppearance] = useState<CompanionRecord | null>(null);
+  const committedRef = useRef<CompanionRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [refreshNonce, setRefreshNonce] = useState(0);
   const retry = () => setRefreshNonce(value => value + 1);
   const generation = useRef(0);
   const refreshGeneration = useRef(0);
+  const selectionGeneration = useRef(0);
+  const activeSelection = useRef(0);
   useEffect(() => {
     let alive = true;
     let sequence = 0;
     generation.current++;
+    committedRef.current = null;
     setAppearance(null); setBusy(false); setError('');
     if (!browserProfileId) { setError('Browserprofil ist noch nicht verfügbar.'); return; }
     const refresh = async () => {
@@ -44,10 +57,12 @@ export function CompanionAppearanceProvider({ children, browserProfileId, worksp
         if (!resolved.ok) throw new Error(resolved.error.message);
         const result = await companionRequestDeadline(client.request({ schemaVersion: 1, operation: 'companion', scope: resolved.value.scope, payload: { action: 'get' } }));
         if (!result.ok) throw new Error(result.error.message);
-        if (!alive || request !== sequence || refreshRevision !== refreshGeneration.current) return;
+        if (!alive || request !== sequence || refreshRevision !== refreshGeneration.current || activeSelection.current !== 0) return;
         if (!sameAssistantScope(result.value.scope, resolved.value.scope)) throw new Error('Companion scope changed');
-        setAppearance({ key, ...result.value }); setError('');
-      } catch (reason) { if (alive && request === sequence && refreshRevision === refreshGeneration.current) { setAppearance(null); setError(reason instanceof Error ? reason.message : String(reason)); } }
+        const next = { key, ...result.value };
+        committedRef.current = next;
+        setAppearance(next); setError('');
+      } catch (reason) { if (alive && request === sequence && refreshRevision === refreshGeneration.current && activeSelection.current === 0) { committedRef.current = null; setAppearance(null); setError(reason instanceof Error ? reason.message : String(reason)); } }
     };
     void refresh();
     window.addEventListener('lastbrowser:settings-changed', refresh);
@@ -56,18 +71,38 @@ export function CompanionAppearanceProvider({ children, browserProfileId, worksp
     return () => { alive = false; sequence++; window.removeEventListener('lastbrowser:settings-changed', refresh); window.removeEventListener('lastbrowser:companion-changed', refresh); window.removeEventListener('focus', refresh); };
   }, [key, client, refreshNonce]);
   const setSelection = async (personality: CompanionPersonality, botName: string) => {
-    if (!appearance || appearance.key !== key || busy) return false;
+    const committed = committedRef.current;
+    const trimmed = botName.trim();
+    if (!committed || committed.key !== keyRef.current || !trimmed) return false;
     const lifecycle = generation.current;
+    const requestKey = committed.key;
+    const selectionId = ++selectionGeneration.current;
+    activeSelection.current = selectionId;
     refreshGeneration.current++;
-    setBusy(true); setError('');
+    setError('');
+    setAppearance({ ...committed, personality, botName: trimmed });
     try {
-      const result = await companionRequestDeadline(client.request({ schemaVersion: 1, operation: 'companion', scope: appearance.scope, payload: { action: 'set', personality, botName: botName.trim(), expectedRevision: appearance.revision, clientRequestId: crypto.randomUUID() } }));
-      if (lifecycle !== generation.current || keyRef.current !== key) return false;
+      const result = await companionRequestDeadline(client.request({ schemaVersion: 1, operation: 'companion', scope: committed.scope, payload: { action: 'set', personality, botName: trimmed, expectedRevision: committed.revision, clientRequestId: crypto.randomUUID() } }));
+      if (lifecycle !== generation.current || keyRef.current !== requestKey || selectionId !== selectionGeneration.current) return false;
       if (!result.ok) throw new Error(result.error.message);
-      if (!sameAssistantScope(result.value.scope, appearance.scope)) throw new Error('Companion scope changed');
-      setAppearance({ key, ...result.value }); return true;
-    } catch (reason) { if (lifecycle === generation.current && keyRef.current === key) setError(reason instanceof Error ? reason.message : String(reason)); return false; }
-    finally { if (lifecycle === generation.current && keyRef.current === key) setBusy(false); }
+      if (!sameAssistantScope(result.value.scope, committed.scope)) throw new Error('Companion scope changed');
+      const next = { key: requestKey, ...result.value };
+      committedRef.current = next;
+      setAppearance(next);
+      return true;
+    } catch (reason) {
+      if (lifecycle === generation.current && keyRef.current === requestKey && selectionId === selectionGeneration.current) {
+        committedRef.current = committed;
+        setAppearance(committed);
+        writeStandardChatCompanion(committed.personality, committed.botName);
+        const message = reason instanceof Error ? reason.message : String(reason);
+        setError(message);
+        surfaceCompanionError(message);
+      }
+      return false;
+    } finally {
+      if (activeSelection.current === selectionId) activeSelection.current = 0;
+    }
   };
   const value: Appearance = appearance?.key === key ? { personality: appearance.personality, botName: appearance.botName, loaded: true, busy, error, retry, setSelection }
     : { ...defaultAppearance, error, busy, retry, setSelection };

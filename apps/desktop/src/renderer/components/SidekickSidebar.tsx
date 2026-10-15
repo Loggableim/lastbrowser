@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { readStandardChatCompanion, useStandardChatCompanion, writeStandardChatCompanion } from './CompanionPicker.js';
+import type { SidekickMotion } from '../sidekick-motion.js';
+import { enginePersona } from '../sidekick-motion.js';
+import { AnimatedSidekick } from './AnimatedSidekick.js';
 import { companionDefaultNames, personalityAvatar, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 import { DownloadDockTrigger } from '../NativeDownloads.js';
 import {
@@ -88,6 +91,7 @@ export interface SidekickSidebarProps {
   activeTabUrl?: string;
   openTabUrls?: string[];
   botName?: string;
+  sidekickMotion?: SidekickMotion;
   /** Called when a sleeping (discarded) tab is woken before activation. */
   onWakeTab?: (tabId: string) => void;
   /** Active panel in main view (e.g. browser, kanban, chat, etc.) */
@@ -161,6 +165,7 @@ export function SidekickSidebar({
   activeTabUrl,
   openTabUrls = [],
   botName = 'Nova',
+  sidekickMotion = 'idle',
   onWakeTab,
   activePanel = 'browser',
   onSelectPanel,
@@ -407,6 +412,8 @@ export function SidekickSidebar({
             {/* Nova Dock provides Apple-style fisheye magnification, label reveal animations and PinnedAppGrid integration */}
             <NovaDock
               botName={botName}
+              sidekickPersona={enginePersona(activePersonality)}
+              sidekickMotion={sidekickMotion}
               activePanel={activePanel}
               activeTabUrl={activeTabUrl}
               openTabUrls={openTabUrls}
@@ -850,6 +857,7 @@ export function SidekickSidebar({
               )}
 
               <div className="drawer-section-title" style={{ marginTop: 12 }}>{activeChatName} AI</div>
+              <AnimatedSidekick persona={enginePersona(activePersonality)} state={sidekickMotion} label={`${activeChatName} AI`} />
               <div className="drawer-cards-list">
                 {aiDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;

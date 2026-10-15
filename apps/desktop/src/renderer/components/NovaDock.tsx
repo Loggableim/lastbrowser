@@ -10,6 +10,8 @@ import {
   GripVertical
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
+import { AnimatedSidekick } from './AnimatedSidekick.js';
+import type { EnginePersona, SidekickMotion } from '../sidekick-motion.js';
 import type { LastbrowserPanelId } from '../shell-state.js';
 import {
   type NovaDockSettings,
@@ -31,6 +33,8 @@ import { canAcceptPinnedTabDrag, canPinBrowserTab, resolvePinnedTabDrop } from '
 
 export interface NovaDockProps {
   botName?: string;
+  sidekickPersona?: EnginePersona;
+  sidekickMotion?: SidekickMotion;
   activePanel?: LastbrowserPanelId;
   activeTabUrl?: string;
   openTabUrls?: string[];
@@ -52,6 +56,8 @@ export interface NovaDockProps {
 
 export function NovaDock({
   botName = 'Nova',
+  sidekickPersona = 'nova',
+  sidekickMotion = 'idle',
   activePanel = 'browser',
   activeTabUrl,
   openTabUrls = [],
@@ -392,14 +398,7 @@ export function NovaDock({
             aria-label={`${shownName} AI`}
           >
             <div className="dock-brand-circle">
-              <img
-                src={shownAvatar}
-                alt={shownName}
-                className="dock-popart-avatar"
-                onError={(e) => {
-                  (e.currentTarget as HTMLElement).style.display = 'none';
-                }}
-              />
+              <AnimatedSidekick persona={sidekickPersona} state={sidekickMotion} mini label={`${botName} AI`} />
             </div>
             <span className="dock-online-dot" />
           </button>

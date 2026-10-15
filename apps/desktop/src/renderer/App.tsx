@@ -1,5 +1,6 @@
 import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { clearModelCatalog, prefetchModelCatalog } from './model-catalog-prefetch.js';
+import { sidekickMotionFromRun, type SidekickMotion } from './sidekick-motion.js';
 import {
   BarChart3,
   Bot,
@@ -1283,6 +1284,21 @@ function AppContent(): JSX.Element {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
   const [hasActiveDownloads, setHasActiveDownloads] = useState(false);
   const [sidekickBusy, setSidekickBusy] = useState(false);
+  const [sidekickMotion, setSidekickMotion] = useState<SidekickMotion>('idle');
+  const latestAssistant = [...chatMessages].reverse().find((message) => message.role === 'assistant');
+  const sidekickSawToken = Boolean(latestAssistant?.streaming && latestAssistant.content && latestAssistant.content !== 'Working on it...');
+  const sidekickToolRunning = Array.isArray(latestAssistant?.tool_calls) && latestAssistant.tool_calls.length > 0;
+  const sidekickNeedsInput = Boolean(latestAssistant?.grill_question);
+  useEffect(() => {
+    setSidekickMotion((previous) => sidekickMotionFromRun({
+      runState: chatRunState === 'idle' && sidekickBusy ? 'starting' : chatRunState,
+      sawToken: sidekickSawToken,
+      toolRunning: sidekickToolRunning,
+      needsInput: sidekickNeedsInput,
+      unreachable: /not reachable|nicht erreichbar/i.test(chatError),
+      previous
+    }));
+  }, [chatRunState, sidekickBusy, sidekickSawToken, sidekickToolRunning, sidekickNeedsInput, chatError]);
   const chatUiOwnershipRef = useRef(new ChatUiOwnership());
   const nativeStopRequestedOwnerRef = useRef<number | null>(null);
   const beginChatUiTurn = (sessionId?: string | null): number => {
@@ -5898,6 +5914,7 @@ function AppContent(): JSX.Element {
               >
                 <SidekickSidebar
                   mode={zenFloatingMode}
+                  sidekickMotion={sidekickMotion}
                   researchToolbar={sidebarResearchToolbar}
                   isFloatingOverlay={true}
                   onCloseOverlay={() => setZenSidebarRevealed(false)}
@@ -6028,6 +6045,7 @@ function AppContent(): JSX.Element {
           <div className={`browser-zen-workspace mode-${sidebarMode} dock-pos-${dockSettings.position}`}>
             <SidekickSidebar
               mode={sidebarMode}
+              sidekickMotion={sidekickMotion}
               researchToolbar={sidebarResearchToolbar}
               onRevealZen={handleZenSidebarEnter}
               tabs={tabs}

@@ -217,7 +217,6 @@ import {
   NativeAgentsMain,
   NativeAppstoreMain,
   NativeDiscordMain,
-  NativeGmailMain,
   NativeInsightsMain,
   NativeLogsMain,
   NativeMemoryMain,
@@ -227,6 +226,7 @@ import {
   NativeSkillsMain,
   jsonPreview
 } from './panels/NativeRestPanels.js';
+import { NativeMailMain } from './panels/NativeMailMain.js';
 import { NativeTaskCenterMain } from './panels/TaskPanels.js';
 import { NativeTerminalMain } from './panels/NativeTerminalMain.js';
 import { ControlCenter } from './NativeControlCenter.js';
@@ -7657,7 +7657,7 @@ function BrowserMain({
       case 'logs':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeLogsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'gmail':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeGmailMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeMailMain workspace={activeSpacePath} activeContextItem={activeContextItem} ready={canCallSidekickApi(serviceStatus)} /></PanelErrorBoundary>;
       case 'discord':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeDiscordMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'appstore':

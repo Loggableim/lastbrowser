@@ -311,7 +311,7 @@ export function SidekickSidebar({
   const toolsDrawerItems: DrawerItem[] = useMemo(() => [
     ...(optionalFeaturesLoaded && policy.tasks_enabled ? [{ id: 'task-center' as const, title: locale === 'de' ? 'Aufgaben · Beta' : 'Tasks · Beta', desc: locale === 'de' ? 'Funktioniert derzeit nicht' : 'Not working', iconSrc: brandAssets.sidebarIcons.tasks }] : []),
     { id: 'insights', title: t('sidebar.items.insights.title'), desc: t('sidebar.items.insights.desc'), iconSrc: brandAssets.sidebarIcons.insights },
-    ...(optionalFeaturesLoaded && policy.gmail_ai_enabled ? [{ id: 'gmail' as const, title: 'Gmail AI · Beta', desc: locale === 'de' ? 'Ungetestet' : 'Untested', iconSrc: brandAssets.sidebarIcons.spark }] : []),
+    { id: 'gmail' as const, title: 'Mail', desc: policy.gmail_ai_enabled ? (locale.startsWith('de') ? 'Postfach dieses Spaces · Beta' : 'Inbox for this Space · Beta') : (locale.startsWith('de') ? 'Postfach dieses Spaces' : 'Inbox for this Space'), iconSrc: brandAssets.sidebarIcons.spark },
     ...(optionalFeaturesLoaded && policy.discord_agents_enabled ? [{ id: 'discord' as const, title: 'Discord Agents · Beta', desc: locale === 'de' ? 'Ungetestet' : 'Untested', iconSrc: brandAssets.sidebarIcons.spark }] : []),
     ...(terminalEnabled ? [{ id: 'terminal' as const, title: t('sidebar.items.terminal.title'), desc: t('sidebar.items.terminal.desc'), iconSrc: brandAssets.sidebarIcons.spark }] : []),
     { id: 'logs', title: t('sidebar.items.logs.title'), desc: t('sidebar.items.logs.desc'), iconSrc: brandAssets.sidebarIcons.logs }

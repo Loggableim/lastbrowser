@@ -371,6 +371,7 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
             except queue.Empty:
                 continue
             try:
+                rpc_started = time.monotonic()
                 result = rpc_handler(context, message["method"], message["payload"]) if rpc_handler else None
                 reply = context.envelope("rpc_reply", requestId=message["requestId"],
                     ok=rpc_handler is not None, result=result)
@@ -388,6 +389,8 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
                         pass
                 reply = context.envelope("rpc_reply", requestId=message["requestId"], ok=False,
                     result=None, denialCode=safe_code)
+            logger.debug("native_chat_phase stream=%s stage=rpc_%s elapsed_ms=%.1f",
+                context.stream_id, message.get("method"), (time.monotonic() - rpc_started) * 1000)
             if not rpc_stopped.is_set():
                 try: rpc_done.put_nowait(reply)
                 except queue.Full: return
@@ -457,6 +460,10 @@ def relay_native_chat(context, args, kwargs, put: Callable, *, cancelled=None,
                     raise WorkerError("native_chat_rpc_capacity_or_identity")
                 rpc_pending.add(request_id)
                 rpc_work.put_nowait(message)
+            elif message.get("kind") == "worker_phase":
+                # Phase timing only: the UI never receives worker phase marks.
+                logger.info("native_chat_phase stream=%s stage=worker_%s wall=%.6f",
+                    context.stream_id, message.get("phase"), float(message.get("wall") or 0.0))
             elif message.get("kind") in {"control_ack", "worker_ready", "worker_finished", "worker_fault"}:
                 if message["kind"] == "worker_ready" and not ready_logged:
                     ready_logged = True

@@ -295,6 +295,10 @@ def main():
         global _stage, _failure_sink
         persistent = initial.get("persistent") is True
         context = NativeChatContext.model_validate(initial["context"])
+        def mark(name):
+            # Wall-clock phase boundary for the Parent latency log; never forwarded to the UI.
+            emit(context.envelope("worker_phase", phase=name, wall=time.time()))
+        mark("turn_start")
         def failure_sink(exc):
             # Only allowlisted static diagnostics; never provider exception text.
             reasons = {"Configured path is not available":"configured_path_unavailable",
@@ -311,8 +315,10 @@ def main():
             raise WorkerError("native_fixed_provider_capture_missing")
         _stage = "bind_context"
         bind_native_context(context)
+        mark("bind_done")
         _stage = "decode_turn"
         args, kwargs = decode_turn(context, initial["turn"])
+        mark("decode_done")
         judge_retry = "native_goal_retry" in kwargs
         from web.api import config
         from web.api.models import Session, SESSIONS
@@ -364,6 +370,7 @@ def main():
             from .native_browser_bridge import install_native_browser_bridge
             install_native_browser_bridge(context, rpc)
             from web.api.streaming import _run_agent_streaming, cancel_stream
+        mark("bridges_done")
         stop_command = [None]
         faults = []
         def interrupt():
@@ -478,6 +485,7 @@ def main():
         with router_lock:
             active_turn[0] = handle_frame
         try:
+            mark("engine_started")
             engine.start()
             auxiliary = threading.Thread(target=observe_plain_thread, name="NativeChatSourceObservation")
             auxiliary.start(); auxiliary.join(timeout=1)

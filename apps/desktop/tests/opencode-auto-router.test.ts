@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifyAutoRouterPrompt, mergeAutoRouterTranscript, opencodeAutoRouterEnabled, planOpenCodeAutoRoute, previewAutoRouter } from '../src/renderer/opencode-auto-router.js';
+import { classifyAutoRouterPrompt, listFreeOpenCodeModels, mergeAutoRouterTranscript, opencodeAutoRouterEnabled, planOpenCodeAutoRoute, previewAutoRouter, resolveAutoRouterSend } from '../src/renderer/opencode-auto-router.js';
 
 const free = [
   { provider: 'opencode-go', model: 'glm-5.3-flash' },
@@ -55,5 +55,14 @@ describe('OpenCode auto router prototype', () => {
     expect(complex.kind).toBe('complex');
     expect(complex.score).toBeGreaterThan(simple.score);
     expect(mergeAutoRouterTranscript('A', 'B', 'simple')).toBe('A');
+  });
+
+  it('routes an automatic turn to the free scout and leaves an explicit model alone', () => {
+    const sent = resolveAutoRouterSend({ enabled: true, explicitModel: false, text: 'Hi', freeModels: free });
+    expect(sent?.model).toBe('glm-5.3-flash');
+    expect(resolveAutoRouterSend({ enabled: true, explicitModel: true, text: 'Hi', freeModels: free })).toBeNull();
+    expect(listFreeOpenCodeModels([{ provider_id: 'opencode-go', configured: true, models: [{ id: 'opencode-go:glm-5.3-flash' }] }])).toEqual([
+      { provider: 'opencode-go', model: 'glm-5.3-flash' }
+    ]);
   });
 });

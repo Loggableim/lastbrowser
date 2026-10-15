@@ -31,4 +31,4 @@ Dieselbe Frage, Quickchat und Standard-Chat, Auto gegen ein fest gewähltes Mode
 
 `apps/desktop/src/renderer/opencode-auto-router.ts`
 
-Der laufende Chat ruft den Planer noch nicht. Das Flag ändert die bestehende Modellwahl nicht.
+Der laufende Quickchat und der Standard-Chat rufen den Planer auf, wenn `LASTBROWSER_OPENCODE_AUTO_ROUTER=1` oder `localStorage['lastbrowser.opencodeAutoRouter.v1']==='1'`. Ein expliziter Quickchat-Favorit bleibt. Sonst geht die erste Anfrage an das Scout-Modell. Pro Turn schreibt die Konsole eine Zeile `OPENCODE_AUTO_ROUTER` mit Spur, Modell, Klasse, `ttftScoutMs` und `handoffMs`.

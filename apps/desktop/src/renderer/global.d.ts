@@ -192,6 +192,7 @@ declare global {
 declare global {
   interface Window {
     lastbrowser: {
+      opencodeAutoRouter?: boolean;
       independent: IndependentTransport;
       quickChat: {
         start: (request: import('../main/quick-chat-controller.js').QuickChatStartRequest) => Promise<{

@@ -292,6 +292,20 @@ export class IndependentController {
       || result.mainGeneration !== host.mainGeneration || result.runnerGeneration !== runnerGeneration)
       throw new BrowserHostError('unauthorized', 'Native browser Parent writer proof changed');
   }
+  async rebind(): Promise<void> {
+    if (this.closing) return;
+    if (this.generation && this.host) {
+      try {
+        const response = object(await this.limited(this.options.apiRequest('browser.heartbeat', null,
+          { mainGeneration: this.host.mainGeneration, runnerGeneration: this.generation }, '')));
+        if (response.runnerGeneration === this.generation) return;
+      } catch {
+        // The process that owned this generation is gone.
+      }
+      try { await this.disconnect('sidekick_restarted'); } catch { /* The next handshake still has to run. */ }
+    }
+    await this.start();
+  }
   async start(): Promise<void> {
     if (this.closing) throw new Error('Independent controller is shutting down');
     if (this.generation && this.gateway) return;

@@ -1,0 +1,1 @@
+Windows beta.8 preview not available in Cloud VM (Cid local path only).

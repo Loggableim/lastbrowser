@@ -21,9 +21,26 @@ LastBrowser-Nutzer können ein lokales Modell aus Ollama, llama.cpp oder LM Stud
 
 Eine Anfrage darf nur auf einer Stufe landen, die der Nutzer freigegeben hat. Sensible Inhalte, etwa Zugangsdaten, private Dokumente und als vertraulich markierter Space-Kontext, gehen nie in Stufe 4. Das sagt die Oberfläche vor dem Senden in Klartext: der Host sieht den Prompt, der Vermittler nicht.
 
+Innerhalb eines privaten Organisations-Pools (nächster Abschnitt) gelten zuerst die Regeln der Organisation. Nach außen zählt der Pool als eine Gruppe, deren Stufe der Admin festlegt.
+
+## Private Organisations-Pools
+
+Eine Schule, eine Uni oder eine Firma kann einen eigenen Worker-Pool betreiben. Rechner der Organisation stellen Modelle bereit, der Pool ist über eine eigene API-URL erreichbar. Diese URL tritt für die Mitglieder an die Stelle des öffentlichen Vermittlers. Die Prompts bleiben im eigenen Netz, solange der Pool geschlossen bleibt.
+
+Admins der Organisation legen fest, wer beitreten darf: Mitgliederverwaltung mit Rollen, zum Beispiel wer Rechenzeit beisteuert, wer Anfragen stellt und wer den Pool verwaltet. Der Beitritt läuft per Einladung, kein offener Beitritt von außen.
+
+Ein solcher Pool hat zwei Betriebsarten:
+
+- Geschlossen. Nur Mitglieder der Organisation. Keine Verbindung nach außen, Anfragen verlassen das Netz nicht.
+- Föderiert. Der Pool hängt sich an den großen Pool an. Regeln der Organisation legen fest, was hinausgehen darf: welche Modelle, welche Vertrauensstufe, welche Inhaltsklassen. Was die Regeln nicht erlauben, bleibt lokal.
+
+Im geschlossenen Fall ist die Organisation selbst der Vermittler. Im föderierten Fall entscheidet der Admin zusätzlich, ob nur ausgehende oder auch eingehende Jobs erlaubt sind. Eingehende Jobs eines fremden Nutzers sehen den Prompt wie jeder andere Host, der Vermittler nicht.
+
 ## Transport
 
 Die Nutzlast ist Ende-zu-Ende verschlüsselt zwischen Nutzer und Host. Der Vermittler leitet nur zu und sieht den Klartext nicht. Metadaten für die Vermittlung bleiben klein: Stufe, Modellname, ungefähre Länge, keine Prompt-Kopie.
+
+In einem geschlossenen Organisations-Pool ist die Organisation selbst der Vermittler, die Ende-zu-Ende-Verschlüsselung bleibt gleich. Im föderierten Fall sitzt zwischen Organisation und großem Pool ein weiterer Übergang, der die Regeln der Organisation durchsetzt.
 
 ## Ausgleich
 
@@ -44,7 +61,7 @@ Der Host ist für das verantwortlich, was auf seiner Maschine ankommt und welche
 - Exo bündelt vor allem eigene Geräte zu einem lokalen Cluster.
 - NVIDIA PAIR (Personal AI Router) verbindet Ollama, llama.cpp und LM Studio auf explizit gekoppelten Geräten im eigenen Netz. Eine Anfrage läuft ganz auf einem Gerät. Kopplung ist gegenseitig, Verkehr zwischen Geräten ist verschlüsselt. Ein öffentlicher Pool und eine Credit-Abrechnung sind dort nicht das Modell.
 
-Der LastBrowser-Pool übernimmt von PAIR die Idee „ein lokales Modell, eine ganze Anfrage, ein gewählter Host“. Von Horde die freiwillige Stufe und das Punktekonto. Er teilt ein Modell nicht wie Petals auf mehrere Unbekannte auf.
+Der LastBrowser-Pool übernimmt von PAIR die Idee „ein lokales Modell, eine ganze Anfrage, ein gewählter Host“. Von Horde die freiwillige Stufe und das Punktekonto. Er teilt ein Modell nicht wie Petals auf mehrere Unbekannte auf. Der private Organisations-Pool überträgt die PAIR-Idee von gekoppelten Geräten auf eine ganze Organisation mit eigener API-URL und optionaler Föderation.
 
 ## Auto-Router
 
@@ -61,4 +78,4 @@ Die ID steht in `lastbrowser.com/assets/js/roadmap-catalog.js`. Die übersetzten
 
 ## Nicht in diesem Schritt
 
-Kein Server, keine Settings-Schaltfläche, kein Verschlüsselungsprototyp, keine Credit-Buchhaltung, kein beta.10.
+Kein Server, keine Settings-Schaltfläche, kein Verschlüsselungsprototyp, keine Credit-Buchhaltung, kein beta.10. Auch kein zweiter Vermittler, keine Mitgliederverwaltung und keine Föderationsregeln.

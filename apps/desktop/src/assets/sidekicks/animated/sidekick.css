@@ -1,0 +1,25 @@
+.sidekick { width: 180px; height: 180px; display: grid; place-items: center; }
+.sidekick svg { width: 100%; height: 100%; overflow: visible; }
+.sidekick-mini { width: 40px; height: 40px; }
+.sidekick .body { transform-origin: 140px 160px; animation: sidekick-idle 3.2s ease-in-out infinite; }
+.sidekick .eyes, .sidekick .mouth { transform-origin: 140px 140px; }
+.sidekick[data-state="thinking"] .body { animation: sidekick-think 1.6s ease-in-out infinite; }
+.sidekick[data-state="working"] .body { animation: sidekick-work 0.7s ease-in-out infinite; }
+.sidekick[data-state="done"] .mouth { d: path('M112 150c16 22 42 22 58 0'); }
+.sidekick[data-state="done"] .ring { stroke: #3dde8a; }
+.sidekick[data-state="needs_input"] .body { animation: sidekick-ask 1.8s ease-in-out infinite; }
+.sidekick[data-state="error"] .body { animation: sidekick-error 0.45s linear 1; }
+.sidekick[data-state="error"] .ring, .sidekick[data-state="error"] .mouth { stroke: #ff5a6a; }
+.sidekick-orion .body { animation-duration: 4.8s; }
+.sidekick-patch[data-state="working"] .tool { animation: sidekick-tool 0.7s ease-in-out infinite; }
+.sidekick-spark[data-state="working"] .sparks { animation: sidekick-spark 0.8s ease-in-out infinite; }
+.sidekick-zen .body { animation-duration: 6.4s; }
+.sidekick-paused .body, .sidekick-paused .tool, .sidekick-paused .sparks,
+.sidekick-reduced .body, .sidekick-reduced .tool, .sidekick-reduced .sparks { animation: none; }
+@keyframes sidekick-idle { 50% { transform: translateY(-6px); } }
+@keyframes sidekick-think { 50% { transform: translateY(-4px) rotate(-2deg); } }
+@keyframes sidekick-work { 50% { transform: translateY(-3px) rotate(2deg); } }
+@keyframes sidekick-ask { 50% { transform: rotate(-6deg); } }
+@keyframes sidekick-error { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+@keyframes sidekick-tool { 50% { transform: rotate(-18deg); } }
+@keyframes sidekick-spark { 50% { opacity: 0.35; transform: translateY(-6px); } }

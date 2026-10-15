@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sidekick animation demo</title>
+  <link rel="stylesheet" href="sidekick.css">
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; background: #101522; color: #e8f2ff; }
+    main { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    h1 { font-size: 22px; }
+    .grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+    figure { margin: 0; text-align: center; }
+    figcaption { margin-top: 8px; }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 24px; }
+    button { background: #1c2a44; color: inherit; border: 1px solid #345; border-radius: 8px; padding: 8px 12px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Sidekick states</h1>
+    <div class="controls" id="controls"></div>
+    <div class="grid" id="cast"></div>
+  </main>
+  <script type="module">
+    import { createSidekick } from './sidekick.js';
+    const names = ['nova', 'orion', 'patch', 'spark', 'zen'];
+    const states = ['idle', 'thinking', 'working', 'done', 'needs_input', 'error'];
+    const cast = document.querySelector('#cast');
+    const actors = names.map(name => {
+      const figure = document.createElement('figure');
+      const host = document.createElement('div');
+      host.dataset.sidekick = name;
+      const caption = document.createElement('figcaption');
+      caption.textContent = name[0].toUpperCase() + name.slice(1);
+      figure.append(host, caption);
+      cast.append(figure);
+      return createSidekick(host);
+    });
+    const controls = document.querySelector('#controls');
+    for (const state of states) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = state;
+      button.addEventListener('click', () => actors.forEach(actor => actor.setState(state)));
+      controls.append(button);
+    }
+    const mini = document.createElement('button');
+    mini.type = 'button';
+    mini.textContent = 'mini 40px';
+    let small = false;
+    mini.addEventListener('click', () => { small = !small; actors.forEach(actor => actor.setMini(small)); });
+    controls.append(mini);
+  </script>
+</body>
+</html>

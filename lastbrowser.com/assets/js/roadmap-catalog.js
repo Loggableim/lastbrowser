@@ -36,5 +36,7 @@ export const roadmapCatalog = [
   ['automatic-model-routing', 'Modellwahl nach Aufgabe'],
   ['cost-estimates', 'Kostenprognose pro Auftrag'],
   ['extension-health', 'Erweiterungs-Gesundheitsanzeige'],
-  ['custom-shortcuts', 'Eigene Schnellbefehle und Tastenkürzel']
+  ['custom-shortcuts', 'Eigene Schnellbefehle und Tastenkürzel'],
+  ['sidekick-local-images', 'Lokale Bilder durch Sidekicks'],
+  ['imagine-plugin', 'Plugin Imagine']
 ];

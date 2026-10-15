@@ -209,6 +209,7 @@ import { canCallSidekickApi } from './runtime-readiness.js';
 import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
 import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
 import { StartupScreen } from './startup/StartupScreen.js';
+import { StartupAnimationLayer } from './startup/StartupAnimationLayer.js';
 import { FirstLaunchCompletion } from './startup/FirstLaunchCompletion.js';
 import { chooseStartupSound, playStartupSound, readStartupPreferences, startupAnimations, useStartupPreferences, type StartupSound } from './startup/startup-preferences.js';
 import { reduceStartupOpeningState, type StartupOpeningState } from './startup/startup-opening-state.js';
@@ -1253,6 +1254,9 @@ function AppContent(): JSX.Element {
   const [startupLaunchIcon, setStartupLaunchIcon] = useState<StartupIconId | null>(null);
   const [startupRetryVersion, setStartupRetryVersion] = useState(0);
   const [startupReadyAcknowledged, setStartupReadyAcknowledged] = useState(false);
+  const [startupAnimDismissed, setStartupAnimDismissed] = useState(false);
+  const startupUnlockedThisLaunch = useRef(false);
+  const dismissStartupAnimation = useCallback(() => setStartupAnimDismissed(true), []);
   const [startupOpeningState, setStartupOpeningState] = useState<StartupOpeningState>('idle');
   const startupPreferences = useStartupPreferences();
   const [startupOpeningDurationMs, setStartupOpeningDurationMs] = useState<number | undefined>(undefined);
@@ -1748,6 +1752,7 @@ function AppContent(): JSX.Element {
       const auth = await window.lastbrowser.sidekick.getAccessAuthStatus();
       if (!isVerifiedAccessAuthLogin(auth)) throw new Error('Login did not create an authenticated session.');
       const state = accessAuthGateRef.current!.dispatch({ type: 'login-success', generation: loginGeneration });
+      startupUnlockedThisLaunch.current = true;
       if (state.generation !== loginGeneration || loginProfileId !== activeProfileIdRef.current || state.required || !state.checked) return;
       const openingPreferences = readStartupPreferences();
       const openingSound = openingPreferences.soundEnabled ? chooseStartupSound(openingPreferences) : null;
@@ -5726,7 +5731,9 @@ function AppContent(): JSX.Element {
     />
   ) : null;
   if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged) {
+    const showStartupAnimation = accessAuthChecked && !accessAuthRequired && !startupFailureStage && !startupAnimDismissed;
     return (
+      <>
       <StartupScreen
         locale={locale}
         launchIcon={startupLaunchIcon}
@@ -5735,6 +5742,8 @@ function AppContent(): JSX.Element {
         onRetry={startupFailureStage === 'session' ? retryAccessAuthStatus : retryStartupChecks}
         retryContent={accessAuthForm}
       />
+      {showStartupAnimation && <StartupAnimationLayer locale={locale} phase={startupPhase} afterUnlock={startupUnlockedThisLaunch.current} soundId={startupOpeningSoundId} onFinished={dismissStartupAnimation} />}
+      </>
     );
   }
 

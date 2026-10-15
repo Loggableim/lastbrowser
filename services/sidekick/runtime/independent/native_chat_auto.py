@@ -438,11 +438,16 @@ class NativeAutoBridge:
 
     def _wrap_proven(self, client, *, agent, purpose=None, allow_subscription_fallback=True):
         from openai import OpenAI
-        from anthropic import Anthropic
         from runtime.gemini_native_adapter import GeminiNativeClient
         from runtime.antigravity_cloudcode_adapter import AntigravityCloudCodeClient
         self.validate_selection(agent.model, agent.provider, api_mode=agent.api_mode)
-        accepted_types = {OpenAI, Anthropic, GeminiNativeClient}
+        accepted_types = {OpenAI, GeminiNativeClient}
+        # The Anthropic SDK alone costs seconds to import. Only an Anthropic client
+        # needs it, and such a client already has its module loaded, so the exact
+        # type-identity check below is unchanged.
+        if type(client).__module__.partition(".")[0] == "anthropic":
+            from anthropic import Anthropic
+            accepted_types.add(Anthropic)
         antigravity_binding = None
         try:
             from .native_sdk_broker import get_bound_native_sdk_bridge

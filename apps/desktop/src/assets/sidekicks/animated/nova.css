@@ -1,0 +1,810 @@
+
+    :root {
+      --bg-deep: #06101a;
+      --bg-panel: #0b1928;
+      --bg-card: #0f2236;
+      --border-subtle: rgba(0, 229, 255, 0.16);
+      --cyan: #00e5ff;
+      --cyan-soft: rgba(0, 229, 255, 0.25);
+      --red: #ff334b;
+      --green: #10b981;
+      --amber: #38bdf8;
+      --text-main: #f0f7ff;
+      --text-muted: #8ba3be;
+      --transition-smooth: 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(0, 212, 255, 0.12), transparent 55%),
+        radial-gradient(circle at 85% 80%, rgba(124, 58, 237, 0.08), transparent 45%),
+        var(--bg-deep);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem 1.25rem 4rem;
+      line-height: 1.5;
+    }
+
+    header {
+      text-align: center;
+      max-width: 760px;
+      margin-bottom: 2rem;
+    }
+
+    .brand-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.3rem 0.85rem;
+      border-radius: 999px;
+      background: rgba(0, 229, 255, 0.1);
+      border: 1px solid rgba(0, 229, 255, 0.28);
+      color: var(--cyan);
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-size: clamp(1.6rem, 3vw, 2.25rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+    }
+
+    header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .workspace {
+      width: 100%;
+      max-width: 960px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (min-width: 820px) {
+      .workspace {
+        grid-template-columns: 1.15fr 0.85fr;
+      }
+    }
+
+    .card {
+      background: linear-gradient(180deg, rgba(16, 36, 56, 0.9), rgba(9, 22, 35, 0.95));
+      border: 1px solid var(--border-subtle);
+      border-radius: 20px;
+      padding: 1.75rem;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.25rem;
+    }
+
+    .card-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .state-pill {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      padding: 0.25rem 0.7rem;
+      border-radius: 8px;
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid rgba(0, 229, 255, 0.3);
+      color: var(--cyan);
+      transition: opacity 200ms ease, transform 200ms ease;
+    }
+
+    /* Stage for main 128x128 Avatar */
+    .stage-main {
+      position: relative;
+      min-height: 240px;
+      border-radius: 16px;
+      background:
+        radial-gradient(circle at 50% 50%, #0d273d 0%, #06121e 72%, #040b13 100%);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+      overflow: hidden;
+    }
+
+    .stage-caption {
+      margin-top: 1rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-align: center;
+      min-height: 1.4em;
+    }
+
+    /* Simulated Browser Pin-Bar for 40x40 Mini Avatar */
+    .browser-bar-demo {
+      margin-top: 1.25rem;
+      background: #071320;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 14px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .url-bar-mock {
+      flex: 1;
+      background: #0c1d30;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      border-radius: 8px;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+
+    .url-bar-mock span.protocol {
+      color: var(--cyan);
+      font-weight: 600;
+    }
+
+    .pin-slot {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding-left: 0.5rem;
+      border-left: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .pin-label {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      text-align: right;
+      line-height: 1.2;
+    }
+
+    .pin-label strong {
+      display: block;
+      color: var(--text-main);
+      font-size: 0.8rem;
+    }
+
+    /* Controls */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.65rem;
+      margin-bottom: 1.25rem;
+    }
+
+    button.state-btn {
+      appearance: none;
+      background: rgba(18, 41, 64, 0.75);
+      border: 1px solid rgba(0, 229, 255, 0.18);
+      color: var(--text-main);
+      padding: 0.75rem 0.9rem;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      transition: transform 160ms ease, opacity 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    button.state-btn:hover {
+      background: rgba(24, 55, 86, 0.9);
+      border-color: rgba(0, 229, 255, 0.45);
+      transform: translateY(-1px);
+    }
+
+    button.state-btn:active {
+      transform: translateY(0);
+    }
+
+    button.state-btn.is-active {
+      background: rgba(0, 229, 255, 0.16);
+      border-color: var(--cyan);
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.18);
+    }
+
+    button.state-btn .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--text-muted);
+      transition: transform 200ms ease, opacity 200ms ease;
+    }
+
+    button.state-btn.is-active .dot {
+      background: var(--cyan);
+      transform: scale(1.3);
+    }
+
+    .demo-btn {
+      width: 100%;
+      appearance: none;
+      background: linear-gradient(135deg, #00c6ff 0%, #0072ff 100%);
+      color: #ffffff;
+      border: none;
+      border-radius: 12px;
+      padding: 0.9rem 1.2rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      box-shadow: 0 8px 24px rgba(0, 140, 255, 0.35);
+      transition: transform 180ms ease, opacity 180ms ease;
+    }
+
+    .demo-btn:hover {
+      transform: translateY(-1px);
+      opacity: 0.95;
+    }
+
+    .demo-btn.is-running {
+      background: linear-gradient(135deg, #f43f5e 0%, #be123c 100%);
+      box-shadow: 0 8px 24px rgba(244, 63, 94, 0.35);
+    }
+
+    .meta-box {
+      margin-top: 1.25rem;
+      padding: 0.9rem 1rem;
+      border-radius: 12px;
+      background: rgba(6, 16, 26, 0.65);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+    }
+
+    .meta-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .meta-row code {
+      color: var(--cyan);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    /* ==========================================================================
+       NOVA AVATAR & STATE MACHINE STYLES (transform & opacity + stroke-dashoffset)
+       ========================================================================== */
+    .nova-host {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 128px;
+      height: 128px;
+      position: relative;
+      user-select: none;
+    }
+
+    .nova-host.nova-mini {
+      width: 40px;
+      height: 40px;
+    }
+
+    .nova-svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      display: block;
+    }
+
+    /* Transform origins for SVG layers (128x128 coordinate space) */
+    .nova-svg #glow,
+    .nova-svg #status-ring,
+    .nova-svg .ring-spin-track,
+    .nova-svg .nova-rig,
+    .nova-svg #head,
+    .nova-svg #visor,
+    .nova-svg #mouth {
+      transform-origin: 64px 64px;
+    }
+
+    .nova-svg #eye-left,
+    .nova-svg .eye-left-blink {
+      transform-origin: 51px 60px;
+    }
+
+    .nova-svg #eye-right,
+    .nova-svg .eye-right-blink {
+      transform-origin: 75px 60px;
+    }
+
+    .nova-svg #headphone-left {
+      transform-origin: 34px 60px;
+    }
+
+    .nova-svg #headphone-right {
+      transform-origin: 94px 66px;
+    }
+
+    .nova-svg #antenna-light {
+      transform-origin: 83px 34px;
+    }
+
+    .nova-svg #badge,
+    .nova-svg .badge-item {
+      transform-origin: 98px 96px;
+    }
+
+    /* Smooth base transitions (150-300 ms) so state changes never snap abruptly */
+    .nova-svg #glow,
+    .nova-svg .glow-error,
+    .nova-svg .glow-done,
+    .nova-svg .ring-base,
+    .nova-svg .ring-runner,
+    .nova-svg .ring-error,
+    .nova-svg .ring-done,
+    .nova-svg .nova-rig,
+    .nova-svg #head,
+    .nova-svg #visor,
+    .nova-svg #eye-left,
+    .nova-svg #eye-right,
+    .nova-svg .eye-normal,
+    .nova-svg .eye-happy,
+    .nova-svg #mouth,
+    .nova-svg .mouth-smile,
+    .nova-svg .mouth-small,
+    .nova-svg .mouth-sad,
+    .nova-svg #headphone-left,
+    .nova-svg #headphone-right,
+    .nova-svg .thinking-dots,
+    .nova-svg .led-bulb,
+    .nova-svg #badge,
+    .nova-svg .badge-item {
+      transition:
+        transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 220ms ease;
+      will-change: transform, opacity;
+    }
+
+    /* Default layer opacities */
+    .nova-svg #glow {
+      opacity: 0.5;
+      transform: scale(1);
+    }
+    .nova-svg .glow-error,
+    .nova-svg .glow-done {
+      opacity: 0;
+    }
+
+    .nova-svg .ring-base {
+      opacity: 0.55;
+    }
+    .nova-svg .ring-runner {
+      opacity: 0;
+    }
+    .nova-svg .ring-error {
+      opacity: 0;
+    }
+    .nova-svg .ring-done {
+      opacity: 0;
+    }
+
+    .nova-svg .eye-normal {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .nova-svg .eye-happy {
+      opacity: 0;
+      transform: scale(0.7);
+    }
+
+    .nova-svg .mouth-smile {
+      opacity: 1;
+      transform: scale(1);
+    }
+    .nova-svg .mouth-small {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    .nova-svg .mouth-sad {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+
+    .nova-svg .thinking-dots {
+      opacity: 0;
+      transform: translateY(5px) scale(0.85);
+    }
+
+    .nova-svg .led-bulb {
+      opacity: 0.35;
+      transform: scale(1);
+    }
+
+    .nova-svg #badge {
+      opacity: 0;
+      transform: scale(0.25);
+    }
+
+    .nova-svg .badge-item {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+
+    /* Blink transition on inner eye wrappers */
+    .nova-svg .eye-left-blink,
+    .nova-svg .eye-right-blink {
+      transition: transform 110ms ease-in-out;
+    }
+    .nova-host.is-blinking .eye-left-blink,
+    .nova-host.is-blinking .eye-right-blink {
+      transform: scaleY(0.08);
+    }
+
+    /* ==========================================================================
+       STATE 1: IDLE
+       - Gentle breathing (scale 1 -> 1.02)
+       - Random blink every 3-6 s (via .is-blinking class)
+       - Soft glow
+       ========================================================================== */
+    .nova-host[data-state="idle"] .nova-svg #glow {
+      opacity: 0.45;
+      animation: nova-idle-glow 3.6s ease-in-out infinite;
+    }
+
+    .nova-host[data-state="idle"] .nova-svg .nova-rig {
+      animation: nova-idle-breathe 3.6s ease-in-out infinite;
+    }
+
+    @keyframes nova-idle-breathe {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    @keyframes nova-idle-glow {
+      0%, 100% { opacity: 0.38; transform: scale(0.98); }
+      50% { opacity: 0.56; transform: scale(1.02); }
+    }
+
+    /* ==========================================================================
+       STATE 2: THINKING
+       - Eyes wander upwards & to the side
+       - Three pulsing thinking dots appear above the head
+       - Glow pulses slowly
+       ========================================================================== */
+    .nova-host[data-state="thinking"] .nova-svg #glow {
+      animation: nova-thinking-glow 2.4s ease-in-out infinite;
+    }
+
+    .nova-host[data-state="thinking"] .nova-svg .nova-rig {
+      transform: translateY(-1px) rotate(-2deg);
+    }
+
+    .nova-host[data-state="thinking"] .nova-svg #eye-left,
+    .nova-host[data-state="thinking"] .nova-svg #eye-right {
+      animation: nova-thinking-eyes 2.8s ease-in-out infinite;
+    }
+
+    .nova-host[data-state="thinking"] .nova-svg .mouth-smile {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    .nova-host[data-state="thinking"] .nova-svg .mouth-small {
+      opacity: 1;
+      transform: translate(2px, 1px) scale(1);
+    }
+
+    .nova-host[data-state="thinking"] .nova-svg .thinking-dots {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+
+    .nova-host[data-state="thinking"] .nova-svg .think-dot-1 {
+      transform-origin: 52px 15px;
+      animation: nova-dot-pulse 1.35s ease-in-out infinite 0s;
+    }
+    .nova-host[data-state="thinking"] .nova-svg .think-dot-2 {
+      transform-origin: 64px 12px;
+      animation: nova-dot-pulse 1.35s ease-in-out infinite 0.22s;
+    }
+    .nova-host[data-state="thinking"] .nova-svg .think-dot-3 {
+      transform-origin: 76px 15px;
+      animation: nova-dot-pulse 1.35s ease-in-out infinite 0.44s;
+    }
+
+    @keyframes nova-thinking-glow {
+      0%, 100% { opacity: 0.35; transform: scale(0.95); }
+      50% { opacity: 0.88; transform: scale(1.07); }
+    }
+
+    @keyframes nova-thinking-eyes {
+      0%, 100% { transform: translate(3.5px, -4.5px); }
+      45% { transform: translate(-3.5px, -5px); }
+      75% { transform: translate(4px, -3.5px); }
+    }
+
+    @keyframes nova-dot-pulse {
+      0%, 100% { opacity: 0.32; transform: translateY(0) scale(0.8); }
+      50% { opacity: 1; transform: translateY(-3px) scale(1.22); }
+    }
+
+    /* ==========================================================================
+       STATE 3: WORKING
+       - Antenna & headphone lights blink in rhythm
+       - Head bobs slightly
+       - Turquoise ring runs around the avatar (stroke-dashoffset)
+       ========================================================================== */
+    .nova-host[data-state="working"] .nova-svg #glow {
+      opacity: 0.75;
+      transform: scale(1.03);
+    }
+
+    .nova-host[data-state="working"] .nova-svg .ring-runner {
+      opacity: 1;
+      animation: nova-ring-dash 1.25s linear infinite;
+    }
+
+    .nova-host[data-state="working"] .nova-svg .nova-rig {
+      animation: nova-working-bob 0.65s ease-in-out infinite;
+    }
+
+    .nova-host[data-state="working"] .nova-svg .led-bulb {
+      animation: nova-led-blink 0.65s ease-in-out infinite;
+    }
+
+    .nova-host[data-state="working"] .nova-svg .led-bulb-alt {
+      animation: nova-led-blink 0.65s ease-in-out infinite 0.32s;
+    }
+
+    @keyframes nova-ring-dash {
+      0% {
+        stroke-dashoffset: 352;
+        transform: rotate(0deg);
+      }
+      100% {
+        stroke-dashoffset: 0;
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes nova-working-bob {
+      0%, 100% { transform: translateY(0) rotate(0deg) scale(1); }
+      50% { transform: translateY(2.4px) rotate(-1.5deg) scale(1.01, 0.99); }
+    }
+
+    @keyframes nova-led-blink {
+      0%, 100% { opacity: 0.25; transform: scale(0.88); }
+      50% { opacity: 1; transform: scale(1.24); }
+    }
+
+    /* ==========================================================================
+       STATE 4: DONE
+       - Short hop with Squash & Stretch
+       - Eyes become happy arcs ^^
+       - Green checkmark badge pops up
+       - Returns automatically to idle after 1.5 s (handled in JS)
+       ========================================================================== */
+    .nova-host[data-state="done"] .nova-svg #glow {
+      opacity: 0.85;
+      transform: scale(1.06);
+    }
+    .nova-host[data-state="done"] .nova-svg .glow-done {
+      opacity: 0.65;
+    }
+    .nova-host[data-state="done"] .nova-svg .ring-done {
+      opacity: 0.9;
+    }
+
+    .nova-host[data-state="done"] .nova-svg .nova-rig {
+      animation: nova-done-hop 680ms cubic-bezier(0.22, 1, 0.36, 1) 1 forwards;
+    }
+
+    .nova-host[data-state="done"] .nova-svg .eye-normal {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    .nova-host[data-state="done"] .nova-svg .eye-happy {
+      opacity: 1;
+      transform: translateY(-1px) scale(1.08);
+    }
+
+    .nova-host[data-state="done"] .nova-svg .mouth-smile {
+      transform: translateY(1px) scale(1.16);
+    }
+
+    .nova-host[data-state="done"] .nova-svg #badge {
+      opacity: 1;
+      transform: scale(1);
+      transition:
+        transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1),
+        opacity 180ms ease;
+    }
+
+    .nova-host[data-state="done"] .nova-svg .badge-done {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    @keyframes nova-done-hop {
+      0% { transform: translateY(0) scale(1, 1); }
+      18% { transform: translateY(4px) scale(1.08, 0.91); }
+      45% { transform: translateY(-11px) scale(0.94, 1.07); }
+      68% { transform: translateY(2.5px) scale(1.04, 0.96); }
+      85% { transform: translateY(-1.5px) scale(0.99, 1.01); }
+      100% { transform: translateY(0) scale(1, 1); }
+    }
+
+    /* ==========================================================================
+       STATE 5: NEEDS_INPUT
+       - Head tilted slightly (8°)
+       - "?" badge gently pulsing
+       - Eyes look straight forward at the user
+       ========================================================================== */
+    .nova-host[data-state="needs_input"] .nova-svg #glow {
+      opacity: 0.65;
+    }
+
+    .nova-host[data-state="needs_input"] .nova-svg .nova-rig {
+      transform: rotate(8deg);
+    }
+
+    .nova-host[data-state="needs_input"] .nova-svg #eye-left,
+    .nova-host[data-state="needs_input"] .nova-svg #eye-right {
+      transform: translate(0px, 0px) scale(1.07);
+    }
+
+    .nova-host[data-state="needs_input"] .nova-svg .mouth-smile {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    .nova-host[data-state="needs_input"] .nova-svg .mouth-small {
+      opacity: 1;
+      transform: scale(1.05);
+    }
+
+    .nova-host[data-state="needs_input"] .nova-svg #badge {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .nova-host[data-state="needs_input"] .nova-svg .badge-input {
+      opacity: 1;
+      animation: nova-badge-pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes nova-badge-pulse {
+      0%, 100% { transform: scale(1); opacity: 0.92; }
+      50% { transform: scale(1.14); opacity: 1; }
+    }
+
+    /* ==========================================================================
+       STATE 6: ERROR
+       - Short flinch/shake (300 ms)
+       - Red ring
+       - Small red badge remains visible
+       ========================================================================== */
+    .nova-host[data-state="error"] .nova-svg .glow-error {
+      opacity: 0.85;
+    }
+
+    .nova-host[data-state="error"] .nova-svg .ring-error {
+      opacity: 1;
+    }
+
+    .nova-host[data-state="error"] .nova-svg .nova-rig {
+      animation: nova-error-shake 300ms cubic-bezier(0.36, 0.07, 0.19, 0.97) 1;
+    }
+
+    .nova-host[data-state="error"] .nova-svg .mouth-smile {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    .nova-host[data-state="error"] .nova-svg .mouth-sad {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .nova-host[data-state="error"] .nova-svg #badge {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .nova-host[data-state="error"] .nova-svg .badge-error {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    @keyframes nova-error-shake {
+      0%, 100% { transform: translateX(0) rotate(0deg); }
+      20% { transform: translateX(-6px) rotate(-4deg); }
+      40% { transform: translateX(6px) rotate(4deg); }
+      60% { transform: translateX(-4.5px) rotate(-2.5deg); }
+      80% { transform: translateX(3.5px) rotate(2deg); }
+    }
+
+    /* ==========================================================================
+       MINI MODE (40x40px Pin-Bar):
+       Only Ring, Glow, and Badge are animated; character rig stays calm & crisp
+       ========================================================================== */
+    .nova-host.nova-mini .nova-svg .nova-rig,
+    .nova-host.nova-mini .nova-svg #eye-left,
+    .nova-host.nova-mini .nova-svg #eye-right,
+    .nova-host.nova-mini .nova-svg .led-bulb,
+    .nova-host.nova-mini .nova-svg .led-bulb-alt {
+      animation: none !important;
+      transform: none !important;
+    }
+
+    .nova-host.nova-mini .nova-svg .thinking-dots {
+      opacity: 0 !important;
+      animation: none !important;
+    }
+
+    .nova-host.nova-mini .nova-svg #badge {
+      transform-origin: 96px 94px;
+    }
+    .nova-host.nova-mini[data-state="done"] .nova-svg #badge,
+    .nova-host.nova-mini[data-state="needs_input"] .nova-svg #badge,
+    .nova-host.nova-mini[data-state="error"] .nova-svg #badge {
+      transform: scale(1.22);
+    }
+
+    /* ==========================================================================
+       INTERSECTION OBSERVER PAUSE & PREFERS-REDUCED-MOTION
+       ========================================================================== */
+    .nova-host.is-offscreen *,
+    .nova-host.is-offscreen *::before,
+    .nova-host.is-offscreen *::after {
+      animation-play-state: paused !important;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .nova-host *,
+      .nova-host *::before,
+      .nova-host *::after {
+        animation: none !important;
+        transition-duration: 0.01ms !important;
+      }
+
+      /* Keep static visual indicators for states without movement */
+      .nova-host[data-state="working"] .nova-svg .ring-runner {
+        opacity: 1;
+        stroke-dasharray: none;
+      }
+      .nova-host[data-state="needs_input"] .nova-svg .nova-rig {
+        transform: none !important;
+      }
+    }
+  

@@ -153,7 +153,8 @@ class NativeChatHandle(WorkerHandle):
 class NativeChatHost:
     def __init__(self, context: NativeChatContext, *, python_executable=None):
         self.context = NativeChatContext.model_validate_json(canonical_json(context))
-        self.python_executable = canonical_path(python_executable or sys.executable)
+        from .worker_host import resolve_worker_python_executable
+        self.python_executable = canonical_path(python_executable or resolve_worker_python_executable())
         self.sidekick_root = Path(__file__).resolve().parents[2]
 
     def start(self, args, kwargs, *, runtime_env=None, before_stop=None) -> NativeChatHandle:

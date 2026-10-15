@@ -357,7 +357,7 @@ function preparePosixPythonCommand() {
   const desired = {
     sourcePythonHome: executable,
     sourceVersion: pythonVersion(executable),
-    runtimeSchema: isLinux ? 7 : 6,
+    runtimeSchema: isLinux ? 8 : 6,
     dependencyDigest: runtimeDependencyDigest()
   };
   const runtimeImportsReady = !isLinux || hasLinuxRuntimeImports(venvPython);
@@ -377,7 +377,8 @@ function preparePosixPythonCommand() {
   }
 
   console.log(`[prepare:python] Creating Linux venv at ${pythonRuntimeDir} from ${executable}`);
-  run(executable, ['-m', 'venv', pythonRuntimeDir]);
+  // Copies keep bin/python3 inside the packaged tree instead of symlinking to /usr/bin.
+  run(executable, ['-m', 'venv', '--copies', pythonRuntimeDir]);
   if (isLinux) {
     run(venvPython, [
       '-m', 'pip', 'install', '--no-index', '--find-links', wheelhouseDir,
@@ -516,7 +517,7 @@ export function isPreparedRuntimeCompatible(marker, desired, hasPythonExecutable
 
 function hasLinuxRuntimeImports(pythonExe) {
   if (!existsSync(pythonExe)) return false;
-  const result = spawnSync(pythonExe, ['-c', 'import fastapi, uvicorn, requests, httpx, yaml, PIL, psutil'], {
+  const result = spawnSync(pythonExe, ['-I', '-c', 'import pydantic, fastapi, uvicorn, requests, httpx, yaml, PIL, psutil'], {
     encoding: 'utf8',
     timeout: 15_000
   });

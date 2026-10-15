@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { createSidekick } from '../assets/sidekicks/animated/sidekick-engine.js';
-import '../assets/sidekicks/animated/sidekicks.css';
+import { createSidekick } from '../../assets/sidekicks/animated/sidekick-engine.js';
+import '../../assets/sidekicks/animated/sidekicks.css';
 import { personalityAvatar, type CompanionPersonality } from '../personality-avatar.js';
 import type { SidekickMotion } from '../sidekick-motion.js';
 

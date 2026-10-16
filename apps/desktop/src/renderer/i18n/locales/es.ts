@@ -1,4 +1,5 @@
 import type { DesktopCatalog } from '../keys.js';
+import { chatLatencyPlaceholderCopy } from '../chat-latency-placeholder-copy.js';
 
 export const desktopEsOverrides = {
   'app.title': 'LastBrowser',
@@ -133,6 +134,7 @@ export const desktopEsOverrides = {
   'chat.latencyPlaceholder.10': 'Escribo pronto — reuniendo contexto.',
   'chat.latencyPlaceholder.11': 'Un instante antes de que empiece la respuesta.',
   'chat.latencyPlaceholder.12': 'Aguanta — el stream está arrancando.',
+  ...chatLatencyPlaceholderCopy.es,
   'chat.model': 'Modelo',
   'chat.newSession': 'Nuevo chat',
   'chat.resetChat': 'Restablecer chat',

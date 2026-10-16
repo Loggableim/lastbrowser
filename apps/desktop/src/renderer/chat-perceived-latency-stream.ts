@@ -1,4 +1,12 @@
 import type { DesktopTranslationKey } from './i18n/keys.js';
+import {
+  chatLatencyPersonalities,
+  type ChatLatencyPersonality,
+  type ChatLatencyPlaceholderKey,
+} from './i18n/chat-latency-placeholder-copy.js';
+
+export { chatLatencyPersonalities, chatLatencyPersonaNames } from './i18n/chat-latency-placeholder-copy.js';
+export type { ChatLatencyPersonality, ChatLatencyPlaceholderKey } from './i18n/chat-latency-placeholder-copy.js';
 
 export const CHAT_LATENCY_PLACEHOLDER_COUNT = 12;
 
@@ -101,4 +109,144 @@ export function fallbackFinishedAssistantContent(message: LatencyPlaceholderMess
 
 export function countsAsVisibleStreamOutput(message: LatencyPlaceholderMessage): boolean {
   return Boolean(message.content?.trim() && !message.latencyPlaceholder && !shouldDiscardPlaceholderContent(message));
+}
+
+/** Wait before the first fake sentence starts streaming in. */
+export const CHAT_LATENCY_FIRST_WAVE_MS = 2_000;
+/** Wait before the apology / patience sentence starts streaming in. */
+export const CHAT_LATENCY_SECOND_WAVE_MS = 6_000;
+/** Gap between small reveal chunks. Short enough to read as typing, not a dump. */
+export const CHAT_LATENCY_REVEAL_INTERVAL_MS = 36;
+export const CHAT_LATENCY_REVEAL_CHARS = 2;
+
+const personaCursor: Record<ChatLatencyPersonality, number> = {
+  nova: 0,
+  analytical: 0,
+  developer: 0,
+  creative: 0,
+  mentor: 0,
+};
+
+export function resetChatLatencyPersonaRotation(): void {
+  for (const personality of chatLatencyPersonalities) personaCursor[personality] = 0;
+}
+
+export function takeChatLatencyPersonaIndex(personality: ChatLatencyPersonality): number {
+  const index = personaCursor[personality] % CHAT_LATENCY_PLACEHOLDER_COUNT;
+  personaCursor[personality] = (index + 1) % CHAT_LATENCY_PLACEHOLDER_COUNT;
+  return index;
+}
+
+export function chatLatencyPersonaPlaceholderKey(
+  personality: ChatLatencyPersonality,
+  wave: 'first' | 'late',
+  index: number,
+): ChatLatencyPlaceholderKey {
+  const slot = String((index % CHAT_LATENCY_PLACEHOLDER_COUNT) + 1).padStart(2, '0');
+  return (wave === 'late'
+    ? `chat.latencyPlaceholder.${personality}.late.${slot}`
+    : `chat.latencyPlaceholder.${personality}.${slot}`) as ChatLatencyPlaceholderKey;
+}
+
+export function resolveChatLatencyPersonality(...candidates: unknown[]): ChatLatencyPersonality {
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    const personality = (candidate as { personality?: unknown }).personality;
+    if (typeof personality === 'string' && (chatLatencyPersonalities as readonly string[]).includes(personality)) {
+      return personality as ChatLatencyPersonality;
+    }
+  }
+  return 'nova';
+}
+
+/** Reveal a sentence in small chunks. At elapsed 0 the first chunk is already visible. */
+export function revealChatLatencyChunk(sentence: string, elapsedInWaveMs: number): string {
+  if (!sentence || elapsedInWaveMs < 0) return '';
+  const steps = Math.floor(elapsedInWaveMs / CHAT_LATENCY_REVEAL_INTERVAL_MS) + 1;
+  return sentence.slice(0, Math.min(sentence.length, steps * CHAT_LATENCY_REVEAL_CHARS));
+}
+
+/** First sentence streams from 2s. Second sentence streams from 6s and does not replace the first. */
+export function composeChatLatencyPlaceholder(input: {
+  elapsedMs: number;
+  firstSentence: string;
+  secondSentence: string;
+}): string {
+  if (input.elapsedMs < CHAT_LATENCY_FIRST_WAVE_MS) return '';
+  const firstPartial = revealChatLatencyChunk(input.firstSentence, input.elapsedMs - CHAT_LATENCY_FIRST_WAVE_MS);
+  if (input.elapsedMs < CHAT_LATENCY_SECOND_WAVE_MS) return firstPartial;
+  const secondPartial = revealChatLatencyChunk(input.secondSentence, input.elapsedMs - CHAT_LATENCY_SECOND_WAVE_MS);
+  if (!secondPartial) return input.firstSentence;
+  return `${input.firstSentence}\n\n${secondPartial}`;
+}
+
+export type ChatLatencyPlaceholderRun = {
+  cancel(): void;
+  noteRealToken(): void;
+};
+
+export function startChatLatencyPlaceholder(options: {
+  personality: ChatLatencyPersonality;
+  translate: (key: DesktopTranslationKey) => string;
+  onText: (text: string) => void;
+  now?: () => number;
+  schedule?: (callback: () => void, delayMs: number) => ReturnType<typeof setTimeout>;
+  clear?: (handle: ReturnType<typeof setTimeout>) => void;
+}): ChatLatencyPlaceholderRun {
+  const now = options.now ?? (() => Date.now());
+  const schedule = options.schedule ?? ((callback, delayMs) => setTimeout(callback, delayMs));
+  const clear = options.clear ?? ((handle) => clearTimeout(handle));
+  const index = takeChatLatencyPersonaIndex(options.personality);
+  const firstSentence = options.translate(chatLatencyPersonaPlaceholderKey(options.personality, 'first', index));
+  const secondSentence = options.translate(chatLatencyPersonaPlaceholderKey(options.personality, 'late', index));
+  const started = now();
+  let handle: ReturnType<typeof setTimeout> | null = null;
+  let stopped = false;
+  let last = '';
+
+  const publish = (): void => {
+    if (stopped) return;
+    const text = composeChatLatencyPlaceholder({
+      elapsedMs: now() - started,
+      firstSentence,
+      secondSentence,
+    });
+    if (!text || text === last) return;
+    last = text;
+    options.onText(text);
+  };
+
+  const tick = (): void => {
+    if (stopped) return;
+    publish();
+    const elapsed = now() - started;
+    const second = revealChatLatencyChunk(secondSentence, elapsed - CHAT_LATENCY_SECOND_WAVE_MS);
+    if (elapsed >= CHAT_LATENCY_SECOND_WAVE_MS && second.length >= secondSentence.length) return;
+    handle = schedule(tick, CHAT_LATENCY_REVEAL_INTERVAL_MS);
+  };
+
+  handle = schedule(tick, CHAT_LATENCY_FIRST_WAVE_MS);
+  const stop = (): void => {
+    stopped = true;
+    if (handle !== null) clear(handle);
+    handle = null;
+  };
+  return { cancel: stop, noteRealToken: stop };
+}
+
+/** Stream fake text into the live placeholder only. A real token clears the flag, so later reveals no-op. */
+export function applyChatLatencyPlaceholderReveal<T extends LatencyPlaceholderMessage>(messages: T[], text: string): T[] {
+  if (!text) return messages;
+  let index = -1;
+  for (let cursor = messages.length - 1; cursor >= 0; cursor -= 1) {
+    const message = messages[cursor];
+    if (message?.role === 'assistant' && message.latencyPlaceholder && (message.pending || message.streaming)) {
+      index = cursor;
+      break;
+    }
+  }
+  if (index < 0 || messages[index]?.content === text) return messages;
+  const next = messages.slice();
+  next[index] = { ...messages[index], content: text };
+  return next;
 }

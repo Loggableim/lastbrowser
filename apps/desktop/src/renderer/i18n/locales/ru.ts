@@ -1,4 +1,5 @@
 import type { DesktopCatalog, DesktopTranslationKey } from '../keys.js';
+import { chatLatencyPlaceholderCopy } from '../chat-latency-placeholder-copy.js';
 
 const translations: DesktopCatalog = {
   'app.title': 'LastBrowser',
@@ -136,6 +137,7 @@ const translations: DesktopCatalog = {
   'chat.latencyPlaceholder.10': 'Скоро начну печатать — собираю контекст.',
   'chat.latencyPlaceholder.11': 'Мгновение, пока ответ не начнётся.',
   'chat.latencyPlaceholder.12': 'Ещё чуть-чуть — поток запускается.',
+  ...chatLatencyPlaceholderCopy.ru,
   'chat.model': 'Модель',
   'chat.newSession': 'Новый чат',
   'chat.resetChat': 'Сбросить чат',

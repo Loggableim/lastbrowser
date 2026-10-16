@@ -27,6 +27,8 @@ describe('desktop runtime packaging', () => {
   it('runs the Python runtime preparation before Windows packaging', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
 
+    expect(packageJson.main).toBe('dist/main/boot.js');
+    expect(packageJson.scripts['build:main']).toContain('node scripts/stage-packaged-ms.mjs');
     expect(packageJson.scripts['prepare:python']).toBe('node scripts/prepare-python-runtime.mjs');
     expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
     expect(packageJson.scripts['package:win']).toContain('--win nsis portable');

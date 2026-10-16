@@ -5,7 +5,7 @@
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
   "author": "LastBrowser",
-  "main": "dist/main/main.js",
+  "main": "dist/main/boot.js",
   "scripts": {
     "dev": "npm run build:main && vite --host 127.0.0.1",
     "start": "electron dist/main/main.js",
@@ -15,7 +15,7 @@
     "prepare:local-model-engines": "node scripts/prepare-local-model-engines.mjs",
     "build:installer-assets": "python scripts/generate-installer-assets.py",
     "build": "npm run build:main && npm run build:renderer",
-    "build:main": "tsc -p tsconfig.main.json && node scripts/build-preload.mjs",
+    "build:main": "tsc -p tsconfig.main.json && node scripts/build-preload.mjs && node scripts/stage-packaged-ms.mjs",
     "build:renderer": "npm run typecheck:renderer && vite build",
     "typecheck:renderer": "tsc --noEmit -p tsconfig.renderer.json",
     "test": "vitest",

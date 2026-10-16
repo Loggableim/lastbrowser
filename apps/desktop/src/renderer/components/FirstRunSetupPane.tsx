@@ -343,7 +343,7 @@ export function FirstRunSetupPane({
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
       const readCatalog = async () => {
-        if (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider)) {
+        if (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek', 'groq'].includes(provider)) {
           const response = await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/models/probe',
             body: { provider, api_key: apiKey.trim(), ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) }
           }) as { models?: Array<{ id?: string; name?: string; label?: string }>; error?: string };
@@ -1444,13 +1444,19 @@ export function FirstRunSetupPane({
                       Erhältlich unter <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>. Ein Key gewährt Zugriff auf über 200 Modelle.
                     </small>
                   )}
-                  {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
+                  {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek', 'groq'].includes(provider) && (
                     <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                       <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
                         {modelProbeLoading ? 'Modelle werden geladen…' : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
                       </button>
                       {modelProbeError && <p role="alert">{modelProbeError}</p>}
                     </div>
+                  )}
+                  {activeProviderOption?.id === 'groq' && (
+                    <small className="field-hint">
+                      {shellText(locale, "Beta-Test. Eigenen Schlüssel von der Groq Console eintragen. Die Modellliste kommt live von Groq. Ein leeres Gratis-Kontingent meldet 429 und ist kein LastBrowser-Fehler.", "Beta test. Enter your own key from the Groq console. The model list is loaded live from Groq. An empty free quota reports 429 and is not a LastBrowser error.")}
+                      {' '}<a href="https://console.groq.com/keys" target="_blank" rel="noreferrer">console.groq.com/keys</a>
+                    </small>
                   )}
                   {activeProviderOption?.id === 'deepseek' && (
                     <small className="field-hint">

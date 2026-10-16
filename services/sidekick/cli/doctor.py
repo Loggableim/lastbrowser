@@ -41,6 +41,7 @@ _PROVIDER_CHECK_URLS = {
     "anthropic": "https://api.anthropic.com/v1/models",
     "openrouter": "https://openrouter.ai/api/v1/models",
     "deepseek": "https://api.deepseek.com/v1/models",
+    "groq": "https://api.groq.com/openai/v1/models",
     "google": "https://generativelanguage.googleapis.com/v1beta/models",
 }
 

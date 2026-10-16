@@ -351,6 +351,7 @@ _URL_TO_PROVIDER: Dict[str, str] = {
     "openrouter.ai": "openrouter",
     "generativelanguage.googleapis.com": "gemini",
     "api.deepseek.com": "deepseek",
+    "api.groq.com": "groq",
     "api.githubcopilot.com": "copilot",
     "models.github.ai": "copilot",
     "api.fireworks.ai": "fireworks",

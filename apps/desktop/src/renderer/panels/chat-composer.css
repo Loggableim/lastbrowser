@@ -36,19 +36,19 @@
 
 .chat-composer .composer-current-model {
   box-sizing: border-box;
-  flex: 0 1 15rem;
+  flex: 1 1 auto;
   max-width: 100%;
-  min-width: 0;
+  min-width: min(100%, 20rem);
 }
 
 .chat-composer .composer-current-model select {
   box-sizing: border-box;
-  flex: 1 1 7rem;
-  width: clamp(5rem, 18vw, 12rem);
+  flex: 1 1 auto;
+  width: 100%;
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 

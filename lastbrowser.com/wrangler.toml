@@ -7,3 +7,7 @@ binding = "ROADMAP_DB"
 database_name = "roadmap-votes-production"
 database_id = "9980f92f-df0f-4888-90f6-2a1f81868c34"
 preview_database_id = "0917233b-a363-457c-b5e2-b3c2bad76e14"
+
+[[r2_buckets]]
+binding = "BETA_DOWNLOADS"
+bucket_name = "lastbrowser-beta-downloads"

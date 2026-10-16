@@ -5904,8 +5904,11 @@ class AIAgent:
         # scope, and verification standards without overwriting that persona.
         stable_parts.append(CORE_WORK_GUIDANCE)
 
-        # Pointer to the sidekick-agent skill + docs for user questions about Sidekick itself.
-        stable_parts.append(SIDEKICK_AGENT_HELP_GUIDANCE)
+        # The sidekick-agent pointer names skill_view. A native standard-chat
+        # turn intentionally exposes only the sandboxed file tools, so this
+        # instruction is included only when that tool is actually callable.
+        if "skill_view" in self.valid_tool_names:
+            stable_parts.append(SIDEKICK_AGENT_HELP_GUIDANCE)
 
         # Tool-aware behavioral guidance: only inject when the tools are loaded
         tool_guidance = []
@@ -5976,7 +5979,9 @@ class AIAgent:
                 if "gpt" in _model_lower or "codex" in _model_lower:
                     stable_parts.append(OPENAI_MODEL_EXECUTION_GUIDANCE)
 
-        has_skills_tools = any(name in self.valid_tool_names for name in ['skills_list', 'skill_view', 'skill_manage'])
+        # The skills index tells the model to call skill_view. Omit it, including
+        # its catalog text, unless that tool is in this turn's tool list.
+        has_skills_tools = "skill_view" in self.valid_tool_names
         if has_skills_tools:
             avail_toolsets = {
                 toolset

@@ -42,7 +42,7 @@ import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { loadSpaceModel, saveSpaceModel } from '../space-models.js';
 import { hasChosenChatModel, isMultiAgentModelSelection, parseProviderModelId, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
-import { getProviderModelEvidence, isProviderModelQualified, useProviderChatEvidenceRevision } from '../provider-chat-evidence.js';
+import { getProviderModelEvidence, isOpenRouterRouterModel, isProviderModelQualified, useProviderChatEvidenceRevision } from '../provider-chat-evidence.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
 import { assistantScopeKey, sameAssistantScope, newIndependentRequestId, type ScopedModelSelection, type NativeModelAvailability } from '../independent-contracts.js';
@@ -459,8 +459,9 @@ export function NativeChatMain({
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
       const local=group.providerId==='local-store';
       const localDeployment=group.deployment==='local';
-      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence)||localDeployment, qualification: local?undefined:evidence,
-        label: local||evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
+      const openRouterRouter=isOpenRouterRouterModel(group.providerId, entry.id);
+      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence)||localDeployment||openRouterRouter, qualification: local?undefined:evidence,
+        label: local||evidence||openRouterRouter ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
     });
     return models.length ? [{ ...group, models }] : [];
   }), [modelCatalog, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, isAntigravityCatalogUnverified, t, activeModelRevision, showUntestedBetas, providerEvidenceRevision]);

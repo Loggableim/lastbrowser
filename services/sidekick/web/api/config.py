@@ -3295,7 +3295,9 @@ def _openai_api_key_provider_ids(env_values: dict) -> set[str]:
 
 
 def _annotate_provider_deployment(catalog):
+    from runtime.openrouter_routers import ensure_openrouter_routers
     from runtime.provider_deployment import provider_deployment
+    ensure_openrouter_routers(catalog)
     configuration = get_config()
     for group in catalog.get("groups", []) if isinstance(catalog, dict) else []:
         if isinstance(group, dict):
@@ -4157,6 +4159,8 @@ def get_available_models() -> dict:
                             # finish_reason=length (0 tokens). Excluding them from the
                             # picker to avoid user frustration. Re-test monthly.
                             _BROKEN_OR_FREE: set[str] = {
+                                # Kept out of this live page so it cannot jump ahead of
+                                # curated rows. ensure_openrouter_routers appends it.
                                 "openrouter/free",
                                 "google/gemma-4-31b-it:free",
                                 "google/gemma-4-26b-a4b-it:free",

@@ -319,7 +319,8 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
 def _with_runtime_catalog(catalog, scope, profile_name):
     from runtime.local_ai.store_provider_host import with_store_catalog
     from runtime.opencode_free_chat import attach_free_opencode_catalog
-    return attach_free_opencode_catalog(with_store_catalog(catalog, scope, profile_name))
+    from runtime.openrouter_routers import ensure_openrouter_routers
+    return ensure_openrouter_routers(attach_free_opencode_catalog(with_store_catalog(catalog, scope, profile_name)))
 
 
 def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=True) -> dict:

@@ -6,6 +6,7 @@ import { providerDeployment, providerHostingLabel, type ProviderDeployment } fro
 export type ModelPickerOptionGroup = Readonly<{
   provider: string;
   providerId: string;
+  catalogTier?: 'paid' | 'free';
   configured: boolean;
   deployment?: ProviderDeployment;
   disabledReason?: 'unavailable' | 'notConfigured';
@@ -71,7 +72,13 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
     .map(group => {
       const provider = providers.get(group.provider_id);
       const models = [...new Map([...group.models, ...(group.extra_models ?? [])].map(entry => [entry.id, entry])).values()]
-        .filter(entry => !currentModels || currentModels.get(group.provider_id)?.has(entry.id))
+        .filter(entry => {
+          if (group.catalog_tier === 'paid' || group.catalog_tier === 'free') return true;
+          if (!currentModels) return true;
+          const listed = currentModels.get(group.provider_id);
+          if (!listed || listed.has(entry.id)) return true;
+          return group.provider_id === 'openrouter' && entry.id === 'openrouter/free';
+        })
         .map(entry => {
           const availability = entry.nativeAvailability;
           const listingStatus = currentModels?.get(group.provider_id)?.get(entry.id);
@@ -90,7 +97,9 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
             ...(availability ? { nativeAvailability: identityMatches ? availability : { ...availability, supported: false, available: false, reasonCode: 'binding_mismatch' as const } } : {}) };
         });
       const deployment = providerDeployment(group.provider_id, undefined, group.deploymentKind??group.deployment);
-      return { provider: providerHostingLabel(group.provider_id, group.provider, deployment), deployment, providerId: group.provider_id, configured: group.configured,
+      const catalogTier = group.catalog_tier === 'paid' || group.catalog_tier === 'free' ? group.catalog_tier : undefined;
+      const providerLabel = catalogTier ? group.provider : providerHostingLabel(group.provider_id, group.provider, deployment);
+      return { provider: providerLabel, ...(catalogTier ? { catalogTier } : {}), deployment, providerId: group.provider_id, configured: group.configured,
         ...(!group.configured ? { disabledReason: provider?.provider_available === false ? 'unavailable' as const : 'notConfigured' as const } : {}), models };
     }).filter(group => group.models.length > 0);
 }

@@ -3011,6 +3011,38 @@ def _run_agent_streaming(
                     put('stream_end', {'session_id': session_id})
             return
 
+        from runtime.openrouter_free_chat import OpenRouterFreeError, deliver_free_turn, is_openrouter_free_chat
+        if is_openrouter_free_chat(provider_context, model):
+            _metering_stop.set()
+            try:
+                home = getattr(_native_context, "profile_home", None)
+                deliver_free_turn(session=s, text=msg_text, put=put, cancel_event=cancel_event,
+                    profile_home=home, session_key=str(session_id))
+            except InterruptedError:
+                if getattr(s, "active_stream_id", None) == stream_id:
+                    s.active_stream_id = None
+                    s.pending_user_message = None
+                    s.pending_attachments = []
+                    s.pending_started_at = None
+                    try:
+                        s.save()
+                    except Exception:
+                        logger.warning("Could not save cancelled OpenRouter free turn")
+                put("cancel", {"message": "Cancelled", "session_id": session_id, "processExited": True})
+            except OpenRouterFreeError as exc:
+                if getattr(s, "active_stream_id", None) == stream_id:
+                    s.active_stream_id = None
+                    s.pending_user_message = None
+                    s.pending_attachments = []
+                    s.pending_started_at = None
+                    try:
+                        s.save()
+                    except Exception:
+                        logger.warning("Could not save failed OpenRouter free turn")
+                put("error", {"error": str(exc)[:500], "session_id": session_id, "processExited": True})
+                put("stream_end", {"session_id": session_id, "processExited": True})
+            return
+
         # Teamwork / Smart Track requests are rejected before any model work
         # when the user's persisted preference disables that orchestration.
         orchestration = _requested_orchestration_mode(model, mode)

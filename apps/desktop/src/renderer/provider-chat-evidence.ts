@@ -182,6 +182,7 @@ export function isProviderModelQualified(providerId: string, modelId: string, br
   backendProfileName: string, storage: Pick<Storage, 'getItem' | 'setItem'>, now = Date.now()): boolean {
   // Stable release eligibility does not invent a successful chat record.
   // Callers still supply models from the scoped catalog and validate credentials.
+  if (normalizeProviderId(providerId) === 'openrouter' && modelId.trim() === 'openrouter/free') return true;
   return Boolean(modelId.trim()) && (isStableProvider(providerId)
     || Boolean(getProviderModelEvidence(providerId, modelId, browserProfileId, backendProfileName, storage, now)));
 }

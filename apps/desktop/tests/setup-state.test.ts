@@ -113,7 +113,7 @@ describe('cloud first-run setup state', () => {
   it('requires setup until local cloud setup state and backend readiness agree', () => {
     const readyStatus = { system: { chat_ready: true } };
 
-    expect(isFirstRunRequired(defaultSetupState, readyStatus)).toBe(true);
+    expect(isFirstRunRequired(defaultSetupState, readyStatus)).toBe(false);
     expect(isFirstRunRequired({ cloudSetupComplete: true, provider: 'openrouter', model: 'openai/gpt-5.4-mini' }, readyStatus)).toBe(false);
     expect(isFirstRunRequired({ cloudSetupComplete: true, provider: 'openrouter', model: 'openai/gpt-5.4-mini' }, { system: { chat_ready: false } })).toBe(true);
   });
@@ -141,7 +141,7 @@ describe('cloud first-run setup state', () => {
     const readyStatus = { system: { chat_ready: true } };
     expect(firstRunAiChoiceForSetup({ cloudSetupComplete: false, provider: '', model: '', aiChoice: 'disabled' })).toBe('disabled');
     expect(firstRunAiChoiceForSetup({ cloudSetupComplete: true, provider: 'openrouter', model: 'model-a' })).toBe('enabled');
-    expect(firstRunAiChoiceForSetup(defaultSetupState)).toBeNull();
+    expect(firstRunAiChoiceForSetup(defaultSetupState)).toBe('enabled');
     expect(isFirstRunRequired({ cloudSetupComplete: false, provider: '', model: '', aiChoice: 'disabled' }, readyStatus)).toBe(true);
     expect(isFirstRunRequired({ cloudSetupComplete: false, provider: '', model: '', aiChoice: 'disabled', browserSetupComplete: true }, readyStatus)).toBe(false);
     expect(isFirstRunRequired({ cloudSetupComplete: true, provider: 'openrouter', model: 'model-a' }, readyStatus)).toBe(false);

@@ -322,3 +322,28 @@ def test_catalog_errors_preserve_workspace_mismatch_reason(home):
     device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": value}})
     with pytest.raises(device.DeviceError, match="workspace_binding_changed"):
         device.discovered_models("opencode-go")
+
+
+def test_live_prices_split_paid_and_free_without_a_fixed_model_list(monkeypatch):
+    workspace = {"providers": {
+        "opencode-go": {"package": "aisdk:@ai-sdk/openai-compatible",
+            "settings": {"baseURL": "https://opencode.ai/inference/go/openai/v1"},
+            "headers": {"x-opencode-org-id": "synthetic-org"},
+            "models": {
+                "paid-model": {"name": "Paid Live", "cost": [{"input": 1, "output": 2}]},
+                "zero-on-go": {"name": "Zero On Go", "cost": [{"input": 0, "output": 0}]},
+            }},
+        "opencode": {"package": "aisdk:@ai-sdk/openai-compatible",
+            "settings": {"baseURL": "https://opencode.ai/inference/openai/v1"},
+            "headers": {"x-opencode-org-id": "synthetic-org"},
+            "models": {
+                "live-free": {"name": "Live Free", "cost": [{"input": 0, "output": 0}]},
+                "zen-paid": {"name": "Zen Paid", "cost": [{"input": 3, "output": 4}]},
+            }},
+    }}
+    monkeypatch.setattr(device, "_current_credentials", lambda _provider: {
+        "config": workspace, "org_id": "synthetic-org", "access_token": "synthetic-access"})
+    tiers = device.discovered_model_tiers("opencode-go")
+    assert [row["id"] for row in tiers["paid"]] == ["paid-model"]
+    assert [row["id"] for row in tiers["free"]] == ["zero-on-go", "live-free"]
+    assert "zen-paid" not in {row["id"] for row in tiers["paid"] + tiers["free"]}

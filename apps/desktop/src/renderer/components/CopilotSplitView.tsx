@@ -65,7 +65,7 @@ export interface AvailableModelItem {
   providerId?: string;
   label: string;
   provider: string;
-  category: 'gemini' | 'claude' | 'openai' | 'local' | 'cloud' | 'teamwork' | 'other';
+  category: 'gemini' | 'claude' | 'openai' | 'local' | 'cloud' | 'teamwork' | 'opencode-go-paid' | 'opencode-go-free' | 'other';
   badge: string;
   badgeClass: string;
   reasoningEfforts?: string[];
@@ -357,11 +357,13 @@ export function CopilotSplitView({
           if (isRetiredProvider(pid)) continue;
           const gAccount = g.account;
 
-          let category: 'gemini' | 'claude' | 'openai' | 'local' | 'cloud' | 'other' = 'other';
+          let category: AvailableModelItem['category'] = 'other';
           let providerLabel = g.provider || pid;
           let badgeClass = 'other';
-
-          if (pid.includes('antigravity') || pid.includes('gemini') || pid.includes('google')) {
+          const catalogTier = String((g as { catalog_tier?: string }).catalog_tier || '');
+          if (catalogTier === 'paid' || catalogTier === 'free') {
+            category = catalogTier === 'paid' ? 'opencode-go-paid' : 'opencode-go-free';
+          } else if (pid.includes('antigravity') || pid.includes('gemini') || pid.includes('google')) {
             category = 'gemini';
             providerLabel = pid.includes('antigravity') ? 'Antigravity' : 'Google Gemini (AI Studio)';
             badgeClass = 'gemini';
@@ -477,6 +479,20 @@ export function CopilotSplitView({
       { browserProfileId, backendProfileName }, model.providerId, identity.model)
       && (showUntestedBetas || isProviderModelQualified(model.providerId, identity.model, browserProfileId, backendProfileName, window.localStorage)));
   }), [modelList, smartTrackEnabled, teamworkEnabled, showUntestedBetas, browserProfileId, backendProfileName, activeModelRevision]);
+  const [disabledModelNotice, setDisabledModelNotice] = useState('');
+  useEffect(() => {
+    if (!favorite || !modelCapabilitiesLoaded || !browserProfileId || !backendProfileName) return;
+    if (isModelActive(window.localStorage, { browserProfileId, backendProfileName }, favorite.provider, favorite.model)) return;
+    const replacement = visibleModelList.find(model => model.providerId && model.category !== 'teamwork');
+    if (!replacement?.providerId) return;
+    try {
+      setQuickchatFavorite(favoriteScope, { provider: replacement.providerId, model: replacement.id });
+      setFavoriteState({ key: favoriteScopeKey, ...readQuickchatFavoriteState(favoriteScope) });
+      setDisabledModelNotice(t('settings.panels.providers.activeModelFallback'));
+    } catch {
+      setFavoriteError(t('settings.panels.providers.activeModelsSaveFailed'));
+    }
+  }, [favorite, modelCapabilitiesLoaded, browserProfileId, backendProfileName, visibleModelList, favoriteScope, favoriteScopeKey, t]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -741,6 +757,11 @@ export function CopilotSplitView({
           {visibleModelList.filter((m) => m.category === 'openai').map(renderModelItem)}
 
           {/* 4. Lokale Modelle */}
+          {visibleModelList.some((m) => m.category === 'opencode-go-paid') && <div className="model-group-title">OpenCode Go (bezahlt)</div>}
+          {visibleModelList.filter((m) => m.category === 'opencode-go-paid').map(renderModelItem)}
+          {visibleModelList.some((m) => m.category === 'opencode-go-free') && <div className="model-group-title">OpenCode Go Free (gratis)</div>}
+          {visibleModelList.filter((m) => m.category === 'opencode-go-free').map(renderModelItem)}
+
           {visibleModelList.some((m) => m.category === 'local') && <div className="model-group-title">{locale === 'de' ? 'Auf diesem Computer' : 'On this computer'}</div>}
           {visibleModelList.filter((m) => m.category === 'local').map(renderModelItem)}
 
@@ -1256,6 +1277,7 @@ export function CopilotSplitView({
         {modelCapabilitiesLoaded && visibleModelList.length === 0 && !connectionNotice && <div className="copilot-model-gate-notice" role="status">
           {t('settings.panels.providers.noActiveModels')} {onOpenSettings && <button type="button" onClick={() => onOpenSettings('providers')}>{t('settings.panels.providers.openActiveModels')}</button>}
         </div>}
+        {disabledModelNotice && <div className="copilot-model-gate-notice" role="status">{disabledModelNotice}</div>}
         {favoriteInvalid && <div className="copilot-model-gate-notice" role="alert">
           {locale === 'de' ? 'Der gespeicherte Quickchat-Favorit ist ungültig. Es wird kein anderes Modell stillschweigend gewählt.' : 'The saved Quickchat favorite is invalid. Another model will not be selected silently.'}
           <button type="button" onClick={handleAutomaticModel}>{locale === 'de' ? 'Automatisch wählen' : 'Choose Automatic'}</button>

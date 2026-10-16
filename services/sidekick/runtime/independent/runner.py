@@ -26,6 +26,39 @@ class WorkerCancelled(RuntimeError):
     pass
 
 
+def _replace_opencode_go_groups(raw: dict) -> None:
+    """Replace the flat OpenCode Go list with the live paid and free groups."""
+    if not isinstance(raw, dict) or not isinstance(raw.get("groups"), list):
+        return
+    try:
+        from cli.opencode_device import discovered_model_tiers, has_credentials
+        if not has_credentials("opencode-go"):
+            return
+        tiers = discovered_model_tiers("opencode-go")
+    except Exception:
+        return
+    paid = tiers.get("paid") if isinstance(tiers, dict) else None
+    free = tiers.get("free") if isinstance(tiers, dict) else None
+    if not paid and not free:
+        return
+    raw["groups"] = [group for group in raw["groups"]
+                     if not (isinstance(group, dict) and group.get("provider_id") == "opencode-go")]
+    if paid:
+        raw["groups"].append({
+            "provider_id": "opencode-go",
+            "provider": "OpenCode Go (bezahlt)",
+            "catalog_tier": "paid",
+            "models": paid,
+        })
+    if free:
+        raw["groups"].append({
+            "provider_id": "opencode-go",
+            "provider": "OpenCode Go Free (gratis)",
+            "catalog_tier": "free",
+            "models": free,
+        })
+
+
 def _discover_model_catalog(context, include_capabilities, *, available_models=None,
                             configuration=None, providers=None, capability_inventory=None,
                             provider_model_ids=None):
@@ -141,6 +174,7 @@ def _discover_model_catalog(context, include_capabilities, *, available_models=N
             group.setdefault("models", [])
             existing = {str(row.get("id")) for row in group["models"] if isinstance(row, dict)}
             group["models"].extend({"id": model_id, "label": model_id} for model_id in model_ids if model_id not in existing)
+    _replace_opencode_go_groups(raw)
     config = configuration()
     result = public_catalog(raw, account_catalog, config)
     # Keep a known provider group visible even when its returned list is empty;

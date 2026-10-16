@@ -446,7 +446,7 @@ export type ChatComposerProps = {
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
-  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence;localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }> }>;
+  modelOptions: Array<{ provider: string; providerId?: string; catalogTier?: 'paid' | 'free'; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence;localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }> }>;
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
   emptyQualifiedCatalog?: boolean;
   noActiveModels?: boolean;
@@ -667,7 +667,7 @@ export function ChatComposer({
                   {modelCatalogLoading&&!connectionNotice ? t('settings.panels.providers.loadingModels') : modelCatalogSlow ? t('chat.model') : noActiveModels ? (locale.startsWith('de') ? 'Keine Modelle aktiv' : 'No active models') : t('chat.noManualModels')}
                 </option>}
                 {manualModelPickerOptions(modelOptions).map((group) => (
-                  <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false}>
+                  <optgroup key={`${group.providerId || group.provider}:${group.catalogTier || group.provider}`} label={group.provider} disabled={group.configured===false}>
                     {group.models.map((m) => (
                     <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={m.supportsIndependent===false||!canSelectNativeModel(group.providerId,m.nativeAvailability)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
                         {m.label}{m.listingStatus === 'configured' ? ' · configured · unverified' : m.listingStatus === 'fallback' ? ` · ${t('settings.panels.providers.catalogFallbackUnverified')}` : ''} · {group.provider}
@@ -699,10 +699,10 @@ export function ChatComposer({
       {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
         onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>
         <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>
-        {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
+        {manualModelGroups.map(group=><fieldset key={`${group.providerId||group.provider}:${group.catalogTier||group.provider}`} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
           {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);
-            const desiredDefault=group.providerId==='openai-codex'&&entry.id==='gpt-6-luna';
+            const desiredDefault=group.providerId==='openrouter'&&entry.id==='openrouter/free';
             const expiry=entry.qualification?new Date(entry.qualification.recordedAt+24*60*60*1000).toLocaleString(locale):'';
             const local=group.providerId==='local-store';
             const localProof=locale.startsWith('de')?'Gerät und Werkzeugaufrufe geprüft':'Device and tool calls verified';
@@ -712,7 +712,7 @@ export function ChatComposer({
             return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||!ready||running}
             title={`${group.provider} · ${entry.id} · ${evidenceDetails}`}
             aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
-            <span className="composer-manual-model-name">{desiredDefault?'GPT-6 Luna':entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
+            <span className="composer-manual-model-name">{entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
             <small>{group.provider} · {entry.id} · {unavailable?t('chat.modelUnavailableInSpace'):entry.supportsIndependent===false?t('chat.modelIndependentUnsupported'):local?evidenceDetails:entry.qualified?`${t('settings.panels.providers.lastSuccessfulChat')}${expiry?` · ${expiry}`:''}`:t('settings.panels.providers.betaUntested')}</small>
           </button>;})}
         </fieldset>)}

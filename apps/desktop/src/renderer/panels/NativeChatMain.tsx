@@ -79,7 +79,7 @@ import { hasCurrentTurnBrowserUse } from '../chat-browser-use.js';
 import { nativeGrillCopy } from '../i18n/native-grill-copy.js';
 
 const noCommandCapabilities:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
-const REQUESTED_CHAT_DEFAULT = { provider: 'openai-codex', model: 'gpt-6-luna' } as const;
+const REQUESTED_CHAT_DEFAULT = { provider: 'openrouter', model: 'openrouter/free' } as const;
 const CHAT_DEFAULT_PREFERENCE_KEY = 'lastbrowser.chatDefaultPreference.v1';
 function readRequestedChatDefault(): { provider: string; model: string } {
   try {
@@ -491,7 +491,10 @@ export function NativeChatMain({
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
   const selectableModels = visibleModelCatalog.flatMap(group => group.configured && group.providerId
     ? group.models.filter(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)) : []);
-  const emptyQualifiedCatalog = modelCatalogLoaded && selectableModels.length > 0 && selectableModels.every(entry => !entry.qualified);
+  const keylessFreeReady = modelProvider === 'openrouter' && model === 'openrouter/free' && modelPairAvailable
+    && isModelActive(window.localStorage, { browserProfileId: activeBrowserProfileId,
+      backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || 'default' }, modelProvider, model);
+  const emptyQualifiedCatalog = !keylessFreeReady && modelCatalogLoaded && selectableModels.length > 0 && selectableModels.every(entry => !entry.qualified);
   const sessionReasoningEffort = resolveSessionReasoningEffort(activeSession?.reasoning_selection, model, modelProvider);
   useEffect(() => {
     if (!activeSessionId || activeSession?.session_id !== activeSessionId || sessionReasoningEffort === null
@@ -546,7 +549,7 @@ export function NativeChatMain({
   const multiAgentBetaBlocked = (!AI_ORCHESTRATION_ENABLED || !showUntestedBetas)
     && (multiAgentSelection || Boolean(automaticSelected && currentPolicy?.response.policy.orchestrator));
   // Before the catalog answers, only the synchronous multi-agent beta gate applies; the rest needs the verified catalog.
-  const betaSelectionBlocked = !modelCatalogLoaded ? multiAgentBetaBlocked : (automaticSelected
+  const betaSelectionBlocked = keylessFreeReady ? false : !modelCatalogLoaded ? multiAgentBetaBlocked : (automaticSelected
     ? unqualifiedAutoModels || Boolean(currentPolicy?.response.policy.orchestrator && !showUntestedBetas)
     : multiAgentSelection ? multiAgentBetaBlocked : !modelPairAvailable
       || !isModelActive(window.localStorage, { browserProfileId: activeBrowserProfileId,

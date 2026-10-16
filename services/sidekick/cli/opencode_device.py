@@ -358,6 +358,62 @@ def _current_credentials(provider_id):
         return credential
 
 
+def _cost_is_free(cost) -> bool:
+    """True when every published price row charges nothing for input and output."""
+    rows = cost if isinstance(cost, list) else [cost] if isinstance(cost, dict) else []
+    if not rows:
+        return False
+    for row in rows:
+        if not isinstance(row, dict):
+            return False
+        try:
+            if float(row.get("input") or 0) != 0 or float(row.get("output") or 0) != 0:
+                return False
+        except (TypeError, ValueError):
+            return False
+    return True
+
+
+def discovered_model_tiers(provider_id):
+    """Split a live workspace catalog into paid and free model rows.
+
+    Membership comes from the connection's provider entries and price rows.
+    Model ids are not chosen from a fixed list.
+    """
+    credential = _current_credentials(provider_id)
+    providers = credential.get("config", {}).get("providers", {})
+    if not isinstance(providers, dict):
+        raise DeviceError("invalid_workspace_config")
+    paid, free = [], []
+    seen_paid, seen_free = set(), set()
+    go_keys = {"opencode-go", "go"}
+    for key in _PROVIDERS.get(provider_id, ()):
+        entry = providers.get(key)
+        if not isinstance(entry, dict) or not isinstance(entry.get("models"), dict):
+            continue
+        for model_id, row in entry["models"].items():
+            if not isinstance(model_id, str) or not isinstance(row, dict) or row.get("disabled") is True:
+                continue
+            try:
+                _validated_connection(credential, provider_id, model_id, None)
+            except DeviceError:
+                continue
+            label = row.get("name") if isinstance(row.get("name"), str) and row["name"].strip() else model_id
+            item = {"id": model_id, "label": label.strip()}
+            if _cost_is_free(row.get("cost")):
+                if model_id in seen_free:
+                    continue
+                if model_id in seen_paid:
+                    paid[:] = [existing for existing in paid if existing["id"] != model_id]
+                    seen_paid.discard(model_id)
+                free.append(item)
+                seen_free.add(model_id)
+            elif key in go_keys and model_id not in seen_paid and model_id not in seen_free:
+                paid.append(item)
+                seen_paid.add(model_id)
+    return {"paid": paid, "free": free}
+
+
 def discovered_models(provider_id):
     credential = _current_credentials(provider_id)
     return _supported_models(credential, provider_id)

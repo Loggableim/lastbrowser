@@ -2834,6 +2834,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const sharedCatalogSelection = catalogState.key === providerCatalogKey ? catalogState.selection : null;
   const catalogMappedGroups = sharedCatalogSelection ? mapScopedModelPickerOptions(sharedCatalogSelection).map(group => ({
     provider_id: group.providerId, provider: group.provider, configured: group.configured,
+    ...(group.catalogTier ? { catalog_tier: group.catalogTier } : {}),
     deployment: group.deployment,
     models: group.models.map(model => ({ id: model.id, label: model.label, listingStatus: model.listingStatus, supportsIndependent: model.supportsIndependent })), extra_models: []
   })) as AnyRecord[] : null;
@@ -4824,9 +4825,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     && <p role="status">{t('settings.panels.providers.noScannedModels')}</p>}
                   {sharedCatalogSelection && allModelGroups.map(group => {
                     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
-                    if (selectedProvider.id === 'local-ai'
+                    const tier = settingsText(group.catalog_tier, '');
+                    const tierGroup = tier === 'paid' || tier === 'free';
+                    if (!tierGroup && (selectedProvider.id === 'local-ai'
                       ? providerPresentation(providerId, undefined, typeof group.deployment === 'string' ? group.deployment : undefined).category !== 'local'
-                      : providerId !== selectedProvider.id) return null;
+                      : providerId !== selectedProvider.id)) return null;
                     const scanned = [...(Array.isArray(group.models) ? group.models : []),
                       ...(Array.isArray(group.extra_models) ? group.extra_models : [])].filter(isRecord);
                     const models = [...new Map(scanned.map(modelEntry => {
@@ -4834,15 +4837,16 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       return [parseProviderModelId(rawId, providerId).model, modelEntry] as const;
                     }).filter(([modelId]) => Boolean(modelId))).values()];
                     if (!providerId || !models.length) return null;
-                    return <fieldset className="settings-active-model-group" key={providerId}>
+                    return <fieldset className="settings-active-model-group" key={`${providerId}:${settingsText(group.provider, providerId)}`}>
                       <legend>{settingsText(group.provider, providerId)}</legend>
                       {models.map(modelEntry => {
                         const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
                         const modelId = parseProviderModelId(rawId, providerId).model;
                         if (!modelId) return null;
-                        return <label className="settings-active-model-row" key={`${providerId}:${modelId}`}>
-                          <input type="checkbox" checked={isModelActive(window.localStorage,
-                            { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' }, providerId, modelId)}
+                        const active = isModelActive(window.localStorage,
+                          { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' }, providerId, modelId);
+                        return <label className="settings-active-model-row" key={`${providerId}:${settingsText(group.provider, providerId)}:${modelId}`}>
+                          <input type="checkbox" role="switch" aria-checked={active} checked={active}
                             onChange={event => {
                               try {
                                 setModelActive(window.localStorage,

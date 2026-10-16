@@ -51,8 +51,12 @@ export function chooseQuickchatModel(selection: ScopedModelSelection, scope: Qui
       && (showBetas || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));
   if (favorite) {
     const choice = candidates.find(row => row.provider === favorite.provider && row.model === favorite.model);
-    // An explicit favorite must never silently send its prompt to another provider.
     return choice ? { provider: choice.provider, model: choice.model, basis: 'favorite' } : null;
+  }
+  const freeDefault = candidates.find(row => row.provider === 'openrouter' && row.model === 'openrouter/free');
+  const hasUserProvider = candidates.some(row => row.provider !== 'openrouter' && row.provider !== 'local-store');
+  if (freeDefault && !hasUserProvider) {
+    return { provider: freeDefault.provider, model: freeDefault.model, basis: 'estimated' };
   }
   const automaticCandidates = designatedAutomaticPool(candidates);
   const now = Date.now() / 1000;

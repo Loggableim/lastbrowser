@@ -176,12 +176,15 @@ export function normalizeSetupState(raw: unknown): SetupState {
 /** Legacy configured installations opted into AI before the explicit first-run choice existed. */
 export function firstRunAiChoiceForSetup(state: SetupState): FirstRunAiChoice | null {
   if (state.aiChoice) return state.aiChoice;
-  return state.cloudSetupComplete ? 'enabled' : null;
+  if (state.cloudSetupComplete) return 'enabled';
+  if (!state.provider && !state.model) return 'enabled';
+  return null;
 }
 
 export function isFirstRunRequired(state: SetupState, onboardingStatus: unknown): boolean {
   const status = onboardingStatus as OnboardingStatus | null;
   if (state.aiChoice === 'disabled') return state.browserSetupComplete !== true;
+  if (!state.cloudSetupComplete && !state.provider && !state.model) return false;
   // The wizard is done once the user completed setup AND the runtime reports a
   // usable chat provider. `chat_ready` is the authoritative signal, but the
   // newer FastAPI WebUI may omit it while still being fully configured — in

@@ -13592,6 +13592,11 @@ def _handle_chat_start(handler, body, diag=None):
         if not model and provider_context.get("model"):
             model = str(provider_context.get("model") or "")
         if not model_provider and not provider_context.get("provider"):
+            from runtime.openrouter_free_chat import free_default_choice
+            free_model, free_provider = free_default_choice()
+            if free_model and free_provider and (not model or model == free_model):
+                model, model_provider = free_model, free_provider
+        if not model_provider and not provider_context.get("provider"):
             setup_error = provider_context.get("setup_error") or {
                 "code": "llm_provider_not_configured",
                 "message": "Choose an LLM provider and save credentials before starting chat.",

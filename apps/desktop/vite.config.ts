@@ -1,10 +1,13 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rendererBuildIdentity } from './scripts/renderer-build-identity.mjs';
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
+const reactDir = fs.realpathSync(path.resolve(desktopDir, 'node_modules/react'));
+const reactDomDir = fs.realpathSync(path.resolve(desktopDir, 'node_modules/react-dom'));
 
 export default defineConfig({
   root: desktopDir,
@@ -21,8 +24,14 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@': path.resolve(desktopDir, 'src')
-    }
+      '@': path.resolve(desktopDir, 'src'),
+      react: reactDir,
+      'react/jsx-runtime': path.join(reactDir, 'jsx-runtime.js'),
+      'react/jsx-dev-runtime': path.join(reactDir, 'jsx-dev-runtime.js'),
+      'react-dom': reactDomDir,
+      'react-dom/client': path.join(reactDomDir, 'client.js')
+    },
+    dedupe: ['react', 'react-dom']
   },
   server: {
     host: '127.0.0.1',

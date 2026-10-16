@@ -4048,15 +4048,44 @@ def get_available_models() -> dict:
                     # Use the authenticated workspace's supported models only;
                     # curated IDs are not proof of this account's catalog.
                     try:
-                        from cli.models import provider_model_ids
-                        provenance = {}
-                        discovered = provider_model_ids(pid, source_out=provenance) or []
-                        if provenance.get("source") == "provider_api":
-                            device_models = [{"id": mid if pid == active_provider else f"@{pid}:{mid}", "label": mid}
-                                             for mid in dict.fromkeys(discovered) if isinstance(mid, str) and mid]
-                            if device_models:
-                                groups.append({"provider": provider_name, "provider_id": pid,
-                                               "configured": True, "models": device_models})
+                        from cli.opencode_device import connection_picker_groups
+                        live_groups = connection_picker_groups(pid) if pid == "opencode-go" else []
+                        if live_groups:
+                            for live in live_groups:
+                                live_models = []
+                                for row in live.get("models") or []:
+                                    if not isinstance(row, dict):
+                                        continue
+                                    mid = str(row.get("id") or "").strip()
+                                    if not mid:
+                                        continue
+                                    entry = {"id": mid, "label": str(row.get("label") or mid)}
+                                    if type(row.get("context_length")) is int:
+                                        entry["context_length"] = row["context_length"]
+                                        entry["context_length_source"] = row.get("context_length_source") or "provided_catalog"
+                                    # Keep every connection model selectable even when
+                                    # gateway validation omits it from the flat id list.
+                                    entry["modelSource"] = "explicit_config"
+                                    live_models.append(entry)
+                                if live_models:
+                                    groups.append({
+                                        "provider": live.get("provider") or provider_name,
+                                        "provider_id": live.get("provider_id") or pid,
+                                        "configured": True,
+                                        "catalog_source": "connection",
+                                        "catalog_tier": live.get("catalog_tier"),
+                                        "models": live_models,
+                                    })
+                        else:
+                            from cli.models import provider_model_ids
+                            provenance = {}
+                            discovered = provider_model_ids(pid, source_out=provenance) or []
+                            if provenance.get("source") == "provider_api":
+                                device_models = [{"id": mid if pid == active_provider else f"@{pid}:{mid}", "label": mid}
+                                                 for mid in dict.fromkeys(discovered) if isinstance(mid, str) and mid]
+                                if device_models:
+                                    groups.append({"provider": provider_name, "provider_id": pid,
+                                                   "configured": True, "models": device_models})
                     except Exception:
                         pass
                     continue

@@ -84,7 +84,8 @@ def is_free_official_chat(provider: str | None, model: str | None) -> bool:
         model_id = model_id.split("/", 1)[1]
     if model_id in FORBIDDEN_DEFAULTS:
         return False
-    if provider_id == FREE_PROVIDER and (model_id in CANDIDATE_MODELS or model_id.endswith("-free")):
+    # opencode-go-free is the connection's zero-cost group. It never uses the Go key.
+    if provider_id in {FREE_PROVIDER, "opencode-go-free"} and (model_id in CANDIDATE_MODELS or model_id.endswith("-free")):
         return True
     return False
 
@@ -95,6 +96,10 @@ def attach_free_opencode_catalog(catalog: dict) -> dict:
         return catalog
     groups = catalog.get("groups")
     if not isinstance(groups, list):
+        return catalog
+    # The connection already published the free group. Do not replace it
+    # with the small hardcoded client list.
+    if any(isinstance(group, dict) and group.get("provider_id") == "opencode-go-free" for group in groups):
         return catalog
     limits = {
         "deepseek-v4.1-flash-free": 200000,

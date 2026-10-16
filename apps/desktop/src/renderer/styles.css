@@ -4408,6 +4408,53 @@ body:has(.nova-dock.pos-floating.settings-safe-position) .settings-main {
   margin-left: 6px;
 }
 
+.settings-connection-model-groups {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-connection-model-group {
+  max-height: 280px;
+  overflow: auto;
+}
+
+.settings-model-switch {
+  appearance: none;
+  background: rgba(255, 255, 255, .16);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  height: 22px;
+  position: relative;
+  width: 40px;
+}
+
+.settings-model-switch::after {
+  background: #f4f7fb;
+  border-radius: 50%;
+  content: "";
+  height: 16px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  transition: transform .15s ease;
+  width: 16px;
+}
+
+.settings-model-switch:checked {
+  background: #2f9e74;
+}
+
+.settings-model-switch:checked::after {
+  transform: translateX(18px);
+}
+
+.settings-model-switch:focus-visible {
+  outline: 2px solid var(--accent, #7aa2ff);
+  outline-offset: 2px;
+}
+
 .settings-env-lock {
   border: 1px solid rgba(255, 159, 28, .22);
   border-radius: 10px;

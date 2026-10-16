@@ -24,6 +24,9 @@ def test_paid_opencode_routes_are_not_the_free_default():
     assert is_free_official_chat("opencode", "muse-spark-1.3-contributor") is False
     assert is_free_official_chat("opencode", "deepseek-v4-pro") is False
     assert is_free_official_chat("opencode", "muse-spark-1.3-contributor-free") is False
+    assert is_free_official_chat("opencode-go-free", "space-bunny-free") is True
+    assert is_free_official_chat("opencode-go-free", "deepseek-v4-pro") is False
+    assert is_free_official_chat("opencode-go", "space-bunny-free") is False
 
 
 def test_catalog_stays_unchanged_without_the_official_client(monkeypatch, tmp_path):
@@ -107,3 +110,17 @@ def test_configured_catalog_offers_only_the_free_model(monkeypatch, tmp_path):
     assert group["configured"] is True
     assert group["models"][0]["id"] == FREE_MODEL
     assert free_default_choice() == (FREE_MODEL, FREE_PROVIDER)
+
+
+def test_connection_free_group_is_not_replaced_by_the_client_list(monkeypatch, tmp_path):
+    binary = tmp_path / "opencode"
+    binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
+    monkeypatch.setenv("LASTBROWSER_OPENCODE_BIN", str(binary))
+    catalog = attach_free_opencode_catalog({"groups": [{
+        "provider_id": "opencode-go-free",
+        "provider": "OpenCode Go Free",
+        "models": [{"id": "space-bunny-free", "label": "Space Bunny Free"}],
+    }]})
+    assert [group["provider_id"] for group in catalog["groups"]] == ["opencode-go-free"]
+    assert catalog["groups"][0]["models"][0]["id"] == "space-bunny-free"

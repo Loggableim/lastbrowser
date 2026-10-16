@@ -363,6 +363,102 @@ def discovered_models(provider_id):
     return _supported_models(credential, provider_id)
 
 
+def _connection_cost_is_free(row):
+    """True when the connection's own price list is present and entirely zero."""
+    if not isinstance(row, dict):
+        return False
+    cost = row.get("cost")
+    if not isinstance(cost, list) or not cost:
+        return False
+    priced = False
+
+    def walk(node):
+        nonlocal priced
+        if isinstance(node, dict):
+            return all(walk(value) for key, value in node.items() if key != "tier")
+        if isinstance(node, list):
+            return all(walk(item) for item in node) if node else False
+        if isinstance(node, bool) or not isinstance(node, (int, float)):
+            return False
+        priced = True
+        return node == 0
+
+    return all(walk(item) for item in cost) and priced
+
+
+def _entry_is_paid_go(key, entry):
+    """The subscription catalog is the Go provider entry or the Go inference gateway."""
+    if key in {"opencode-go", "go"}:
+        return True
+    settings = entry.get("settings") if isinstance(entry, dict) and isinstance(entry.get("settings"), dict) else {}
+    base = settings.get("baseURL") if isinstance(settings, dict) else ""
+    if not isinstance(base, str) or not base:
+        return False
+    return "/inference/go/" in urllib.parse.urlsplit(base).path
+
+
+def _connection_model_row(model_id, row):
+    if not isinstance(model_id, str) or not model_id or len(model_id) > 256 or any(ord(char) < 32 for char in model_id):
+        return None
+    if isinstance(row, dict) and row.get("disabled") is True:
+        return None
+    name = row.get("name") if isinstance(row, dict) else None
+    label = name.strip() if isinstance(name, str) else ""
+    if not label or len(label) > 256 or any(ord(char) < 32 for char in label):
+        label = model_id
+    item = {"id": model_id, "label": label}
+    limit = row.get("limit") if isinstance(row, dict) else None
+    context = limit.get("context") if isinstance(limit, dict) else None
+    if type(context) is int and 1 <= context <= 16_000_000:
+        item["context_length"] = context
+        item["context_length_source"] = "provided_catalog"
+    return item
+
+
+def connection_picker_groups(provider_id="opencode-go"):
+    """Split the stored connection into paid and free picker groups.
+
+    Membership comes from the connection's provider entries and price list.
+    This does not refresh tokens and does not return credentials.
+    """
+    if provider_id != "opencode-go":
+        return []
+    try:
+        record = _read(get_sidekick_home()).get(provider_id)
+        config = record.get("config") if isinstance(record, dict) else None
+        providers = config.get("providers") if isinstance(config, dict) else None
+        if not isinstance(providers, dict):
+            return []
+    except (DeviceError, OSError, ValueError, TypeError):
+        return []
+    paid, free = [], []
+    seen_paid, seen_free = set(), set()
+    for key in _PROVIDERS.get(provider_id, ()):
+        entry = providers.get(key)
+        if not isinstance(entry, dict) or not isinstance(entry.get("models"), dict) or not entry["models"]:
+            continue
+        paid_entry = _entry_is_paid_go(key, entry)
+        for model_id, row in entry["models"].items():
+            item = _connection_model_row(model_id, row)
+            if item is None:
+                continue
+            if paid_entry:
+                if item["id"] not in seen_paid:
+                    paid.append(item)
+                    seen_paid.add(item["id"])
+            elif _connection_cost_is_free(row) and item["id"] not in seen_free:
+                free.append(item)
+                seen_free.add(item["id"])
+    groups = []
+    if paid:
+        groups.append({"provider": "OpenCode Go", "provider_id": "opencode-go", "catalog_tier": "paid",
+                       "catalog_source": "connection", "models": paid})
+    if free:
+        groups.append({"provider": "OpenCode Go Free", "provider_id": "opencode-go-free", "catalog_tier": "free",
+                       "catalog_source": "connection", "models": free})
+    return groups
+
+
 def device_model_context_length(provider_id, model_id):
     """Public context window from the device catalog. No credentials are returned."""
     try:

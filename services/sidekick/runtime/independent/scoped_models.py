@@ -226,9 +226,14 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
         pid = _catalog_provider_id(group.get("provider_id"))
         if not pid:
             continue
+        connection_catalog = group.get("catalog_source") == "connection"
         clean = {"provider_id": pid, "provider": _text(group.get("provider"), 256) or pid,
-                 "configured": connections.get(pid, False), "models": [],
+                 "configured": True if connection_catalog else connections.get(pid, False), "models": [],
                  "deployment": provider_deployment(pid, configuration, active_provider=raw.get("active_provider"))}
+        if connection_catalog:
+            clean["catalog_source"] = "connection"
+            if group.get("catalog_tier") in {"paid", "free"}:
+                clean["catalog_tier"] = group["catalog_tier"]
         explicit_model_ids = set()
         provider_config = configured_providers.get(pid) if isinstance(configured_providers, dict) else None
         if isinstance(provider_config, dict):

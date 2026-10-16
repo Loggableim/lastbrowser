@@ -214,6 +214,7 @@ export function CopilotSplitView({
   const favoriteScopeKey = JSON.stringify(favoriteScope);
   const [favoriteState, setFavoriteState] = useState(() => ({ key: favoriteScopeKey, ...readQuickchatFavoriteState(favoriteScope) }));
   const [favoriteError, setFavoriteError] = useState('');
+  const [inactiveModelNotice, setInactiveModelNotice] = useState('');
   const displayedFavorite = favoriteState.key === favoriteScopeKey ? favoriteState : readQuickchatFavoriteState(favoriteScope);
   const favorite = displayedFavorite.favorite;
   const favoriteInvalid = displayedFavorite.invalid;
@@ -480,9 +481,25 @@ export function CopilotSplitView({
     const active = scopeReady
       ? isModelActive(window.localStorage, { browserProfileId, backendProfileName: backendName }, model.providerId, identity.model)
       : true;
-    const qualified = showUntestedBetas || localModel || isProviderModelQualified(model.providerId, identity.model, browserProfileId, backendName, window.localStorage);
+    const connectionGroup = model.providerId === 'opencode-go' || model.providerId === 'opencode-go-free';
+    const qualified = showUntestedBetas || localModel || connectionGroup || isProviderModelQualified(model.providerId, identity.model, browserProfileId, backendName, window.localStorage);
     return Boolean(model.providerId && active && qualified && (scopeReady || localModel));
   }), [modelList, smartTrackEnabled, teamworkEnabled, showUntestedBetas, browserProfileId, backendProfileName, activeModelRevision]);
+  useEffect(() => {
+    if (!favorite || !browserProfileId || !backendProfileName || !modelCapabilitiesLoaded) return;
+    const scope = { browserProfileId, backendProfileName };
+    if (isModelActive(window.localStorage, scope, favorite.provider, favorite.model)) return;
+    const replacement = visibleModelList.find(model => model.providerId && !isMultiAgentModelSelection({ model: model.id, provider: model.providerId }));
+    try {
+      const next = replacement?.providerId ? { provider: replacement.providerId, model: replacement.id } : null;
+      setQuickchatFavorite(favoriteScope, next);
+      setFavoriteState({ key: favoriteScopeKey, favorite: next, invalid: false });
+      if (replacement?.providerId) onSelectModel?.(replacement.id, replacement.providerId);
+      setInactiveModelNotice(t('settings.panels.providers.activeModelFallback'));
+    } catch {
+      setInactiveModelNotice(t('settings.panels.providers.activeModelFallback'));
+    }
+  }, [favorite, favoriteScope, favoriteScopeKey, browserProfileId, backendProfileName, modelCapabilitiesLoaded, visibleModelList, activeModelRevision, onSelectModel, t]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -753,13 +770,13 @@ export function CopilotSplitView({
           {visibleModelList.some((m) => m.category === 'cloud') && <div className="model-group-title">{locale === 'de' ? 'Cloud & entfernte Endpunkte' : 'Cloud & remote endpoints'}</div>}
           {visibleModelList.filter((m) => m.category === 'cloud').map(renderModelItem)}
 
-          {/* 5. Other provider engines */}
-          {visibleModelList.some((m) => m.category === 'other') && (
-            <>
-              <div className="model-group-title">{t('copilot.modelGroupOtherEngines')}</div>
-              {visibleModelList.filter((m) => m.category === 'other').map(renderModelItem)}
-            </>
-          )}
+          {/* Connection catalogs keep the provider label returned with the group. */}
+          {[...new Set(visibleModelList.filter((m) => m.category === 'other').map((m) => m.provider))].map((label) => (
+            <div key={label}>
+              <div className="model-group-title">{label || t('copilot.modelGroupOtherEngines')}</div>
+              {visibleModelList.filter((m) => m.category === 'other' && m.provider === label).map(renderModelItem)}
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -1274,6 +1291,7 @@ export function CopilotSplitView({
         {modelGateReason && !favoriteInvalid && !slowCatalogVisible && <div className="copilot-model-gate-notice" role={modelGateReason === 'loading' ? 'status' : 'alert'}>
           {quickChatModelGateCopy[locale][modelGateReason]}
         </div>}
+        {inactiveModelNotice && <div className="copilot-model-gate-notice" role="status">{inactiveModelNotice}</div>}
         <div className="copilot-model-row" ref={footerModelRef} style={{ position: 'relative' }}>
           <span className="copilot-model-label">{t('copilot.modelLabel')}</span>
           <div

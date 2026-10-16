@@ -20,8 +20,11 @@ export default defineConfig({
     emptyOutDir: true
   },
   resolve: {
+    dedupe: ['react', 'react-dom'],
     alias: {
-      '@': path.resolve(desktopDir, 'src')
+      '@': path.resolve(desktopDir, 'src'),
+      react: path.resolve(desktopDir, 'node_modules/react'),
+      'react-dom': path.resolve(desktopDir, 'node_modules/react-dom')
     }
   },
   server: {

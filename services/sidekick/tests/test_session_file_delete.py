@@ -11,6 +11,8 @@ def test_delete_removes_the_space_session_file(monkeypatch, tmp_path):
     sid = "abc123"
     leftover = space_dir / f"{sid}.json"
     leftover.write_text("{}", encoding="utf-8")
+    tail = space_dir / f"{sid}.tail.json"
+    tail.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(models, "get_session_dir", lambda: request_dir)
 
     class Workspace:
@@ -23,6 +25,7 @@ def test_delete_removes_the_space_session_file(monkeypatch, tmp_path):
 
     assert models.unlink_owned_session_files(sid) is True
     assert not leftover.exists()
+    assert not tail.exists()
 
 
 def test_delete_reports_failure_when_the_session_file_stays(monkeypatch, tmp_path):

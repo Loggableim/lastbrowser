@@ -94,6 +94,17 @@ function configurationCatalogProvider(raw: Record<string, unknown>, url: URL): s
   return provider && query.get('catalog') === 'configuration' && configurableProviderIds.has(provider) ? provider : null;
 }
 
+function isSessionFlagRequest(raw: Record<string, unknown>, endpoint: string, url: URL): boolean {
+  const method = raw.method ?? 'GET';
+  if (method !== 'POST' || url.search !== '' || raw.query !== undefined || url.pathname !== endpoint) return false;
+  const flag = endpoint === '/api/session/pin' ? 'pinned' : endpoint === '/api/session/archive' ? 'archived' : '';
+  if (!flag) return false;
+  const body = requestBodyRecord(raw.body);
+  return Boolean(body && onlyKeys(body, ['session_id', flag])
+    && typeof body.session_id === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(body.session_id)
+    && typeof body[flag] === 'boolean');
+}
+
 function isProviderSettingsScopedRequest(raw: Record<string, unknown>, endpoint: string, url: URL): boolean {
   const method = raw.method ?? 'GET';
   if (url.pathname !== endpoint) return false;
@@ -140,7 +151,9 @@ export async function requestScopedWebui(
       || (endpoint === '/api/teamwork/status' && method === 'GET');
     const exactTeamworkRequest = teamworkRequest && parsedRequestUrl.search === '' && raw.query === undefined;
     const providerSettingsRequest = isProviderSettingsScopedRequest(raw, endpoint, parsedRequestUrl);
-    if (!exactTeamworkRequest && !providerSettingsRequest)
+    const sessionFlagRequest = (endpoint === '/api/session/pin' || endpoint === '/api/session/archive')
+      && isSessionFlagRequest(raw, endpoint, parsedRequestUrl);
+    if (!exactTeamworkRequest && !providerSettingsRequest && !sessionFlagRequest)
       throw new Error('This WebUI endpoint does not support a Space binding');
     if (!record(scopeSelection)
       || Object.keys(scopeSelection).some(key => !['browserProfileId', 'workspacePath', 'backendProfileName'].includes(key))

@@ -33,6 +33,25 @@ export function sessionDeletionFailureMessage(result: unknown, locale: string): 
       ? 'Das Ziel dieses Chats konnte nicht gelöscht werden. Bitte erneut versuchen.'
       : 'The goal of this chat could not be cleared. Please try again.';
   }
+  const busy = 'This chat is still being written by an active turn. Stop that turn before changing or deleting the chat.';
+  if (error === busy || (typeof response.message === 'string' && response.message.trim() === busy)) {
+    const localized = locale === 'de'
+      ? 'Dieser Chat wird noch von einem laufenden Durchgang geschrieben. Beende diesen Durchgang, bevor du den Chat änderst oder löschst.'
+      : locale === 'es'
+        ? 'Este chat todavía lo está escribiendo un turno activo. Detén ese turno antes de cambiar o eliminar el chat.'
+        : locale === 'fr'
+          ? 'Ce chat est encore écrit par un tour actif. Arrêtez ce tour avant de modifier ou supprimer le chat.'
+          : locale === 'it'
+            ? 'Questa chat è ancora scritta da un turno attivo. Interrompi quel turno prima di modificare o eliminare la chat.'
+            : locale === 'pt-BR'
+              ? 'Este chat ainda está sendo escrito por um turno ativo. Interrompa esse turno antes de alterar ou excluir o chat.'
+              : locale === 'ru'
+                ? 'Этот чат ещё пишет активный ход. Остановите этот ход, прежде чем изменять или удалять чат.'
+                : locale === 'ja'
+                  ? 'このチャットは進行中のターンがまだ書き込んでいます。変更または削除する前に、そのターンを停止してください。'
+                  : busy;
+    return localized;
+  }
   if (error) return error;
   const message = typeof response.message === 'string' ? response.message.trim() : '';
   return message || fallback;

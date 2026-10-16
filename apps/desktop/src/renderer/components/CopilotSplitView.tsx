@@ -989,12 +989,12 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn copilot-new-chat-btn"
-              title="Reset Chat"
-              aria-label="Reset Chat"
+              title={t('chat.resetChat')}
+              aria-label={t('chat.resetChat')}
               onClick={onNewChat}
             >
               <Plus size={13} />
-              <span>Reset Chat</span>
+              <span>{t('chat.resetChat')}</span>
             </button>
           )}
 

@@ -351,6 +351,21 @@ def _clarify_timeout_seconds(default: int = 120) -> int:
         return default
 
 
+def _turn_failed_without_reply(result) -> bool:
+    """Older assistant turns in the transcript are not this turn's reply.
+
+    A provider 404 on a follow-up still returns the full history, so "any
+    assistant message exists" would hide the error and leave only the user text.
+    """
+    if not isinstance(result, dict):
+        return False
+    if result.get('failed') is True:
+        return True
+    error = result.get('error')
+    final = result.get('final_response')
+    return bool(error) and not str(final or '').strip()
+
+
 def _classify_provider_error(err_str: str, exc=None, *, silent_failure: bool = False) -> dict:
     """Classify provider/agent failure text for WebUI apperror UX.
 
@@ -4380,7 +4395,7 @@ def _run_agent_streaming(
                 # an empty final_response without raising — the stream would end with
                 # a done event containing zero assistant messages, leaving the user with
                 # no feedback. Emit an apperror so the client shows an inline error.
-                _assistant_added = any(
+                _assistant_added = False if _turn_failed_without_reply(result) else any(
                     m.get('role') == 'assistant' and str(m.get('content') or '').strip()
                     for m in (result.get('messages') or [])
                 )

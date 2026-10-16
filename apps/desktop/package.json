@@ -26,7 +26,7 @@
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
     "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
     "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
-    "package:linux": "npm run prepare:python && npm run build && electron-builder --linux tar.gz AppImage && node scripts/fix-linux-apprun.mjs && node scripts/write-linux-checksums.mjs"
+    "package:linux": "npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus && node scripts/fix-linux-apprun.mjs && node scripts/write-linux-checksums.mjs"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -102,6 +102,12 @@
           "!**/*.gguf",
           "!**/*.egg-info/**",
           "!sidekick/build/**",
+          "!sidekick/tests/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/.mypy_cache/**",
+          "!**/node_modules/**",
+          "!**/*.map",
           "!**/build/lib/**"
         ]
       },
@@ -116,6 +122,8 @@
           "**/*",
           "!**/*.cpython-3[!1]*.pyc",
           "!**/*.cpython-31[!2]*.pyc",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
           "!**/site-packages/tests/**"
         ]
       }
@@ -158,7 +166,8 @@
         "portable"
       ],
       "files": [
-        "!node_modules/node-pty/prebuilds/linux-*/**/*"
+        "!node_modules/node-pty/prebuilds/linux-*/**/*",
+        "!**/*.map"
       ],
       "icon": "build/icon.ico",
       "signAndEditExecutable": false,

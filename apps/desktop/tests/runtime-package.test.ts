@@ -30,7 +30,9 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.scripts['prepare:python']).toBe('node scripts/prepare-python-runtime.mjs');
     expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
     expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
-    expect(packageJson.scripts['package:linux']).toContain('npm run prepare:python && npm run build && electron-builder --linux tar.gz AppImage');
+    expect(packageJson.scripts['package:linux']).toContain('node scripts/stage-opencode-client.mjs');
+    expect(packageJson.scripts['package:linux']).toContain('electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus');
+    expect(packageJson.build.electronVersion).toBe('45.0.0-alpha.14+wvcus');
     expect(packageJson.build.linux.target).toContain('AppImage');
     expect(packageJson.scripts['package:linux']).toContain('node scripts/write-linux-checksums.mjs');
     expect(packageJson.scripts['smoke:linux:fresh-profile']).toBe('node scripts/smoke-linux-fresh-profile.mjs');
@@ -50,7 +52,11 @@ describe('desktop runtime packaging', () => {
         expect.objectContaining({
           from: 'runtime/python',
           to: 'runtime/python',
-          filter: expect.arrayContaining(['!**/*.cpython-3[!1]*.pyc', '!**/*.cpython-31[!2]*.pyc', '!**/site-packages/tests/**'])
+          filter: expect.arrayContaining(['!**/*.cpython-3[!1]*.pyc', '!**/*.cpython-31[!2]*.pyc', '!**/__pycache__/**', '!**/*.pyc', '!**/site-packages/tests/**'])
+        }),
+        expect.objectContaining({
+          from: '../../services',
+          filter: expect.arrayContaining(['!sidekick/tests/**', '!**/__pycache__/**', '!**/*.pyc'])
         })
       ])
     );

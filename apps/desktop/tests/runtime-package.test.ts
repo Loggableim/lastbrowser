@@ -44,6 +44,10 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.build.files).toContain('!node_modules/node-pty/prebuilds/darwin-*/**/*');
     expect(packageJson.build.win.files).toContain('!node_modules/node-pty/prebuilds/linux-*/**/*');
     expect(packageJson.build.linux.files).toContain('!node_modules/node-pty/prebuilds/win32-*/**/*');
+    // debug (via electron-updater) requires `ms`. npm workspaces mark the hoisted
+    // copy extraneous, so electron-builder omits it and the packaged main process
+    // throws before a window exists. Keep it a direct production dependency.
+    expect(packageJson.dependencies.ms).toBe('2.1.3');
   });
 
   it('ships the prepared Python runtime as an Electron resource', () => {

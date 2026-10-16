@@ -22,6 +22,14 @@ def bind_native_policy(context: NativeChatContext) -> None:
     verify_native_context(context)
     if _context is not None and _context != context:
         raise PermissionError("A native worker cannot change its binding")
+    # Spawn keeps these stable so one warm process can serve the next session.
+    # The bound turn overwrites them before any tool or child reads the env.
+    os.environ["LASTBROWSER_NATIVE_GENERATION"] = context.writer_generation
+    os.environ["SIDEKICK_SESSION_ID"] = context.session_id
+    os.environ["LASTBROWSER_BACKEND_PROFILE_ID"] = context.scope.backend_profile_id
+    os.environ["LASTBROWSER_BROWSER_PROFILE_ID"] = context.scope.browser_profile_id
+    os.environ["LASTBROWSER_SPACE_ID"] = context.scope.space_id
+    os.environ["LASTBROWSER_PARTITION_KEY"] = context.partition_key
     _context = context
 
 

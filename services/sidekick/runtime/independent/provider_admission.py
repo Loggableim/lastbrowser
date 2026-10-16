@@ -111,6 +111,35 @@ def _integer(value):
     return None
 
 
+LOCAL_LOOPBACK_REQUESTS_PER_MINUTE = 600
+
+
+def loopback_endpoint(endpoint: str | None) -> bool:
+    """A loopback base URL is this machine, not a shared cloud rate limit."""
+    if not isinstance(endpoint, str) or not endpoint:
+        return False
+    parsed = urlsplit(endpoint)
+    return (parsed.scheme in {"http", "https"} and parsed.hostname in {"127.0.0.1", "::1", "localhost"}
+            and not parsed.username and not parsed.password)
+
+
+def request_cap_for_endpoint(budgets, endpoint: str | None) -> int:
+    cap = min(value.requests_per_minute for value in budgets)
+    if loopback_endpoint(endpoint):
+        return max(cap, LOCAL_LOOPBACK_REQUESTS_PER_MINUTE)
+    return cap
+
+
+def loopback_provider_endpoint(endpoint: str | None) -> bool:
+    """True for an explicit loopback origin. Remote and unverified endpoints stay capped."""
+    try:
+        parsed = urlsplit(endpoint or "")
+    except ValueError:
+        return False
+    host = (parsed.hostname or "").lower().strip("[]").rstrip(".")
+    return parsed.scheme in {"http", "https"} and host in {"localhost", "127.0.0.1", "::1"}
+
+
 def provider_endpoint(home: Path, provider: str) -> str | None:
     """Pure explicit own-Home endpoint read, with no provider/auth resolution."""
     import yaml
@@ -322,7 +351,8 @@ class ProviderAdmission:
                 raise PolicyDenied("provider_request_already_claimed")
             known = any(now - _date(row.observed_at) <= timedelta(seconds=60) and any(bucket.remaining is not None for bucket in row.buckets) for row in snapshots)
             captured_budgets = [budget, *(row.admission_budget for row in recent), *(row.admission_budget for row in active if row not in recent)]
-            request_cap = min(value.requests_per_minute for value in captured_budgets)
+            request_cap = request_cap_for_endpoint(
+                captured_budgets, provider_endpoint(self.store.profile_home, proposed.provider))
             token_cap = min(value.tokens_per_minute for value in captured_budgets)
             concurrency_cap = min(value.max_concurrent for value in captured_budgets)
             costs = [value.max_cost_microusd_per_minute for value in captured_budgets if value.max_cost_microusd_per_minute is not None]
@@ -330,7 +360,11 @@ class ProviderAdmission:
             if len(active) >= min(concurrency_cap, 1 if not known else concurrency_cap):
                 raise ResourceBusy("Shared provider concurrency is occupied",
                     diagnostic_reason="provider_concurrency_occupied")
-            if len(recent) >= request_cap:
+            # A loopback model has no shared cloud account. The conservative
+            # per-minute request cap was denying later chat turns before any
+            # HTTP request, while earlier turns in the same minute still posted.
+            loopback = loopback_provider_endpoint(provider_endpoint(self.store.profile_home, proposed.provider))
+            if not loopback and len(recent) >= request_cap:
                 raise ResourceBusy("Local shared request budget is exhausted",
                     diagnostic_reason="request_budget_exhausted")
             if proposed.reserved_tokens + sum(row.measured_tokens if row.measured_tokens is not None else row.reserved_tokens for row in recent) > token_cap:

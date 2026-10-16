@@ -3,6 +3,9 @@ node_modules/
 /output/local-ai-evaluation/
 /output/local-ai-pr-body.md
 dist/
+!/dist/
+/dist/*
+!/dist/linux/
 out/
 release/
 !docs/release/
@@ -31,6 +34,7 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 services/sidekick/build/
+services/sidekick/vendor/opencode/
 .DS_Store
 Thumbs.db
 *.png

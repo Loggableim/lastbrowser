@@ -161,6 +161,8 @@ import {
   collectBrowserContext,
   collectTeamworkGroundingContext,
   dispatchSidekickAction,
+  assistantErrorAfterPrompt,
+  assistantTextAfterPrompt,
   lastAssistantText,
   resolveConfiguredModel,
   resolveConfiguredModelSelection,
@@ -2706,12 +2708,14 @@ function AppContent(): JSX.Element {
         );
         const updated = await loadActiveSession(restored.sessionId, { loadDraft: false, showLoading: false });
         if (!isOwningContextCurrent()) return;
-        const answer = lastAssistantText(updated);
-        if (streamResult.streamError) {
+        const answer = assistantTextAfterPrompt(updated, restored.pendingUserMessage);
+        const savedError = assistantErrorAfterPrompt(updated, restored.pendingUserMessage);
+        const visibleError = streamResult.streamError || savedError;
+        if (visibleError) {
           failed = true;
-          setChatError(streamResult.streamError);
-          setChatMessages((messages) => finishLiveChatMessageWithError(messages, streamResult.streamError!, restored.streamId));
-          setMessages((messages) => finishLiveChatMessageWithError(messages, streamResult.streamError!, restored.streamId));
+          setChatError(visibleError);
+          setChatMessages((messages) => finishLiveChatMessageWithError(messages, visibleError, restored.streamId));
+          setMessages((messages) => finishLiveChatMessageWithError(messages, visibleError, restored.streamId));
         } else if (streamResult.cancelled) {
           setChatMessages((messages) => finishLiveChatMessage(messages, restored.streamId));
           setMessages((messages) => finishLiveChatMessage(messages, restored.streamId));
@@ -4452,6 +4456,9 @@ function AppContent(): JSX.Element {
     });
     const initialStart = prepareGuardedNativeChatStart(createGuardedStartInput());
     if (!initialStart.ok) {
+      // The optimistic user bubble is already on screen. A failed prepare never
+      // reaches the provider, so the draft must be restored and the bubble removed.
+      if (submission) submission.definitelyRejected = true;
       if (initialStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
       else if (initialStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
       else if (initialStart.reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'));
@@ -4650,7 +4657,9 @@ function AppContent(): JSX.Element {
       // the literal string "Sidekick finished.", so every reply — including
       // errors and full summaries — was hidden behind that text.
       const finished = await loadActiveSession(response.sessionId, { loadDraft: false, showLoading: false });
-      const answer = lastAssistantText(finished);
+      const answer = assistantTextAfterPrompt(finished, displayText);
+      const savedError = assistantErrorAfterPrompt(finished, displayText);
+      const visibleError = streamResult.streamError || savedError;
       recordCompletedChatEvidence({
         startAccepted: chatStartAccepted,
         completed: streamResult.completed,
@@ -4663,25 +4672,22 @@ function AppContent(): JSX.Element {
         providerEvidence: streamResult.providerEvidence,
       }, window.localStorage);
       if (turnContextStillCurrent) {
-        if (streamResult.streamError) {
+        if (visibleError) {
           turnFailed = true;
-          setChatError(streamResult.streamError);
-          setChatMessages((current) => finishLiveChatMessageWithError(current, streamResult.streamError!));
-          setMessages((current) => finishLiveChatMessageWithError(current, streamResult.streamError!));
+          setChatError(visibleError);
+          setChatMessages((current) => finishLiveChatMessageWithError(current, visibleError, response.streamId));
+          setMessages((current) => finishLiveChatMessageWithError(current, visibleError, response.streamId));
         } else if (streamResult.cancelled) {
           setChatMessages((current) => finishStoppedLiveChatMessage(current, response.streamId));
           setMessages((current) => finishStoppedLiveChatMessage(current, response.streamId));
         } else {
-          setChatMessages((current) => current.map((item) => (
-            item.pending && item.chatStreamId === response.streamId
-              ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
+          const settle = <T extends { pending?: boolean; streaming?: boolean; latencyPlaceholder?: boolean; chatStreamId?: string; content?: string; progress?: string; reasoning?: string; role?: string }>(current: T[]) => current.map((item) => (
+            shouldFinalizeInFlightAssistant(item) && (!item.chatStreamId || item.chatStreamId === response.streamId)
+              ? { ...item, content: fallbackFinishedAssistantContent(item, answer), pending: false, streaming: false, progress: undefined, latencyPlaceholder: undefined }
               : item
-          )));
-          setMessages((current) => current.map((item) => (
-            item.pending && item.chatStreamId === response.streamId
-              ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
-              : item
-          )));
+          ));
+          setChatMessages(settle);
+          setMessages(settle);
         }
         if (streamResult.goalError) setChatError(streamResult.goalError);
       }
@@ -8131,6 +8137,7 @@ function NativeSpacesMain({
   onSelectSpace: (path: string) => void;
   onNewSession: () => void;
 }): JSX.Element {
+  const { t } = useDesktopI18n();
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Spaces');
@@ -8163,8 +8170,8 @@ function NativeSpacesMain({
         </div>
       </div>
       <div className="native-card-actions insights-tabs">
-        {['Spaces', 'Active workspace', 'Files', 'New chat'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        {([['Spaces', 'Spaces'], ['Active workspace', 'Active workspace'], ['Files', 'Files'], ['New chat', t('chat.newSession')]] as const).map(([item, label]) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{label}</button>
         ))}
       </div>
       <section className="native-work-card detail-json-card">

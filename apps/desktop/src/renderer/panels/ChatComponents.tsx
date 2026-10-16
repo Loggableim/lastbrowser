@@ -40,6 +40,7 @@ import { RichTextRenderer } from '../NativeRichText.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import type { DesktopChatMessage, DesktopSessionDetail, ChatRunState } from '../shell-state.js';
 import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usage.js';
+import { localizeKnownChatStatus } from '../chat-live-stream.js';
 import { useDesktopI18n } from '../i18n.js';
 import { parseProviderModelId, qualifyModelForProvider } from '../provider-model-selection.js';
 import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker.js';
@@ -65,6 +66,8 @@ import { TeamworkProcessCard } from '../components/TeamworkProcessCard.js';
 import { MemoryUsageBadge } from '../components/MemoryUsageBadge.js';
 import type { TeamworkMetadata } from '../teamwork-live-stream.js';
 import './chat-composer.css';
+import { composerEnterAction } from '../composer-queue.js';
+import { ComposerQueuedRows } from '../NativeCompressQueue.js';
 
 const nativeMessageCopy: Record<DesktopLocaleId,{ you:string; system:string; partial:string }> = {
   en:{you:'You',system:'System',partial:'Partial output'},de:{you:'Du',system:'System',partial:'Teilausgabe'},
@@ -170,7 +173,7 @@ export function ChatTranscript({
 
   return (
     <div ref={transcript} className="chat-transcript">
-      {error && <div className="chat-error">{error}</div>}
+      {error && <div className="chat-error">{localizeKnownChatStatus(error, t)}</div>}
       {messages.map((message, index) => {
         const messageAppearance = (message.pending || message.streaming) && pendingCompanion
           ? pendingCompanion
@@ -236,7 +239,7 @@ export function ChatTranscript({
         <p className="child-run-identity">{childRunLabels[locale==='pt-BR'?'pt':locale].children} · {group.binding.parentTurnId}</p>
         <ChildRunBubbles state={group} locale={locale==='pt-BR'?'pt':locale} onResync={identity=>onChildResync?.(identity.parentTurnId)} renderContent={content=><ChatMessageBody content={content}/>}/>
       </section>)}
-      {(childHistoryUnavailable||childHistoryResyncNeeded)&&<p className="chat-status-message" role="status">
+      {!error && (childHistoryUnavailable || (childHistoryResyncNeeded && childGroups.length > 0)) && <p className="chat-status-message" role="status">
         {childRunLabels[locale==='pt-BR'?'pt':locale][childHistoryUnavailable?'stale':'overflow']}
         {childParentTurns.some(turn=>!childGroups.some(group=>group.binding.parentTurnId===turn))&&
           <button type="button" className="secondary-action compact" onClick={()=>onChildResync?.('')}>
@@ -429,6 +432,7 @@ export type ChatComposerProps = {
   automaticPolicy?:Readonly<{active:boolean;available:boolean;qualified?:boolean;allowedModels?:readonly {provider:string;model:string}[]}>;
   sendBlocked?:boolean;
   betaSelectionBlocked?:boolean;
+  qualificationNoticeHidden?:boolean;
   multiAgentBetaBlocked?:boolean;
   modelQualified?:boolean;
   requestedDefaultModel?:string;
@@ -447,6 +451,8 @@ export type ChatComposerProps = {
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
   modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence;localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }> }>;
+  /** When a turn error is already visible, do not stack the qualification notice under it. */
+  hideQualificationNotice?: boolean;
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
   emptyQualifiedCatalog?: boolean;
   noActiveModels?: boolean;
@@ -475,6 +481,8 @@ export type ChatComposerProps = {
   onSend: (message: string, reasoningEffort?: string) => void;
   onStop: () => void;
   onText: (text: string) => void;
+  queuedMessages?: Array<{ text: string }>;
+  onRemoveQueued?: (index: number) => void;
 };
 
 const unavailableCommands:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
@@ -490,7 +498,7 @@ function workspaceLabel(path?: string | null): string {
 
 export function ChatComposer({
   conversationCompanion = null,
-  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,multiAgentBetaBlocked=false,modelQualified=false,requestedLunaInCatalog,
+  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,qualificationNoticeHidden=false,multiAgentBetaBlocked=false,modelQualified=false,requestedLunaInCatalog,
   requestedDefaultModel='',requestedDefaultProviderLabel='',requestedDefaultQualified=false,requestedDefaultAvailable=false,requestedDefaultUnavailableReason='',
   browserProfileId='',backendProfileName='default',
   commandContext,
@@ -505,6 +513,7 @@ export function ChatComposer({
   reasoningEfforts,
   reasoningCapabilityState,
   modelOptions,
+  hideQualificationNotice = false,
   emptyQualifiedCatalog = false,
   noActiveModels = false,
   modelCatalogError=false,
@@ -526,7 +535,9 @@ export function ChatComposer({
   onReasoningEffort,
   onSend,
   onStop,
-  onText
+  onText,
+  queuedMessages = [],
+  onRemoveQueued
 }: ChatComposerProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
   const companion = useCompanionAppearance();
@@ -534,10 +545,12 @@ export function ChatComposer({
   const composerCompanion = conversationCompanion ?? (standardCompanion.stored ? standardCompanion : companion);
   const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
-  const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
   const selectedModelVisible = modelOptions.some(group => group.providerId === modelProvider
     && group.models.some(entry => parseProviderModelId(entry.id, group.providerId).model === model));
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
+  const submission = composerEnterAction({ ready, text, running, busy, sendBlocked });
+  const canSend = submission === 'send';
+  const canQueue = submission === 'queue';
 
   const [showSlashDropdown, setShowSlashDropdown] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
@@ -571,7 +584,8 @@ export function ChatComposer({
   function submit(event?: FormEvent): void {
     event?.preventDefault();
     if(ready&&parseChatCommand(text)&&executeCommand(text))return;
-    if (!canSend) return;
+    const action = composerEnterAction({ ready, text, running, busy, sendBlocked });
+    if (action === 'ignore') return;
     setShowSlashDropdown(false);
     onSend(text, reasoningEffort || undefined);
   }
@@ -692,7 +706,7 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {(betaSelectionBlocked||emptyQualifiedCatalog)&&!connectionNotice&&!modelCatalogLoading&&!modelCatalogError&&<div className="composer-model-notice" role="status">
+      {!hideQualificationNotice&&!qualificationNoticeHidden&&(betaSelectionBlocked||emptyQualifiedCatalog)&&!connectionNotice&&!modelCatalogLoading&&!modelCatalogError&&<div className="composer-model-notice" role="status">
         <span>{multiAgentBetaBlocked ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</span>
         {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
@@ -702,7 +716,7 @@ export function ChatComposer({
         {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
           {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);
-            const desiredDefault=group.providerId==='openai-codex'&&entry.id==='gpt-6-luna';
+            const desiredDefault=group.providerId==='opencode'&&entry.id==='deepseek-v4.1-flash-free';
             const expiry=entry.qualification?new Date(entry.qualification.recordedAt+24*60*60*1000).toLocaleString(locale):'';
             const local=group.providerId==='local-store';
             const localProof=locale.startsWith('de')?'Gerät und Werkzeugaufrufe geprüft':'Device and tool calls verified';
@@ -712,9 +726,8 @@ export function ChatComposer({
             return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||!ready||running}
             title={`${group.provider} · ${entry.id} · ${evidenceDetails}`}
             aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
-            <span className="composer-manual-model-name">{desiredDefault?'GPT-6 Luna':entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
-            <small>{group.provider} · {entry.id} · {local?evidenceDetails:entry.qualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
-              {!local&&entry.qualified?` · ${expiry}`:''}{unavailable?` · ${t('chat.modelUnavailableInSpace')}`:entry.supportsIndependent===false?` · ${t('chat.modelIndependentUnsupported')}`:''}</small>
+            <span className="composer-manual-model-name">{entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
+            <small>{group.provider} · {entry.id} · {unavailable?t('chat.modelUnavailableInSpace'):entry.supportsIndependent===false?t('chat.modelIndependentUnsupported'):local?evidenceDetails:entry.qualified?`${t('settings.panels.providers.lastSuccessfulChat')}${expiry?` · ${expiry}`:''}`:t('settings.panels.providers.betaUntested')}</small>
           </button>;})}
         </fieldset>)}
         {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">
@@ -725,6 +738,7 @@ export function ChatComposer({
             : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
         </p>}
       </section>}
+      <ComposerQueuedRows queue={queuedMessages} onRemoveAt={onRemoveQueued ?? (() => undefined)} />
       <div className="composer-input-row">
         {showSlashDropdown&&commandContext&&onCommandAction&&<SlashCommandMenu locale={locale} query={slashFilter} capabilities={commandCapabilities}
           onChoose={command=>{executeCommand('/'+command.name);}} onClose={closeSlashMenu}/>}
@@ -744,15 +758,16 @@ export function ChatComposer({
             if (event.key === 'Escape') setShowSlashDropdown(false);
           }}
         />
-        {running ? (
-          <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
-            <StopCircle size={17} />
-          </button>
-        ) : (
-          <button type="submit" className="composer-send" disabled={!canSend} aria-label={t('chat.send')}>
+        <div className="composer-send-actions">
+          {running ? (
+            <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
+              <StopCircle size={17} />
+            </button>
+          ) : null}
+          <button type="submit" className="composer-send" disabled={!(canSend || canQueue)} aria-label={t('chat.send')}>
             <Send size={17} />
           </button>
-        )}
+        </div>
       </div>
     </form>
   );

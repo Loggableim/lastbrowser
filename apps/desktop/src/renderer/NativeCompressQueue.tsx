@@ -1,7 +1,15 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { Archive, List, Loader2, Trash2, X } from 'lucide-react';
 import { useDesktopI18n } from './i18n.js';
 import type { DesktopLocaleId } from './i18n/keys.js';
+import {
+  dequeueSessionMessage,
+  enqueueSessionMessage,
+  removeSessionMessage,
+  sessionQueue,
+  type ComposerQueueMessage,
+  type SessionQueues,
+} from './composer-queue.js';
 
 const compressionCopy: Record<DesktopLocaleId, { action:string; busy:string; title:string; done:string; failed:string }> = {
   en:{action:'Compress',busy:'Compressing…',title:'Compress conversation context',done:'Context compressed successfully.',failed:'Context compression failed'},
@@ -16,54 +24,86 @@ const compressionCopy: Record<DesktopLocaleId, { action:string; busy:string; tit
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 
-type QueueMessage = {
-  text: string;
-  model?: string;
-  profile?: string;
-  reasoningEffort?: string;
-};
+type QueueMessage = ComposerQueueMessage;
 
-const QUEUE_STORAGE_KEY = 'lastbrowser.chatQueue.v1';
+const SESSION_QUEUE_STORAGE_KEY = 'lastbrowser.chatQueue.sessions.v1';
 
-function loadQueue(): QueueMessage[] {
+function loadSessionQueues(): SessionQueues {
   try {
-    const raw = window.localStorage.getItem(QUEUE_STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as QueueMessage[]) : [];
-  } catch { return []; }
+    const raw = window.localStorage.getItem(SESSION_QUEUE_STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed as SessionQueues;
+  } catch { return {}; }
 }
-function saveQueue(queue: QueueMessage[]) {
-  try { window.localStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(queue)); } catch {}
+function saveSessionQueues(queues: SessionQueues) {
+  try { window.localStorage.setItem(SESSION_QUEUE_STORAGE_KEY, JSON.stringify(queues)); } catch { /* storage can be unavailable */ }
 }
 
-export function useChatQueue(): {
+export function useChatQueue(sessionId: string | null): {
   queue: QueueMessage[];
-  enqueue: (msg: QueueMessage) => void;
+  enqueue: (msg: QueueMessage) => boolean;
   dequeue: () => QueueMessage | undefined;
   clearQueue: () => void;
   removeAt: (i: number) => void;
 } {
-  const [queue, setQueue] = useState<QueueMessage[]>(loadQueue);
-  const save = useCallback((q: QueueMessage[]) => { setQueue(q); saveQueue(q); }, []);
+  const [queues, setQueues] = useState<SessionQueues>(loadSessionQueues);
+  const persist = useCallback((next: SessionQueues) => { setQueues(next); saveSessionQueues(next); }, []);
+  const queue = sessionQueue(queues, sessionId);
 
   const enqueue = useCallback((msg: QueueMessage) => {
-    save([...loadQueue(), msg]);
-  }, [save]);
+    const next = enqueueSessionMessage(loadSessionQueues(), sessionId, msg);
+    if (!next) return false;
+    persist(next);
+    return true;
+  }, [persist, sessionId]);
 
   const dequeue = useCallback(() => {
-    const q = loadQueue();
-    if (!q.length) return undefined;
-    const [first, ...rest] = q;
-    save(rest);
-    return first;
-  }, [save]);
+    const result = dequeueSessionMessage(loadSessionQueues(), sessionId);
+    if (!result.message) return undefined;
+    persist(result.store);
+    return result.message;
+  }, [persist, sessionId]);
 
-  const clearQueue = useCallback(() => save([]), [save]);
+  const clearQueue = useCallback(() => {
+    const key = sessionId?.trim();
+    if (!key) return;
+    const next = { ...loadSessionQueues() };
+    delete next[key];
+    persist(next);
+  }, [persist, sessionId]);
+
   const removeAt = useCallback((i: number) => {
-    const q = loadQueue();
-    if (i >= 0 && i < q.length) { q.splice(i, 1); save(q); }
-  }, [save]);
+    persist(removeSessionMessage(loadSessionQueues(), sessionId, i));
+  }, [persist, sessionId]);
 
   return { queue, enqueue, dequeue, clearQueue, removeAt };
+}
+
+export function ComposerQueuedRows({
+  queue,
+  onRemoveAt,
+}: {
+  queue: QueueMessage[];
+  onRemoveAt: (index: number) => void;
+}): JSX.Element | null {
+  const { t } = useDesktopI18n();
+  if (!queue.length) return null;
+  const label = t('spaceAssistant.queued');
+  return (
+    <ul className="composer-queued" aria-label={label}>
+      {queue.map((message, index) => (
+        <li key={`${index}:${message.text}`} className="composer-queued-row" data-testid="composer-queued-row">
+          <span className="composer-queued-label">{label}</span>
+          <span className="composer-queued-text">{message.text}</span>
+          <button type="button" className="queue-remove-btn" onClick={() => onRemoveAt(index)} aria-label={t('common.remove')}>
+            <X size={12} />
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function QueueIndicator({

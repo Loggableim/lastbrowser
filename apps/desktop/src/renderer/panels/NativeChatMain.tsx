@@ -79,7 +79,7 @@ import { hasCurrentTurnBrowserUse } from '../chat-browser-use.js';
 import { nativeGrillCopy } from '../i18n/native-grill-copy.js';
 
 const noCommandCapabilities:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
-const REQUESTED_CHAT_DEFAULT = { provider: 'openai-codex', model: 'gpt-6-luna' } as const;
+const REQUESTED_CHAT_DEFAULT = { provider: 'opencode', model: 'deepseek-v4.1-flash-free' } as const;
 const CHAT_DEFAULT_PREFERENCE_KEY = 'lastbrowser.chatDefaultPreference.v1';
 function readRequestedChatDefault(): { provider: string; model: string } {
   try {
@@ -175,7 +175,7 @@ export function NativeChatMain({
   const [showHeaderActions, setShowHeaderActions] = useState(false);
   const headerActionsRef = useRef<HTMLDivElement>(null);
   const [statusMessage, setStatusMessage] = useState('');
-  const { queue, enqueue, dequeue, clearQueue, removeAt } = useChatQueue();
+  const { queue, enqueue, dequeue, clearQueue, removeAt } = useChatQueue(activeSessionId);
   const { visible: visibleMessages, developer: developerMessages } = useMemo(
     () => partitionChatMessages(messages),
     [messages]
@@ -458,7 +458,8 @@ export function NativeChatMain({
       const evidence = getProviderModelEvidence(group.providerId, entry.id, activeBrowserProfileId,
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
       const local=group.providerId==='local-store';
-      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence), qualification: local?undefined:evidence,
+      const localDeployment=group.deployment==='local';
+      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence)||localDeployment, qualification: local?undefined:evidence,
         label: local||evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
     });
     return models.length ? [{ ...group, models }] : [];
@@ -471,7 +472,7 @@ export function NativeChatMain({
   const requestedDefaultQualified = (!isAntigravityCatalogUnverified || requestedChatDefault.provider !== 'antigravity')
     && isProviderModelQualified(requestedChatDefault.provider, requestedChatDefault.model,
       activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
-  const requestedDefaultProviderLabel = requestedDefaultGroup?.provider || (requestedChatDefault.provider === 'openai-codex' ? 'OpenAI Codex' : requestedChatDefault.provider);
+  const requestedDefaultProviderLabel = requestedDefaultGroup?.provider || (requestedChatDefault.provider === 'opencode' ? 'OpenCode' : requestedChatDefault.provider);
   const requestedDefaultUnavailableReason = !modelCatalogLoaded ? '' : !requestedDefaultGroup
     ? t('settings.panels.providers.requestedModelUnavailable')
     : !requestedDefaultGroup.configured
@@ -483,12 +484,15 @@ export function NativeChatMain({
       entry.nativeAvailability))));
   const modelProviderLabel = modelCatalog.find(group => group.providerId === modelProvider)?.provider
     || (modelProvider === requestedChatDefault.provider && requestedChatDefault.provider === 'openai-codex' ? 'OpenAI Codex' : modelProvider);
+  const selectedCatalogGroup = modelCatalog.find(group => group.providerId === (currentModelPair.provider || modelProvider));
+  const localDeploymentSelected = selectedCatalogGroup?.deployment === 'local'
+    && selectedCatalogGroup.models.some(entry => entry.id === currentModelPair.model);
   const modelQualified = Boolean((!isAntigravityCatalogUnverified || (currentModelPair.provider || modelProvider) !== 'antigravity')
     && (currentModelPair.provider || modelProvider) && currentModelPair.model
-    && ((currentModelPair.provider || modelProvider)==='local-store'
+    && (localDeploymentSelected || ((currentModelPair.provider || modelProvider)==='local-store'
       ? modelCatalog.some(group=>group.providerId==='local-store'&&group.configured&&group.models.some(entry=>entry.id===currentModelPair.model&&isLocalStoreModelQualified(group.providerId,entry)))
       : isProviderModelQualified(currentModelPair.provider || modelProvider, currentModelPair.model, activeBrowserProfileId,
-        activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
+        activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage))));
   const selectableModels = visibleModelCatalog.flatMap(group => group.configured && group.providerId
     ? group.models.filter(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)) : []);
   const emptyQualifiedCatalog = modelCatalogLoaded && selectableModels.length > 0 && selectableModels.every(entry => !entry.qualified);
@@ -537,7 +541,8 @@ export function NativeChatMain({
   const automaticAllowedModels=currentPolicy?.response.policy.allowedModels||[];
   const catalogPairQualified=(pair:{provider:string;model:string})=>pair.provider==='local-store'
     ? modelCatalog.some(group=>group.providerId==='local-store'&&group.configured&&group.models.some(entry=>entry.id===pair.model&&isLocalStoreModelQualified(group.providerId,entry)))
-    : isProviderModelQualified(pair.provider,pair.model,activeBrowserProfileId,activeBackendProfileName || (activeSession as any)?.profile || 'default',window.localStorage);
+    : modelCatalog.some(group=>group.deployment==='local'&&group.providerId===pair.provider&&group.models.some(entry=>entry.id===pair.model))
+      || isProviderModelQualified(pair.provider,pair.model,activeBrowserProfileId,activeBackendProfileName || (activeSession as any)?.profile || 'default',window.localStorage);
   const automaticModelsQualified=automaticAllowedModels.length>0&&automaticAllowedModels.every(catalogPairQualified);
   const unqualifiedAutoModels = !currentPolicy?.response.policy.allowedModels.length
     || (!showUntestedBetas && currentPolicy.response.policy.allowedModels.some(pair =>
@@ -704,16 +709,35 @@ export function NativeChatMain({
   // Wrap onSend to synthesize @tabs context and enqueue when busy instead of losing the message
   const handleSend = async (text: string, queuedEffort?: string): Promise<void> => {
     if (writerProtected) { setStatusMessage(t('spaceAssistant.writerProtected')); return; }
+    if ((running || busy) && text.trim()) {
+      const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
+      const sendEffort = modelReasoningEfforts.includes(requestedEffort) ? requestedEffort : '';
+      let messageToSend = text;
+      if (hasTabsMention(text)) {
+        try {
+          const synth = await synthesizeTabsContext({ specificTabIndices: extractTargetTabNumbers(text) });
+          if (synth && synth.tabCount > 0) messageToSend = buildPromptWithTabContext(text, synth);
+        } catch (err) {
+          console.warn('[tab-intelligence] Failed to synthesize tabs context:', err);
+        }
+      }
+      const stored = enqueue({ text: messageToSend, model, profile, reasoningEffort: sendEffort });
+      if (!stored) return;
+      onComposerText('');
+      const preview = text.trim();
+      setStatusMessage(`${t('spaceAssistant.queued')}: "${preview.slice(0, 80)}${preview.length > 80 ? '…' : ''}"`);
+      return;
+    }
     if (pendingChoice) { setStatusMessage(`${t('chat.model')}: ${pendingChoice.model} · ${t('common.loading')}`); return; }
     if (connectionNotice) { setStatusMessage(connectionNoticeCopy[locale][connectionNotice]); return; }
     if (modelChoiceMissing) { setStatusMessage(modelCatalogError ? t('chat.modelCatalogUnavailable') : modelCatalogSlow ? t('chat.modelCatalogSlow') : t('settings.panels.providers.loadingModels')); return; }
     if(automaticBlocked||policyPending===policyOperationKey){setStatusMessage(modelPolicyReason(locale,currentPolicy?.response.executionAvailability.reasonCode));return;}
     const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
     const sendEffort = modelReasoningEfforts.includes(requestedEffort) ? requestedEffort : '';
-    if(currentModeGate?.response.mode.mode==='grill_me'&&currentGrill?.grill?.status==='asking'){
+    if(currentModeGate?.response.mode.mode==='grill_me'&&currentGrill?.grill?.status==='asking'&&!(running||busy)){
       const question=currentGrill.grill.questions.find(question=>question.answer===null);
       if(question){
-        if(!text.trim()||running||busy||grillPending===modeViewKey)return;
+        if(!text.trim()||grillPending===modeViewKey)return;
         const captured=commandContext;
         const actual=await mutateGrill({action:'answer',questionId:question.questionId,questionRevision:question.revision,text:text.trim()});
         if(actual&&isCommandContextCurrent(captured,currentCommandContext.current)){
@@ -774,13 +798,23 @@ export function NativeChatMain({
       }
     }
 
-    if (running) {
-      enqueue({ text: messageToSend, model, profile, reasoningEffort: sendEffort });
-      setStatusMessage(`Queued: "${text.slice(0, 40)}${text.length > 40 ? '…' : ''}"`);
-      return;
-    }
     onSend(messageToSend, sendEffort || undefined);
   };
+
+  const wasTurnActiveRef = useRef(false);
+  const releaseQueuedHeadRef = useRef<() => void>(() => undefined);
+  releaseQueuedHeadRef.current = () => {
+    if (running || busy || writerProtected || composerText.trim() || !queue.length) return;
+    const head = dequeue();
+    if (!head?.text.trim()) return;
+    onComposerText(head.text);
+    onSend(head.text, head.reasoningEffort);
+  };
+  useEffect(() => {
+    const turnActive = running || busy;
+    if (wasTurnActiveRef.current && !turnActive) releaseQueuedHeadRef.current();
+    wasTurnActiveRef.current = turnActive;
+  }, [running, busy]);
 
   async function setChatMode(action:Extract<CommandAction,{kind:'set_mode'}>) {
     const gate=currentModeGate;
@@ -1032,6 +1066,7 @@ export function NativeChatMain({
           allowedModels:automaticAllowedModels}}
         sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked||modelChoiceMissing||Boolean(connectionNotice)||Boolean(pendingChoice)}
         betaSelectionBlocked={betaSelectionBlocked}
+        qualificationNoticeHidden={Boolean(chatError)}
         multiAgentBetaBlocked={multiAgentBetaBlocked}
         modelQualified={automaticSelected?automaticModelsQualified:modelQualified}
         requestedDefaultModel={requestedChatDefault.model}
@@ -1050,6 +1085,7 @@ export function NativeChatMain({
         modelProvider={modelProvider}
         modelProviderLabel={modelProviderLabel}
         modelOptions={visibleModelCatalog}
+        hideQualificationNotice={Boolean(chatError)}
         emptyQualifiedCatalog={emptyQualifiedCatalog}
         noActiveModels={modelCatalogLoaded && !visibleModelCatalog.some(group => group.configured && group.providerId
           && group.models.some(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)))}
@@ -1078,6 +1114,8 @@ export function NativeChatMain({
         onSend={handleSend}
         onStop={onStop}
         onText={onComposerText}
+        queuedMessages={queue}
+        onRemoveQueued={removeAt}
       />
             {modelFallbackNotice && <div className="chat-status-message" role="status">{modelFallbackNotice}</div>}
             {statusMessage && <div className="chat-status-message" onClick={() => setStatusMessage('')}>{statusMessage}</div>}

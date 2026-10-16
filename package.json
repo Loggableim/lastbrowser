@@ -3,6 +3,7 @@
   "version": "0.1.57-demo.4",
   "private": true,
   "description": "Lastbrowser desktop browser shell with Sidekick integration.",
+  "license": "GPL-3.0-only",
   "engines": {
     "node": ">=22.12.0"
   },

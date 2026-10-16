@@ -1,3 +1,12 @@
+import { createDesktopI18n } from './i18n.js';
+import { desktopLocaleIds, type DesktopLocaleId } from './i18n/keys.js';
+
+const activeTurnBusyMessage = 'This chat is still being written by an active turn. Stop that turn before changing or deleting the chat.';
+
+function deletionLocale(locale: string): DesktopLocaleId {
+  return (desktopLocaleIds as readonly string[]).includes(locale) ? locale as DesktopLocaleId : 'en';
+}
+
 export type SessionListScope = {
   profile: string;
   workspacePath: string;
@@ -33,6 +42,9 @@ export function sessionDeletionFailureMessage(result: unknown, locale: string): 
       ? 'Das Ziel dieses Chats konnte nicht gelöscht werden. Bitte erneut versuchen.'
       : 'The goal of this chat could not be cleared. Please try again.';
   }
+  if (error === activeTurnBusyMessage || (typeof response.message === 'string' && response.message.trim() === activeTurnBusyMessage)) {
+    return createDesktopI18n(deletionLocale(locale)).t('chat.activeTurnBusy');
+  }
   if (error) return error;
   const message = typeof response.message === 'string' ? response.message.trim() : '';
   return message || fallback;
@@ -44,9 +56,16 @@ export function resolveSessionBackendProfile(
   resolvedProfile: string | undefined,
   currentScope: SessionListScope
 ): string | undefined {
-  return sameSessionListScope(requestedScope, currentScope)
-    ? resolvedProfile || currentScope.backendProfileName
-    : currentScope.backendProfileName;
+  if (!requestedScope || requestedScope.profile !== currentScope.profile
+    || requestedScope.workspacePath !== currentScope.workspacePath) {
+    return currentScope.backendProfileName;
+  }
+  const currentName = currentScope.backendProfileName || '';
+  const requestedName = requestedScope.backendProfileName || '';
+  // An explicit choice on the current Space wins over a different resolved name.
+  // Filling in the name for the same Space must not drop it back to empty.
+  if (currentName && currentName !== requestedName) return currentScope.backendProfileName;
+  return resolvedProfile || requestedName || currentScope.backendProfileName;
 }
 
 export function sameSessionListScope(left: SessionListScope | null, right: SessionListScope): boolean {

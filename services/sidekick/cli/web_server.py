@@ -8108,9 +8108,29 @@ async def api_route_bridge(request: Request, path: str):
 
 mount_spa(app)
 
+def _prewarm_integrated_free_chat() -> None:
+    """Official free server starts with the packaged shell so the first turn is not cold."""
+    if os.environ.get("LASTBROWSER_INTEGRATED") != "1":
+        return
+    try:
+        from runtime.opencode_free_chat import prewarm_free_server
+        from web.api.profiles import get_profile_home
+        prewarm_free_server(get_profile_home("default"))
+    except Exception:
+        _log.debug("Free chat prewarm skipped", exc_info=True)
+
+
+async def _schedule_free_chat_prewarm() -> None:
+    if os.environ.get("LASTBROWSER_INTEGRATED") != "1":
+        return
+    import asyncio
+    asyncio.create_task(asyncio.to_thread(_prewarm_integrated_free_chat))
+
+
 # Registered here (not with the other startup hooks above) because
 # ``_start_shell_precompress`` is defined further down in this module.
 app.router.on_startup.append(_start_shell_precompress)
+app.router.on_startup.append(_schedule_free_chat_prewarm)
 
 
 def start_server(

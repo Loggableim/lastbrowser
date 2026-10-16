@@ -584,3 +584,17 @@ def test_audit_duplicate_numeric_types_conflict_after_canonicalization(monkeypat
 
     with pytest.raises(space_engine.SpaceGovernanceError, match="conflicting revisions"):
         space_engine.list_nova_management_audit(space)
+
+
+def test_space_config_cache_is_a_copy_and_sees_the_next_save(tmp_path):
+    from web.api import space_engine
+
+    space = space_engine.Space("nova", custom_root=tmp_path)
+    space.save_config({"name": "Nova", "model": {"default": "one", "provider": "opencode-go"}})
+    first = space.load_config()
+    first["name"] = "mutated"
+    second = space.load_config()
+    assert second["name"] == "Nova"
+    assert second is not first
+    space.save_config({"name": "Changed", "model": {"default": "one", "provider": "opencode-go"}})
+    assert space.load_config()["name"] == "Changed"

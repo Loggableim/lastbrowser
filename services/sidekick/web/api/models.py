@@ -3184,10 +3184,15 @@ def unlink_owned_session_files(sid: str, extra_dirs=()) -> bool:
         try:
             resolved.unlink(missing_ok=True)
             resolved.with_suffix(".json.bak").unlink(missing_ok=True)
+            tail = resolved.with_name(f"{resolved.stem}.tail.json")
+            tail.unlink(missing_ok=True)
         except OSError:
-            if resolved.exists():
+            if resolved.exists() or resolved.with_name(f"{resolved.stem}.tail.json").exists():
                 return False
-    return all(not path.exists() for path in paths)
+    return all(
+        not path.exists() and not path.with_name(f"{path.stem}.tail.json").exists()
+        for path in paths
+    )
 
 
 def delete_cli_session(sid) -> bool:

@@ -872,9 +872,9 @@ export function SidekickSidebar({
                                 event.preventDefault(); selectChat(event, session);
                               }
                             }}
-                            title={session.title || t('sidebar.drawer.newChat')}>
+                            title={session.title?.trim() && session.title.trim() !== 'New chat' ? session.title : t('chat.newSession')}>
                             {session.pinned ? <Pin size={12} className="session-item-icon" /> : <Sparkles size={12} className="session-item-icon" />}
-                            <span className="session-item-title" role={deleteArmed ? 'status' : undefined}>{deleteArmed ? (locale === 'de' ? 'Sicher?' : 'Sure?') : session.title || t('sidebar.drawer.newChat')}</span>
+                            <span className="session-item-title" role={deleteArmed ? 'status' : undefined}>{deleteArmed ? (locale === 'de' ? 'Sicher?' : 'Sure?') : (session.title?.trim() && session.title.trim() !== 'New chat' ? session.title : t('chat.newSession'))}</span>
                           </button>
                           <div className="sidebar-session-actions">
                             {onPinSession && <button type="button" className="sidebar-session-action"

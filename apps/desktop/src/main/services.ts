@@ -73,13 +73,13 @@ export function readSidekickVersion(sidekickDir: string): string | null {
 /**
  * Build the sidecar launch command.
  *
- * monorepo: the live Sidekick layout — `python -m uvicorn cli.web_server:app`
- *           run from the sidekick directory (package imports need that cwd).
+ * monorepo: the live Sidekick layout — `python -m cli.supervised_web`
+ *           which runs uvicorn and exits when Electron's pid is gone.
  * legacy:   the older split layout — `python <webui>/server.py`.
  */
 export function buildSidecarLaunch(layout: ServiceLayout, webuiPort: number): SidecarLaunch {
   return {
-    args: ['-m', 'uvicorn', 'cli.web_server:app', '--host', '127.0.0.1', '--port', String(webuiPort)],
+    args: ['-m', 'cli.supervised_web', '--host', '127.0.0.1', '--port', String(webuiPort)],
     cwd: layout.sidekickDir
   };
 }
@@ -151,6 +151,16 @@ export function resolveServiceLayout(
   };
 }
 
+/** Official OpenCode CLI used for the no-key free chat route. */
+export function resolveOpenCodeClientPath(layout: Pick<ServiceLayout, 'sidekickDir'>, platform: NodeJS.Platform | string = process.platform): string | undefined {
+  const fileName = platform === 'win32' ? 'opencode.exe' : 'opencode';
+  const candidates = [
+    path.join(layout.sidekickDir, 'vendor', 'opencode', fileName),
+    path.join(layout.sidekickDir, 'vendor', 'opencode', 'opencode')
+  ];
+  return candidates.find(candidate => existsSync(candidate));
+}
+
 export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number): NodeJS.ProcessEnv {
   const webuiPortValue = String(webuiPort);
   const webuiBaseUrl = `http://127.0.0.1:${webuiPortValue}`;
@@ -179,6 +189,7 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
     SIDEKICK_WEBUI_PORT: webuiPortValue,
     SIDEKICK_WEBUI_NO_BROWSER: '1',
     SIDEKICK_STATE_DIR: stateDirectory,
+    LASTBROWSER_ELECTRON_PID: String(process.pid),
     HERMES_HOME: layout.runtimeDir,
     HERMES_WEBUI_AGENT_DIR: layout.sidekickDir,
     HERMES_WEBUI_STATE_DIR: stateDirectory,
@@ -191,6 +202,9 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
       ? `${layout.sidekickDir}${path.delimiter}${process.env.PYTHONPATH}`
       : layout.sidekickDir
   };
+  const openCodePlatform = layout.pythonExe.toLowerCase().endsWith('.exe') ? 'win32' : process.platform;
+  const bundledOpenCode = resolveOpenCodeClientPath(layout, openCodePlatform);
+  if (bundledOpenCode) env.LASTBROWSER_OPENCODE_BIN = bundledOpenCode;
   if (isCdpEnabled()) {
     const cdpPort = String(resolveCdpPort());
     const cdpUrl = formatCdpUrl(Number(cdpPort));

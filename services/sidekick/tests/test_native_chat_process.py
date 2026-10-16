@@ -123,6 +123,8 @@ def test_context_requires_actual_lease_and_exact_turn(tmp_path, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "ambient-fixture")
         monkeypatch.setenv("LASTBROWSER_CDP_PORT", "1234")
         env = build_native_environment(context)
+        assert env["SIDEKICK_SESSION_ID"] == "persistent"
+        assert env["LASTBROWSER_NATIVE_GENERATION"] == "persistent"
         assert env["CUSTOM_API_KEY"] == "fixture-a"
         assert "OPENAI_API_KEY" not in env and "LASTBROWSER_CDP_PORT" not in env
         assert "LASTBROWSER_BRIDGE_TOKEN" not in env

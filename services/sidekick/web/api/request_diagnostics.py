@@ -71,6 +71,7 @@ class RequestDiagnostics:
         if (method.upper(), clean_path) not in {
             ("GET", "/api/sessions"),
             ("POST", "/api/chat/start"),
+            ("POST", "/api/quickchat/start"),
         }:
             return None
         return cls(method, clean_path, logger=logger)

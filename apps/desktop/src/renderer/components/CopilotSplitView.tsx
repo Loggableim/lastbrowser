@@ -44,6 +44,7 @@ import type { ScopedModelSelection } from '../independent-contracts.js';
 import { conversationCompanionAppearance, messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
 import { CompanionSwitch } from './CompanionPicker.js';
 import { useDesktopI18n } from '../i18n.js';
+import { localizeKnownChatStatus } from '../chat-live-stream.js';
 import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
 import { isModelActive, useActiveModelRevision } from '../active-model-selection.js';
 import { QUICKCHAT_FAVORITE_CHANGED_EVENT, readQuickchatFavoriteState, setQuickchatFavorite } from '../quickchat-preferences.js';
@@ -473,9 +474,14 @@ export function CopilotSplitView({
       return true;
     }
     const identity = parseProviderModelId(model.id, model.providerId);
-    return Boolean(browserProfileId && backendProfileName && model.providerId && isModelActive(window.localStorage,
-      { browserProfileId, backendProfileName }, model.providerId, identity.model)
-      && (showUntestedBetas || isProviderModelQualified(model.providerId, identity.model, browserProfileId, backendProfileName, window.localStorage)));
+    const localModel = model.category === 'local';
+    const scopeReady = Boolean(browserProfileId && backendProfileName);
+    const backendName = backendProfileName || '';
+    const active = scopeReady
+      ? isModelActive(window.localStorage, { browserProfileId, backendProfileName: backendName }, model.providerId, identity.model)
+      : true;
+    const qualified = showUntestedBetas || localModel || isProviderModelQualified(model.providerId, identity.model, browserProfileId, backendName, window.localStorage);
+    return Boolean(model.providerId && active && qualified && (scopeReady || localModel));
   }), [modelList, smartTrackEnabled, teamworkEnabled, showUntestedBetas, browserProfileId, backendProfileName, activeModelRevision]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -989,12 +995,12 @@ export function CopilotSplitView({
             <button
               type="button"
               className="copilot-action-btn copilot-new-chat-btn"
-              title="Reset Chat"
-              aria-label="Reset Chat"
+              title={t('chat.resetChat')}
+              aria-label={t('chat.resetChat')}
               onClick={onNewChat}
             >
               <Plus size={13} />
-              <span>Reset Chat</span>
+              <span>{t('chat.resetChat')}</span>
             </button>
           )}
 
@@ -1110,7 +1116,7 @@ export function CopilotSplitView({
       <div className="copilot-messages-container" ref={scrollRef}>
         {messages.length === 0 ? (
           <div className="copilot-empty-state">
-            {error && <div className="copilot-stream-error" role="alert">{error}</div>}
+            {error && <div className="copilot-stream-error" role="alert">{localizeKnownChatStatus(error, t)}</div>}
             {status && <div className="copilot-reset-status" role="status">{status}</div>}
             <div className="copilot-empty-icon">
               <img src={conversationCompanion?.avatar ?? companion.avatar} alt={companionName} className="copilot-empty-avatar" draggable={false} />
@@ -1138,7 +1144,7 @@ export function CopilotSplitView({
           </div>
         ) : (
           <div className="copilot-messages-list">
-            {error && <div className="copilot-stream-error" role="alert">{error}</div>}
+            {error && <div className="copilot-stream-error" role="alert">{localizeKnownChatStatus(error, t)}</div>}
             {status && <div className="copilot-reset-status" role="status">{status}</div>}
             {messages.map((msg, index) => {
               const messageAppearance = messageCompanionAppearance(msg.companion, companion);

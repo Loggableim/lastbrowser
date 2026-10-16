@@ -189,7 +189,9 @@ export function FirstRunSetupPane({
   const evidenceStorage = typeof window === 'undefined' ? undefined : window.localStorage;
   const qualifiedProviders = providers.filter(item => isStableProvider(item.id) || Boolean(browserProfileId && evidenceStorage
     && getProviderChatEvidence(item.id, browserProfileId, backendProfileName || 'default', evidenceStorage)));
-  const defaultProviderId = qualifiedProviders.some((p) => p.id === 'openai-codex')
+  const defaultProviderId = qualifiedProviders.some((p) => p.id === 'opencode')
+    ? 'opencode'
+    : qualifiedProviders.some((p) => p.id === 'openai-codex')
     ? 'openai-codex'
     : (qualifiedProviders[0]?.id || '');
 

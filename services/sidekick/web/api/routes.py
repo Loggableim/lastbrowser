@@ -1393,6 +1393,39 @@ def _kanban_unknown_endpoint(handler, parsed, method: str) -> bool:
     ) or True
 
 
+def _visible_chat_start_error(exc: BaseException) -> str:
+    """User-visible text for a start that never reached the provider."""
+    code = str(getattr(exc, "code", "") or "")
+    message = str(exc or "").strip()
+    if code == "native_fixed_model_not_in_bound_catalog" or "invalid model" in message.lower():
+        return "The selected model is not in the current catalog."
+    if "404" in message or "not found" in message.lower():
+        return "The assistant returned an invalid response."
+    if code:
+        return f"The chat could not start ({code})."
+    return message or "The chat could not start."
+
+
+def _record_visible_chat_start_error(session, exc: BaseException) -> None:
+    text = _visible_chat_start_error(exc)
+    messages = getattr(session, "messages", None)
+    if not isinstance(messages, list) or not text:
+        return
+    last = messages[-1] if messages else None
+    if isinstance(last, dict) and last.get("_error") is True and last.get("content") == text:
+        return
+    messages.append({
+        "role": "assistant",
+        "content": text,
+        "timestamp": int(time.time()),
+        "_error": True,
+    })
+    try:
+        session.save()
+    except Exception:
+        logger.warning("Could not persist the visible chat start error", exc_info=True)
+
+
 def _clear_stale_stream_state(session, *, materialize_pending: bool = True) -> bool:
     """Clear persisted streaming flags when the in-memory stream no longer exists.
 
@@ -12642,6 +12675,8 @@ def _start_chat_stream_for_session(
                         # duplicate it in the transcript on that retry.
                         materialize_pending=goal_claim_turn is None,
                     )
+                    if goal_claim_turn is None:
+                        _record_visible_chat_start_error(s, exc)
             except Exception:
                 logger.warning("Could not roll back failed stream startup for %s", s.session_id, exc_info=True)
             if goal_claim_turn is not None:

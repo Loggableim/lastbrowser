@@ -145,6 +145,9 @@ def attach_free_opencode_catalog(catalog: dict) -> dict:
             "auth_state": "not_required",
             "has_key": False,
             "oauth_connected": False,
+            # The desktop model-selection decoder requires this array. Omitting
+            # it rejects the whole catalog, including the free models above.
+            "models": list(CANDIDATE_MODELS),
         })
     return catalog
 

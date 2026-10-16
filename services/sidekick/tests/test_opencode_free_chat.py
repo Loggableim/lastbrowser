@@ -5,6 +5,7 @@ import stat
 import pytest
 
 from runtime.opencode_free_chat import (
+    CANDIDATE_MODELS,
     CLI_MODEL,
     FREE_MODEL,
     FREE_PROVIDER,
@@ -14,6 +15,12 @@ from runtime.opencode_free_chat import (
     openrouter_free_headers,
     stream_free_reply,
 )
+
+
+def test_free_opencode_id_is_not_rewritten_to_zen():
+    from web.api.config import _resolve_provider_alias
+    assert _resolve_provider_alias("opencode") == "opencode"
+    assert _resolve_provider_alias("zen") == "opencode-zen"
 
 
 def test_paid_opencode_routes_are_not_the_free_default():
@@ -104,11 +111,20 @@ def test_configured_catalog_offers_only_the_free_model(monkeypatch, tmp_path):
     binary.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
     binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("LASTBROWSER_OPENCODE_BIN", str(binary))
-    catalog = attach_free_opencode_catalog({"groups": []})
+    catalog = attach_free_opencode_catalog({"groups": [], "providers": []})
     group = catalog["groups"][0]
     assert group["provider_id"] == FREE_PROVIDER
     assert group["configured"] is True
     assert group["models"][0]["id"] == FREE_MODEL
+    assert catalog["providers"] == [{
+        "id": FREE_PROVIDER,
+        "display_name": "OpenCode",
+        "provider_available": True,
+        "auth_state": "not_required",
+        "has_key": False,
+        "oauth_connected": False,
+        "models": list(CANDIDATE_MODELS),
+    }]
     assert free_default_choice() == (FREE_MODEL, FREE_PROVIDER)
 
 

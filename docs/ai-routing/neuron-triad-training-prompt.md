@@ -30,7 +30,9 @@ Samples: 1.800 Train, 180 Val.
 
 ## Neuron Synapse
 
-Modell `granite-3.1-8b-instruct`. Quantisierung Q8_0, etwa 8,5 GB.
+Modell im Trainingsprompt vom 16.10.2026: `granite-3.1-8b-instruct`. Quantisierung Q8_0, etwa 8,5 GB.
+
+Nachtrag 17.10.2026 00:03: die Kaskade nutzt stattdessen `granite-4.2-8b-instruct`, ebenfalls Q8_0, etwa 8,5 GB. Siehe `model-cascade-2026-10-17.md`.
 
 Aufgabe: MCP über mehrere Schritte.
 

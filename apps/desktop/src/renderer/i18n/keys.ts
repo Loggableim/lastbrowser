@@ -1752,6 +1752,7 @@ export const desktopTranslationKeys = [
   , 'sidebar.companion.developer'
   , 'sidebar.companion.creative'
   , 'sidebar.companion.mentor'
+  , 'sidebar.companion.active'
 ] as const;
 
 export type DesktopTranslationKey = (typeof desktopTranslationKeys)[number];

@@ -342,6 +342,7 @@ export const desktopPtBrOverrides = {
   'sidebar.companion.developer': 'Precisa e técnica. Prefere uma solução concreta e os passos até ela.',
   'sidebar.companion.creative': 'Imaginativa e aberta. Mostra algumas direções e leva uma adiante.',
   'sidebar.companion.mentor': 'Paciente e clara. Explica um passo de cada vez e deixa espaço para perguntas.',
+  'sidebar.companion.active': 'Sidekick ativo',
   'sidebar.drawer.aiTitle': 'Nova IA, agentes e habilidades',
   'sidebar.drawer.flows': 'Fluxos',
   'sidebar.drawer.flowsTitle': 'Kanban, tarefas e espaços',

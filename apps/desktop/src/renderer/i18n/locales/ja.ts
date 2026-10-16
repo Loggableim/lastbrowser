@@ -37,6 +37,7 @@ export const desktopJaOverrides = {
     developer: '正確で技術的。具体的な修正と、そこへ至る手順を好みます。',
     creative: '想像力があり開かれています。いくつかの方向を示し、一つを進めます。',
     mentor: '忍耐強く明快。一歩ずつ説明し、質問する余白を残します。',
+    active: '使用中のサイドキック',
   }),
   ...group('browser.actions', { explain: '説明', research: '調査', summarize: '要約' }),
   ...group('browser.aiBrowser', {

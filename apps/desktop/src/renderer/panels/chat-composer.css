@@ -146,8 +146,8 @@
   outline-offset: 2px;
 }
 
-.chat-composer .composer-reasoning-disclosure:not([open]) > .composer-reasoning-effort {
-  display: none;
+.chat-composer .composer-more-content .composer-reasoning-disclosure > .composer-reasoning-effort {
+  display: flex;
 }
 
 .chat-composer .composer-reasoning-disclosure[open] {
@@ -198,7 +198,7 @@
   align-items: flex-start;
   gap: 8px;
   min-width: 0;
-  color: #e8f2ff;
+  color: var(--lb-text);
   cursor: pointer;
   overflow-wrap: anywhere;
 }
@@ -453,8 +453,15 @@
 .chat-composer .composer-current-model { flex: 0 1 260px; color: var(--lb-text); border-color: var(--lb-border); background: var(--lb-bg-alt); }
 .chat-composer .composer-current-model:hover { border-color: var(--lb-accent-border); background: var(--lb-accent-soft); }
 .chat-composer .composer-current-model select { width: min(30vw, 235px); max-width: 100%; color: var(--lb-text); background: var(--lb-bg-alt); }
+.chat-composer .composer-current-model select,
+.chat-composer .composer-reasoning-effort select,
 .chat-composer .composer-current-model select option,
-.chat-composer .composer-current-model select optgroup { color: var(--lb-text) !important; background: var(--lb-bg-alt) !important; }
+.chat-composer .composer-current-model select optgroup,
+.chat-composer .composer-reasoning-effort select option,
+.chat-composer .composer-reasoning-effort select optgroup {
+  color: var(--lb-text) !important;
+  background: var(--lb-surface-strong) !important;
+}
 .chat-composer .composer-more-content {
   position: absolute;
   z-index: 40;
@@ -519,6 +526,227 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chat-composer .composer-current-model,
-  .chat-composer .composer-current-model select { transition: none; }
+  .chat-composer *,
+  .chat-composer *::before,
+  .chat-composer *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* More popover sections: context, model, reasoning, scope. No nested details. */
+.chat-composer .composer-more-content {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  width: min(330px, calc(100vw - 32px));
+}
+
+.chat-composer .composer-more-active-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--lb-accent);
+  flex: 0 0 auto;
+}
+
+.chat-composer .composer-more-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--lb-border);
+}
+
+.chat-composer .composer-more-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.chat-composer .composer-more-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lb-muted);
+}
+
+.chat-composer .composer-more-section-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--lb-muted);
+}
+
+.chat-composer .composer-more-content .composer-tab-btn,
+.chat-composer .composer-more-content .composer-model-trigger {
+  box-sizing: border-box;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 38px;
+  white-space: normal;
+  text-align: start;
+}
+
+.chat-composer .composer-more-btn-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.chat-composer .composer-more-btn-copy strong {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--lb-text);
+}
+
+.chat-composer .composer-more-btn-copy small {
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.35;
+  color: var(--lb-muted);
+  overflow-wrap: anywhere;
+}
+
+.chat-composer .composer-scope-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--lb-border);
+  border-radius: 999px;
+  background: var(--lb-bg-alt);
+  color: var(--lb-text);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
+.chat-composer .composer-manual-models-header,
+.chat-composer .composer-manual-search-label,
+.chat-composer .composer-manual-search-caption,
+.chat-composer .composer-manual-model-row,
+.chat-composer .composer-manual-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.chat-composer .composer-manual-models-header,
+.chat-composer .composer-manual-search-label,
+.chat-composer .composer-manual-empty {
+  justify-content: space-between;
+}
+
+.chat-composer .composer-manual-search-label {
+  display: grid;
+  margin-bottom: 8px;
+}
+
+.chat-composer .composer-manual-models {
+  background: var(--lb-surface-strong);
+  color: var(--lb-text);
+  border-color: var(--lb-border);
+}
+
+.theme-vision-impaired .chat-composer .composer-current-model select option,
+.theme-vision-impaired .chat-composer .composer-reasoning-effort select option,
+.theme-vision-impaired .chat-composer .composer-current-model select optgroup,
+.theme-vision-impaired .chat-composer .composer-reasoning-effort select optgroup {
+  background: #000 !important;
+  color: #fff !important;
+}
+
+@media (max-width: 440px) {
+  .chat-composer .composer-more-content .composer-tab-btn span {
+    display: flex;
+  }
+}
+
+@media (max-width: 360px) {
+  .chat-composer .composer-more-content {
+    width: min(300px, calc(100vw - 24px));
+  }
+}
+
+.theme-vision-impaired .chat-composer {
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+}
+
+.theme-vision-impaired .chat-composer .composer-more > summary,
+.theme-vision-impaired .chat-composer .composer-command-button,
+.theme-vision-impaired .chat-composer .composer-mode button,
+.theme-vision-impaired .chat-composer .composer-tab-btn,
+.theme-vision-impaired .chat-composer .composer-model-trigger,
+.theme-vision-impaired .chat-composer .composer-current-model,
+.theme-vision-impaired .chat-composer .composer-current-model select,
+.theme-vision-impaired .chat-composer .composer-reasoning-effort,
+.theme-vision-impaired .chat-composer .composer-reasoning-effort select,
+.theme-vision-impaired .chat-composer .composer-manual-models input[type="search"],
+.theme-vision-impaired .chat-composer .composer-manual-models fieldset button,
+.theme-vision-impaired .chat-composer .composer-manual-models-close,
+.theme-vision-impaired .chat-composer .composer-send,
+.theme-vision-impaired .chat-composer .composer-model-notice button {
+  min-height: 44px;
+  min-width: 44px;
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+}
+
+.theme-vision-impaired .chat-composer .composer-more-content,
+.theme-vision-impaired .chat-composer .composer-manual-models,
+.theme-vision-impaired .chat-composer .composer-model-notice {
+  background: #000000;
+  color: #ffffff;
+  border: 2px solid #ffffff;
+  box-shadow: none;
+}
+
+.theme-vision-impaired .chat-composer .composer-mode button.active,
+.theme-vision-impaired .chat-composer .composer-tab-btn[aria-pressed="true"],
+.theme-vision-impaired .chat-composer .composer-model-trigger[aria-expanded="true"],
+.theme-vision-impaired .chat-composer .composer-manual-models fieldset button[aria-pressed="true"],
+.theme-vision-impaired .chat-composer .composer-more[open] > summary,
+.theme-vision-impaired .chat-composer .composer-send:not(:disabled) {
+  background: #ffd700 !important;
+  color: #000000 !important;
+  border-color: #ffd700 !important;
+  font-weight: 700;
+}
+
+.theme-vision-impaired .chat-composer .composer-tab-btn[aria-pressed="true"] strong,
+.theme-vision-impaired .chat-composer .composer-tab-btn[aria-pressed="true"] small,
+.theme-vision-impaired .chat-composer .composer-tab-btn[aria-pressed="true"] svg,
+.theme-vision-impaired .chat-composer .composer-model-trigger[aria-expanded="true"] strong,
+.theme-vision-impaired .chat-composer .composer-model-trigger[aria-expanded="true"] small,
+.theme-vision-impaired .chat-composer .composer-model-trigger[aria-expanded="true"] svg,
+.theme-vision-impaired .chat-composer .composer-manual-models fieldset button[aria-pressed="true"] span,
+.theme-vision-impaired .chat-composer .composer-manual-models fieldset button[aria-pressed="true"] small {
+  color: #000000 !important;
+}
+
+.theme-vision-impaired .chat-composer .composer-more-section-title,
+.theme-vision-impaired .chat-composer .composer-more-btn-copy small,
+.theme-vision-impaired .chat-composer .composer-manual-models fieldset button small {
+  color: #ffffff;
+}
+
+.theme-vision-impaired .chat-composer summary:focus-visible,
+.theme-vision-impaired .chat-composer button:focus-visible,
+.theme-vision-impaired .chat-composer select:focus-visible,
+.theme-vision-impaired .chat-composer input:focus-visible,
+.theme-vision-impaired .chat-composer textarea:focus-visible {
+  outline: 3px solid #ffd700 !important;
+  outline-offset: 2px;
 }

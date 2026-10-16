@@ -2,6 +2,9 @@ import type { NativeAvailabilityReason, NativeModelAvailability, ScopedModelSele
 import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { isRetiredProvider } from './retired-providers.js';
 import { providerDeployment, providerHostingLabel, type ProviderDeployment } from './provider-presentation.js';
+import { isModelActive } from './active-model-selection.js';
+import { isMultiAgentModelSelection } from './provider-model-selection.js';
+import { getComposerMoreUxCopy } from './i18n/sidekick-ux-translations.js';
 
 export type ModelPickerOptionGroup = Readonly<{
   provider: string;
@@ -25,13 +28,91 @@ export function isLocalStoreModelQualified(providerId:string|undefined,entry:Pic
     &&canSelectNativeModel(providerId,entry.nativeAvailability);
 }
 
-export function localStoreModelUnavailableLabel(entry:Pick<ScopedModelEntry,'id'|'deploymentKind'|'contextLength'|'contextLengthSource'|'localRuntime'>):string|null {
+export function localStoreModelUnavailableLabel(entry:Pick<ScopedModelEntry,'id'|'deploymentKind'|'contextLength'|'contextLengthSource'|'localRuntime'>, locale = 'de'):string|null {
   if(isLocalStoreModelRuntimeReady(entry))return null;
+  const copy = getComposerMoreUxCopy(locale);
   const runtime=entry.localRuntime;
   const code=runtime?.state==='unavailable'?runtime.reasonCode:runtime?.state==='ready'&&!runtime.toolCallingQualified?'local_standard_tool_quality_proof_required':'';
-  return ({text_model_not_qualified:'Lokales Modell noch nicht freigegeben',model_not_installed_verified:'Installation noch nicht geprüft',
-    successful_device_benchmark_required:'Gerätetest fehlt',local_standard_tool_quality_proof_required:'Ausführlicher Werkzeugtest fehlt',
-    fresh_hardware_admission_required:'Aktuelle Speicherprüfung erforderlich'} as Record<string,string>)[code]??'Lokale Ausführung noch nicht bestätigt';
+  const byReason: Record<string, string> = {
+    text_model_not_qualified: copy.localNotQualified,
+    model_not_installed_verified: copy.localInstallUnverified,
+    successful_device_benchmark_required: copy.localBenchmarkRequired,
+    local_standard_tool_quality_proof_required: copy.localToolProofRequired,
+    fresh_hardware_admission_required: copy.localHardwareAdmissionRequired,
+  };
+  return byReason[code] ?? copy.localUnverified;
+}
+
+/**
+ * Free OpenCode models (for example deepseek-v4.1-flash-free) belong in
+ * "OpenCode Go Free". Paid models stay in "OpenCode Go". Routing providerId
+ * remains `opencode`.
+ */
+export function isOpenCodeFreeModel(entry: { id?: string; label?: string; free?: boolean; tier?: string }): boolean {
+  if (entry.free === true || entry.tier === 'free') return true;
+  const rawId = String(entry.id || '').trim().toLowerCase();
+  const rawLabel = String(entry.label || '').trim().toLowerCase();
+  return rawId.endsWith('-free') || rawId.endsWith(':free') || rawId.includes('/free-') || /\b(free|gratis)\b/i.test(rawLabel);
+}
+
+export function splitOpenCodeGroups<
+  TModel extends Readonly<{ id?: string; label?: string; free?: boolean; tier?: string }>,
+  TGroup extends Readonly<{ provider?: string; providerId?: string; models?: readonly TModel[] }>
+>(groups: readonly TGroup[], locale = 'de'): TGroup[] {
+  const copy = getComposerMoreUxCopy(locale);
+  const result: TGroup[] = [];
+  for (const group of groups) {
+    const pid = String(group.providerId || '').trim().toLowerCase();
+    const providerName = String(group.provider || '').trim();
+    const models = group.models ?? [];
+    if (pid === 'opencode-go') {
+      result.push({ ...group, provider: copy.openCodeGoPaid });
+      continue;
+    }
+    if (pid === 'opencode-free' || pid === 'opencode-go-free') {
+      result.push({ ...group, provider: copy.openCodeGoFree });
+      continue;
+    }
+    const alreadySplit = providerName === copy.openCodeGoPaid || providerName === copy.openCodeGoFree
+      || providerName === 'OpenCode Go' || providerName === 'OpenCode Go Free';
+    if (pid !== 'opencode' || alreadySplit || models.length === 0) {
+      result.push(group);
+      continue;
+    }
+    const paidModels = models.filter((model) => !isOpenCodeFreeModel(model));
+    const freeModels = models.filter((model) => isOpenCodeFreeModel(model));
+    if (paidModels.length > 0 && freeModels.length > 0) {
+      result.push({ ...group, provider: copy.openCodeGoPaid, models: paidModels });
+      result.push({ ...group, provider: copy.openCodeGoFree, models: freeModels });
+    } else if (freeModels.length > 0) {
+      result.push({ ...group, provider: copy.openCodeGoFree, models: freeModels });
+    } else {
+      result.push({ ...group, provider: copy.openCodeGoPaid, models: paidModels });
+    }
+  }
+  return result;
+}
+
+function isEntryEnabledInSettings(
+  entry: { id?: string; enabled?: boolean; active?: boolean; disabled?: boolean },
+  providerId: string | undefined,
+  scope?: { browserProfileId?: string; backendProfileName?: string }
+): boolean {
+  if (entry.disabled === true || entry.enabled === false || entry.active === false) return false;
+  if (!providerId || !entry.id) return true;
+  // Multi-agent rows are not user opt-outs. isModelActive reports them inactive.
+  if (isMultiAgentModelSelection({ provider: providerId, model: entry.id })) return true;
+  if (typeof window !== 'undefined' && window.localStorage && scope?.browserProfileId) {
+    try {
+      return isModelActive(window.localStorage, {
+        browserProfileId: scope.browserProfileId,
+        backendProfileName: scope.backendProfileName || 'default',
+      }, providerId, entry.id);
+    } catch {
+      return true;
+    }
+  }
+  return true;
 }
 
 export function isModelCatalogResponseCurrent(capturedScopeKey: string, activeScopeKey: string): boolean {
@@ -54,7 +135,7 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
       .map(model => [model.id, model.listed.status as 'current' | 'configured' | 'fallback']))]))
     : null;
   const providers = new Map((selection.providers ?? []).map(provider => [provider.id, provider]));
-  return (selection.groups ?? [])
+  const mappedGroups = (selection.groups ?? [])
     .filter(group => {
       const pid = String(group.provider_id || '').toLowerCase();
       if (isRetiredProvider(pid)) return false;
@@ -72,6 +153,10 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
       const provider = providers.get(group.provider_id);
       const models = [...new Map([...group.models, ...(group.extra_models ?? [])].map(entry => [entry.id, entry])).values()]
         .filter(entry => !currentModels || currentModels.get(group.provider_id)?.has(entry.id))
+        .filter(entry => isEntryEnabledInSettings(entry, group.provider_id, {
+          browserProfileId: selection.scope.browserProfileId,
+          backendProfileName: selection.scope.backendProfileId || 'default',
+        }))
         .map(entry => {
           const availability = entry.nativeAvailability;
           const listingStatus = currentModels?.get(group.provider_id)?.get(entry.id);
@@ -93,6 +178,7 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
       return { provider: providerHostingLabel(group.provider_id, group.provider, deployment), deployment, providerId: group.provider_id, configured: group.configured,
         ...(!group.configured ? { disabledReason: provider?.provider_available === false ? 'unavailable' as const : 'notConfigured' as const } : {}), models };
     }).filter(group => group.models.length > 0);
+  return splitOpenCodeGroups(mappedGroups);
 }
 
 export function nativeModelAvailabilityMatchesIdentity(
@@ -122,13 +208,19 @@ const VIRTUAL_ORCHESTRATION_MODEL_IDS = new Set([
   'smart-track-high'
 ]);
 
-export function manualModelPickerOptions<T extends Readonly<{ providerId?: string; models?: readonly Readonly<{ id?: string }>[] }>>(
-  groups: readonly T[], orchestrationEnabled = AI_ORCHESTRATION_ENABLED): T[] {
-  return groups.filter(group => {
+export function manualModelPickerOptions<T extends Readonly<{ provider?: string; providerId?: string; models?: readonly Readonly<{ id?: string; label?: string; free?: boolean; tier?: string; enabled?: boolean; active?: boolean; disabled?: boolean }>[] }>>(
+  groups: readonly T[], orchestrationEnabled = AI_ORCHESTRATION_ENABLED,
+  scope?: { browserProfileId?: string; backendProfileName?: string; locale?: string }): T[] {
+  const filteredGroups = groups.filter(group => {
     if (group.providerId) return true;
     if (!orchestrationEnabled) return false;
     // Empty provider IDs are reserved for the renderer's fixed orchestration entries.
     // Do not let arbitrary catalog groups masquerade as selectable virtual models.
     return Boolean(group.models?.length) && group.models!.every(model => VIRTUAL_ORCHESTRATION_MODEL_IDS.has(model.id ?? ''));
-  });
+  }).map(group => {
+    if (!group.models) return group;
+    const activeModels = group.models.filter(model => isEntryEnabledInSettings(model, group.providerId, scope));
+    return { ...group, models: activeModels };
+  }).filter(group => Boolean(group.models && group.models.length > 0));
+  return splitOpenCodeGroups(filteredGroups, scope?.locale);
 }

@@ -163,4 +163,59 @@ describe('chat composer model guidance', () => {
     expect(markup).toContain('rows="1"');
     expect(markup).not.toContain('composer-context-group');
   });
+
+  it.each(testLocales)('renders at most one prioritized notice banner when multiple notice conditions overlap for $locale', ({ locale }) => {
+    const markup = renderComposer(locale, {
+      connectionNotice: 'opencode-unreachable',
+      modelCatalogLoading: true,
+      modelCatalogSlow: true,
+      modelCatalogError: true,
+      betaSelectionBlocked: true,
+      emptyQualifiedCatalog: true,
+      onRetryModelCatalog: () => undefined,
+    });
+
+    const noticeCount = markup.split('class="composer-model-notice"').length - 1;
+    expect(noticeCount).toBe(1);
+    expect(markup).toContain('role="alert"');
+  });
+
+  it.each(testLocales)('eliminates duplicate "More" labels, removes nested <details>, and removes inline option colors for $locale', ({ locale, catalogLocale }) => {
+    const translations = createDesktopI18n(catalogLocale);
+    const markup = renderComposer(locale, {
+      reasoningEfforts: ['low', 'medium', 'high'],
+      reasoningCapabilityState: 'ready',
+    });
+    const manualLabel = escapeHtml(translations.t('chat.chooseModelManually'));
+
+    expect(markup).toContain(`<strong>${manualLabel}</strong>`);
+    expect(markup.split('<details').length - 1).toBe(1);
+    expect(markup).not.toContain('#0b1325');
+  });
+
+  it.each(testLocales)('splits OpenCode models into "OpenCode Go" and "OpenCode Go Free" and filters disabled models for $locale', ({ locale }) => {
+    const markup = renderComposer(locale, {
+      modelOptions: [
+        {
+          provider: 'OpenCode',
+          providerId: 'opencode',
+          configured: true,
+          models: [
+            { id: 'claude-4-sonnet', label: 'Claude 4 Sonnet' },
+            { id: 'deepseek-v4.1-flash-free', label: 'DeepSeek V4.1 Flash Free' },
+            {
+              id: 'deactivated-model',
+              label: 'Hidden Deactivated Model',
+              ...({ enabled: false } as Record<string, unknown>),
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(markup).toContain('label="OpenCode Go"');
+    expect(markup).toContain('label="OpenCode Go Free"');
+    expect(markup).toContain('deepseek-v4.1-flash-free');
+    expect(markup).not.toContain('Hidden Deactivated Model');
+  });
 });

@@ -52,6 +52,16 @@ describe('Main-owned Teamwork profile binding', () => {
     expect(options.request).not.toHaveBeenCalled();
   });
 
+  it('binds pin and archive to the captured Space and rejects extra fields', async () => {
+    const { event, options } = fixture();
+    await requestScopedWebui(event, { method: 'POST', path: '/api/session/pin', body: { session_id: 'abc123', pinned: true }, scopeSelection: selection }, options);
+    expect(options.request).toHaveBeenLastCalledWith({ method: 'POST', path: '/api/session/pin', body: { session_id: 'abc123', pinned: true }, profile: 'alpha' });
+    await requestScopedWebui(event, { method: 'POST', path: '/api/session/archive', body: { session_id: 'abc123', archived: true }, scopeSelection: selection }, options);
+    expect(options.request).toHaveBeenLastCalledWith({ method: 'POST', path: '/api/session/archive', body: { session_id: 'abc123', archived: true }, profile: 'alpha' });
+    await expect(requestScopedWebui(event, { method: 'POST', path: '/api/session/pin', body: { session_id: 'abc123', pinned: true, extra: true }, scopeSelection: selection }, options)).rejects.toThrow(/Space binding/);
+    expect(options.request).toHaveBeenCalledTimes(2);
+  });
+
   it('resolves the captured Space and sends only its saved backend profile', async () => {
     const { event, options } = fixture();
     await expect(requestScopedWebui(event, { ...selectedRequest, method: 'POST', body: { enabled: true } }, options))

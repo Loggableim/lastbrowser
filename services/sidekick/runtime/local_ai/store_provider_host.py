@@ -137,9 +137,20 @@ def with_store_catalog(catalog, scope, actor):
     result['groups'] = [item for item in result.get('groups', []) if item.get('provider_id') != 'local-store']
     result['groups'].append(group)
     result['providers'] = [item for item in result.get('providers', []) if item.get('id') != 'local-store']
-    result['providers'].append({'id': 'local-store', 'display_name': 'LastBrowser Local AI',
-                                'provider_available': True, 'configuration_present': group['configured'],
-                                'deploymentKind': 'local'})
+    # The desktop catalog decoder rejects the whole model list when one provider
+    # row omits the account fields. An empty local store must still be a
+    # complete row, or Quickchat and Standard chat never see the other models.
+    result['providers'].append({
+        'id': 'local-store',
+        'display_name': 'LastBrowser Local AI',
+        'has_key': False,
+        'oauth_connected': False,
+        'auth_state': 'not_connected',
+        'provider_available': True,
+        'models': [row['id'] for row in group['models'] if isinstance(row.get('id'), str) and row['id']],
+        'configuration_present': group['configured'],
+        'deploymentKind': 'local',
+    })
     return result
 
 

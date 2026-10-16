@@ -1,10 +1,19 @@
 # Linux preview runtime and fresh-profile smoke
 
-Linux preview packages carry the Sidekick Python environment under
-`resources/runtime/python`. The packaged app uses that environment even when
-the shell that launched it exports `LASTBROWSER_WEBUI_PYTHON` or
-`HERMES_WEBUI_PYTHON`. A missing bundled launcher is a packaging error; the
-packaged app does not fall back to the host's `/usr/bin/python3`.
+Linux preview packages carry a relocatable CPython 3.12 from
+python-build-standalone under `resources/runtime/python`. That tree has its
+own standard library (`lib/python3.12`, including `encodings`) and no
+`pyvenv.cfg`. It starts on a machine that does not have system Python 3.12.
+The packaged app uses that environment even when the shell that launched it
+exports `LASTBROWSER_WEBUI_PYTHON` or `HERMES_WEBUI_PYTHON`. A missing bundled
+launcher is a packaging error; the packaged app does not fall back to the
+host's `/usr/bin/python3`.
+
+A venv copied from `/usr` is not this runtime. `libfuse2` is only needed to
+mount an AppImage on hosts without FUSE; `--appimage-extract-and-run` avoids
+that mount. After `--appimage-extract`, `AppRun` needs `APPDIR` set to the
+extracted directory. Neither of those host details replaces the bundled
+interpreter.
 
 ## Prepare and build offline
 
@@ -18,9 +27,12 @@ available:
 npm run prepare:python:online
 ```
 
-This downloads the pinned wheels to `apps/desktop/runtime/wheelhouse-linux-x64`,
-writes `SHA256SUMS.json`, installs the venv, and verifies the Sidekick imports,
-including `uvicorn`. The wheelhouse is local build input and is not shipped.
+This downloads the pinned python-build-standalone CPython and the pinned
+wheels to `apps/desktop/runtime/wheelhouse-linux-x64`, writes
+`SHA256SUMS.json`, installs those wheels into the relocatable interpreter,
+and verifies the Sidekick imports, including `uvicorn` and `encodings`. The
+wheelhouse and the standalone tarball are local build input and are not
+shipped. The installed interpreter is.
 
 After that preparation, the regular package command is offline for Python
 dependencies. It uses `--no-index`, verifies the wheel hashes, and fails if a

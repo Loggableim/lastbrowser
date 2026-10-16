@@ -170,7 +170,7 @@ export function ChatTranscript({
 
   return (
     <div ref={transcript} className="chat-transcript">
-      {error && <div className="chat-error">{error}</div>}
+      {error && <div className="chat-error">{error === 'The assistant returned an invalid response.' ? t('chat.invalidResponse') : error}</div>}
       {messages.map((message, index) => {
         const messageAppearance = (message.pending || message.streaming) && pendingCompanion
           ? pendingCompanion
@@ -236,7 +236,7 @@ export function ChatTranscript({
         <p className="child-run-identity">{childRunLabels[locale==='pt-BR'?'pt':locale].children} · {group.binding.parentTurnId}</p>
         <ChildRunBubbles state={group} locale={locale==='pt-BR'?'pt':locale} onResync={identity=>onChildResync?.(identity.parentTurnId)} renderContent={content=><ChatMessageBody content={content}/>}/>
       </section>)}
-      {(childHistoryUnavailable||childHistoryResyncNeeded)&&<p className="chat-status-message" role="status">
+      {!error && (childHistoryUnavailable || (childHistoryResyncNeeded && childGroups.length > 0)) && <p className="chat-status-message" role="status">
         {childRunLabels[locale==='pt-BR'?'pt':locale][childHistoryUnavailable?'stale':'overflow']}
         {childParentTurns.some(turn=>!childGroups.some(group=>group.binding.parentTurnId===turn))&&
           <button type="button" className="secondary-action compact" onClick={()=>onChildResync?.('')}>
@@ -447,6 +447,8 @@ export type ChatComposerProps = {
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
   modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence;localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }> }>;
+  /** When a turn error is already visible, do not stack the qualification notice under it. */
+  hideQualificationNotice?: boolean;
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
   emptyQualifiedCatalog?: boolean;
   noActiveModels?: boolean;
@@ -505,6 +507,7 @@ export function ChatComposer({
   reasoningEfforts,
   reasoningCapabilityState,
   modelOptions,
+  hideQualificationNotice = false,
   emptyQualifiedCatalog = false,
   noActiveModels = false,
   modelCatalogError=false,
@@ -692,7 +695,7 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {(betaSelectionBlocked||emptyQualifiedCatalog)&&!connectionNotice&&!modelCatalogLoading&&!modelCatalogError&&<div className="composer-model-notice" role="status">
+      {!hideQualificationNotice&&(betaSelectionBlocked||emptyQualifiedCatalog)&&!connectionNotice&&!modelCatalogLoading&&!modelCatalogError&&<div className="composer-model-notice" role="status">
         <span>{multiAgentBetaBlocked ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</span>
         {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}

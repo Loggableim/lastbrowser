@@ -1050,6 +1050,7 @@ export function NativeChatMain({
         modelProvider={modelProvider}
         modelProviderLabel={modelProviderLabel}
         modelOptions={visibleModelCatalog}
+        hideQualificationNotice={Boolean(chatError)}
         emptyQualifiedCatalog={emptyQualifiedCatalog}
         noActiveModels={modelCatalogLoaded && !visibleModelCatalog.some(group => group.configured && group.providerId
           && group.models.some(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)))}

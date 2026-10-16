@@ -4,6 +4,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   isPreparedRuntimeCompatible,
+  linuxStandalonePython,
   runtimeDependencyDigest,
   posixPythonLauncherScript,
   pythonRuntimeExecutableName,
@@ -42,7 +43,7 @@ describe('desktop runtime packaging', () => {
         expect.objectContaining({
           from: 'runtime/python',
           to: 'runtime/python',
-          filter: expect.arrayContaining(['!**/__pycache__/**', '!**/*.pyc', '!**/site-packages/tests/**'])
+          filter: expect.arrayContaining(['!**/*.cpython-3[!1]*.pyc', '!**/*.cpython-31[!2]*.pyc', '!**/site-packages/tests/**'])
         })
       ])
     );
@@ -73,7 +74,9 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain("'anthropic>=0.39.0'");
     expect(prepareScript).toContain('import anthropic');
     expect(prepareScript).toContain("'--no-compile'");
-    expect(prepareScript).toContain('runtimeSchema: isLinux ? 8 : 6');
+    expect(prepareScript).toContain('runtimeSchema: 9');
+    expect(prepareScript).toContain('python-build-standalone');
+    expect(prepareScript).toContain(linuxStandalonePython.sha256);
     expect(prepareScript).toContain("'--no-index', '--find-links', wheelhouseDir");
     expect(prepareScript).toContain("import anthropic, requests, uvicorn, yaml");
     expect(prepareScript).toContain('yaml, PIL, psutil');

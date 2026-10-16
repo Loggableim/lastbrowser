@@ -7,7 +7,7 @@ import { createDesktopI18n, desktopLocaleIds } from '../src/renderer/i18n.js';
 // recorded in the audit evidence. A catalog response alone is insufficient.
 const ONBOARDING_PROVIDER_IDS = [
   'openrouter', 'anthropic', 'openai-codex', 'openai', 'google-gemini-cli', 'antigravity',
-  'ollama', 'ollama-cloud', 'lmstudio', 'custom', 'gemini', 'deepseek',
+  'ollama', 'ollama-cloud', 'lmstudio', 'custom', 'gemini', 'deepseek', 'groq',
   'xiaomi', 'zai', 'nvidia', 'mistralai', 'x-ai',
   // Other canonical Sidekick runtime providers and current provider plugins.
   'nous', 'copilot-acp', 'minimax-oauth', 'azure-foundry', 'qwen-oauth',

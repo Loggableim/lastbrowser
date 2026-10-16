@@ -24,7 +24,7 @@ function requestBodyRecord(value: unknown): Record<string, unknown> | null {
 }
 
 const configurableProviderIds = new Set(['alibaba', 'openrouter', 'xiaomi']);
-const keyProviderIds = new Set(['alibaba', 'anthropic', 'deepseek', 'gemini', 'google', 'kimi-coding', 'lmstudio',
+const keyProviderIds = new Set(['alibaba', 'anthropic', 'deepseek', 'gemini', 'google', 'groq', 'kimi-coding', 'lmstudio',
   'minimax', 'minimax-cn', 'mistralai', 'morph', 'nvidia', 'ollama', 'ollama-cloud', 'openai', 'openrouter',
   'opencode-go', 'opencode-zen', 'x-ai', 'xiaomi', 'zai']);
 const ollamaTestProviderIds = new Set(['ollama', 'ollama-cloud', 'xiaomi']);

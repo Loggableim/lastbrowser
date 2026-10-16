@@ -170,12 +170,66 @@ export function buildSidekickPrompt(action: SidekickActionId, context: BrowserCo
  * replaced with the real answer, not a fixed string. Returns '' when the session
  * has no assistant message yet.
  */
+type SessionTextMessage = { role?: string; content?: string; _error?: boolean };
+
+function sessionMessages(session: unknown): SessionTextMessage[] {
+  const record = (session || {}) as { messages?: SessionTextMessage[] };
+  return Array.isArray(record.messages) ? record.messages : [];
+}
+
 export function lastAssistantText(session: unknown): string {
-  const record = (session || {}) as { messages?: Array<{ role?: string; content?: string; _error?: boolean }> };
-  const messages = Array.isArray(record.messages) ? record.messages : [];
+  const messages = sessionMessages(session);
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
     if (message && message.role === 'assistant' && message._error !== true &&
+        typeof message.content === 'string' && message.content.trim()) {
+      return message.content.trim();
+    }
+  }
+  return '';
+}
+
+/** Assistant text produced after this prompt. Earlier turns must not fill a new bubble. */
+export function assistantTextAfterPrompt(session: unknown, prompt: string): string {
+  const wanted = prompt.replace(/\s+/g, ' ').trim();
+  if (!wanted) return '';
+  const messages = sessionMessages(session);
+  let userIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'user' && String(message.content || '').replace(/\s+/g, ' ').trim() === wanted) {
+      userIndex = index;
+      break;
+    }
+  }
+  if (userIndex < 0) return '';
+  for (let index = messages.length - 1; index > userIndex; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'assistant' && message._error !== true &&
+        typeof message.content === 'string' && message.content.trim()) {
+      return message.content.trim();
+    }
+  }
+  return '';
+}
+
+/** Provider failure saved for this prompt, when the stream event never reached the UI. */
+export function assistantErrorAfterPrompt(session: unknown, prompt: string): string {
+  const wanted = prompt.replace(/\s+/g, ' ').trim();
+  if (!wanted) return '';
+  const messages = sessionMessages(session);
+  let userIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'user' && String(message.content || '').replace(/\s+/g, ' ').trim() === wanted) {
+      userIndex = index;
+      break;
+    }
+  }
+  if (userIndex < 0) return '';
+  for (let index = messages.length - 1; index > userIndex; index -= 1) {
+    const message = messages[index];
+    if (message?.role === 'assistant' && message._error === true &&
         typeof message.content === 'string' && message.content.trim()) {
       return message.content.trim();
     }

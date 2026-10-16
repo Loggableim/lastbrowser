@@ -205,3 +205,22 @@ def test_loopback_chat_is_not_stopped_by_the_cloud_six_per_minute_cap(tmp_path):
     finally:
         for store in stores:
             store.close()
+
+
+def test_loopback_chat_is_not_stopped_by_the_shared_request_cap(tmp_path):
+    """A local model keeps posting after six completed turns in the same minute."""
+    stores, scopes, admissions, _ = fixture(tmp_path)
+    try:
+        (stores[0].profile_home / "config.yaml").write_text(
+            "model:\n  provider: custom\n  base_url: http://127.0.0.1:11434/v1\n", "utf-8")
+        group = provider_group_key(stores[0].profile_home, "custom")
+        def local_claim():
+            return proposal(scopes[0], admissions[0]).model_copy(update={"provider": "custom", "group_key": group})
+        for _ in range(6):
+            claim = admissions[0].claim(local_claim(), AdmissionBudget(), validate=lambda: None)
+            admissions[0].update(scopes[0], claim.claim_id, state="completed", measured_tokens=1)
+        seventh = admissions[0].claim(local_claim(), AdmissionBudget(), validate=lambda: None)
+        assert seventh.state == "reserved"
+    finally:
+        for store in stores:
+            store.close()

@@ -48,7 +48,7 @@ export function chooseQuickchatModel(selection: ScopedModelSelection, scope: Qui
     ? group.models.filter(model => model.supportsIndependent && canSelectNativeModel(group.providerId, model.nativeAvailability))
       .map(model => ({ provider: group.providerId, model: parseProviderModelId(model.id, group.providerId).model, label: model.label, deployment: group.deployment })) : [])
     .filter(choice => isModelActive(storage, scope, choice.provider, choice.model)
-      && (showBetas || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));
+      && (showBetas || choice.deployment === 'local' || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));
   if (favorite) {
     const choice = candidates.find(row => row.provider === favorite.provider && row.model === favorite.model);
     // An explicit favorite must never silently send its prompt to another provider.

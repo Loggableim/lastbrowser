@@ -313,6 +313,17 @@ export function finishStoppedLiveChatMessage<T extends LiveChatMessage>(messages
   });
 }
 
+const knownChatStatusKeys = {
+  'The assistant returned an invalid response.': 'chat.assistantInvalidResponse',
+  'This chat is still being written by an active turn. Stop that turn before changing or deleting the chat.': 'chat.activeTurnBusy',
+} as const;
+
+/** Show the localized chat copy for the two fixed English status sentences. */
+export function localizeKnownChatStatus(message: string, translate: (key: typeof knownChatStatusKeys[keyof typeof knownChatStatusKeys]) => string): string {
+  const key = knownChatStatusKeys[message.trim() as keyof typeof knownChatStatusKeys];
+  return key ? translate(key) : message;
+}
+
 /** Read actionable provider errors from native chat SSE payload variants. */
 export function readNativeChatStreamError(data: unknown): string {
   if (typeof data === 'string' && data.trim()) return data.trim();
@@ -341,14 +352,17 @@ export function finishLiveChatMessageWithError<T extends LiveChatMessage>(
   streamId?: string,
 ): T[] {
   return messages.map((message) => {
-    if (!(message.pending || message.streaming || message.progress) || streamId && message.chatStreamId !== streamId) return message;
+    if (streamId && message.chatStreamId && message.chatStreamId !== streamId) return message;
+    const inFlight = Boolean(message.pending || message.streaming || message.progress || message.latencyPlaceholder || shouldDiscardPlaceholderContent(message));
+    if (!inFlight) return message;
     const hasPartialOutput = Boolean(message.content && !shouldDiscardPlaceholderContent(message)) || Boolean(message.reasoning);
+    const { latencyPlaceholder: _placeholder, ...rest } = message;
     return {
-      ...message,
+      ...rest,
       content: hasPartialOutput ? message.content : `Sidekick could not respond: ${error}`,
       pending: false,
       streaming: false,
       progress: undefined,
-    };
+    } as T;
   });
 }

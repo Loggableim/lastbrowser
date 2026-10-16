@@ -161,6 +161,8 @@ import {
   collectBrowserContext,
   collectTeamworkGroundingContext,
   dispatchSidekickAction,
+  assistantErrorAfterPrompt,
+  assistantTextAfterPrompt,
   lastAssistantText,
   resolveConfiguredModel,
   resolveConfiguredModelSelection,
@@ -2706,12 +2708,14 @@ function AppContent(): JSX.Element {
         );
         const updated = await loadActiveSession(restored.sessionId, { loadDraft: false, showLoading: false });
         if (!isOwningContextCurrent()) return;
-        const answer = lastAssistantText(updated);
-        if (streamResult.streamError) {
+        const answer = assistantTextAfterPrompt(updated, restored.pendingUserMessage);
+        const savedError = assistantErrorAfterPrompt(updated, restored.pendingUserMessage);
+        const visibleError = streamResult.streamError || savedError;
+        if (visibleError) {
           failed = true;
-          setChatError(streamResult.streamError);
-          setChatMessages((messages) => finishLiveChatMessageWithError(messages, streamResult.streamError!, restored.streamId));
-          setMessages((messages) => finishLiveChatMessageWithError(messages, streamResult.streamError!, restored.streamId));
+          setChatError(visibleError);
+          setChatMessages((messages) => finishLiveChatMessageWithError(messages, visibleError, restored.streamId));
+          setMessages((messages) => finishLiveChatMessageWithError(messages, visibleError, restored.streamId));
         } else if (streamResult.cancelled) {
           setChatMessages((messages) => finishLiveChatMessage(messages, restored.streamId));
           setMessages((messages) => finishLiveChatMessage(messages, restored.streamId));
@@ -4650,7 +4654,9 @@ function AppContent(): JSX.Element {
       // the literal string "Sidekick finished.", so every reply — including
       // errors and full summaries — was hidden behind that text.
       const finished = await loadActiveSession(response.sessionId, { loadDraft: false, showLoading: false });
-      const answer = lastAssistantText(finished);
+      const answer = assistantTextAfterPrompt(finished, displayText);
+      const savedError = assistantErrorAfterPrompt(finished, displayText);
+      const visibleError = streamResult.streamError || savedError;
       recordCompletedChatEvidence({
         startAccepted: chatStartAccepted,
         completed: streamResult.completed,
@@ -4663,25 +4669,22 @@ function AppContent(): JSX.Element {
         providerEvidence: streamResult.providerEvidence,
       }, window.localStorage);
       if (turnContextStillCurrent) {
-        if (streamResult.streamError) {
+        if (visibleError) {
           turnFailed = true;
-          setChatError(streamResult.streamError);
-          setChatMessages((current) => finishLiveChatMessageWithError(current, streamResult.streamError!));
-          setMessages((current) => finishLiveChatMessageWithError(current, streamResult.streamError!));
+          setChatError(visibleError);
+          setChatMessages((current) => finishLiveChatMessageWithError(current, visibleError, response.streamId));
+          setMessages((current) => finishLiveChatMessageWithError(current, visibleError, response.streamId));
         } else if (streamResult.cancelled) {
           setChatMessages((current) => finishStoppedLiveChatMessage(current, response.streamId));
           setMessages((current) => finishStoppedLiveChatMessage(current, response.streamId));
         } else {
-          setChatMessages((current) => current.map((item) => (
-            item.pending && item.chatStreamId === response.streamId
-              ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
+          const settle = <T extends { pending?: boolean; streaming?: boolean; latencyPlaceholder?: boolean; chatStreamId?: string; content?: string; progress?: string; reasoning?: string; role?: string }>(current: T[]) => current.map((item) => (
+            shouldFinalizeInFlightAssistant(item) && (!item.chatStreamId || item.chatStreamId === response.streamId)
+              ? { ...item, content: fallbackFinishedAssistantContent(item, answer), pending: false, streaming: false, progress: undefined, latencyPlaceholder: undefined }
               : item
-          )));
-          setMessages((current) => current.map((item) => (
-            item.pending && item.chatStreamId === response.streamId
-              ? { ...item, content: answer || 'Sidekick finished.', pending: false, progress: undefined }
-              : item
-          )));
+          ));
+          setChatMessages(settle);
+          setMessages(settle);
         }
         if (streamResult.goalError) setChatError(streamResult.goalError);
       }

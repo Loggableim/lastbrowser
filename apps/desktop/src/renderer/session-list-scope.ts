@@ -1,3 +1,12 @@
+import { createDesktopI18n } from './i18n.js';
+import { desktopLocaleIds, type DesktopLocaleId } from './i18n/keys.js';
+
+const activeTurnBusyMessage = 'This chat is still being written by an active turn. Stop that turn before changing or deleting the chat.';
+
+function deletionLocale(locale: string): DesktopLocaleId {
+  return (desktopLocaleIds as readonly string[]).includes(locale) ? locale as DesktopLocaleId : 'en';
+}
+
 export type SessionListScope = {
   profile: string;
   workspacePath: string;
@@ -33,6 +42,7 @@ export function sessionDeletionFailureMessage(result: unknown, locale: string): 
       ? 'Das Ziel dieses Chats konnte nicht gelöscht werden. Bitte erneut versuchen.'
       : 'The goal of this chat could not be cleared. Please try again.';
   }
+  if (error === activeTurnBusyMessage) return createDesktopI18n(deletionLocale(locale)).t('chat.activeTurnBusy');
   if (error) return error;
   const message = typeof response.message === 'string' ? response.message.trim() : '';
   return message || fallback;

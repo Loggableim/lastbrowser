@@ -40,6 +40,7 @@ import { RichTextRenderer } from '../NativeRichText.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import type { DesktopChatMessage, DesktopSessionDetail, ChatRunState } from '../shell-state.js';
 import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usage.js';
+import { localizeKnownChatStatus } from '../chat-live-stream.js';
 import { useDesktopI18n } from '../i18n.js';
 import { parseProviderModelId, qualifyModelForProvider } from '../provider-model-selection.js';
 import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker.js';
@@ -170,7 +171,7 @@ export function ChatTranscript({
 
   return (
     <div ref={transcript} className="chat-transcript">
-      {error && <div className="chat-error">{error}</div>}
+      {error && <div className="chat-error">{localizeKnownChatStatus(error, t)}</div>}
       {messages.map((message, index) => {
         const messageAppearance = (message.pending || message.streaming) && pendingCompanion
           ? pendingCompanion
@@ -429,6 +430,7 @@ export type ChatComposerProps = {
   automaticPolicy?:Readonly<{active:boolean;available:boolean;qualified?:boolean;allowedModels?:readonly {provider:string;model:string}[]}>;
   sendBlocked?:boolean;
   betaSelectionBlocked?:boolean;
+  qualificationNoticeHidden?:boolean;
   multiAgentBetaBlocked?:boolean;
   modelQualified?:boolean;
   requestedDefaultModel?:string;
@@ -490,7 +492,7 @@ function workspaceLabel(path?: string | null): string {
 
 export function ChatComposer({
   conversationCompanion = null,
-  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,multiAgentBetaBlocked=false,modelQualified=false,requestedLunaInCatalog,
+  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,qualificationNoticeHidden=false,multiAgentBetaBlocked=false,modelQualified=false,requestedLunaInCatalog,
   requestedDefaultModel='',requestedDefaultProviderLabel='',requestedDefaultQualified=false,requestedDefaultAvailable=false,requestedDefaultUnavailableReason='',
   browserProfileId='',backendProfileName='default',
   commandContext,
@@ -692,7 +694,7 @@ export function ChatComposer({
         <span>{t('chat.modelCatalogUnavailable')}</span>
         {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}
-      {(betaSelectionBlocked||emptyQualifiedCatalog)&&!connectionNotice&&!modelCatalogLoading&&!modelCatalogError&&<div className="composer-model-notice" role="status">
+      {(betaSelectionBlocked||emptyQualifiedCatalog)&&!qualificationNoticeHidden&&!connectionNotice&&!modelCatalogLoading&&!modelCatalogError&&<div className="composer-model-notice" role="status">
         <span>{multiAgentBetaBlocked ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</span>
         {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
       </div>}

@@ -458,7 +458,8 @@ export function NativeChatMain({
       const evidence = getProviderModelEvidence(group.providerId, entry.id, activeBrowserProfileId,
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
       const local=group.providerId==='local-store';
-      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence), qualification: local?undefined:evidence,
+      const localDeployment=group.deployment==='local';
+      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence)||localDeployment, qualification: local?undefined:evidence,
         label: local||evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
     });
     return models.length ? [{ ...group, models }] : [];
@@ -483,12 +484,15 @@ export function NativeChatMain({
       entry.nativeAvailability))));
   const modelProviderLabel = modelCatalog.find(group => group.providerId === modelProvider)?.provider
     || (modelProvider === requestedChatDefault.provider && requestedChatDefault.provider === 'openai-codex' ? 'OpenAI Codex' : modelProvider);
+  const selectedCatalogGroup = modelCatalog.find(group => group.providerId === (currentModelPair.provider || modelProvider));
+  const localDeploymentSelected = selectedCatalogGroup?.deployment === 'local'
+    && selectedCatalogGroup.models.some(entry => entry.id === currentModelPair.model);
   const modelQualified = Boolean((!isAntigravityCatalogUnverified || (currentModelPair.provider || modelProvider) !== 'antigravity')
     && (currentModelPair.provider || modelProvider) && currentModelPair.model
-    && ((currentModelPair.provider || modelProvider)==='local-store'
+    && (localDeploymentSelected || ((currentModelPair.provider || modelProvider)==='local-store'
       ? modelCatalog.some(group=>group.providerId==='local-store'&&group.configured&&group.models.some(entry=>entry.id===currentModelPair.model&&isLocalStoreModelQualified(group.providerId,entry)))
       : isProviderModelQualified(currentModelPair.provider || modelProvider, currentModelPair.model, activeBrowserProfileId,
-        activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage)));
+        activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage))));
   const selectableModels = visibleModelCatalog.flatMap(group => group.configured && group.providerId
     ? group.models.filter(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)) : []);
   const emptyQualifiedCatalog = modelCatalogLoaded && selectableModels.length > 0 && selectableModels.every(entry => !entry.qualified);
@@ -537,7 +541,8 @@ export function NativeChatMain({
   const automaticAllowedModels=currentPolicy?.response.policy.allowedModels||[];
   const catalogPairQualified=(pair:{provider:string;model:string})=>pair.provider==='local-store'
     ? modelCatalog.some(group=>group.providerId==='local-store'&&group.configured&&group.models.some(entry=>entry.id===pair.model&&isLocalStoreModelQualified(group.providerId,entry)))
-    : isProviderModelQualified(pair.provider,pair.model,activeBrowserProfileId,activeBackendProfileName || (activeSession as any)?.profile || 'default',window.localStorage);
+    : modelCatalog.some(group=>group.deployment==='local'&&group.providerId===pair.provider&&group.models.some(entry=>entry.id===pair.model))
+      || isProviderModelQualified(pair.provider,pair.model,activeBrowserProfileId,activeBackendProfileName || (activeSession as any)?.profile || 'default',window.localStorage);
   const automaticModelsQualified=automaticAllowedModels.length>0&&automaticAllowedModels.every(catalogPairQualified);
   const unqualifiedAutoModels = !currentPolicy?.response.policy.allowedModels.length
     || (!showUntestedBetas && currentPolicy.response.policy.allowedModels.some(pair =>
@@ -1032,6 +1037,7 @@ export function NativeChatMain({
           allowedModels:automaticAllowedModels}}
         sendBlocked={automaticBlocked||policyPending===policyOperationKey||betaSelectionBlocked||modelChoiceMissing||Boolean(connectionNotice)||Boolean(pendingChoice)}
         betaSelectionBlocked={betaSelectionBlocked}
+        qualificationNoticeHidden={Boolean(chatError)}
         multiAgentBetaBlocked={multiAgentBetaBlocked}
         modelQualified={automaticSelected?automaticModelsQualified:modelQualified}
         requestedDefaultModel={requestedChatDefault.model}

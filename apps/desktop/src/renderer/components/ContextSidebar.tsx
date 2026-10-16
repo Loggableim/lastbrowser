@@ -268,7 +268,7 @@ export function ContextSidebar({
         <>
           <button type="button" className="new-session-button" onClick={onNewSession}>
             <Plus size={16} />
-            <span>New chat</span>
+            <span>{t('chat.newSession')}</span>
           </button>
           <label className="session-search">
             <Search size={15} />

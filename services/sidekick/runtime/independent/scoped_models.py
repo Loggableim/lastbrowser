@@ -311,6 +311,12 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
     return {"groups": groups, "providers": providers}
 
 
+def _with_runtime_catalog(catalog, scope, profile_name):
+    from runtime.local_ai.store_provider_host import with_store_catalog
+    from runtime.opencode_free_chat import attach_free_opencode_catalog
+    return attach_free_opencode_catalog(with_store_catalog(catalog, scope, profile_name))
+
+
 def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=True) -> dict:
     """Reuse only a recent receipt for this exact binding and credential state."""
     from .capabilities import evidence_digest
@@ -321,8 +327,7 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
     model_identity = opencode_model_identity(resolved.profile_home)
     stored = read_persistent_model_catalog(resolved.profile_home, digest, model_identity=model_identity)
     if stored is not None:
-        from runtime.local_ai.store_provider_host import with_store_catalog
-        return with_store_catalog(stored, scope, resolved.profile.name)
+        return _with_runtime_catalog(stored, scope, resolved.profile.name)
     key = (getattr(manager, "generation", None), scope.key, resolved.binding.partition_key, resolved.binding.revision,
            bool(include_capabilities), digest, fingerprint, space_state)
     cache, inflight, lock = _catalog_cache_state(manager)
@@ -339,13 +344,11 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
                 inflight[key] = pending
     if cached is not None:
         _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
-        from runtime.local_ai.store_provider_host import with_store_catalog
-        return with_store_catalog(cached, scope, resolved.profile.name)
+        return _with_runtime_catalog(cached, scope, resolved.profile.name)
     if not owner:
         result = copy.deepcopy(pending.result())
         _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
-        from runtime.local_ai.store_provider_host import with_store_catalog
-        return with_store_catalog(result, scope, resolved.profile.name)
+        return _with_runtime_catalog(result, scope, resolved.profile.name)
 
     provider = selection or ProviderSelection(provider_config_ref=digest, model="__catalog__", provider="")
     try:
@@ -364,8 +367,7 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
             if len(cache) > 16:
                 del cache[min(cache, key=lambda item: cache[item][0])]
             inflight.pop(key, None)
-        from runtime.local_ai.store_provider_host import with_store_catalog
-        combined = with_store_catalog(result, scope, resolved.profile.name)
+        combined = _with_runtime_catalog(result, scope, resolved.profile.name)
         pending.set_result(copy.deepcopy(result))
         return combined
     except BaseException as exc:
@@ -380,7 +382,10 @@ def _choice(resolved, config):
     if not isinstance(model_config, dict):
         raise ScopeError("Space model configuration is malformed")
     selection, _ = provider_selection(resolved, space_config=config)
-    return (selection.model, selection.provider) if selection else ("", "")
+    if selection:
+        return (selection.model, selection.provider)
+    from runtime.opencode_free_chat import free_default_choice
+    return free_default_choice()
 
 
 def _fingerprint(model, provider):

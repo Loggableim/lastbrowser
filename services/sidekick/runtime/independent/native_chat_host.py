@@ -109,6 +109,10 @@ def build_native_environment(context: NativeChatContext, *, runtime_env=None) ->
         # or discover the development checkout's fallback .env.
         "PYTHON_DOTENV_DISABLED": "1",
         "PYTHONIOENCODING": "utf-8", "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"})
+    from runtime.opencode_free_chat import free_client_path
+    binary = free_client_path()
+    if binary:
+        env["LASTBROWSER_OPENCODE_BIN"] = binary
     return env
 
 
@@ -171,8 +175,8 @@ class NativeChatHandle(WorkerHandle):
 class NativeChatHost:
     def __init__(self, context: NativeChatContext, *, python_executable=None):
         self.context = NativeChatContext.model_validate_json(canonical_json(context))
-        from .worker_host import resolve_worker_python_executable
-        self.python_executable = canonical_path(python_executable or resolve_worker_python_executable())
+        from .worker_host import _interpreter_path, resolve_worker_python_executable
+        self.python_executable = _interpreter_path(Path(python_executable or resolve_worker_python_executable()))
         self.sidekick_root = Path(__file__).resolve().parents[2]
 
     def pool_key(self):
@@ -336,9 +340,9 @@ def prewarm_persistent_chat_workers() -> int:
         from web.api.independent import hub
         from .scope import ScopeResolver, canonical_path
         from .scope_binding import provider_selection
-        from .worker_host import resolve_worker_python_executable
+        from .worker_host import _interpreter_path, resolve_worker_python_executable
         current = hub()
-        python_executable = canonical_path(resolve_worker_python_executable())
+        python_executable = _interpreter_path(Path(resolve_worker_python_executable()))
         sidekick_root = Path(__file__).resolve().parents[2]
         for profile in current.profiles():
             if parked >= _PREWARM_LIMIT:

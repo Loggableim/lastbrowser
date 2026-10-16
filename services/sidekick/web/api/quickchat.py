@@ -170,6 +170,11 @@ def start_quickchat(body: Any, handler: Any, diag=None) -> tuple[dict[str, Any],
     if not model and provider_context.get("model"):
         model = str(provider_context.get("model") or "")
     if not provider:
+        from runtime.opencode_free_chat import free_default_choice
+        free_model, free_provider = free_default_choice()
+        if free_provider and (not model or model == free_model):
+            model, provider = free_model, free_provider
+    if not provider:
         raise QuickChatError("Choose and save a provider before using Quickchat", 409, "quickchat_provider_unavailable")
     from web.api.config import _known_reasoning_efforts_for_model
     supported_reasoning_efforts = _known_reasoning_efforts_for_model(model, provider)

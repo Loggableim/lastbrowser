@@ -151,6 +151,16 @@ export function resolveServiceLayout(
   };
 }
 
+/** Official OpenCode CLI used for the no-key free chat route. */
+export function resolveOpenCodeClientPath(layout: Pick<ServiceLayout, 'sidekickDir'>, platform: NodeJS.Platform | string = process.platform): string | undefined {
+  const fileName = platform === 'win32' ? 'opencode.exe' : 'opencode';
+  const candidates = [
+    path.join(layout.sidekickDir, 'vendor', 'opencode', fileName),
+    path.join(layout.sidekickDir, 'vendor', 'opencode', 'opencode')
+  ];
+  return candidates.find(candidate => existsSync(candidate));
+}
+
 export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number): NodeJS.ProcessEnv {
   const webuiPortValue = String(webuiPort);
   const webuiBaseUrl = `http://127.0.0.1:${webuiPortValue}`;
@@ -191,6 +201,13 @@ export function buildSidecarEnvironment(layout: ServiceLayout, webuiPort: number
       ? `${layout.sidekickDir}${path.delimiter}${process.env.PYTHONPATH}`
       : layout.sidekickDir
   };
+  const openCodePlatform = layout.pythonExe.toLowerCase().endsWith('.exe') ? 'win32' : process.platform;
+  const bundledOpenCode = resolveOpenCodeClientPath(layout, openCodePlatform);
+  const devOpenCode = !bundledOpenCode && openCodePlatform === 'linux' && existsSync('/tmp/opencode-cli/opencode')
+    ? '/tmp/opencode-cli/opencode'
+    : undefined;
+  const openCodeClient = bundledOpenCode || devOpenCode;
+  if (openCodeClient) env.LASTBROWSER_OPENCODE_BIN = openCodeClient;
   if (isCdpEnabled()) {
     const cdpPort = String(resolveCdpPort());
     const cdpUrl = formatCdpUrl(Number(cdpPort));

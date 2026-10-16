@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { I18N_TEXTS } from '../../../docs/design/startup-animation/startup-animation.js';
-import { clipIdFromSound, startupAnimationLocales, startupPersona, timingForClip } from '../src/renderer/startup/StartupAnimationLayer.js';
+import { clipIdFromSound, startupAnimationLocales, startupPersona, startupPlaybackScene, startupSceneForState, timingForClip } from '../src/renderer/startup/StartupAnimationLayer.js';
 import { defaultStartupPreferences } from '../src/renderer/startup/startup-preferences.js';
 
 describe('startup animation integration', () => {
@@ -16,6 +16,18 @@ describe('startup animation integration', () => {
     expect(timing.onsetsMs[0]).toBe(120);
     expect(timing.mainPeakMs).toBe(250);
     expect(timingForClip('unlock-gesture').durationMs).toBe(5614);
+  });
+
+  it('plays the demo scenes on the startup gate', () => {
+    expect(startupSceneForState({ locked: false, afterUnlock: false, phaseReady: false })).toBe('coldstart-loop');
+    expect(startupSceneForState({ locked: true, afterUnlock: false, phaseReady: false })).toBe('unlock-input');
+    expect(startupSceneForState({ locked: false, afterUnlock: true, phaseReady: false })).toBe('unlock-success');
+    expect(startupSceneForState({ locked: false, afterUnlock: true, phaseReady: true })).toBe('transition');
+    expect(startupSceneForState({ locked: false, afterUnlock: false, phaseReady: true })).toBe('transition');
+    expect(startupPlaybackScene({ locked: false, afterUnlock: true, phaseReady: true }, null)).toBe('unlock-success');
+    expect(startupPlaybackScene({ locked: false, afterUnlock: true, phaseReady: true }, 'unlock-success')).toBe('unlock-success');
+    expect(startupPlaybackScene({ locked: false, afterUnlock: true, phaseReady: true }, 'coldstart-loop')).toBe('transition');
+    expect(startupPlaybackScene({ locked: false, afterUnlock: false, phaseReady: false }, 'coldstart-loop')).toBe('coldstart-loop');
   });
 
   it('uses the unlock clip after the password and the active sidekick persona', () => {

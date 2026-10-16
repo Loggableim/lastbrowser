@@ -213,6 +213,7 @@ import { canCallSidekickApi } from './runtime-readiness.js';
 import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
 import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
 import { StartupScreen } from './startup/StartupScreen.js';
+import { StartupPreferencesPanel } from './startup/StartupPreferencesPanel.js';
 import { StartupAnimationLayer } from './startup/StartupAnimationLayer.js';
 import { FirstLaunchCompletion } from './startup/FirstLaunchCompletion.js';
 import { chooseStartupSound, playStartupSound, readStartupPreferences, startupAnimations, useStartupPreferences, type StartupSound } from './startup/startup-preferences.js';
@@ -1267,7 +1268,6 @@ function AppContent(): JSX.Element {
   const [startupReadyAcknowledged, setStartupReadyAcknowledged] = useState(false);
   const [startupAnimDismissed, setStartupAnimDismissed] = useState(false);
   const startupUnlockedThisLaunch = useRef(false);
-  const dismissStartupAnimation = useCallback(() => setStartupAnimDismissed(true), []);
   const [startupOpeningState, setStartupOpeningState] = useState<StartupOpeningState>('idle');
   const startupPreferences = useStartupPreferences();
   const [startupOpeningDurationMs, setStartupOpeningDurationMs] = useState<number | undefined>(undefined);
@@ -1607,6 +1607,12 @@ function AppContent(): JSX.Element {
       stopStartupSoundRef.current = null;
       return;
     }
+    if (accessAuthChecked && !startupAnimDismissed && !startupFailureStage) {
+      pendingStartupSoundRef.current = null;
+      stopStartupSoundRef.current?.();
+      stopStartupSoundRef.current = null;
+      return;
+    }
     if (startupPhase !== 'ready' || !startupReadyAcknowledged) return;
     const pending = pendingStartupSoundRef.current;
     if (!pending) return;
@@ -1619,7 +1625,7 @@ function AppContent(): JSX.Element {
     }, pending.sound);
     const timer = window.setTimeout(stop, pending.sound.durationMs + 2_000);
     stopStartupSoundRef.current = () => { window.clearTimeout(timer); stop(); };
-  }, [activeProfileId, startupAuthAllowsShell, startupPhase, startupReadyAcknowledged]);
+  }, [accessAuthChecked, activeProfileId, startupAnimDismissed, startupAuthAllowsShell, startupFailureStage, startupPhase, startupReadyAcknowledged]);
   useEffect(() => {
     if (!startupPreferences.soundEnabled) { stopStartupSoundRef.current?.(); stopStartupSoundRef.current = null; setStartupOpeningDurationMs(undefined); setStartupOpeningSoundId(undefined); }
   }, [startupPreferences.soundEnabled]);
@@ -5798,7 +5804,7 @@ function AppContent(): JSX.Element {
       : startupCopy.errorDescription
     : null;
   const accessAuthForm = accessAuthRequired && !startupFailureStage ? (
-    <section className="startup-screen__auth" aria-labelledby="startup-auth-title">
+    <section className="startup-screen__auth" data-startup-auth="" aria-labelledby="startup-auth-title">
       <h1 id="startup-auth-title">{t('access.lock.title')}</h1>
       <p>{t('access.lock.description')}</p>
       <form onSubmit={(event) => void unlockBrowser(event)}>
@@ -5810,6 +5816,10 @@ function AppContent(): JSX.Element {
     </section>
   ) : null;
   const completeStartupOpening = useCallback(() => {
+    setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'complete' }));
+  }, []);
+  const finishStartupEngine = useCallback(() => {
+    setStartupAnimDismissed(true);
     setStartupOpeningState((current) => reduceStartupOpeningState(current, { type: 'complete' }));
   }, []);
 
@@ -5833,10 +5843,30 @@ function AppContent(): JSX.Element {
       </>}
     />
   ) : null;
-  if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged) {
-    const showStartupAnimation = accessAuthChecked && !accessAuthRequired && !startupFailureStage && !startupAnimDismissed;
-    return (
-      <>
+  const startupGate = !startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged;
+  const showStartupEngine = accessAuthChecked && !startupFailureStage && !startupAnimDismissed;
+  const startupEngine = showStartupEngine ? (
+    <>
+      <StartupAnimationLayer
+        locale={locale}
+        phase={startupPhase}
+        afterUnlock={startupUnlockedThisLaunch.current}
+        locked={accessAuthRequired}
+        authError={accessAuthError}
+        soundId={startupOpeningSoundId || startupPreferences.soundId}
+        onFinished={finishStartupEngine}
+      />
+      <div className="startup-engine-chrome">
+        {accessAuthRequired ? accessAuthForm : null}
+        <StartupPreferencesPanel compact />
+      </div>
+    </>
+  ) : null;
+
+  return (
+    <>
+    {startupGate ? (
+      showStartupEngine ? null : (
       <StartupScreen
         locale={locale}
         launchIcon={startupLaunchIcon}
@@ -5845,12 +5875,8 @@ function AppContent(): JSX.Element {
         onRetry={startupFailureStage === 'session' ? retryAccessAuthStatus : retryStartupChecks}
         retryContent={accessAuthForm}
       />
-      {showStartupAnimation && <StartupAnimationLayer locale={locale} phase={startupPhase} afterUnlock={startupUnlockedThisLaunch.current} soundId={startupOpeningSoundId} onFinished={dismissStartupAnimation} />}
-      </>
-    );
-  }
-
-  return (
+      )
+    ) : (
     <ProfileResolutionContext.Provider value={{ error: assistantSelectionError || (!sidekickApiReady ? (locale.startsWith('de') ? 'KI-Dienst ist noch nicht bereit.' : 'AI service is not ready yet.') : ''), retry: () => setProfileResolutionRefresh(value => value + 1) }}>
     <OptionalAiProfileContext.Provider value={activeBackendProfileName || null}>
     <OptionalAiWorkspaceContext.Provider value={activeSpacePath}>
@@ -6800,11 +6826,11 @@ function AppContent(): JSX.Element {
         <CommandPalette onToggleTabPinned={toggleTabPinned} onToggleTabMute={toggleTabMute} />
 
     </div>
-    {firstLaunchOpening && (
+    {firstLaunchOpening && !showStartupEngine && (
       <FirstLaunchCompletion locale={locale} launchIcon={startupLaunchIcon}
         onComplete={() => setFirstLaunchOpening(false)} />
     )}
-    {startupIsOpening && !firstLaunchOpening && (
+    {startupIsOpening && !firstLaunchOpening && !showStartupEngine && (
       <StartupScreen
         locale={locale}
         launchIcon={startupLaunchIcon}
@@ -6819,6 +6845,9 @@ function AppContent(): JSX.Element {
     </OptionalAiWorkspaceContext.Provider>
     </OptionalAiProfileContext.Provider>
     </ProfileResolutionContext.Provider>
+    )}
+    {startupEngine}
+    </>
   );
 }
 

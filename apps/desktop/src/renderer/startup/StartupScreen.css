@@ -1,3 +1,12 @@
+.startup-animation-layer { z-index: 2100; }
+.startup-animation-layer .lb-gear-btn { display: none; }
+.startup-animation-layer.is-external-auth .lb-unlock-box { display: none; }
+.startup-engine-chrome { position: fixed; inset: 0; z-index: 2200; pointer-events: none; }
+.startup-engine-chrome .startup-preferences-trigger,
+.startup-engine-chrome .startup-screen__auth { pointer-events: auto; }
+.startup-engine-chrome .startup-screen__auth { position: absolute; left: 50%; top: 62%; transform: translateX(-50%); width: min(420px, calc(100% - 48px)); }
+.startup-engine-chrome .startup-preferences-trigger { position: absolute; right: 18px; bottom: 18px; }
+
 .startup-screen {
   --startup-navy: #071426;
   --startup-pride-angle: 0deg;

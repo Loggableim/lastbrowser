@@ -3,6 +3,9 @@ node_modules/
 /output/local-ai-evaluation/
 /output/local-ai-pr-body.md
 dist/
+!/dist/
+/dist/*
+!/dist/linux/
 out/
 release/
 !docs/release/

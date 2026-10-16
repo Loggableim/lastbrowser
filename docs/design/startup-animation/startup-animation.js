@@ -1207,6 +1207,8 @@ export function createStartupAnimation(el, options = {}) {
   const onExternalAudioClock = (ev) => {
     const d = ev?.detail;
     if (!d || typeof d.currentTimeMs !== 'number') return;
+    // Preview clocks and the engine's own buffer must not finish or drive the scene.
+    if (d.purpose === 'preview' || sourceNode) return;
     externalClock = {
       currentTimeMs: d.currentTimeMs,
       durationMs: d.durationMs || currentTiming.durationMs,
@@ -1361,7 +1363,8 @@ export function createStartupAnimation(el, options = {}) {
       renderQuoteStream(rawTimeMs);
       avatarCtx.clearRect(0, 0, avatarCanvas.width, avatarCanvas.height);
       drawSidekickAvatar(avatarCtx, currentPersona, 'done', 0, 0, 1, 1);
-      if (opts.scene === 'transition' || (isReady && rawTimeMs >= 260)) {
+      const finiteScene = opts.scene !== 'coldstart-loop' && opts.scene !== 'unlock-input';
+      if (opts.scene === 'transition' || (isReady && rawTimeMs >= 260) || (finiteScene && rawTimeMs >= 260)) {
         finishAnimation();
         return;
       }
@@ -1570,19 +1573,28 @@ export function createStartupAnimation(el, options = {}) {
     rafId = requestAnimationFrame(renderFrame);
   }
 
-  function finishAnimation() {
+  function finishAnimation(reason = 'end') {
     if (completed || destroyed) return;
     completed = true;
     if (rafId) cancelAnimationFrame(rafId);
     if (watchdogTimer) clearTimeout(watchdogTimer);
     resolveFinished?.();
-    opts.onComplete?.();
+    opts.onComplete?.(reason);
   }
 
   // Keyboard & Click skip handling (80ms fast audio fade-out)
+  const realAuthForm = () => document.querySelector('[data-startup-auth]');
+
   const onKeyDown = (e) => {
     if (destroyed || completed) return;
-    if (opts.scene === 'unlock-input' && document.activeElement === unlockInput) {
+    // The real access form and the preferences gear own Enter, Space, and Escape.
+    if (e.target instanceof Element && (e.target.closest('[data-startup-auth]') || e.target.closest('.startup-engine-chrome'))) return;
+    const externalAuth = Boolean(realAuthForm());
+    if (externalAuth && (document.activeElement === unlockInput || unlockBox.contains(e.target))) {
+      unlockInput.blur();
+      return;
+    }
+    if (opts.scene === 'unlock-input' && document.activeElement === unlockInput && !externalAuth) {
       if (e.key === 'Escape') {
         api.skip();
       } else if (e.key === 'Enter') {
@@ -1600,9 +1612,8 @@ export function createStartupAnimation(el, options = {}) {
 
   const onRootClick = (e) => {
     if (gearBtn.contains(e.target) || unlockBox.contains(e.target)) return;
-    if (opts.scene !== 'unlock-input') {
-      api.skip();
-    }
+    if (e.target instanceof Element && e.target.closest('[data-startup-auth]')) return;
+    api.skip();
   };
 
   const onGearClick = (e) => {
@@ -1628,10 +1639,13 @@ export function createStartupAnimation(el, options = {}) {
       currentTiming = resolveTiming();
       currentPersona = PERSONAS[opts.persona] || PERSONAS.nova;
       fallbackImg.src = currentPersona.fallbackPng;
-      unlockBox.dataset.visible = opts.scene === 'unlock-input' ? 'true' : 'false';
+      const externalAuth = Boolean(document.querySelector('[data-startup-auth]'));
+      unlockBox.dataset.visible = opts.scene === 'unlock-input' && !externalAuth ? 'true' : 'false';
+      unlockInput.disabled = externalAuth;
+      unlockInput.tabIndex = externalAuth ? -1 : 0;
       if (opts.scene === 'unlock-input') {
         unlockInput.placeholder = '••••••••';
-        setTimeout(() => unlockInput.focus(), 20);
+        if (!externalAuth) setTimeout(() => unlockInput.focus(), 20);
       }
 
       updateStatusText(currentPhaseKey);
@@ -1658,7 +1672,6 @@ export function createStartupAnimation(el, options = {}) {
 
     setPhase(phaseKey) {
       updateStatusText(phaseKey);
-      if (phaseKey === 'ready') this.ready();
     },
 
     ready() {
@@ -1728,7 +1741,7 @@ export function createStartupAnimation(el, options = {}) {
         }, 85);
       }
       root.style.opacity = '0';
-      finishAnimation();
+      finishAnimation('skip');
     },
 
     destroy() {

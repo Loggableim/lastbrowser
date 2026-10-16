@@ -11,6 +11,9 @@ declare module '../../../../../docs/design/startup-animation/startup-animation.j
     play: (scene?: string) => Promise<void> | void;
     setPhase: (phase: string) => void;
     ready: () => void;
+    error: () => void;
+    setRainbow: (style: string) => void;
+    setAudioOptions: (audio: { volume?: number; enabled?: boolean }) => void;
     destroy: () => void;
   };
 }

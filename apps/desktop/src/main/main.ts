@@ -1687,6 +1687,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
       const response = await startQuickChat(requireWebuiUrl(), { quickChatId: request.quickChatId, scope: request.scope,
         profile: request.profile, workspacePath: request.workspacePath, nativeBridgeNonce: services!.getLayout().bridgeToken,
         prompt: request.prompt, ...(request.context ? { context: { ...request.context } } : {}),
+        ...(request.companion ? { companion: request.companion } : {}),
         ...(request.reasoningEffort ? { reasoningEffort: request.reasoningEffort } : {}),
         ...(request.model ? { model: request.model } : {}), ...(request.modelProvider ? { modelProvider: request.modelProvider } : {}) });
       const scopeValue = (response.space_scope ?? response.scope) as BrowserScope;

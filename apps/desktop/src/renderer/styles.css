@@ -15678,6 +15678,36 @@ html[data-message-layout="expanded"] .copilot-bubble.user {
   text-transform: uppercase;
 }
 
+.sidebar-active-sidekick {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 2px 6px 4px;
+}
+
+.sidebar-active-sidekick-kicker {
+  margin: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+  color: var(--lb-muted);
+}
+
+.sidebar-active-sidekick-name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.2;
+  color: var(--lb-text);
+}
+
+.sidebar-active-sidekick [data-sidekick-state] {
+  margin-top: 2px;
+}
+
 .drawer-cards-list {
   display: flex;
   flex-direction: column;

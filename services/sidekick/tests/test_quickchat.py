@@ -368,3 +368,53 @@ def test_quickchat_is_filtered_from_both_session_list_paths(monkeypatch, tmp_pat
     models._SESSION_LIST_CACHE.clear()
     models._SESSION_LIST_CACHE_AT.clear()
     assert [row["session_id"] for row in models.all_sessions()] == [ordinary.session_id]
+
+
+def _choose_space_companion(store, resolver, scope, personality):
+    """Change the Space companion through the same call the header and sidebar use."""
+    import uuid
+    from runtime.independent import companion as companion_module
+
+    current = companion_module.companion_operation(store, resolver, scope, "default", {"action": "get"})
+    return companion_module.companion_operation(store, resolver, scope, "default", {
+        "action": "set", "personality": personality, "expectedRevision": current["revision"],
+        "clientRequestId": str(uuid.uuid4())})
+
+
+def test_quickchat_start_companion_override_is_stored_without_changing_the_space(monkeypatch, tmp_path):
+    """A new Quickchat keeps the persona sent with its start and leaves the Space companion alone."""
+    from runtime.independent import companion as companion_module
+
+    handler, body, starts = _setup(monkeypatch, tmp_path)
+    scope = Scope.model_validate(SCOPE)
+    home = tmp_path / "home"
+    root = tmp_path / "companion-space"
+    home.mkdir()
+    root.mkdir()
+    resolver = SimpleNamespace(resolve=lambda _scope, **_: SimpleNamespace(scope=scope, profile_home=home, space_root=root))
+    store = SimpleNamespace(list_bindings=lambda: [SimpleNamespace(scope=scope)])
+    monkeypatch.setattr("web.api.independent.hub", lambda: SimpleNamespace(by_scope=lambda *_: (store, resolver)))
+    chosen = _choose_space_companion(store, resolver, scope, "mentor")
+
+    body["companion"] = {"personality": "developer", "botName": " Patch "}
+    result, status = quickchat.start_quickchat(body, handler)
+
+    assert status == 200 and result["stream_id"] == STREAM_ID
+    assert starts[0][0].companion == {"personality": "developer", "botName": "Patch"}
+    space_companion = companion_module.companion_operation(store, resolver, scope, "default", {"action": "get"})
+    assert space_companion["personality"] == "mentor"
+    assert space_companion["botName"] == "Zen"
+    assert space_companion["revision"] == chosen["revision"]
+
+    body["companion"] = {"personality": "creative", "botName": "Spark"}
+    quickchat.start_quickchat(body, handler)
+    assert models.get_session(QUICK_ID).companion == {"personality": "developer", "botName": "Patch"}
+    unchanged = companion_module.companion_operation(store, resolver, scope, "default", {"action": "get"})
+    assert unchanged["personality"] == "mentor" and unchanged["revision"] == chosen["revision"]
+
+    fresh = {**body, "quick_chat_id": "d" * 32, "companion": {"personality": "unknown", "botName": "Ghost"}}
+    quickchat.start_quickchat(fresh, handler)
+    created = models.get_session("d" * 32)
+    assert created.companion == {"personality": "mentor", "botName": "Zen"}
+    still = companion_module.companion_operation(store, resolver, scope, "default", {"action": "get"})
+    assert still["personality"] == "mentor" and still["revision"] == chosen["revision"]

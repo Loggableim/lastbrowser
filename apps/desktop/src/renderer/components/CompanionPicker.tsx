@@ -39,6 +39,41 @@ export function useStandardChatCompanion(): CompanionSelection & { stored: boole
   return { ...value, avatar: personalityAvatar(value.personality) };
 }
 
+const QUICK_CHAT_COMPANION_KEY = 'lastbrowser.quickChatCompanion.v1';
+export const QUICK_CHAT_COMPANION_EVENT = 'lastbrowser:quick-chat-companion';
+
+export function readQuickChatCompanion(): CompanionSelection & { stored: boolean } {
+  try {
+    const raw = JSON.parse(window.localStorage.getItem(QUICK_CHAT_COMPANION_KEY) || '');
+    if (raw && typeof raw.personality === 'string' && Object.hasOwn(companionDefaultNames, raw.personality)) {
+      const personality = raw.personality as CompanionPersonality;
+      const botName = typeof raw.botName === 'string' && raw.botName.trim() ? raw.botName.trim() : companionDefaultNames[personality];
+      return { personality, botName, stored: true };
+    }
+  } catch { /* default */ }
+  return { personality: 'nova', botName: 'Nova', stored: false };
+}
+
+export function writeQuickChatCompanion(personality: CompanionPersonality, botName: string): void {
+  const saved = { personality, botName: botName.trim() || companionDefaultNames[personality] };
+  window.localStorage.setItem(QUICK_CHAT_COMPANION_KEY, JSON.stringify(saved));
+  window.dispatchEvent(new CustomEvent(QUICK_CHAT_COMPANION_EVENT, { detail: saved }));
+}
+
+export function useQuickChatCompanion(): CompanionSelection & { stored: boolean; avatar: string } {
+  const [value, setValue] = useState(readQuickChatCompanion);
+  useEffect(() => {
+    const sync = () => setValue(readQuickChatCompanion());
+    window.addEventListener(QUICK_CHAT_COMPANION_EVENT, sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener(QUICK_CHAT_COMPANION_EVENT, sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+  return { ...value, avatar: personalityAvatar(value.personality) };
+}
+
 export function CompanionPicker({ value, onChange, disabled = false }: { value: CompanionSelection; onChange: (value: CompanionSelection) => void; disabled?: boolean }) {
   const { t } = useDesktopI18n();
   return <div>
@@ -52,8 +87,9 @@ export function CompanionPicker({ value, onChange, disabled = false }: { value: 
   </div>;
 }
 
-export function CompanionSwitch({ compact = false, conversation = null }: { compact?: boolean; conversation?: CompanionSelection | null }) {
+export function CompanionSwitch({ compact = false, conversation = null, target = 'standard' }: { compact?: boolean; conversation?: CompanionSelection | null; target?: 'standard' | 'quickchat' }) {
   const companion = useCompanionAppearance();
+  const quickCompanion = useQuickChatCompanion();
   const { t } = useDesktopI18n();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<CompanionSelection>({ personality: 'nova', botName: 'Nova' });
@@ -69,10 +105,12 @@ export function CompanionSwitch({ compact = false, conversation = null }: { comp
   }, [open]);
   const saved = readStandardChatCompanion();
   // The picker chooses the persona for new chats; the header names the conversation's own persona.
-  const globalPersonality = companion.loaded ? companion.personality : saved.personality;
-  const globalBotName = companion.loaded ? companion.botName : saved.botName;
+  // Quickchat keeps that choice on its own key and never writes the standard-chat companion.
+  const globalPersonality = target === 'quickchat' ? quickCompanion.personality : (companion.loaded ? companion.personality : saved.personality);
+  const globalBotName = target === 'quickchat' ? quickCompanion.botName : (companion.loaded ? companion.botName : saved.botName);
   const personality = conversation?.personality ?? globalPersonality;
   const botName = conversation?.botName ?? globalBotName;
+  const pickerDisabled = target === 'quickchat' ? false : (!companion.loaded || companion.busy);
   return <div ref={rootRef} style={{ position: 'relative' }}>
     <button type="button" ref={triggerRef} className={compact ? 'sidebar-companion-switch' : 'copilot-header-brand'} aria-label={t('copilot.personalitySwitch')} aria-haspopup="dialog" aria-expanded={open}
       style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
@@ -83,16 +121,17 @@ export function CompanionSwitch({ compact = false, conversation = null }: { comp
     {open && <section role="dialog" aria-label={t('copilot.personalityDialog')} onClick={event => event.stopPropagation()} style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300, boxSizing: 'border-box', maxWidth: 'calc(100vw - 32px)', padding: 16, borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-primary, #101522)', color: 'var(--text-primary)', zIndex: 1000, boxShadow: '0 12px 32px rgba(0,0,0,.4)' }}>
       <strong>{t('copilot.personalityTitle')}</strong>
       <p role="note" style={{ margin: '6px 0 10px', fontSize: 12, lineHeight: 1.4 }}>{t('sidebar.companion.menu')}</p>
-      <CompanionPicker value={draft} onChange={setDraft} disabled={!companion.loaded || companion.busy} />
-      {companion.error && <p role="alert">{companion.error}</p>}
-      {companion.error && <button type="button" onClick={companion.retry}>{t('common.retry')}</button>}
-      {!companion.loaded && !companion.error && <p role="status">{t('copilot.loading')}</p>}
+      <CompanionPicker value={draft} onChange={setDraft} disabled={pickerDisabled} />
+      {target !== 'quickchat' && companion.error && <p role="alert">{companion.error}</p>}
+      {target !== 'quickchat' && companion.error && <button type="button" onClick={companion.retry}>{t('common.retry')}</button>}
+      {target !== 'quickchat' && !companion.loaded && !companion.error && <p role="status">{t('copilot.loading')}</p>}
       <div className="native-card-actions">
-        <button type="button" disabled={!companion.loaded} onClick={() => {
+        <button type="button" disabled={target === 'quickchat' ? false : !companion.loaded} onClick={() => {
           const botNameToSave = draft.botName.trim() || companionDefaultNames[draft.personality];
           setOpen(false);
           triggerRef.current?.focus();
-          void companion.setSelection(draft.personality, botNameToSave);
+          if (target === 'quickchat') writeQuickChatCompanion(draft.personality, botNameToSave);
+          else void companion.setSelection(draft.personality, botNameToSave);
         }}>{t('common.save')}</button>
         <button type="button" onClick={() => { setOpen(false); triggerRef.current?.focus(); }}>{t('common.cancel')}</button>
       </div>

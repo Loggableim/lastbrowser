@@ -74,13 +74,17 @@ def _session_for_quickchat(body: dict[str, Any], actor: str, scope, workspace: s
             or Path(session.workspace).resolve() != Path(workspace).resolve()):
             raise QuickChatError("Quickchat identity is already bound to another conversation", 409, "quickchat_binding_conflict")
         return session
-    from runtime.independent.companion import start_conversation_companion
+    from runtime.independent.companion import normalize_conversation_companion, start_conversation_companion
     from web.api.independent import hub
     store, resolver = hub().by_scope(scope, actor)
+    # A new Quickchat keeps the persona sent with this start. An invalid or
+    # missing companion still copies the Space companion, and an existing
+    # session returned above is never retargeted.
+    override = normalize_conversation_companion(body.get("companion")) if "companion" in body else None
     session = Session(session_id=quick_id, title="Quickchat", workspace=workspace, model=model,
         model_provider=provider, profile=actor, space_scope=scope.model_dump(mode="json", by_alias=True),
         enabled_toolsets=[], session_kind="quickchat", quick_chat_id=quick_id,
-        companion=start_conversation_companion(store, resolver, scope, actor))
+        companion=override if override is not None else start_conversation_companion(store, resolver, scope, actor))
     # Register before save so standard stream workers resolve this exact private session.
     with LOCK:
         if quick_id in SESSIONS:
@@ -98,7 +102,7 @@ def _session_for_quickchat(body: dict[str, Any], actor: str, scope, workspace: s
 
 def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     if not isinstance(body, dict) or set(body) - {
-        "quick_chat_id", "space_scope", "profile", "workspace", "prompt", "context", "model", "model_provider", "reasoning_effort"
+        "quick_chat_id", "space_scope", "profile", "workspace", "prompt", "context", "model", "model_provider", "reasoning_effort", "companion"
     }:
         raise QuickChatError("Invalid Quickchat request")
     quick_id = body.get("quick_chat_id")

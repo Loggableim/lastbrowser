@@ -32,7 +32,9 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
     expect(packageJson.scripts['package:linux']).toContain('node scripts/stage-opencode-client.mjs');
     expect(packageJson.scripts['package:linux']).toContain('electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus');
+    expect(packageJson.scripts['package:linux']).toContain('--config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/');
     expect(packageJson.build.electronVersion).toBe('45.0.0-alpha.14+wvcus');
+    expect(packageJson.build.electronDownload.mirror).toBe('https://github.com/castlabs/electron-releases/releases/download/v');
     expect(packageJson.build.linux.target).toContain('AppImage');
     expect(packageJson.scripts['package:linux']).toContain('node scripts/write-linux-checksums.mjs');
     expect(packageJson.scripts['smoke:linux:fresh-profile']).toBe('node scripts/smoke-linux-fresh-profile.mjs');

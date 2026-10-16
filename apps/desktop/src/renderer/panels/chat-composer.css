@@ -395,13 +395,54 @@
 .chat-composer .composer-model-group { grid-column: 2; order: 1; justify-content: flex-end; }
 .chat-composer > .composer-model-notice,
 .chat-composer > .composer-manual-models { grid-column: 1 / -1; order: 2; }
+.chat-composer .composer-queued {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  grid-column: 1 / -1;
+  order: 3;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.chat-composer .composer-queued-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(0, 217, 255, .4);
+  border-radius: 8px;
+  background: rgba(0, 217, 255, .1);
+  color: var(--lb-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.chat-composer .composer-queued-label {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #8ee7ff;
+}
+.chat-composer .composer-queued-text {
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-composer .composer-send-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .chat-composer .composer-input-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-column: 1 / -1;
   align-items: end;
   gap: 8px;
-  order: 3;
+  order: 4;
   min-width: 0;
 }
 .chat-composer .composer-input-row > .chat-command-menu { grid-column: 1 / -1; }

@@ -217,3 +217,69 @@ def test_persistent_worker_serves_five_turns_in_one_process(tmp_path, monkeypatc
         _drain_idle_pool()
         server.close()
         store.close()
+
+
+def test_persistent_worker_queued_followup_after_deferred_terminal(tmp_path, monkeypatch):
+    """Simulates standard chat: turn 1 defers terminal until writer release, then a queued follow-up."""
+    from web.api import config, native_chats
+    from runtime.chat_modes import ChatExecutionPolicy
+
+    monkeypatch.setenv("LASTBROWSER_CHAT_PERSISTENT_WORKER", "1")
+    server = ControlledServer(text_only=True, parties=1)
+    context, store = fixture_context(tmp_path, "a", server.port)
+    session_file = Path(context.sessions_dir) / (context.session_id + ".json")
+    channel = config.create_stream_channel()
+    with config.STREAMS_LOCK:
+        config.STREAMS[context.stream_id] = channel
+    try:
+        base, session, service, _resolver = captured_fixed(context, store, monkeypatch)
+        generation = base.writer_generation
+        broker = NativeSdkSessionBroker(base, session, service=service,
+            execution_policy=ChatExecutionPolicy("action", 1))
+        broker.file_fence.python_executable = str(isolated_python())
+        native_chats.register_native_chat(base)
+        args = (base.session_id, "queued-ping", "controlled-model", base.workspace, base.stream_id)
+        kwargs = {"model_provider": "custom", "execution_policy": ChatExecutionPolicy("action", 1)}
+        try:
+            exit_code = native_chats.run_native_chat(base, args, kwargs, python_executable=isolated_python(),
+                rpc_handler=broker, defer_terminal=True)
+        finally:
+            broker.close_after_exit()
+        assert exit_code == 0
+        assert native_chats.native_chat_exit_confirmed(base)
+        assert not native_chats.finalize_native_chat(base)
+        store.release_lease(base.writer_lease_id, owner_generation=generation)
+        assert native_chats.finalize_native_chat(base)
+
+        stream_id = "turn_queued_followup"
+        turn_context, _lease, turn_session = _advance_turn(
+            base, store, session_file, generation, base.writer_lease_id, stream_id, "queued-pong")
+        channel2 = config.create_stream_channel()
+        with config.STREAMS_LOCK:
+            config.STREAMS[stream_id] = channel2
+        native_chats.register_native_chat(turn_context)
+        broker2 = NativeSdkSessionBroker(turn_context, turn_session, service=service,
+            execution_policy=ChatExecutionPolicy("action", 1))
+        broker2.file_fence.python_executable = str(isolated_python())
+        follow_events = []
+        args2 = (turn_context.session_id, "queued-pong", "controlled-model", turn_context.workspace, stream_id)
+        try:
+            exit2 = relay_native_chat(turn_context, args2, kwargs,
+                lambda event, data: follow_events.append((event, data)),
+                python_executable=isolated_python(), rpc_handler=broker2)
+        finally:
+            broker2.close_after_exit()
+        fault_names = [event for event, data in follow_events if event in {"worker_fault", "error", "apperror"}
+            or (event == "error" and isinstance(data, dict) and data.get("error") == "native_chat_worker_failed")]
+        assert exit2 == 0 and not fault_names, {"exit": exit2, "events": follow_events}
+        finished = [data for event, data in follow_events if event == "worker_finished"]
+        assert finished and finished[-1].get("failed") is False and finished[-1].get("reusable") is True
+    finally:
+        _drain_idle_pool()
+        server.close()
+        store.close()
+        with config.STREAMS_LOCK:
+            config.STREAMS.pop(context.stream_id, None)
+            config.STREAMS.pop("turn_queued_followup", None)
+            config.RECENT_CHAT_STREAMS.pop(context.stream_id, None)
+            config.RECENT_CHAT_STREAMS.pop("turn_queued_followup", None)

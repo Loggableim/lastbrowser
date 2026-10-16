@@ -50,6 +50,8 @@ import { chatCommandCopy } from '../chat-command-copy.js';
 import { canSelectNativeModel, manualModelPickerOptions } from '../model-picker-options.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
+import { composerEnterAction } from '../composer-queue.js';
+import { ComposerQueuedRows } from '../NativeCompressQueue.js';
 import { ComposerMoreMenu } from './composer/ComposerMoreMenu.js';
 import { ComposerNotices } from './composer/ComposerNotices.js';
 import { ManualModelPicker } from './composer/ManualModelPicker.js';
@@ -479,6 +481,8 @@ export type ChatComposerProps = {
   onSend: (message: string, reasoningEffort?: string) => void;
   onStop: () => void;
   onText: (text: string) => void;
+  queuedMessages?: Array<{ text: string }>;
+  onRemoveQueued?: (index: number) => void;
 };
 
 const unavailableCommands:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
@@ -525,7 +529,9 @@ export function ChatComposer({
   onReasoningEffort,
   onSend,
   onStop,
-  onText
+  onText,
+  queuedMessages = [],
+  onRemoveQueued
 }: ChatComposerProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
   const translate = (key: string) => t(key as DesktopTranslationKey);
@@ -536,7 +542,9 @@ export function ChatComposer({
   const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
-  const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
+  const submission = composerEnterAction({ ready, text, running, busy, sendBlocked });
+  const canSend = submission === 'send';
+  const canQueue = submission === 'queue';
 
   const [showSlashDropdown, setShowSlashDropdown] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
@@ -589,11 +597,8 @@ export function ChatComposer({
   function submit(event?: FormEvent): void {
     event?.preventDefault();
     if(ready&&parseChatCommand(text)&&executeCommand(text))return;
-    // Enter during a streaming turn still reaches the parent, which enqueues
-    // the draft for this session instead of dropping it. The send control stays
-    // disabled so Stop remains the pointer action.
-    const queueWhileStreaming = running && ready && text.trim().length > 0 && !sendBlocked;
-    if (!canSend && !queueWhileStreaming) return;
+    const action = composerEnterAction({ ready, text, running, busy, sendBlocked });
+    if (action === 'ignore') return;
     setShowSlashDropdown(false);
     onSend(text, reasoningEffort || undefined);
   }
@@ -717,6 +722,7 @@ export function ChatComposer({
         onRetryModelCatalog={onRetryModelCatalog}
         t={translate}
       />}
+      <ComposerQueuedRows queue={queuedMessages} onRemoveAt={onRemoveQueued ?? (() => undefined)} />
       <div className="composer-input-row">
         {showSlashDropdown&&commandContext&&onCommandAction&&<SlashCommandMenu locale={locale} query={slashFilter} capabilities={commandCapabilities}
           onChoose={command=>{executeCommand('/'+command.name);}} onClose={closeSlashMenu}/>}
@@ -736,15 +742,16 @@ export function ChatComposer({
             if (event.key === 'Escape') setShowSlashDropdown(false);
           }}
         />
-        {running ? (
-          <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
-            <StopCircle size={17} />
-          </button>
-        ) : (
-          <button type="submit" className="composer-send" disabled={!canSend} aria-label={t('chat.send')}>
+        <div className="composer-send-actions">
+          {running ? (
+            <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
+              <StopCircle size={17} />
+            </button>
+          ) : null}
+          <button type="submit" className="composer-send" disabled={!(canSend || canQueue)} aria-label={t('chat.send')}>
             <Send size={17} />
           </button>
-        )}
+        </div>
       </div>
     </form>
   );

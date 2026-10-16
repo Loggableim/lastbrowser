@@ -66,6 +66,8 @@ import { TeamworkProcessCard } from '../components/TeamworkProcessCard.js';
 import { MemoryUsageBadge } from '../components/MemoryUsageBadge.js';
 import type { TeamworkMetadata } from '../teamwork-live-stream.js';
 import './chat-composer.css';
+import { composerEnterAction } from '../composer-queue.js';
+import { ComposerQueuedRows } from '../NativeCompressQueue.js';
 
 const nativeMessageCopy: Record<DesktopLocaleId,{ you:string; system:string; partial:string }> = {
   en:{you:'You',system:'System',partial:'Partial output'},de:{you:'Du',system:'System',partial:'Teilausgabe'},
@@ -479,6 +481,8 @@ export type ChatComposerProps = {
   onSend: (message: string, reasoningEffort?: string) => void;
   onStop: () => void;
   onText: (text: string) => void;
+  queuedMessages?: Array<{ text: string }>;
+  onRemoveQueued?: (index: number) => void;
 };
 
 const unavailableCommands:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
@@ -531,7 +535,9 @@ export function ChatComposer({
   onReasoningEffort,
   onSend,
   onStop,
-  onText
+  onText,
+  queuedMessages = [],
+  onRemoveQueued
 }: ChatComposerProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
   const companion = useCompanionAppearance();
@@ -539,10 +545,12 @@ export function ChatComposer({
   const composerCompanion = conversationCompanion ?? (standardCompanion.stored ? standardCompanion : companion);
   const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
-  const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
   const selectedModelVisible = modelOptions.some(group => group.providerId === modelProvider
     && group.models.some(entry => parseProviderModelId(entry.id, group.providerId).model === model));
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
+  const submission = composerEnterAction({ ready, text, running, busy, sendBlocked });
+  const canSend = submission === 'send';
+  const canQueue = submission === 'queue';
 
   const [showSlashDropdown, setShowSlashDropdown] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
@@ -576,7 +584,8 @@ export function ChatComposer({
   function submit(event?: FormEvent): void {
     event?.preventDefault();
     if(ready&&parseChatCommand(text)&&executeCommand(text))return;
-    if (!canSend) return;
+    const action = composerEnterAction({ ready, text, running, busy, sendBlocked });
+    if (action === 'ignore') return;
     setShowSlashDropdown(false);
     onSend(text, reasoningEffort || undefined);
   }
@@ -729,6 +738,7 @@ export function ChatComposer({
             : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
         </p>}
       </section>}
+      <ComposerQueuedRows queue={queuedMessages} onRemoveAt={onRemoveQueued ?? (() => undefined)} />
       <div className="composer-input-row">
         {showSlashDropdown&&commandContext&&onCommandAction&&<SlashCommandMenu locale={locale} query={slashFilter} capabilities={commandCapabilities}
           onChoose={command=>{executeCommand('/'+command.name);}} onClose={closeSlashMenu}/>}
@@ -748,15 +758,16 @@ export function ChatComposer({
             if (event.key === 'Escape') setShowSlashDropdown(false);
           }}
         />
-        {running ? (
-          <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
-            <StopCircle size={17} />
-          </button>
-        ) : (
-          <button type="submit" className="composer-send" disabled={!canSend} aria-label={t('chat.send')}>
+        <div className="composer-send-actions">
+          {running ? (
+            <button type="button" className="composer-send stop" onClick={onStop} aria-label={t('chat.stop')}>
+              <StopCircle size={17} />
+            </button>
+          ) : null}
+          <button type="submit" className="composer-send" disabled={!(canSend || canQueue)} aria-label={t('chat.send')}>
             <Send size={17} />
           </button>
-        )}
+        </div>
       </div>
     </form>
   );

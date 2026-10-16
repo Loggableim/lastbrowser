@@ -175,7 +175,7 @@ export function NativeChatMain({
   const [showHeaderActions, setShowHeaderActions] = useState(false);
   const headerActionsRef = useRef<HTMLDivElement>(null);
   const [statusMessage, setStatusMessage] = useState('');
-  const { queue, enqueue, dequeue, clearQueue, removeAt } = useChatQueue();
+  const { queue, enqueue, dequeue, clearQueue, removeAt } = useChatQueue(activeSessionId);
   const { visible: visibleMessages, developer: developerMessages } = useMemo(
     () => partitionChatMessages(messages),
     [messages]
@@ -709,16 +709,35 @@ export function NativeChatMain({
   // Wrap onSend to synthesize @tabs context and enqueue when busy instead of losing the message
   const handleSend = async (text: string, queuedEffort?: string): Promise<void> => {
     if (writerProtected) { setStatusMessage(t('spaceAssistant.writerProtected')); return; }
+    if ((running || busy) && text.trim()) {
+      const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
+      const sendEffort = modelReasoningEfforts.includes(requestedEffort) ? requestedEffort : '';
+      let messageToSend = text;
+      if (hasTabsMention(text)) {
+        try {
+          const synth = await synthesizeTabsContext({ specificTabIndices: extractTargetTabNumbers(text) });
+          if (synth && synth.tabCount > 0) messageToSend = buildPromptWithTabContext(text, synth);
+        } catch (err) {
+          console.warn('[tab-intelligence] Failed to synthesize tabs context:', err);
+        }
+      }
+      const stored = enqueue({ text: messageToSend, model, profile, reasoningEffort: sendEffort });
+      if (!stored) return;
+      onComposerText('');
+      const preview = text.trim();
+      setStatusMessage(`${t('spaceAssistant.queued')}: "${preview.slice(0, 80)}${preview.length > 80 ? '…' : ''}"`);
+      return;
+    }
     if (pendingChoice) { setStatusMessage(`${t('chat.model')}: ${pendingChoice.model} · ${t('common.loading')}`); return; }
     if (connectionNotice) { setStatusMessage(connectionNoticeCopy[locale][connectionNotice]); return; }
     if (modelChoiceMissing) { setStatusMessage(modelCatalogError ? t('chat.modelCatalogUnavailable') : modelCatalogSlow ? t('chat.modelCatalogSlow') : t('settings.panels.providers.loadingModels')); return; }
     if(automaticBlocked||policyPending===policyOperationKey){setStatusMessage(modelPolicyReason(locale,currentPolicy?.response.executionAvailability.reasonCode));return;}
     const requestedEffort = queuedEffort === undefined ? effectiveReasoningEffort : queuedEffort;
     const sendEffort = modelReasoningEfforts.includes(requestedEffort) ? requestedEffort : '';
-    if(currentModeGate?.response.mode.mode==='grill_me'&&currentGrill?.grill?.status==='asking'){
+    if(currentModeGate?.response.mode.mode==='grill_me'&&currentGrill?.grill?.status==='asking'&&!(running||busy)){
       const question=currentGrill.grill.questions.find(question=>question.answer===null);
       if(question){
-        if(!text.trim()||running||busy||grillPending===modeViewKey)return;
+        if(!text.trim()||grillPending===modeViewKey)return;
         const captured=commandContext;
         const actual=await mutateGrill({action:'answer',questionId:question.questionId,questionRevision:question.revision,text:text.trim()});
         if(actual&&isCommandContextCurrent(captured,currentCommandContext.current)){
@@ -779,13 +798,23 @@ export function NativeChatMain({
       }
     }
 
-    if (running) {
-      enqueue({ text: messageToSend, model, profile, reasoningEffort: sendEffort });
-      setStatusMessage(`Queued: "${text.slice(0, 40)}${text.length > 40 ? '…' : ''}"`);
-      return;
-    }
     onSend(messageToSend, sendEffort || undefined);
   };
+
+  const wasTurnActiveRef = useRef(false);
+  const releaseQueuedHeadRef = useRef<() => void>(() => undefined);
+  releaseQueuedHeadRef.current = () => {
+    if (running || busy || writerProtected || composerText.trim() || !queue.length) return;
+    const head = dequeue();
+    if (!head?.text.trim()) return;
+    onComposerText(head.text);
+    onSend(head.text, head.reasoningEffort);
+  };
+  useEffect(() => {
+    const turnActive = running || busy;
+    if (wasTurnActiveRef.current && !turnActive) releaseQueuedHeadRef.current();
+    wasTurnActiveRef.current = turnActive;
+  }, [running, busy]);
 
   async function setChatMode(action:Extract<CommandAction,{kind:'set_mode'}>) {
     const gate=currentModeGate;
@@ -1085,6 +1114,8 @@ export function NativeChatMain({
         onSend={handleSend}
         onStop={onStop}
         onText={onComposerText}
+        queuedMessages={queue}
+        onRemoveQueued={removeAt}
       />
             {modelFallbackNotice && <div className="chat-status-message" role="status">{modelFallbackNotice}</div>}
             {statusMessage && <div className="chat-status-message" onClick={() => setStatusMessage('')}>{statusMessage}</div>}

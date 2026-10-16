@@ -10,5 +10,8 @@ export function createStartupAnimation(el: HTMLElement, options?: Record<string,
   play: (scene?: string) => Promise<void> | void;
   setPhase: (phase: string) => void;
   ready: () => void;
+  error: () => void;
+  setRainbow: (style: string) => void;
+  setAudioOptions: (audio: { volume?: number; enabled?: boolean }) => void;
   destroy: () => void;
 };

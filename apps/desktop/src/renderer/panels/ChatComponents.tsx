@@ -450,7 +450,7 @@ export type ChatComposerProps = {
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
-  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence;localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }> }>;
+  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; releaseVerified?:boolean; qualification?:ProviderChatEvidence;localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }> }>;
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
   emptyQualifiedCatalog?: boolean;
   noActiveModels?: boolean;

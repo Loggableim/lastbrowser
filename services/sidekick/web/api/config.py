@@ -844,7 +844,6 @@ _PROVIDER_ALIASES = {
     "deep-seek": "deepseek",
     "minimax-china": "minimax-cn",
     "minimax_cn": "minimax-cn",
-    "opencode": "opencode-zen",
     "grok": "xai",
     "x-ai": "xai",
     "x.ai": "xai",

@@ -388,7 +388,7 @@ _PROVIDER_ALIASES = {
     "claude": "anthropic",
     "claude-code": "anthropic",
     "deep-seek": "deepseek",
-    "opencode": "opencode-zen",
+    # `opencode` is the keyless free provider. Only the shorthand `zen` maps to OpenCode Zen.
     "zen": "opencode-zen",
     "go": "opencode-go",
     "opencode-go-sub": "opencode-go",

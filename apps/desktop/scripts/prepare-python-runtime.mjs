@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -35,15 +35,6 @@ export function pythonRuntimeExecutablePath(home, platform = process.platform) {
 export function posixPythonLauncherScript() {
   return '#!/bin/sh\ncd "$(dirname "$0")" || exit 1\nexec ./bin/python3 "$@"\n';
 }
-
-/** Pinned python-build-standalone install_only build. It is relocatable and has no pyvenv.cfg. */
-export const linuxStandalonePython = {
-  version: '3.12.15',
-  tag: '20261013',
-  asset: 'cpython-3.12.15+20261013-x86_64-unknown-linux-gnu-install_only.tar.gz',
-  sha256: '5d546fc004fc2435fa142eb8f42ed8de5eb4725963dc22f7e6671014a80eb560',
-  url: 'https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.12.15%2B20261013-x86_64-unknown-linux-gnu-install_only.tar.gz'
-};
 
 export function resolveWheelhouseDir(env = process.env) {
   const explicit = env.LASTBROWSER_WHEELHOUSE?.trim();
@@ -88,6 +79,201 @@ export function writeLinuxWheelhouseManifest(wheelhouseDir) {
   };
   writeFileSync(join(wheelhouseDir, 'SHA256SUMS.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
   return manifest.wheels;
+}
+
+/**
+ * Relocatable CPython 3.12 from astral-sh/python-build-standalone.
+ * A venv created with --copies still records `home = /usr/bin` and loads
+ * encodings from the build host's /usr/lib/python3.12. This prefix does not.
+ */
+export const linuxStandalonePython = Object.freeze({
+  distribution: 'python-build-standalone',
+  release: '20261013',
+  cpython: '3.12.15',
+  filename: 'cpython-3.12.15+20261013-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz',
+  sha256: '178d3d83b6e8e99285a65d3fce9c16b87952cc5efdb4d1a0e3ff3be18ff0fc9c',
+  url: 'https://github.com/astral-sh/python-build-standalone/releases/download/20261013/cpython-3.12.15%2B20261013-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz'
+});
+
+export function linuxStandaloneTarballPath(env = process.env) {
+  const explicit = env.LASTBROWSER_PYTHON_STANDALONE_TARBALL?.trim();
+  if (explicit) return resolve(explicit);
+  return resolve(runtimeDir, 'python-standalone', linuxStandalonePython.filename);
+}
+
+export function assertRelocatableCPython(pythonExe, runtimeRoot) {
+  const pyvenv = join(runtimeRoot, 'pyvenv.cfg');
+  if (existsSync(pyvenv)) {
+    throw new Error(`Linux runtime must be a python-build-standalone prefix, not a venv (${pyvenv}).`);
+  }
+  const probe = [
+    'import encodings, sys',
+    'enc = getattr(encodings, "__file__", "") or ""',
+    'base = sys.base_prefix or ""',
+    'if "/usr/lib/python" in enc or not enc:',
+    '    raise SystemExit("encodings resolved from the host stdlib: " + enc)',
+    'if base == "/usr" or base.startswith("/usr/"):',
+    '    raise SystemExit("base_prefix is a host path: " + base)',
+    'print(base)',
+    'print(enc)'
+  ].join('\n');
+  const env = { ...process.env };
+  delete env.PYTHONHOME;
+  delete env.PYTHONPATH;
+  const result = spawnSync(pythonExe, ['-I', '-c', probe], {
+    encoding: 'utf8',
+    timeout: 30_000,
+    env
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      `Bundled CPython is not relocatable (${pythonExe}).\n${result.stderr || result.stdout || result.error || ''}`
+    );
+  }
+  const libpython = hostLibpython(pythonExe, runtimeRoot);
+  if (libpython) {
+    throw new Error(`Bundled CPython still links host libpython: ${libpython}`);
+  }
+  return result.stdout.trim();
+}
+
+function hostLibpython(pythonExe, runtimeRoot) {
+  const result = spawnSync('ldd', [pythonExe], { encoding: 'utf8', timeout: 15_000 });
+  if (result.status !== 0) {
+    throw new Error(`ldd failed for ${pythonExe}\n${result.stderr || ''}`);
+  }
+  const root = resolve(runtimeRoot);
+  for (const line of result.stdout.split(/\r?\n/)) {
+    const match = line.match(/libpython[\w.+-]*\s+=>\s+(\S+)/);
+    if (!match) continue;
+    const resolved = match[1];
+    if (resolved === 'not') return line.trim();
+    const resolvedPath = resolve(resolved);
+    if (resolvedPath !== root && !resolvedPath.startsWith(`${root}/`)) return line.trim();
+  }
+  return '';
+}
+
+function sha256File(filePath) {
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
+}
+
+function ensureLinuxStandaloneTarball({ allowDownload }) {
+  const dest = linuxStandaloneTarballPath();
+  if (existsSync(dest) && sha256File(dest) === linuxStandalonePython.sha256) return dest;
+  if (existsSync(dest)) {
+    throw new Error(
+      `[prepare:python] Standalone CPython tarball checksum mismatch: ${dest}\n` +
+      `Expected ${linuxStandalonePython.sha256}.`
+    );
+  }
+  if (!allowDownload) {
+    throw new Error(
+      `[prepare:python] Relocatable CPython tarball is missing: ${dest}\n` +
+      'Run "npm run prepare:python:online" once to download the pinned python-build-standalone archive, ' +
+      'or set LASTBROWSER_PYTHON_STANDALONE_TARBALL to a copy with the pinned SHA-256.'
+    );
+  }
+  mkdirSync(dirname(dest), { recursive: true });
+  const partial = `${dest}.partial`;
+  console.log(`[prepare:python] Downloading relocatable CPython ${linuxStandalonePython.cpython}+${linuxStandalonePython.release}`);
+  run('curl', ['-fL', '--retry', '3', '-o', partial, linuxStandalonePython.url]);
+  const actual = sha256File(partial);
+  if (actual !== linuxStandalonePython.sha256) {
+    rmSync(partial, { force: true });
+    throw new Error(`[prepare:python] Downloaded standalone CPython checksum mismatch: ${actual}`);
+  }
+  renameSync(partial, dest);
+  return dest;
+}
+
+function materializePython3Binary(runtimeRoot) {
+  const real = join(runtimeRoot, 'bin', 'python3.12');
+  const alias = join(runtimeRoot, 'bin', 'python3');
+  rmSync(alias, { force: true });
+  copyFileSync(real, alias);
+  chmodSync(alias, 0o755);
+}
+
+function extractLinuxStandalonePython(tarball) {
+  mkdirSync(pythonRuntimeDir, { recursive: true });
+  run('tar', ['-xzf', tarball, '-C', pythonRuntimeDir, '--strip-components=1']);
+  const pythonExe = join(pythonRuntimeDir, 'bin', 'python3.12');
+  if (!existsSync(pythonExe)) {
+    throw new Error(`[prepare:python] Standalone archive did not contain bin/python3.12 under ${pythonRuntimeDir}`);
+  }
+  return pythonExe;
+}
+
+function prepareLinuxStandalonePython() {
+  const wheelhouseDir = resolveLinuxWheelhouseDir();
+  const isOnline = process.argv.includes('--online');
+  const isDownloadOnly = process.argv.includes('--download-wheels');
+  const tarball = ensureLinuxStandaloneTarball({ allowDownload: isOnline || isDownloadOnly });
+  if (isOnline || isDownloadOnly) {
+    mkdirSync(wheelhouseDir, { recursive: true });
+    console.log(`[prepare:python] Downloading Linux x64 wheels from ${requirementsPath} -> ${wheelhouseDir}`);
+    const hostPython = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
+    const hostExe = hostPython.stdout?.trim();
+    if (hostPython.status !== 0 || !hostExe) {
+      throw new Error('Downloading the Linux wheelhouse needs a host python3 with pip. The packaged runtime does not use it.');
+    }
+    run(hostExe, ['-m', 'pip', 'download', '--only-binary=:all:', '--dest', wheelhouseDir, '-r', requirementsPath]);
+    writeLinuxWheelhouseManifest(wheelhouseDir);
+    if (isDownloadOnly) {
+      console.log(`[prepare:python] Linux wheelhouse and standalone CPython are ready.`);
+      return;
+    }
+  }
+
+  const pythonExe = join(pythonRuntimeDir, 'bin', 'python3.12');
+  const desired = {
+    sourcePythonHome: `${linuxStandalonePython.distribution}:${linuxStandalonePython.release}`,
+    sourceVersion: `${linuxStandalonePython.cpython}+${linuxStandalonePython.release}`,
+    standaloneSha256: linuxStandalonePython.sha256,
+    runtimeSchema: 9,
+    dependencyDigest: runtimeDependencyDigest()
+  };
+  if (isPreparedRuntimeCompatible(readMarker(), desired, existsSync(pythonExe), hasLinuxRuntimeImports(pythonExe))) {
+    try {
+      materializePython3Binary(pythonRuntimeDir);
+      assertRelocatableCPython(pythonExe, pythonRuntimeDir);
+      precompileSidekickBytecode(pythonExe);
+      const launcher = writePosixLauncher();
+      console.log(`[prepare:python] Relocatable CPython already prepared: ${launcher} -> ${pythonExe}`);
+      return;
+    } catch (error) {
+      console.log(`[prepare:python] Replacing cached runtime: ${errorMessage(error)}`);
+    }
+  }
+
+  verifyLinuxWheelhouse(wheelhouseDir);
+  if (existsSync(pythonRuntimeDir) && !replaceRuntimeTreeIfUnused(pythonRuntimeDir)) {
+    throw new Error(
+      `Could not replace the Python runtime at ${pythonRuntimeDir} — a process is holding it.\n` +
+      'Close Lastbrowser (and any shell inside that directory) and retry.'
+    );
+  }
+  console.log(`[prepare:python] Installing python-build-standalone ${linuxStandalonePython.cpython}+${linuxStandalonePython.release}`);
+  const bundledPython = extractLinuxStandalonePython(tarball);
+  materializePython3Binary(pythonRuntimeDir);
+  run(bundledPython, [
+    '-m', 'pip', 'install', '--no-index', '--find-links', wheelhouseDir,
+    '--no-cache-dir', '--no-compile', '-r', requirementsPath
+  ]);
+  run(bundledPython, [
+    '-m', 'pip', 'install', '--no-index', '--no-deps', '--no-build-isolation',
+    '--find-links', wheelhouseDir, resolve(repoRoot, 'services', 'sidekick')
+  ]);
+  assertRelocatableCPython(bundledPython, pythonRuntimeDir);
+  precompileSidekickBytecode(bundledPython);
+  run(bundledPython, [
+    '-c',
+    'from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, uvicorn, yaml, PIL, psutil; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Core Sidekick imports verified")'
+  ]);
+  writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');
+  const launcher = writePosixLauncher();
+  console.log(`[prepare:python] Relocatable CPython ready: ${launcher} -> ${bundledPython}`);
 }
 
 export function verifyLinuxWheelhouse(wheelhouseDir) {
@@ -362,126 +548,9 @@ function writePosixLauncher() {
   return launcher;
 }
 
-function standaloneCacheDir() {
-  const explicit = process.env.LASTBROWSER_PYTHON_STANDALONE?.trim();
-  if (explicit) return resolve(explicit);
-  return resolve(runtimeDir, 'python-standalone');
-}
-
-function fileSha256(filePath) {
-  return createHash('sha256').update(readFileSync(filePath)).digest('hex');
-}
-
-function ensureLinuxStandaloneTarball() {
-  const cacheDir = standaloneCacheDir();
-  mkdirSync(cacheDir, { recursive: true });
-  const tarPath = join(cacheDir, linuxStandalonePython.asset);
-  if (existsSync(tarPath) && fileSha256(tarPath) === linuxStandalonePython.sha256) return tarPath;
-  const online = process.argv.includes('--online') || process.argv.includes('--download-wheels');
-  if (!online && existsSync(tarPath)) {
-    throw new Error(`[prepare:python] Relocatable CPython checksum mismatch: ${tarPath}`);
-  }
-  if (!online) {
-    throw new Error(
-      `[prepare:python] Relocatable CPython tarball is missing: ${tarPath}\n` +
-      'Run "npm run prepare:python:online" once to download python-build-standalone. A venv of /usr is not a portable runtime.'
-    );
-  }
-  console.log(`[prepare:python] Downloading relocatable CPython ${linuxStandalonePython.version} -> ${tarPath}`);
-  const result = spawnSync('curl', ['-fL', '--retry', '3', '-o', tarPath, linuxStandalonePython.url], { stdio: 'inherit' });
-  if (result.status !== 0 || !existsSync(tarPath) || fileSha256(tarPath) !== linuxStandalonePython.sha256) {
-    throw new Error(`[prepare:python] Relocatable CPython download failed or checksum mismatch: ${tarPath}`);
-  }
-  return tarPath;
-}
-
-function extractLinuxStandalone(tarPath) {
-  const staging = join(runtimeDir, '.python-standalone-extract');
-  rmSync(staging, { recursive: true, force: true });
-  mkdirSync(staging, { recursive: true });
-  const extracted = spawnSync('tar', ['-xzf', tarPath, '-C', staging], { stdio: 'inherit' });
-  if (extracted.status !== 0) throw new Error(`[prepare:python] Could not extract ${tarPath}`);
-  const root = join(staging, 'python');
-  const pythonBin = join(root, 'bin', 'python3');
-  if (!existsSync(pythonBin)) throw new Error(`[prepare:python] Standalone archive has no bin/python3: ${tarPath}`);
-  if (existsSync(join(root, 'pyvenv.cfg'))) {
-    throw new Error('[prepare:python] Standalone archive is a venv. Refusing to bundle it.');
-  }
-  if (existsSync(pythonRuntimeDir) && !replaceRuntimeTreeIfUnused(pythonRuntimeDir)) {
-    throw new Error(`Could not replace the Python runtime at ${pythonRuntimeDir} — a process is holding it.`);
-  }
-  mkdirSync(dirname(pythonRuntimeDir), { recursive: true });
-  rmSync(pythonRuntimeDir, { recursive: true, force: true });
-  const moved = spawnSync('mv', [root, pythonRuntimeDir], { stdio: 'inherit' });
-  if (moved.status !== 0) throw new Error(`[prepare:python] Could not move the relocatable runtime into ${pythonRuntimeDir}`);
-  rmSync(staging, { recursive: true, force: true });
-  if (!existsSync(join(pythonRuntimeDir, 'bin', 'python3'))) {
-    throw new Error(`[prepare:python] Relocatable runtime was not installed at ${pythonRuntimeDir}`);
-  }
-}
-
-function prepareLinuxRelocatableRuntime() {
-  const wheelhouseDir = resolveLinuxWheelhouseDir();
-  const isOnline = process.argv.includes('--online');
-  const isDownloadOnly = process.argv.includes('--download-wheels');
-  const tarPath = ensureLinuxStandaloneTarball();
-  if (isOnline || isDownloadOnly) {
-    mkdirSync(wheelhouseDir, { recursive: true });
-    const bootstrap = join(pythonRuntimeDir, 'bin', 'python3');
-    const pipPython = existsSync(bootstrap) ? bootstrap : null;
-    if (!pipPython) extractLinuxStandalone(tarPath);
-    console.log(`[prepare:python] Downloading Linux x64 wheels from ${requirementsPath} -> ${wheelhouseDir}`);
-    run(join(pythonRuntimeDir, 'bin', 'python3'), ['-m', 'pip', 'download', '--only-binary=:all:', '--dest', wheelhouseDir, '-r', requirementsPath]);
-    writeLinuxWheelhouseManifest(wheelhouseDir);
-    if (isDownloadOnly) {
-      console.log(`[prepare:python] Linux wheelhouse downloaded successfully at ${wheelhouseDir}`);
-      return;
-    }
-  }
-
-  const venvPython = join(pythonRuntimeDir, 'bin', 'python3');
-  const desired = {
-    sourcePythonHome: 'python-build-standalone',
-    sourceVersion: `${linuxStandalonePython.version}+${linuxStandalonePython.tag}`,
-    runtimeSchema: 9,
-    dependencyDigest: runtimeDependencyDigest()
-  };
-  const runtimeImportsReady = hasLinuxRuntimeImports(venvPython);
-  const relocatable = existsSync(venvPython) && !existsSync(join(pythonRuntimeDir, 'pyvenv.cfg'));
-  if (relocatable && isPreparedRuntimeCompatible(readMarker(), desired, true, runtimeImportsReady)) {
-    precompileSidekickBytecode(venvPython);
-    const launcher = writePosixLauncher();
-    console.log(`[prepare:python] Relocatable CPython already prepared: ${launcher} -> ${venvPython}`);
-    return;
-  }
-
-  verifyLinuxWheelhouse(wheelhouseDir);
-  console.log(`[prepare:python] Installing relocatable CPython ${desired.sourceVersion} at ${pythonRuntimeDir}`);
-  extractLinuxStandalone(tarPath);
-  run(venvPython, [
-    '-m', 'pip', 'install', '--no-index', '--find-links', wheelhouseDir,
-    '--no-cache-dir', '--no-compile', '-r', requirementsPath
-  ]);
-  run(venvPython, [
-    '-m', 'pip', 'install', '--no-index', '--no-deps', '--no-build-isolation',
-    '--find-links', wheelhouseDir, resolve(repoRoot, 'services', 'sidekick')
-  ]);
-  precompileSidekickBytecode(venvPython);
-  run(venvPython, [
-    '-I', '-c',
-    'import encodings; from fastapi import FastAPI; from httpx import Client; from openai import OpenAI; import anthropic, requests, uvicorn, yaml, PIL, psutil; OpenAI(api_key="smoke", base_url="http://127.0.0.1:1"); anthropic.Anthropic(api_key="smoke"); print("[prepare:python] Relocatable CPython imports verified", encodings.__name__)'
-  ]);
-  if (existsSync(join(pythonRuntimeDir, 'pyvenv.cfg'))) {
-    throw new Error('[prepare:python] Refusing to ship a venv. pyvenv.cfg must not exist in the relocatable runtime.');
-  }
-  writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');
-  const launcher = writePosixLauncher();
-  console.log(`[prepare:python] Relocatable CPython ready: ${launcher} -> ${venvPython}`);
-}
-
 function preparePosixPythonCommand() {
   if (process.platform === 'linux') {
-    prepareLinuxRelocatableRuntime();
+    prepareLinuxStandalonePython();
     return;
   }
   const detected = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
@@ -491,36 +560,19 @@ function preparePosixPythonCommand() {
   }
 
   const venvPython = join(pythonRuntimeDir, 'bin', 'python3');
-  const isLinux = false;
   const wheelhouseDir = resolveWheelhouseDir();
-  const isOnline = process.argv.includes('--online');
-  const isDownloadOnly = process.argv.includes('--download-wheels');
-  if (isLinux && (isOnline || isDownloadOnly)) {
-    mkdirSync(wheelhouseDir, { recursive: true });
-    console.log(`[prepare:python] Downloading Linux x64 wheels from ${requirementsPath} -> ${wheelhouseDir}`);
-    run(executable, ['-m', 'pip', 'download', '--only-binary=:all:', '--dest', wheelhouseDir, '-r', requirementsPath]);
-    writeLinuxWheelhouseManifest(wheelhouseDir);
-    if (isDownloadOnly) {
-      console.log(`[prepare:python] Linux wheelhouse downloaded successfully at ${wheelhouseDir}`);
-      return;
-    }
-  }
-
   const desired = {
     sourcePythonHome: executable,
     sourceVersion: pythonVersion(executable),
-    runtimeSchema: isLinux ? 8 : 6,
+    runtimeSchema: 6,
     dependencyDigest: runtimeDependencyDigest()
   };
-  const runtimeImportsReady = !isLinux || hasLinuxRuntimeImports(venvPython);
-  if (isPreparedRuntimeCompatible(readMarker(), desired, existsSync(venvPython), runtimeImportsReady)) {
+  if (isPreparedRuntimeCompatible(readMarker(), desired, existsSync(venvPython))) {
     precompileSidekickBytecode(venvPython);
     const launcher = writePosixLauncher();
-    console.log(`[prepare:python] Linux runtime already prepared: ${launcher} -> ${venvPython}`);
+    console.log(`[prepare:python] POSIX runtime already prepared: ${launcher} -> ${venvPython}`);
     return;
   }
-
-  if (isLinux) verifyLinuxWheelhouse(wheelhouseDir);
 
   if (existsSync(pythonRuntimeDir) && !replaceRuntimeTreeIfUnused(pythonRuntimeDir)) {
     throw new Error(
@@ -529,24 +581,12 @@ function preparePosixPythonCommand() {
     );
   }
 
-  console.log(`[prepare:python] Creating Linux venv at ${pythonRuntimeDir} from ${executable}`);
-  // Copies keep bin/python3 inside the packaged tree instead of symlinking to /usr/bin.
+  console.log(`[prepare:python] Creating POSIX venv at ${pythonRuntimeDir} from ${executable}`);
   run(executable, ['-m', 'venv', '--copies', pythonRuntimeDir]);
-  if (isLinux) {
-    run(venvPython, [
-      '-m', 'pip', 'install', '--no-index', '--find-links', wheelhouseDir,
-      '--no-cache-dir', '--no-compile', '-r', requirementsPath
-    ]);
-    run(venvPython, [
-      '-m', 'pip', 'install', '--no-index', '--no-deps', '--no-build-isolation',
-      '--find-links', wheelhouseDir, resolve(repoRoot, 'services', 'sidekick')
-    ]);
-  } else {
-    const pipArgs = ['-m', 'pip', 'install', '--no-cache-dir', '--no-compile'];
-    if (existsSync(wheelhouseDir)) pipArgs.push('--find-links', wheelhouseDir);
-    pipArgs.push('-r', requirementsPath, resolve(repoRoot, 'services', 'sidekick'));
-    run(venvPython, pipArgs);
-  }
+  const pipArgs = ['-m', 'pip', 'install', '--no-cache-dir', '--no-compile'];
+  if (existsSync(wheelhouseDir)) pipArgs.push('--find-links', wheelhouseDir);
+  pipArgs.push('-r', requirementsPath, resolve(repoRoot, 'services', 'sidekick'));
+  run(venvPython, pipArgs);
   precompileSidekickBytecode(venvPython);
   run(venvPython, [
     '-c',
@@ -554,7 +594,7 @@ function preparePosixPythonCommand() {
   ]);
   writeFileSync(markerPath, `${JSON.stringify(desired, null, 2)}\n`, 'utf8');
   const launcher = writePosixLauncher();
-  console.log(`[prepare:python] Linux runtime command ready: ${launcher} -> ${venvPython}`);
+  console.log(`[prepare:python] POSIX runtime command ready: ${launcher} -> ${venvPython}`);
 }
 
 function resolvePythonHome() {
@@ -664,6 +704,7 @@ export function isPreparedRuntimeCompatible(marker, desired, hasPythonExecutable
     marker.sourcePythonHome === desired.sourcePythonHome &&
     marker.sourceVersion === desired.sourceVersion &&
     marker.runtimeSchema === desired.runtimeSchema &&
+    (desired.standaloneSha256 === undefined || marker.standaloneSha256 === desired.standaloneSha256) &&
     typeof desired.dependencyDigest === 'string' &&
     /^[a-f0-9]{64}$/.test(desired.dependencyDigest) &&
     marker.dependencyDigest === desired.dependencyDigest

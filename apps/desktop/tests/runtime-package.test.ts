@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertRelocatableCPython,
   isPreparedRuntimeCompatible,
   linuxStandalonePython,
   runtimeDependencyDigest,
@@ -15,6 +16,12 @@ import {
   verifyWheelhouse,
   writeLinuxWheelhouseManifest
 } from '../scripts/prepare-python-runtime.mjs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { patchAppRunText } = require('../scripts/patch-linux-apprun.cjs') as {
+  patchAppRunText: (text: string) => string;
+};
 
 describe('desktop runtime packaging', () => {
   it('runs the Python runtime preparation before Windows packaging', () => {
@@ -77,6 +84,13 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain('runtimeSchema: 9');
     expect(prepareScript).toContain('python-build-standalone');
     expect(prepareScript).toContain(linuxStandalonePython.sha256);
+    expect(prepareScript).toContain('prepareLinuxStandalonePython');
+    const linuxPrepare = prepareScript.slice(
+      prepareScript.indexOf('function prepareLinuxStandalonePython'),
+      prepareScript.indexOf('export function verifyLinuxWheelhouse')
+    );
+    expect(linuxPrepare).toContain('python-build-standalone');
+    expect(linuxPrepare).not.toContain('venv');
     expect(prepareScript).toContain("'--no-index', '--find-links', wheelhouseDir");
     expect(prepareScript).toContain("import anthropic, requests, uvicorn, yaml");
     expect(prepareScript).toContain('yaml, PIL, psutil');
@@ -87,6 +101,36 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
     expect(sidekickPyproject).toContain('exclude = ["tests", "tests.*"]');
+  });
+
+  it('rejects a venv and a host CPython for the Linux Sidekick runtime', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-pyvenv-'));
+    try {
+      writeFileSync(path.join(directory, 'pyvenv.cfg'), 'home = /usr/bin\nversion = 3.12.3\n');
+      expect(() => assertRelocatableCPython(path.join(directory, 'python3'), directory)).toThrow(/pyvenv\.cfg/);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    if (existsSync('/usr/bin/python3')) {
+      expect(() => assertRelocatableCPython('/usr/bin/python3', os.tmpdir())).toThrow(/host/);
+    }
+  });
+
+  it('patches extracted AppRun so APPDIR does not collapse to /', () => {
+    const broken = `if [ -z "$APPDIR" ] ; then
+  path="$(dirname "$(readlink -f "\${THIS}")")"
+  while [[ "$path" != "" && ! -e "$path/$1" ]]; do
+    path=\${path%/*}
+  done
+  APPDIR="$path"
+fi
+BIN="$APPDIR/Lastbrowser"
+`;
+    const patched = patchAppRunText(broken);
+    expect(patched).toContain('APPDIR="$(dirname "$(readlink -f "${THIS}")")"');
+    expect(patched).not.toContain('"$path/$1"');
+    expect(patched).toContain('BIN="$APPDIR/Lastbrowser"');
+    expect(patchAppRunText(patched)).toBe(patched);
   });
 
   it('selects python.exe on Windows and python3 on Linux', () => {

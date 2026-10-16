@@ -1,5 +1,6 @@
 import type { DesktopTranslationKey } from '../keys.js';
 import { shellCopyJa } from '../shell-copy-translations.js';
+import { chatLatencyPlaceholderCopy } from '../chat-latency-placeholder-copy.js';
 
 /** Prefix groups keep related Japanese UI copy together without English fallbacks. */
 function group<P extends string, T extends Record<string, string>>(prefix: P, values: T): { [K in keyof T as `${P}.${K & string}`]: string } {
@@ -209,6 +210,7 @@ export const desktopJaOverrides = {
   'chat.latencyPlaceholder.10': 'まもなく入力 — コンテキストを集めています。',
   'chat.latencyPlaceholder.11': '回答が始まるまで少々。',
   'chat.latencyPlaceholder.12': 'もう少し — ストリームを開始します。',
+  ...chatLatencyPlaceholderCopy.ja,
   'chat.modelIndependentUnsupported': '独立したチャットでは利用できません。',
   'chat.modelUnavailableInSpace': 'このSpaceでは利用できません。',
   'chat.modelFallbackSubscriptionUsed': '選択したモデルにはサブスクリプションが必要です。{model}で応答しました。',

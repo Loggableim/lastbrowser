@@ -3,7 +3,16 @@ import { applyLiveChatDelta, applyLiveChatProgress, finishLiveChatMessage, finis
 import { isChatCompletionConfirmed } from './chat-completion.js';
 import { isNativeChatProgressEvent, isNativeChatStreamWaitExpired } from './chat-stream-timeout.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
-import { buildChatLatencyPlaceholderAssistant, pickChatLatencyPlaceholderKey } from './chat-perceived-latency-stream.js';
+import { applyChatLatencyPlaceholderReveal, buildChatLatencyPlaceholderAssistant, resolveChatLatencyPersonality, startChatLatencyPlaceholder, type ChatLatencyPersonality, type ChatLatencyPlaceholderRun } from './chat-perceived-latency-stream.js';
+
+function readQuickChatLatencyPersonality(): ChatLatencyPersonality {
+  try {
+    const stored = globalThis.localStorage?.getItem('lastbrowser.standardChatCompanion.v1');
+    return resolveChatLatencyPersonality(stored ? JSON.parse(stored) : null);
+  } catch {
+    return 'nova';
+  }
+}
 import { createDesktopI18n, resolveDesktopLocale } from './i18n.js';
 
 type QuickChatClient = Pick<Window['lastbrowser']['sidekick'], 'startChat' | 'getSession' | 'onChatStreamEvent' | 'subscribeChatStream' | 'unsubscribeChatStream' | 'getStreamStatus' | 'cancelStream'>;
@@ -25,6 +34,7 @@ export class QuickChat {
   private streamId: string | null = null;
   private detach: (() => void) | null = null;
   private stopRequested = false;
+  private latencyRun: ChatLatencyPlaceholderRun | null = null;
 
   constructor(private client: QuickChatClient, private scope: QuickChatScope) {}
   getSnapshot = (): QuickChatState => this.state;
@@ -40,9 +50,12 @@ export class QuickChat {
   reset = (): void => {
     if (this.state.busy) return;
     this.generation++;
+    this.latencyRun?.cancel();
+    this.latencyRun = null;
     this.update({ sessionId: null, messages: [], error: '', draft: '' });
   };
   stop = async (): Promise<void> => {
+    this.latencyRun?.cancel();
     this.stopRequested = this.state.busy;
     if (!this.streamId) return;
     try {
@@ -53,6 +66,8 @@ export class QuickChat {
   };
   dispose = (): void => {
     this.generation++;
+    this.latencyRun?.cancel();
+    this.latencyRun = null;
     this.detach?.();
     this.detach = null;
     if (this.streamId) void this.client.cancelStream(this.streamId).catch(() => {});
@@ -69,11 +84,19 @@ export class QuickChat {
       settingsLanguage: window.localStorage.getItem('language') || '',
       browserLanguage: navigator.language,
     }));
-    const latencySentence = t(pickChatLatencyPlaceholderKey());
+    this.latencyRun?.cancel();
+    this.latencyRun = startChatLatencyPlaceholder({
+      personality: readQuickChatLatencyPersonality(),
+      translate: (key) => t(key),
+      onText: (visible) => {
+        if (!current()) return;
+        this.update({ messages: applyChatLatencyPlaceholderReveal(this.state.messages, visible) });
+      },
+    });
     this.update({ busy: true, error: '', draft: '', messages: [
       ...this.state.messages,
       { role: 'user', content: text },
-      buildChatLatencyPlaceholderAssistant(latencySentence),
+      buildChatLatencyPlaceholderAssistant(''),
     ] });
     let streamId: string | null = null;
     let ended = false;
@@ -94,10 +117,12 @@ export class QuickChat {
       if (event.streamId !== streamId || ended) return;
       if (isNativeChatProgressEvent(event.event)) lastProgressAt = Date.now();
       if (event.event === 'error' || event.event === 'apperror') {
+        this.latencyRun?.noteRealToken();
         const error = readNativeChatStreamError(event.data);
         failed = ended = true;
         this.update({ error, messages: finishLiveChatMessageWithError(this.state.messages, error) });
       } else if (event.event === 'stream_end' || event.event === 'cancel') {
+        this.latencyRun?.noteRealToken();
         ended = true;
         cancelled = event.event === 'cancel';
         this.update({ messages: cancelled
@@ -106,6 +131,7 @@ export class QuickChat {
       } else if (event.event) {
         const delta = readLiveChatDelta(event.event, event.data);
         const progress = describeOrchestrationProgress(event.event, event.data);
+        if (delta?.kind === 'token') this.latencyRun?.noteRealToken();
         if (delta) this.update({ messages: applyLiveChatDelta(this.state.messages, delta.kind, delta.text) });
         else if (progress) this.update({ messages: applyLiveChatProgress(this.state.messages, progress.message) });
       }
@@ -164,6 +190,8 @@ export class QuickChat {
         this.update({ error: message, messages: finishLiveChatMessageWithError(this.state.messages, message) });
       }
     } finally {
+      this.latencyRun?.cancel();
+      this.latencyRun = null;
       detach();
       if (streamId) void this.client.unsubscribeChatStream({ streamId }).catch(() => {});
       if (current()) {

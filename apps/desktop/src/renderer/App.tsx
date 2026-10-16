@@ -66,7 +66,7 @@ import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from './acces
 import { fetchAccessAuthStatusWithRetry } from './access-auth-status.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishStoppedLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
-import { buildChatLatencyPlaceholderAssistant, countsAsVisibleStreamOutput, fallbackFinishedAssistantContent, pickChatLatencyPlaceholderKey, shouldFinalizeInFlightAssistant } from './chat-perceived-latency-stream.js';
+import { applyChatLatencyPlaceholderReveal, buildChatLatencyPlaceholderAssistant, countsAsVisibleStreamOutput, fallbackFinishedAssistantContent, resolveChatLatencyPersonality, shouldFinalizeInFlightAssistant, startChatLatencyPlaceholder, type ChatLatencyPlaceholderRun } from './chat-perceived-latency-stream.js';
 import { applyLiveTeamworkUpdate, beginLiveTeamworkTurn, bindLiveChatAssistantStream, readTeamworkStreamUpdate } from './teamwork-live-stream.js';
 import { ChatUiOwnership } from './chat-ui-ownership.js';
 import { playChatCompletionSound } from './notification-sound.js';
@@ -270,6 +270,7 @@ import { releaseNotesBetween, type UpdateNoticeCandidate } from './release-notes
 import { UnifiedExtensionHub } from './components/UnifiedExtensionHub.js';
 import { OptionalAiProfileContext, OptionalAiWorkspaceContext } from './optional-ai-policy.js';
 import { ProfileResolutionContext } from './profile-resolution.js';
+import { readStandardChatCompanion } from './components/CompanionPicker.js';
 import { attachCompanionSnapshot, CompanionAppearanceProvider, normalizeCompanionSnapshot, readCompanionSnapshotEvent, type CompanionPersonality } from './personality-avatar.js';
 import { attachMemoryUsage, readMemoryUsageEvent } from './memory-usage.js';
 import { CursorLoupeHUD } from './components/CursorLoupeHUD.js';
@@ -1146,6 +1147,12 @@ function AppContent(): JSX.Element {
   const quickChatIdRef = useRef(quickChatId);
   const [quickChatMessages, setQuickChatMessages] = useState<DesktopChatMessage[]>([]);
   const quickChatMessagesRef = useRef(quickChatMessages);
+  const nativeLatencyRunRef = useRef<ChatLatencyPlaceholderRun | null>(null);
+  const quickLatencyRunRef = useRef<ChatLatencyPlaceholderRun | null>(null);
+  useEffect(() => () => {
+    nativeLatencyRunRef.current?.cancel();
+    quickLatencyRunRef.current?.cancel();
+  }, []);
   const quickChatMessagesByScopeRef = useRef(new Map<string, DesktopChatMessage[]>());
   const [quickChatBusy, setQuickChatBusy] = useState(false);
   const quickChatBusyRef = useRef(false);
@@ -1439,6 +1446,7 @@ function AppContent(): JSX.Element {
         timing.firstVisible = true;
         console.debug('[quickchat.latency]', { phase: 'first_visible', elapsedMs: Math.round(performance.now() - timing.submittedAt), provider: timing.provider, model: timing.model });
       }
+      if (delta?.kind === 'token') quickLatencyRunRef.current?.noteRealToken();
       if (delta && quickChatBindingScopeKeyRef.current) updateQuickChatMessagesForScope(quickChatBindingScopeKeyRef.current, current => applyLiveChatDelta(current, delta.kind, delta.text));
       return;
     }
@@ -1446,6 +1454,7 @@ function AppContent(): JSX.Element {
       const timing = quickChatTimingsRef.current.get(event.streamId);
       if (timing) console.debug('[quickchat.latency]', { phase: event.event, elapsedMs: Math.round(performance.now() - timing.submittedAt), provider: timing.provider, model: timing.model });
       quickChatTimingsRef.current.delete(event.streamId);
+      quickLatencyRunRef.current?.cancel();
       if (quickChatBindingScopeKeyRef.current) updateQuickChatMessagesForScope(quickChatBindingScopeKeyRef.current,
         current => event.event === 'cancel' ? finishStoppedLiveChatMessage(current) : finishLiveChatMessage(current));
       quickChatBusyRef.current = false;
@@ -1454,6 +1463,7 @@ function AppContent(): JSX.Element {
       return;
     }
     if (event.event === 'error' || event.event === 'apperror') {
+      quickLatencyRunRef.current?.cancel();
       quickChatTimingsRef.current.delete(event.streamId);
       const message = readNativeChatStreamError(event.data);
       const scopeKey = quickChatBindingScopeKeyRef.current ?? quickChatTranscriptScopeKeyRef.current;
@@ -3954,6 +3964,7 @@ function AppContent(): JSX.Element {
       }
       if (event.event === 'token' || event.event === 'delta' || event.event === 'reasoning') {
         const delta = readLiveChatDelta(event.event, event.data);
+        if (delta?.kind === 'token') nativeLatencyRunRef.current?.noteRealToken();
         if (delta && isOwningContextCurrent()) {
           hasLiveOutput = true;
           setChatMessages((current) => {
@@ -4468,8 +4479,16 @@ function AppContent(): JSX.Element {
     }
 
     const visibleUserMessage: DesktopChatMessage = { role: 'user', content: displayText };
-    const latencySentence = t(pickChatLatencyPlaceholderKey());
-    const pendingAssistant = buildChatLatencyPlaceholderAssistant(latencySentence);
+    const pendingAssistant = buildChatLatencyPlaceholderAssistant('');
+    nativeLatencyRunRef.current?.cancel();
+    nativeLatencyRunRef.current = startChatLatencyPlaceholder({
+      personality: resolveChatLatencyPersonality(activeSession?.companion, readStandardChatCompanion()),
+      translate: t,
+      onText: (text) => {
+        setChatMessages((current) => applyChatLatencyPlaceholderReveal(current, text));
+        setMessages((current) => applyChatLatencyPlaceholderReveal(current, text));
+      },
+    });
     setLastChatTurnUsage(null);
     setChatMessages((current) => [
       ...current,
@@ -4719,6 +4738,7 @@ function AppContent(): JSX.Element {
         setChatRunState('error');
       }
     } finally {
+      nativeLatencyRunRef.current?.cancel();
       if (nativeStopRequestedOwnerRef.current === uiTurnOwner) {
         nativeStopRequestedOwnerRef.current = null;
         setChatMessages((current) => finishStoppedLiveChatMessage(current, acceptedStreamId ?? undefined));
@@ -4743,6 +4763,7 @@ function AppContent(): JSX.Element {
   }
 
   async function stopNativeChat(): Promise<void> {
+    nativeLatencyRunRef.current?.cancel();
     if (!activeStreamIdRef.current && chatRunState === 'starting') {
       const activeOwner = chatUiOwnershipRef.current.activeTurnId;
       if (activeOwner !== null) nativeStopRequestedOwnerRef.current = activeOwner;
@@ -5159,10 +5180,17 @@ function AppContent(): JSX.Element {
     quickChatErrorScopeKeyRef.current = capturedScopeKey;
     setQuickChatBusy(true);
     setQuickChatErrorForScope(capturedScopeKey, '');
-    const quickChatLatencySentence = t(pickChatLatencyPlaceholderKey());
     updateQuickChatMessagesForScope(capturedScopeKey, current => [...current,
-      { id: crypto.randomUUID(), ...buildChatLatencyPlaceholderAssistant(quickChatLatencySentence, { streaming: true }) },
+      { id: crypto.randomUUID(), ...buildChatLatencyPlaceholderAssistant('', { streaming: true }) },
     ]);
+    quickLatencyRunRef.current?.cancel();
+    quickLatencyRunRef.current = startChatLatencyPlaceholder({
+      personality: resolveChatLatencyPersonality(readStandardChatCompanion()),
+      translate: t,
+      onText: (text) => {
+        updateQuickChatMessagesForScope(capturedScopeKey, current => applyChatLatencyPlaceholderReveal(current, text));
+      },
+    });
     quickChatBufferedEventsRef.current = [];
     quickChatStoppedStreamIdRef.current = null;
     quickChatAwaitingStartRef.current = true;
@@ -5219,6 +5247,7 @@ function AppContent(): JSX.Element {
       quickChatAwaitingStartRef.current = false;
       quickChatBufferedEventsRef.current = [];
       const message = error instanceof Error ? error.message : String(error);
+      quickLatencyRunRef.current?.cancel();
       setQuickChatErrorForScope(capturedScopeKey, message);
       updateQuickChatMessagesForScope(capturedScopeKey, current => finishLiveChatMessageWithError(current, message));
       quickChatBusyRef.current = false;
@@ -5229,6 +5258,7 @@ function AppContent(): JSX.Element {
   }
 
   async function stopQuickChat(): Promise<void> {
+    quickLatencyRunRef.current?.cancel();
     if (quickChatResetPendingRef.current) return;
     const generation = quickChatGenerationRef.current;
     quickChatStopEpochRef.current += 1;

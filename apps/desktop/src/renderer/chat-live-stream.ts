@@ -296,9 +296,18 @@ export function applyLiveChatDelta<T extends LiveChatMessage>(
 }
 
 export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[], streamId?: string): T[] {
-  return messages.map((message) => {
-    if (!(message.pending || message.streaming || message.progress) || streamId && message.chatStreamId !== streamId) return message;
-    return { ...message, pending: false, streaming: false, progress: undefined };
+  return messages.flatMap((message) => {
+    const inFlight = Boolean(message.pending || message.streaming || message.progress || message.latencyPlaceholder);
+    if (!inFlight || (streamId && message.chatStreamId !== streamId)) return [message];
+    // A placeholder that never received a real token must not remain as the answer.
+    if (message.latencyPlaceholder) {
+      if (message.reasoning?.trim()) {
+        const { latencyPlaceholder: _placeholder, ...rest } = message;
+        return [{ ...rest, content: '', pending: false, streaming: false, progress: undefined } as T];
+      }
+      return [];
+    }
+    return [{ ...message, pending: false, streaming: false, progress: undefined }];
   });
 }
 

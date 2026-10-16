@@ -26,7 +26,9 @@ export function repackAppImage(appImage) {
   const squash = path.join(directory, 'image.squashfs');
   const packed = `${appImage}.repacked`;
   try {
-    run(appImage, ['--appimage-extract'], { cwd: directory, stdio: 'pipe' });
+    // The extract listing is larger than spawnSync's default pipe buffer, which
+    // kills the runtime and leaves status null. The files land in cwd; the listing is unused.
+    run(appImage, ['--appimage-extract'], { cwd: directory, stdio: 'ignore' });
     const appRun = path.join(root, 'AppRun');
     writeFileSync(appRun, patchAppRunText(readFileSync(appRun, 'utf8')));
     chmodSync(appRun, 0o755);

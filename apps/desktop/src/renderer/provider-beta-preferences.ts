@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { isStableProvider } from './provider-verification.js';
+import { providerUsesVerifiedModelList } from './verified-catalog-models.js';
 
 let showUntestedBetas = false;
 const listeners = new Set<() => void>();
@@ -34,7 +35,7 @@ export function filterQualifiedModelGroups<T extends {
   isQualified: (providerId: string, modelId: string, profileId: string) => boolean,
 ): T[] {
   return groups.flatMap(group => {
-    if (showBetas || isStableProvider(group.providerId)) return [group];
+    if (showBetas || (isStableProvider(group.providerId) && !providerUsesVerifiedModelList(group.providerId))) return [group];
     const models = group.models.filter(model => isQualified(group.providerId, model.id, browserProfileId));
     return models.length ? [{ ...group, models }] : [];
   });

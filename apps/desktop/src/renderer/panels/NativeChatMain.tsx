@@ -43,6 +43,7 @@ import { useChatStore } from '../stores/useChatStore.js';
 import { loadSpaceModel, saveSpaceModel } from '../space-models.js';
 import { hasChosenChatModel, isMultiAgentModelSelection, parseProviderModelId, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
 import { getProviderModelEvidence, isProviderModelQualified, useProviderChatEvidenceRevision } from '../provider-chat-evidence.js';
+import { isVerifiedCatalogModel } from '../verified-catalog-models.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
 import { assistantScopeKey, sameAssistantScope, newIndependentRequestId, type ScopedModelSelection, type NativeModelAvailability } from '../independent-contracts.js';
@@ -459,8 +460,10 @@ export function NativeChatMain({
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
       const local=group.providerId==='local-store';
       const localDeployment=group.deployment==='local';
+      const releaseVerified = isVerifiedCatalogModel(group.providerId, entry.id);
       return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence)||localDeployment, qualification: local?undefined:evidence,
-        label: local||evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
+        releaseVerified,
+        label: local||evidence||releaseVerified ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
     });
     return models.length ? [{ ...group, models }] : [];
   }), [modelCatalog, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, isAntigravityCatalogUnverified, t, activeModelRevision, showUntestedBetas, providerEvidenceRevision]);
@@ -495,7 +498,7 @@ export function NativeChatMain({
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage))));
   const selectableModels = visibleModelCatalog.flatMap(group => group.configured && group.providerId
     ? group.models.filter(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)) : []);
-  const emptyQualifiedCatalog = modelCatalogLoaded && selectableModels.length > 0 && selectableModels.every(entry => !entry.qualified);
+  const emptyQualifiedCatalog = modelCatalogLoaded && selectableModels.length > 0 && selectableModels.every(entry => !entry.qualified && !entry.releaseVerified);
   const sessionReasoningEffort = resolveSessionReasoningEffort(activeSession?.reasoning_selection, model, modelProvider);
   useEffect(() => {
     if (!activeSessionId || activeSession?.session_id !== activeSessionId || sessionReasoningEffort === null

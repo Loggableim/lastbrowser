@@ -481,8 +481,7 @@ export function CopilotSplitView({
     const active = scopeReady
       ? isModelActive(window.localStorage, { browserProfileId, backendProfileName: backendName }, model.providerId, identity.model)
       : true;
-    const connectionGroup = model.providerId === 'opencode-go' || model.providerId === 'opencode-go-free';
-    const qualified = showUntestedBetas || localModel || connectionGroup || isProviderModelQualified(model.providerId, identity.model, browserProfileId, backendName, window.localStorage);
+    const qualified = showUntestedBetas || localModel || isProviderModelQualified(model.providerId, identity.model, browserProfileId, backendName, window.localStorage);
     return Boolean(model.providerId && active && qualified && (scopeReady || localModel));
   }), [modelList, smartTrackEnabled, teamworkEnabled, showUntestedBetas, browserProfileId, backendProfileName, activeModelRevision]);
   useEffect(() => {

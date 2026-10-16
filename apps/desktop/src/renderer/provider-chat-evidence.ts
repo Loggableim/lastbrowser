@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { isStableProvider } from './provider-verification.js';
+import { isVerifiedCatalogModel, providerUsesVerifiedModelList } from './verified-catalog-models.js';
 
 let evidenceRevision = 0;
 const evidenceListeners = new Set<() => void>();
@@ -182,8 +183,12 @@ export function isProviderModelQualified(providerId: string, modelId: string, br
   backendProfileName: string, storage: Pick<Storage, 'getItem' | 'setItem'>, now = Date.now()): boolean {
   // Stable release eligibility does not invent a successful chat record.
   // Callers still supply models from the scoped catalog and validate credentials.
-  return Boolean(modelId.trim()) && (isStableProvider(providerId)
-    || Boolean(getProviderModelEvidence(providerId, modelId, browserProfileId, backendProfileName, storage, now)));
+  if (!modelId.trim()) return false;
+  if (isVerifiedCatalogModel(providerId, modelId)) return true;
+  // A stable provider does not invent a successful chat. OpenCode Go keeps
+  // that provider exemption, and only ping-verified ids skip the model gate.
+  if (isStableProvider(providerId) && !providerUsesVerifiedModelList(providerId)) return true;
+  return Boolean(getProviderModelEvidence(providerId, modelId, browserProfileId, backendProfileName, storage, now));
 }
 
 export function getQualifiedProviderModels(providerId: string, browserProfileId: string, backendProfileName: string,

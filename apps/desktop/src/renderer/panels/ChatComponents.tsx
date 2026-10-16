@@ -448,7 +448,7 @@ export type ChatComposerProps = {
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
-  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; qualification?:ProviderChatEvidence;localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }> }>;
+  modelOptions: Array<{ provider: string; providerId?: string; configured?: boolean; disabledReason?: string; models: Array<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts?: string[]; supportsIndependent?: boolean; nativeAvailability?: NativeModelAvailability; qualified?:boolean; releaseVerified?:boolean; qualification?:ProviderChatEvidence;localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }> }>;
   /** When a turn error is already visible, do not stack the qualification notice under it. */
   hideQualificationNotice?: boolean;
   /** True when a loaded catalog exists but every provider/model pair is still unqualified. */
@@ -711,14 +711,15 @@ export function ChatComposer({
             const expiry=entry.qualification?new Date(entry.qualification.recordedAt+24*60*60*1000).toLocaleString(locale):'';
             const local=group.providerId==='local-store';
             const localProof=locale.startsWith('de')?'Gerät und Werkzeugaufrufe geprüft':'Device and tool calls verified';
+            const releaseNote=entry.releaseVerified?t('settings.panels.providers.stableRelease'):'';
             const evidenceDetails=local?(entry.qualified?localProof:entry.localUnavailableReason||(locale.startsWith('de')?'Lokale Ausführung noch nicht bestätigt':'Local execution not yet verified')):entry.qualification
               ? `${t('settings.panels.providers.qualificationUntil')}: ${expiry}; ${t('settings.panels.providers.browserProfileLabel')}: ${entry.qualification.browserProfileId}; ${t('settings.panels.providers.backendProfileLabel')}: ${entry.qualification.backendProfileName}; ${t('settings.panels.providers.runtimeLabel')}: ${entry.qualification.runtimeGeneration}; ${t('settings.panels.providers.buildLabel')}: ${entry.qualification.appBuildId}; ${t('settings.panels.providers.providerConfigLabel')}: ${entry.qualification.providerConfigGeneration}; ${t('settings.panels.providers.backendConfigLabel')}: ${entry.qualification.backendConfigGeneration}`
-              : `${t('settings.panels.providers.betaUntested')}; ${t('settings.panels.providers.browserProfileLabel')}: ${browserProfileId||profile}; ${t('settings.panels.providers.backendProfileLabel')}: ${backendProfileName}`;
+              : releaseNote || `${t('settings.panels.providers.betaUntested')}; ${t('settings.panels.providers.browserProfileLabel')}: ${browserProfileId||profile}; ${t('settings.panels.providers.backendProfileLabel')}: ${backendProfileName}`;
             return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||!ready||running}
             title={`${group.provider} · ${entry.id} · ${evidenceDetails}`}
             aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
             <span className="composer-manual-model-name">{entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
-            <small>{group.provider} · {entry.id} · {unavailable?t('chat.modelUnavailableInSpace'):entry.supportsIndependent===false?t('chat.modelIndependentUnsupported'):local?evidenceDetails:entry.qualified?`${t('settings.panels.providers.lastSuccessfulChat')}${expiry?` · ${expiry}`:''}`:t('settings.panels.providers.betaUntested')}</small>
+            <small>{group.provider} · {entry.id} · {unavailable?t('chat.modelUnavailableInSpace'):entry.supportsIndependent===false?t('chat.modelIndependentUnsupported'):local?evidenceDetails:entry.qualified?`${t('settings.panels.providers.lastSuccessfulChat')}${expiry?` · ${expiry}`:''}`:entry.releaseVerified?t('settings.panels.providers.stableRelease'):t('settings.panels.providers.betaUntested')}</small>
           </button>;})}
         </fieldset>)}
         {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">

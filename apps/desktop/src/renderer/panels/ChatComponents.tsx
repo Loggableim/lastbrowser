@@ -22,10 +22,7 @@ import React, {
 import {
   Columns3,
   Cpu,
-  Layers,
-  ListFilter,
   Loader2,
-  MoreHorizontal,
   Plus,
   Send,
   Sparkles,
@@ -34,7 +31,6 @@ import {
 import { brandAssets } from '../brand.js';
 import { conversationCompanionAppearance, messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
 import { useStandardChatCompanion } from '../components/CompanionPicker.js';
-import { connectionNoticeCopy } from '../connection-notice.js';
 import { describeChatContent } from '../chat-display.js';
 import { RichTextRenderer } from '../NativeRichText.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
@@ -43,10 +39,10 @@ import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usa
 import { localizeKnownChatStatus } from '../chat-live-stream.js';
 import { useDesktopI18n } from '../i18n.js';
 import { parseProviderModelId, qualifyModelForProvider } from '../provider-model-selection.js';
-import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker.js';
+import { getComposerMoreUxCopy } from '../i18n/sidekick-ux-translations.js';
 import { toBionicSegments } from '../utils/bionic-reading.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
-import type { DesktopLocaleId } from '../i18n/keys.js';
+import type { DesktopLocaleId, DesktopTranslationKey } from '../i18n/keys.js';
 import type { RunState } from '../independent-contracts.js';
 import type { CommandAction, CommandCapabilities, CommandContext } from '../CommandActionContracts.js';
 import { createChatCommandAction, parseChatCommand } from '../chat-command-registry.js';
@@ -54,7 +50,11 @@ import { chatCommandCopy } from '../chat-command-copy.js';
 import { canSelectNativeModel, manualModelPickerOptions } from '../model-picker-options.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
-import { ProviderBetaCatalogToggle } from '../components/ProviderBetaCatalogToggle.js';
+import { ComposerMoreMenu } from './composer/ComposerMoreMenu.js';
+import { ComposerNotices } from './composer/ComposerNotices.js';
+import { ManualModelPicker } from './composer/ManualModelPicker.js';
+import { formatModelOptionLabel } from './composer/model-evidence.js';
+import { useComposerMoreMenu } from './composer/useComposerMoreMenu.js';
 import type { NativeModelAvailability, LocalStoreRuntimeCapability } from '../independent-contracts.js';
 import type { ProviderChatEvidence } from '../provider-chat-evidence.js';
 import { SlashCommandMenu } from './SlashCommandMenu.js';
@@ -431,6 +431,8 @@ export type ChatComposerProps = {
   sendBlocked?:boolean;
   betaSelectionBlocked?:boolean;
   qualificationNoticeHidden?:boolean;
+  /** When a turn error is already visible, do not stack the qualification notice under it. */
+  hideQualificationNotice?: boolean;
   multiAgentBetaBlocked?:boolean;
   modelQualified?:boolean;
   requestedDefaultModel?:string;
@@ -492,8 +494,7 @@ function workspaceLabel(path?: string | null): string {
 
 export function ChatComposer({
   conversationCompanion = null,
-  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,qualificationNoticeHidden=false,multiAgentBetaBlocked=false,modelQualified=false,requestedLunaInCatalog,
-  requestedDefaultModel='',requestedDefaultProviderLabel='',requestedDefaultQualified=false,requestedDefaultAvailable=false,requestedDefaultUnavailableReason='',
+  automaticPolicy,sendBlocked=false,betaSelectionBlocked=false,qualificationNoticeHidden=false,hideQualificationNotice=false,multiAgentBetaBlocked=false,
   browserProfileId='',backendProfileName='default',
   commandContext,
   commandCapabilities=unavailableCommands,
@@ -502,11 +503,10 @@ export function ChatComposer({
   mode,
   model,
   modelProvider,
-  modelProviderLabel,
   reasoningEffort,
   reasoningEfforts,
   reasoningCapabilityState,
-  modelOptions,
+  modelOptions: incomingModelOptions,
   emptyQualifiedCatalog = false,
   noActiveModels = false,
   modelCatalogError=false,
@@ -514,9 +514,6 @@ export function ChatComposer({
   modelCatalogLoading=false,
   connectionNotice=null,
   antigravityCatalogUnavailable=false,
-  antigravityCatalogUnknown=false,
-  antigravityCatalogReady=false,
-  antigravityCatalogRelevant=false,
   onRetryModelCatalog,
   profile,
   ready,
@@ -531,25 +528,44 @@ export function ChatComposer({
   onText
 }: ChatComposerProps): React.JSX.Element {
   const { t,locale } = useDesktopI18n();
+  const translate = (key: string) => t(key as DesktopTranslationKey);
+  const uxCopy = getComposerMoreUxCopy(locale);
   const companion = useCompanionAppearance();
   const standardCompanion = useStandardChatCompanion();
   const composerCompanion = conversationCompanion ?? (standardCompanion.stored ? standardCompanion : companion);
   const showUntestedBetas = useShowUntestedProviderBetas();
   const commandCopy=chatCommandCopy(locale);
-  const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
-  const selectedModelVisible = modelOptions.some(group => group.providerId === modelProvider
-    && group.models.some(entry => parseProviderModelId(entry.id, group.providerId).model === model));
   const running = runState === 'starting' || runState === 'streaming' || runState === 'cancelling';
+  const canSend = ready && text.trim().length > 0 && !busy && !sendBlocked;
 
   const [showSlashDropdown, setShowSlashDropdown] = useState(false);
   const [slashFilter, setSlashFilter] = useState('');
-  const [showManualModels, setShowManualModels] = useState(false);
-  const [manualModelSearch, setManualModelSearch] = useState('');
   const composerInput=useRef<HTMLTextAreaElement>(null);
-  const manualModelTrigger=useRef<HTMLButtonElement>(null);
-  const manualModelSearchInput=useRef<HTMLInputElement>(null);
+  const {
+    moreOpen,
+    setMoreOpen,
+    showManualModels,
+    manualModelSearch,
+    setManualModelSearch,
+    moreContainerRef,
+    moreSummaryRef,
+    manualModelTriggerRef,
+    manualModelSearchInputRef,
+    openManualModels,
+    closeManualModels,
+    handleMoreKeyDown,
+    handleManualModelsKeyDown,
+  } = useComposerMoreMenu();
   const closeSlashMenu=()=>{setShowSlashDropdown(false);queueMicrotask(()=>composerInput.current?.focus());};
-  useEffect(()=>{if(showManualModels)manualModelSearchInput.current?.focus();},[showManualModels]);
+
+  const modelOptions = useMemo(() => manualModelPickerOptions(incomingModelOptions, AI_ORCHESTRATION_ENABLED, {
+    browserProfileId: browserProfileId || undefined,
+    backendProfileName,
+    locale,
+  }), [incomingModelOptions, browserProfileId, backendProfileName, locale]);
+  const selectedModelVisible = modelOptions.some(group => group.providerId === modelProvider
+    && group.models.some(entry => parseProviderModelId(entry.id, group.providerId).model === model));
+
   function executeCommand(input:string):boolean {
     if(!commandContext||!onCommandAction)return false;
     const action=createChatCommandAction(input,'composer',{...commandContext,model,modelProvider,reasoningEffort:reasoningEffort||undefined},commandCapabilities);
@@ -573,12 +589,20 @@ export function ChatComposer({
   function submit(event?: FormEvent): void {
     event?.preventDefault();
     if(ready&&parseChatCommand(text)&&executeCommand(text))return;
-    if (!canSend) return;
+    // Enter during a streaming turn still reaches the parent, which enqueues
+    // the draft for this session instead of dropping it. The send control stays
+    // disabled so Stop remains the pointer action.
+    const queueWhileStreaming = running && ready && text.trim().length > 0 && !sendBlocked;
+    if (!canSend && !queueWhileStreaming) return;
     setShowSlashDropdown(false);
     onSend(text, reasoningEffort || undefined);
   }
 
   const isTabsActive = /@tabs\b/i.test(text);
+  const handleToggleTabs = () => {
+    if (isTabsActive) onText(text.replace(/@tabs\s*/gi, '').trim());
+    else onText(text ? `@tabs ${text}` : '@tabs ');
+  };
   const reasoningHelp = reasoningCapabilityState === 'loading'
     ? t('common.loading')
     : reasoningCapabilityState !== 'ready' || reasoningEfforts.length === 0
@@ -588,6 +612,7 @@ export function ChatComposer({
     .filter(group => !(antigravityCatalogUnavailable && (group.providerId === 'antigravity' || group.provider.toLowerCase().includes('antigravity'))))
     .map(group=>({...group,models:group.models.filter(entry=>
       `${group.provider} ${entry.label} ${entry.id}`.toLocaleLowerCase().includes(manualModelSearch.trim().toLocaleLowerCase()))}));
+  const currentModelTitle = noActiveModels ? t('settings.panels.providers.noActiveModels') : `${model || 'default'} · ${modelProvider || 'current'}`;
 
   return (
     <form className="chat-composer" onSubmit={submit}>
@@ -606,73 +631,50 @@ export function ChatComposer({
               <span>{t('chat.plan')}</span>
             </button>
           </div>
-          <details className="composer-more" onKeyDown={event=>{
-            if(event.key==='Escape'){
-              event.currentTarget.open=false;
-              event.currentTarget.querySelector('summary')?.focus();
-            }
-          }}>
-            <summary aria-label={t('chat.chooseModelShort')}><MoreHorizontal size={16} aria-hidden="true" /><span>{t('chat.chooseModelShort')}</span></summary>
-            <div className="composer-more-content">
-              <button
-                type="button"
-                className="composer-tab-btn"
-                onClick={() => {
-                  if (isTabsActive) {
-                    onText(text.replace(/@tabs\s*/gi, '').trim());
-                  } else {
-                    onText(text ? `@tabs ${text}` : '@tabs ');
-                  }
-                }}
-                aria-pressed={isTabsActive}
-                title={`@tabs · ${t('browser.chrome.tabs')}`}
-              >
-                <Layers size={13} />
-                <span>{t('browser.chrome.tabs')}</span>
-              </button>
-          <button ref={manualModelTrigger} type="button" className="composer-command-button composer-model-trigger" aria-expanded={showManualModels}
-            aria-label={t('chat.chooseModelManually')} title={t('chat.chooseModelManually')}
-            aria-controls="composer-manual-models" onClick={()=>setShowManualModels(open=>!open)}>
-            <ListFilter size={14} aria-hidden="true" />
-            <span>{t('chat.chooseModelShort')}</span>
-          </button>
-          <details className="composer-reasoning-disclosure">
-            <summary title={reasoningHelp} aria-label={t('chat.reasoningEffort')} data-testid="composer-reasoning-toggle">
-              {t('chat.reasoningEffort')}
-            </summary>
-            <ReasoningEffortPicker
-              value={reasoningEffort}
-              efforts={reasoningEfforts}
-              capabilityState={reasoningCapabilityState}
-              disabled={!ready || running}
-              onChange={onReasoningEffort}
-            />
-          </details>
-          <div className="composer-scope" aria-label={`${profile} · ${workspaceLabel(workspace)}`}>
-            <span>{profile}</span><span>{workspaceLabel(workspace)}</span>
-          </div>
-            </div>
-          </details>
+          <ComposerMoreMenu
+            locale={locale}
+            moreOpen={moreOpen}
+            onToggleMoreOpen={setMoreOpen}
+            moreContainerRef={moreContainerRef}
+            moreSummaryRef={moreSummaryRef}
+            manualModelTriggerRef={manualModelTriggerRef}
+            isTabsActive={isTabsActive}
+            onToggleTabs={handleToggleTabs}
+            showManualModels={showManualModels}
+            onToggleManualModels={openManualModels}
+            reasoningEffort={reasoningEffort}
+            reasoningEfforts={reasoningEfforts}
+            reasoningCapabilityState={reasoningCapabilityState}
+            reasoningHelp={reasoningHelp}
+            ready={ready}
+            running={running}
+            onReasoningEffort={onReasoningEffort}
+            profile={profile}
+            workspaceDisplay={workspaceLabel(workspace)}
+            onKeyDown={handleMoreKeyDown}
+            moreLabel={t('chat.chooseModelShort')}
+            t={translate}
+          />
         </div>
         <div className="composer-toolbar-group composer-model-group">
-          <label className="composer-model composer-current-model" title={noActiveModels ? t('settings.panels.providers.noActiveModels') : `${model || 'default'} · ${modelProvider || 'current'}`}>
+          <label className="composer-model composer-current-model" title={currentModelTitle}>
               <Cpu size={13} />
               <select
                 aria-label={`${t('chat.model')}: ${model || 'default'}`}
-                title={noActiveModels ? t('settings.panels.providers.noActiveModels') : `${model || 'default'} · ${modelProvider || 'current'}`}
+                title={currentModelTitle}
                 value={AI_ORCHESTRATION_ENABLED && automaticPolicy?.active?'__lastbrowser_auto_policy__':selectedModelVisible?qualifyModelForProvider(model, modelProvider):''}
                 disabled={!ready}
                 onChange={(event) => onModelChange(event.target.value)}
               >
                 {AI_ORCHESTRATION_ENABLED&&automaticPolicy&&<option value="__lastbrowser_auto_policy__" disabled={!automaticPolicy.available || !ready}>AUTO{!automaticPolicy.available?` · ${modelPolicyCopy(locale).unavailable}`:''}</option>}
                 {!selectedModelVisible && <option value="" disabled title={noActiveModels ? t('settings.panels.providers.noActiveModels') : undefined}>
-                  {modelCatalogLoading&&!connectionNotice ? t('settings.panels.providers.loadingModels') : modelCatalogSlow ? t('chat.model') : noActiveModels ? (locale.startsWith('de') ? 'Keine Modelle aktiv' : 'No active models') : t('chat.noManualModels')}
+                  {modelCatalogLoading&&!connectionNotice ? t('settings.panels.providers.loadingModels') : modelCatalogSlow ? t('chat.model') : noActiveModels ? uxCopy.noActiveModelsShort : t('chat.noManualModels')}
                 </option>}
                 {manualModelPickerOptions(modelOptions).map((group) => (
-                  <optgroup key={group.providerId || group.provider} label={group.provider} disabled={group.configured===false}>
+                  <optgroup key={`${group.providerId || 'virtual'}:${group.provider}`} label={group.provider} disabled={group.configured===false}>
                     {group.models.map((m) => (
-                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={m.supportsIndependent===false||!canSelectNativeModel(group.providerId,m.nativeAvailability)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
-                        {m.label}{m.listingStatus === 'configured' ? ' · configured · unverified' : m.listingStatus === 'fallback' ? ` · ${t('settings.panels.providers.catalogFallbackUnverified')}` : ''} · {group.provider}
+                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} disabled={m.supportsIndependent===false||!canSelectNativeModel(group.providerId,m.nativeAvailability)}>
+                        {formatModelOptionLabel(m, group.provider, translate)}
                       </option>
                     ))}
                   </optgroup>
@@ -681,52 +683,40 @@ export function ChatComposer({
           </label>
         </div>
       </div>
-      {connectionNotice&&<div className="composer-model-notice" role="alert">
-        <span>{connectionNoticeCopy[locale][connectionNotice]}</span>
-        {connectionNotice==='opencode-unreachable'&&onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
-      </div>}
-      {modelCatalogLoading&&!connectionNotice&&<div className="composer-model-notice" role="status">{t('settings.panels.providers.loadingModels')}</div>}
-      {modelCatalogSlow&&!connectionNotice&&<div className="composer-model-notice" role="status">
-        <span>{t('chat.modelCatalogSlow')}</span>
-        {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
-      </div>}
-      {modelCatalogError&&!connectionNotice&&<div className="composer-model-notice" role="alert">
-        <span>{t('chat.modelCatalogUnavailable')}</span>
-        {onRetryModelCatalog&&<button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
-      </div>}
-      {(betaSelectionBlocked||emptyQualifiedCatalog)&&!qualificationNoticeHidden&&!connectionNotice&&!modelCatalogLoading&&!modelCatalogError&&<div className="composer-model-notice" role="status">
-        <span>{multiAgentBetaBlocked ? t('settings.panels.providers.multiAgentBetaRequired') : t('settings.panels.providers.betaCatalogEmpty')}</span>
-        {!showUntestedBetas ? <ProviderBetaCatalogToggle /> : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
-      </div>}
-      {showManualModels&&<section id="composer-manual-models" className="composer-manual-models" role="region" aria-label={t('chat.chooseModelManually')}
-        onKeyDown={event=>{if(event.key==='Escape'){event.preventDefault();setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}}>
-        <label>{t('chat.modelSearch')}<input ref={manualModelSearchInput} type="search" value={manualModelSearch} onChange={event=>setManualModelSearch(event.target.value)}/></label>
-        {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
-          <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
-          {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);
-            const desiredDefault=group.providerId==='openai-codex'&&entry.id==='gpt-6-luna';
-            const expiry=entry.qualification?new Date(entry.qualification.recordedAt+24*60*60*1000).toLocaleString(locale):'';
-            const local=group.providerId==='local-store';
-            const localProof=locale.startsWith('de')?'Gerät und Werkzeugaufrufe geprüft':'Device and tool calls verified';
-            const evidenceDetails=local?(entry.qualified?localProof:entry.localUnavailableReason||(locale.startsWith('de')?'Lokale Ausführung noch nicht bestätigt':'Local execution not yet verified')):entry.qualification
-              ? `${t('settings.panels.providers.qualificationUntil')}: ${expiry}; ${t('settings.panels.providers.browserProfileLabel')}: ${entry.qualification.browserProfileId}; ${t('settings.panels.providers.backendProfileLabel')}: ${entry.qualification.backendProfileName}; ${t('settings.panels.providers.runtimeLabel')}: ${entry.qualification.runtimeGeneration}; ${t('settings.panels.providers.buildLabel')}: ${entry.qualification.appBuildId}; ${t('settings.panels.providers.providerConfigLabel')}: ${entry.qualification.providerConfigGeneration}; ${t('settings.panels.providers.backendConfigLabel')}: ${entry.qualification.backendConfigGeneration}`
-              : `${t('settings.panels.providers.betaUntested')}; ${t('settings.panels.providers.browserProfileLabel')}: ${browserProfileId||profile}; ${t('settings.panels.providers.backendProfileLabel')}: ${backendProfileName}`;
-            return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||!ready||running}
-            title={`${group.provider} · ${entry.id} · ${evidenceDetails}`}
-            aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
-            <span className="composer-manual-model-name">{desiredDefault?'GPT-6 Luna':entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
-            <small>{group.provider} · {entry.id} · {local?evidenceDetails:entry.qualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
-              {!local&&entry.qualified?` · ${expiry}`:''}{unavailable?` · ${t('chat.modelUnavailableInSpace')}`:entry.supportsIndependent===false?` · ${t('chat.modelIndependentUnsupported')}`:''}</small>
-          </button>;})}
-        </fieldset>)}
-        {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">
-          {t('chat.noManualModels')}
-          {' '}
-          {manualModelSearch.trim()
-            ? <button type="button" className="secondary-action compact" onClick={()=>{setManualModelSearch('');manualModelSearchInput.current?.focus();}}>{locale.startsWith('de') ? 'Suche zurücksetzen' : 'Clear search'}</button>
-            : onRetryModelCatalog && <button type="button" className="secondary-action compact" onClick={onRetryModelCatalog}>{t('chat.retryModels')}</button>}
-        </p>}
-      </section>}
+      <ComposerNotices
+        locale={locale}
+        connectionNotice={connectionNotice}
+        modelCatalogLoading={modelCatalogLoading}
+        modelCatalogSlow={modelCatalogSlow}
+        modelCatalogError={modelCatalogError}
+        hideQualificationNotice={hideQualificationNotice}
+        qualificationNoticeHidden={qualificationNoticeHidden}
+        betaSelectionBlocked={betaSelectionBlocked}
+        emptyQualifiedCatalog={emptyQualifiedCatalog}
+        multiAgentBetaBlocked={multiAgentBetaBlocked}
+        showUntestedBetas={showUntestedBetas}
+        onRetryModelCatalog={onRetryModelCatalog}
+        t={translate}
+      />
+      {showManualModels&&<ManualModelPicker
+        groups={manualModelGroups}
+        model={model}
+        modelProvider={modelProvider}
+        browserProfileId={browserProfileId}
+        profile={profile}
+        backendProfileName={backendProfileName}
+        ready={ready}
+        running={running}
+        locale={locale}
+        searchQuery={manualModelSearch}
+        searchInputRef={manualModelSearchInputRef}
+        onSearchChange={setManualModelSearch}
+        onSelectModel={(qualifiedModelId) => { onModelChange(qualifiedModelId); }}
+        onClose={closeManualModels}
+        onKeyDown={handleManualModelsKeyDown}
+        onRetryModelCatalog={onRetryModelCatalog}
+        t={translate}
+      />}
       <div className="composer-input-row">
         {showSlashDropdown&&commandContext&&onCommandAction&&<SlashCommandMenu locale={locale} query={slashFilter} capabilities={commandCapabilities}
           onChoose={command=>{executeCommand('/'+command.name);}} onClose={closeSlashMenu}/>}

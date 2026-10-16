@@ -1,6 +1,235 @@
-import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId } from './keys.js';
+import type { DesktopCatalog, DesktopLocaleId, LegacyDesktopLocaleId } from './keys.js';
 
-export const sidekickUxTranslations: Record<DesktopLocaleId, Partial<DesktopCatalog>> = {
+export interface ComposerMoreUxCopy {
+  moreButtonLabel: string;
+  moreMenuAria: string;
+  sectionContext: string;
+  sectionModel: string;
+  sectionReasoning: string;
+  sectionScope: string;
+  tabsHint: string;
+  manualModelHint: string;
+  clearSearch: string;
+  noActiveModelsShort: string;
+  localVerified: string;
+  localUnverified: string;
+  localNotQualified: string;
+  localInstallUnverified: string;
+  localBenchmarkRequired: string;
+  localToolProofRequired: string;
+  localHardwareAdmissionRequired: string;
+  openCodeGoPaid: string;
+  openCodeGoFree: string;
+  profileLabel: string;
+  workspaceLabel: string;
+  closeMenu: string;
+}
+
+export const composerMoreUxCopyByLocale: Record<DesktopLocaleId, ComposerMoreUxCopy> = {
+  de: {
+    moreButtonLabel: 'Weitere',
+    moreMenuAria: 'Weitere Composer-Optionen',
+    sectionContext: 'Kontext',
+    sectionModel: 'Modellauswahl',
+    sectionReasoning: 'Denkaufwand',
+    sectionScope: 'Bereich (Scope)',
+    tabsHint: 'Offene Browser-Tabs als Kontext anfügen (@tabs)',
+    manualModelHint: 'Alle Anbieter, Nachweise und Suchfilter öffnen',
+    clearSearch: 'Suche zurücksetzen',
+    noActiveModelsShort: 'Keine Modelle aktiv',
+    localVerified: 'Gerät und Werkzeugaufrufe geprüft',
+    localUnverified: 'Lokale Ausführung noch nicht bestätigt',
+    localNotQualified: 'Lokales Modell noch nicht freigegeben',
+    localInstallUnverified: 'Installation noch nicht geprüft',
+    localBenchmarkRequired: 'Gerätetest fehlt',
+    localToolProofRequired: 'Ausführlicher Werkzeugtest fehlt',
+    localHardwareAdmissionRequired: 'Aktuelle Speicherprüfung erforderlich',
+    openCodeGoPaid: 'OpenCode Go',
+    openCodeGoFree: 'OpenCode Go Free',
+    profileLabel: 'Profil',
+    workspaceLabel: 'Workspace',
+    closeMenu: 'Schließen',
+  },
+  en: {
+    moreButtonLabel: 'More',
+    moreMenuAria: 'More composer options',
+    sectionContext: 'Context',
+    sectionModel: 'Model selection',
+    sectionReasoning: 'Reasoning depth',
+    sectionScope: 'Scope',
+    tabsHint: 'Attach open browser tabs as context (@tabs)',
+    manualModelHint: 'Browse all providers, verification proofs, and search filters',
+    clearSearch: 'Clear search',
+    noActiveModelsShort: 'No active models',
+    localVerified: 'Device and tool calls verified',
+    localUnverified: 'Local execution not yet verified',
+    localNotQualified: 'Local model not yet qualified',
+    localInstallUnverified: 'Installation not yet verified',
+    localBenchmarkRequired: 'Device benchmark required',
+    localToolProofRequired: 'Standard tool quality proof required',
+    localHardwareAdmissionRequired: 'Fresh hardware memory check required',
+    openCodeGoPaid: 'OpenCode Go',
+    openCodeGoFree: 'OpenCode Go Free',
+    profileLabel: 'Profile',
+    workspaceLabel: 'Workspace',
+    closeMenu: 'Close',
+  },
+  it: {
+    moreButtonLabel: 'Altri',
+    moreMenuAria: 'Altre opzioni del composer',
+    sectionContext: 'Contesto',
+    sectionModel: 'Selezione modello',
+    sectionReasoning: 'Profondità di ragionamento',
+    sectionScope: 'Ambito (Scope)',
+    tabsHint: 'Allega le schede aperte del browser come contesto (@tabs)',
+    manualModelHint: 'Apri tutti i provider, le prove di verifica e la ricerca',
+    clearSearch: 'Cancella ricerca',
+    noActiveModelsShort: 'Nessun modello attivo',
+    localVerified: 'Dispositivo e chiamate agli strumenti verificati',
+    localUnverified: 'Esecuzione locale non ancora confermata',
+    localNotQualified: 'Modello locale non ancora abilitato',
+    localInstallUnverified: 'Installazione non ancora verificata',
+    localBenchmarkRequired: 'Benchmark del dispositivo richiesto',
+    localToolProofRequired: 'Verifica approfondita degli strumenti richiesta',
+    localHardwareAdmissionRequired: 'Controllo memoria hardware aggiornato richiesto',
+    openCodeGoPaid: 'OpenCode Go',
+    openCodeGoFree: 'OpenCode Go Free',
+    profileLabel: 'Profilo',
+    workspaceLabel: 'Workspace',
+    closeMenu: 'Chiudi',
+  },
+  es: {
+    moreButtonLabel: 'Más',
+    moreMenuAria: 'Más opciones del compositor',
+    sectionContext: 'Contexto',
+    sectionModel: 'Selección de modelo',
+    sectionReasoning: 'Profundidad de razonamiento',
+    sectionScope: 'Ámbito (Scope)',
+    tabsHint: 'Adjuntar pestañas abiertas del navegador como contexto (@tabs)',
+    manualModelHint: 'Explorar todos los proveedores, pruebas y filtros',
+    clearSearch: 'Borrar búsqueda',
+    noActiveModelsShort: 'Sin modelos activos',
+    localVerified: 'Dispositivo y llamadas de herramientas verificados',
+    localUnverified: 'Ejecución local aún no confirmada',
+    localNotQualified: 'Modelo local aún no habilitado',
+    localInstallUnverified: 'Instalación aún no verificada',
+    localBenchmarkRequired: 'Falta prueba de rendimiento en el dispositivo',
+    localToolProofRequired: 'Falta prueba detallada de herramientas',
+    localHardwareAdmissionRequired: 'Se requiere comprobación actual de memoria',
+    openCodeGoPaid: 'OpenCode Go',
+    openCodeGoFree: 'OpenCode Go Free',
+    profileLabel: 'Perfil',
+    workspaceLabel: 'Workspace',
+    closeMenu: 'Cerrar',
+  },
+  fr: {
+    moreButtonLabel: 'Plus',
+    moreMenuAria: 'Plus d’options du compositeur',
+    sectionContext: 'Contexte',
+    sectionModel: 'Sélection du modèle',
+    sectionReasoning: 'Profondeur de raisonnement',
+    sectionScope: 'Portée (Scope)',
+    tabsHint: 'Joindre les onglets ouverts du navigateur au contexte (@tabs)',
+    manualModelHint: 'Parcourir tous les fournisseurs, preuves et filtres',
+    clearSearch: 'Effacer la recherche',
+    noActiveModelsShort: 'Aucun modèle actif',
+    localVerified: 'Appareil et appels d’outils vérifiés',
+    localUnverified: 'Exécution locale non encore confirmée',
+    localNotQualified: 'Modèle local non encore qualifié',
+    localInstallUnverified: 'Installation non encore vérifiée',
+    localBenchmarkRequired: 'Test matériel requis',
+    localToolProofRequired: 'Test approfondi des outils requis',
+    localHardwareAdmissionRequired: 'Vérification mémoire récente requise',
+    openCodeGoPaid: 'OpenCode Go',
+    openCodeGoFree: 'OpenCode Go Free',
+    profileLabel: 'Profil',
+    workspaceLabel: 'Workspace',
+    closeMenu: 'Fermer',
+  },
+  'pt-BR': {
+    moreButtonLabel: 'Mais',
+    moreMenuAria: 'Mais opções do compositor',
+    sectionContext: 'Contexto',
+    sectionModel: 'Seleção de modelo',
+    sectionReasoning: 'Profundidade de raciocínio',
+    sectionScope: 'Escopo',
+    tabsHint: 'Anexar abas abertas do navegador como contexto (@tabs)',
+    manualModelHint: 'Ver todos os provedores, provas de verificação e busca',
+    clearSearch: 'Limpar busca',
+    noActiveModelsShort: 'Nenhum modelo ativo',
+    localVerified: 'Dispositivo e chamadas de ferramentas verificados',
+    localUnverified: 'Execução local ainda não confirmada',
+    localNotQualified: 'Modelo local ainda não qualificado',
+    localInstallUnverified: 'Instalação ainda não verificada',
+    localBenchmarkRequired: 'Teste de dispositivo necessário',
+    localToolProofRequired: 'Teste detalhado de ferramentas necessário',
+    localHardwareAdmissionRequired: 'Verificação atual de memória necessária',
+    openCodeGoPaid: 'OpenCode Go',
+    openCodeGoFree: 'OpenCode Go Free',
+    profileLabel: 'Perfil',
+    workspaceLabel: 'Workspace',
+    closeMenu: 'Fechar',
+  },
+  ru: {
+    moreButtonLabel: 'Ещё',
+    moreMenuAria: 'Дополнительные параметры чата',
+    sectionContext: 'Контекст',
+    sectionModel: 'Выбор модели',
+    sectionReasoning: 'Глубина рассуждения',
+    sectionScope: 'Область (Scope)',
+    tabsHint: 'Прикрепить открытые вкладки браузера как контекст (@tabs)',
+    manualModelHint: 'Открыть список всех провайдеров, проверок и поиск',
+    clearSearch: 'Сбросить поиск',
+    noActiveModelsShort: 'Нет активных моделей',
+    localVerified: 'Устройство и вызовы инструментов проверены',
+    localUnverified: 'Локальный запуск ещё не подтверждён',
+    localNotQualified: 'Локальная модель ещё не допущена',
+    localInstallUnverified: 'Установка ещё не проверена',
+    localBenchmarkRequired: 'Требуется тест устройства',
+    localToolProofRequired: 'Требуется полная проверка инструментов',
+    localHardwareAdmissionRequired: 'Требуется актуальная проверка памяти',
+    openCodeGoPaid: 'OpenCode Go',
+    openCodeGoFree: 'OpenCode Go Free',
+    profileLabel: 'Профиль',
+    workspaceLabel: 'Workspace',
+    closeMenu: 'Закрыть',
+  },
+  ja: {
+    moreButtonLabel: 'その他',
+    moreMenuAria: 'その他の入力オプション',
+    sectionContext: 'コンテキスト',
+    sectionModel: 'モデル選択',
+    sectionReasoning: '推論の深さ',
+    sectionScope: 'スコープ',
+    tabsHint: '開いているブラウザタブをコンテキストとして添付 (@tabs)',
+    manualModelHint: 'すべてのプロバイダー、検証結果、検索フィルタを表示',
+    clearSearch: '検索をクリア',
+    noActiveModelsShort: '有効なモデルがありません',
+    localVerified: 'デバイスとツール呼び出しを検証済み',
+    localUnverified: 'ローカル実行はまだ確認されていません',
+    localNotQualified: 'ローカルモデルはまだ承認されていません',
+    localInstallUnverified: 'インストールが未確認です',
+    localBenchmarkRequired: 'デバイスベンチマークが必要です',
+    localToolProofRequired: '標準ツール品質テストが必要です',
+    localHardwareAdmissionRequired: '最新のメモリ確認が必要です',
+    openCodeGoPaid: 'OpenCode Go',
+    openCodeGoFree: 'OpenCode Go Free',
+    profileLabel: 'プロファイル',
+    workspaceLabel: 'ワークスペース',
+    closeMenu: '閉じる',
+  },
+};
+
+export function getComposerMoreUxCopy(locale: string): ComposerMoreUxCopy {
+  if (locale in composerMoreUxCopyByLocale) {
+    return composerMoreUxCopyByLocale[locale as DesktopLocaleId];
+  }
+  const prefix = locale.split('-')[0] as DesktopLocaleId;
+  return composerMoreUxCopyByLocale[prefix] || composerMoreUxCopyByLocale.en;
+}
+
+
+export const sidekickUxTranslations: Record<LegacyDesktopLocaleId, Partial<DesktopCatalog>> = {
   en: {
     'chat.header.moreActions': 'More chat actions',
     'chat.header.status.unknown': 'Status unknown', 'chat.header.status.ready': 'Sidekick ready', 'chat.header.status.starting': 'Sidekick starting', 'chat.header.status.unavailable': 'Sidekick unavailable',

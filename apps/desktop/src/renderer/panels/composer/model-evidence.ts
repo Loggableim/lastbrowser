@@ -11,6 +11,7 @@ export interface ComposerModelEntry {
   supportsIndependent?: boolean;
   nativeAvailability?: NativeModelAvailability;
   qualified?: boolean;
+  releaseVerified?: boolean;
   qualification?: ProviderChatEvidence;
   localRuntime?: LocalStoreRuntimeCapability;
   localUnavailableReason?: string;
@@ -106,6 +107,8 @@ export function formatModelEvidence(params: {
       `${t('settings.panels.providers.providerConfigLabel')}: ${entry.qualification.providerConfigGeneration}`,
       `${t('settings.panels.providers.backendConfigLabel')}: ${entry.qualification.backendConfigGeneration}`,
     ].join('; ');
+  } else if (entry.releaseVerified) {
+    detailedEvidence = t('settings.panels.providers.stableRelease');
   } else {
     detailedEvidence = [
       t('settings.panels.providers.betaUntested'),
@@ -128,6 +131,9 @@ export function formatModelEvidence(params: {
     badgeTone = entry.qualified ? 'qualified' : 'unavailable';
   } else if (entry.qualified) {
     statusFragment = `${t('settings.panels.providers.lastSuccessfulChat')}${expiry ? ` · ${expiry}` : ''}`;
+    badgeTone = 'qualified';
+  } else if (entry.releaseVerified) {
+    statusFragment = t('settings.panels.providers.stableRelease');
     badgeTone = 'qualified';
   } else {
     statusFragment = t('settings.panels.providers.betaUntested');

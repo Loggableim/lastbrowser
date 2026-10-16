@@ -3,6 +3,7 @@ import { isProviderModelQualified } from '../src/renderer/provider-chat-evidence
 import { filterQualifiedModelGroups, isProviderQualifiedByModels } from '../src/renderer/provider-beta-preferences.js';
 import { isStableProvider } from '../src/renderer/provider-verification.js';
 import { isVerifiedCatalogModel } from '../src/renderer/verified-catalog-models.js';
+import { formatModelEvidence } from '../src/renderer/panels/composer/model-evidence.js';
 
 const storage = { getItem: () => null, setItem: () => undefined };
 
@@ -27,5 +28,27 @@ describe('verified OpenCode Go catalog', () => {
     ]);
     expect(filterQualifiedModelGroups(catalog, 'profile', true, qualified)).toEqual(catalog);
     expect(isProviderQualifiedByModels('opencode-go', catalog, 'profile', qualified)).toBe(true);
+  });
+
+  it('shows a ping-verified model as a stable release in the composer More menu', () => {
+    const evidence = formatModelEvidence({
+      group: { provider: 'OpenCode Go', providerId: 'opencode-go', models: [] },
+      entry: {
+        id: 'deepseek-v4-flash',
+        label: 'DeepSeek V4 Flash',
+        releaseVerified: true,
+        nativeAvailability: { supported: true, available: true, reasonCode: null } as NonNullable<Parameters<typeof formatModelEvidence>[0]['entry']['nativeAvailability']>,
+      },
+      locale: 'en',
+      browserProfileId: 'profile',
+      profile: 'default',
+      backendProfileName: 'default',
+      ready: true,
+      running: false,
+      t: (key) => key,
+    });
+    expect(evidence.badgeTone).toBe('qualified');
+    expect(evidence.summaryText).toContain('settings.panels.providers.stableRelease');
+    expect(evidence.summaryText).not.toContain('betaUntested');
   });
 });

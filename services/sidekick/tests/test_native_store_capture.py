@@ -116,11 +116,16 @@ def test_catalog_overlay_reads_store_again_even_when_remote_catalog_is_reused(mo
     remote = {'groups': [], 'providers': [], 'providerConfigurationDigest': 'unchanged'}
     first = host.with_store_catalog(remote, 'scope', 'actor')
     assert first['groups'][0]['models'] == []
+    account = first['providers'][0]
+    assert account['has_key'] is False and account['oauth_connected'] is False
+    assert account['auth_state'] == 'not_connected' and account['models'] == []
+    assert account['provider_available'] is True
     store.state['installed']['new'] = {}
     store.entries['new'] = {'artifactManifest': {'category': 'text'}}
     second = host.with_store_catalog(remote, 'scope', 'actor')
     row = second['groups'][0]['models'][0]
     assert row['id'] == 'new' and row['supportsIndependent'] is False
+    assert second['providers'][0]['models'] == ['new']
     assert row['contextLength'] is None
     assert row['localRuntime']['reasonCode'] == 'fresh_hardware_admission_required'
     assert remote == {'groups': [], 'providers': [], 'providerConfigurationDigest': 'unchanged'}

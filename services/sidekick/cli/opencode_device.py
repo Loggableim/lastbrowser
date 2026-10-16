@@ -286,15 +286,46 @@ def cancel_login(login_id):
         return {"ok": True, "status": "cancelled"}
 
 
-def _select_provider(config, provider_id):
+def _provider_entries(config, provider_id):
+    """Every configured workspace provider for this login, in preference order.
+
+    OpenCode Go credentials can list the subscription catalog and the free
+    catalog as sibling provider entries. The first entry stays preferred when
+    a model id exists in both; models that exist only on a later entry remain
+    selectable.
+    """
     providers = config.get("providers", {})
     if not isinstance(providers, dict):
         raise DeviceError("invalid_workspace_config")
+    entries = []
     for key in _PROVIDERS.get(provider_id, ()):
         entry = providers.get(key)
         if isinstance(entry, dict) and isinstance(entry.get("models"), dict) and entry["models"]:
-            return entry
-    raise DeviceError("workspace_provider_unavailable")
+            entries.append(entry)
+    if not entries:
+        raise DeviceError("workspace_provider_unavailable")
+    return entries
+
+
+def _select_provider(config, provider_id):
+    return _provider_entries(config, provider_id)[0]
+
+
+def _owning_provider_entry(config, provider_id, model):
+    entries = _provider_entries(config, provider_id)
+    if model is None:
+        return entries[0], next(iter(entries[0]["models"]))
+    for entry in entries:
+        if model in entry["models"]:
+            return entry, model
+    matches = []
+    for entry in entries:
+        for key, row in entry["models"].items():
+            if isinstance(row, dict) and row.get("modelID") == model:
+                matches.append((entry, key))
+    if len(matches) != 1:
+        raise DeviceError("workspace_model_unavailable")
+    return matches[0]
 
 
 def _current_credentials(provider_id):
@@ -332,16 +363,135 @@ def discovered_models(provider_id):
     return _supported_models(credential, provider_id)
 
 
+def _connection_cost_is_free(row):
+    """True when the connection's own price list is present and entirely zero."""
+    if not isinstance(row, dict):
+        return False
+    cost = row.get("cost")
+    if not isinstance(cost, list) or not cost:
+        return False
+    priced = False
+
+    def walk(node):
+        nonlocal priced
+        if isinstance(node, dict):
+            return all(walk(value) for key, value in node.items() if key != "tier")
+        if isinstance(node, list):
+            return all(walk(item) for item in node) if node else False
+        if isinstance(node, bool) or not isinstance(node, (int, float)):
+            return False
+        priced = True
+        return node == 0
+
+    return all(walk(item) for item in cost) and priced
+
+
+def _entry_is_paid_go(key, entry):
+    """The subscription catalog is the Go provider entry or the Go inference gateway."""
+    if key in {"opencode-go", "go"}:
+        return True
+    settings = entry.get("settings") if isinstance(entry, dict) and isinstance(entry.get("settings"), dict) else {}
+    base = settings.get("baseURL") if isinstance(settings, dict) else ""
+    if not isinstance(base, str) or not base:
+        return False
+    return "/inference/go/" in urllib.parse.urlsplit(base).path
+
+
+def _connection_model_row(model_id, row):
+    if not isinstance(model_id, str) or not model_id or len(model_id) > 256 or any(ord(char) < 32 for char in model_id):
+        return None
+    if isinstance(row, dict) and row.get("disabled") is True:
+        return None
+    name = row.get("name") if isinstance(row, dict) else None
+    label = name.strip() if isinstance(name, str) else ""
+    if not label or len(label) > 256 or any(ord(char) < 32 for char in label):
+        label = model_id
+    item = {"id": model_id, "label": label}
+    limit = row.get("limit") if isinstance(row, dict) else None
+    context = limit.get("context") if isinstance(limit, dict) else None
+    if type(context) is int and 1 <= context <= 16_000_000:
+        item["context_length"] = context
+        item["context_length_source"] = "provided_catalog"
+    return item
+
+
+def connection_picker_groups(provider_id="opencode-go"):
+    """Split the stored connection into paid and free picker groups.
+
+    Membership comes from the connection's provider entries and price list.
+    This does not refresh tokens and does not return credentials.
+    """
+    if provider_id != "opencode-go":
+        return []
+    try:
+        record = _read(get_sidekick_home()).get(provider_id)
+        config = record.get("config") if isinstance(record, dict) else None
+        providers = config.get("providers") if isinstance(config, dict) else None
+        if not isinstance(providers, dict):
+            return []
+    except (DeviceError, OSError, ValueError, TypeError):
+        return []
+    paid, free = [], []
+    seen_paid, seen_free = set(), set()
+    for key in _PROVIDERS.get(provider_id, ()):
+        entry = providers.get(key)
+        if not isinstance(entry, dict) or not isinstance(entry.get("models"), dict) or not entry["models"]:
+            continue
+        paid_entry = _entry_is_paid_go(key, entry)
+        for model_id, row in entry["models"].items():
+            item = _connection_model_row(model_id, row)
+            if item is None:
+                continue
+            if paid_entry:
+                if item["id"] not in seen_paid:
+                    paid.append(item)
+                    seen_paid.add(item["id"])
+            elif _connection_cost_is_free(row) and item["id"] not in seen_free:
+                free.append(item)
+                seen_free.add(item["id"])
+    groups = []
+    if paid:
+        groups.append({"provider": "OpenCode Go", "provider_id": "opencode-go", "catalog_tier": "paid",
+                       "catalog_source": "connection", "models": paid})
+    if free:
+        groups.append({"provider": "OpenCode Go Free", "provider_id": "opencode-go-free", "catalog_tier": "free",
+                       "catalog_source": "connection", "models": free})
+    return groups
+
+
+def device_model_context_length(provider_id, model_id):
+    """Public context window from the device catalog. No credentials are returned."""
+    try:
+        record = _read(get_sidekick_home()).get(provider_id)
+        config = record.get("config") if isinstance(record, dict) else None
+        if not isinstance(config, dict):
+            return None
+        entry, key = _owning_provider_entry(config, provider_id, model_id)
+    except (DeviceError, OSError, ValueError, TypeError):
+        return None
+    row = entry["models"].get(key)
+    limit = row.get("limit") if isinstance(row, dict) else None
+    value = limit.get("context") if isinstance(limit, dict) else None
+    if type(value) is int and 1 <= value <= 16_000_000:
+        return value
+    return None
+
+
 def _supported_models(credential, provider_id):
     result = []
     errors = []
-    for model in _select_provider(credential["config"], provider_id)["models"]:
-        try:
-            _validated_connection(credential, provider_id, model, None)
-            result.append(model)
-        except DeviceError as error:
-            errors.append(str(error))
-            continue
+    seen = set()
+    for entry in _provider_entries(credential["config"], provider_id):
+        for model in entry["models"]:
+            if model in seen:
+                continue
+            try:
+                _validated_connection(credential, provider_id, model, None)
+                result.append(model)
+                seen.add(model)
+            except DeviceError as error:
+                errors.append(str(error))
+                continue
     if not result:
         for reason in ("workspace_binding_changed", "unsupported_workspace_header", "invalid_workspace_config"):
             if reason in errors:
@@ -356,16 +506,13 @@ def resolve_connection(provider_id, model=None, session_id=None):
 
 
 def _validated_connection(credential, provider_id, model, session_id):
-    entry = _select_provider(credential["config"], provider_id)
-    models = entry["models"]
-    if model not in models:
-        # The live agent keeps the resolved wire ID between turns. Resolve
-        # it back to exactly one current catalog entry on credential refresh.
-        matches = [key for key, row in models.items() if isinstance(row, dict) and row.get("modelID") == model]
-        if len(matches) != 1:
-            raise DeviceError("workspace_model_unavailable")
-        model = matches[0]
-    model_config = models[model] if isinstance(models[model], dict) else {}
+    entry, model = _owning_provider_entry(credential["config"], provider_id, model)
+    models = []
+    for candidate in _provider_entries(credential["config"], provider_id):
+        for key in candidate["models"]:
+            if key not in models:
+                models.append(key)
+    model_config = entry["models"][model] if isinstance(entry["models"][model], dict) else {}
     if model_config.get("disabled") is True:
         raise DeviceError("workspace_model_unavailable")
     for record in (entry, model_config):

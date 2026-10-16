@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from runtime.independent.contracts import BackendProfileRef, Scope, SpaceBinding, new_id
-from runtime.independent.provider_admission import AdmissionBudget, ProviderAdmission, ProviderClaim, parse_response_limits, provider_group_key
+from runtime.independent.provider_admission import AdmissionBudget, ProviderAdmission, ProviderClaim, parse_response_limits, provider_group_key, request_cap_for_endpoint
 from runtime.independent.policy import PolicyDenied
 from runtime.independent.store import IndependentStore, ResourceBusy
 
@@ -187,6 +187,21 @@ def test_profile_claim_identity_cannot_be_fabricated_and_reads_create_no_schema(
         assert admissions[0].limits("controlled") == []
         assert stores[0]._many("SELECT name FROM sqlite_master ORDER BY name") == before
         assert not any(path.name == "config.yaml" for path in tmp_path.rglob("*"))
+    finally:
+        for store in stores:
+            store.close()
+
+
+def test_loopback_chat_is_not_stopped_by_the_cloud_six_per_minute_cap(tmp_path):
+    stores, scopes, admissions, _ = fixture(tmp_path)
+    try:
+        (stores[0].profile_home / "config.yaml").write_text(
+            "providers:\n  controlled:\n    base_url: http://127.0.0.1:11434/v1\n", "utf-8")
+        assert request_cap_for_endpoint([AdmissionBudget()], "http://127.0.0.1:11434/v1") == 600
+        assert request_cap_for_endpoint([AdmissionBudget()], "https://api.example.invalid/v1") == 6
+        for _ in range(7):
+            claim = admissions[0].claim(proposal(scopes[0], admissions[0]), AdmissionBudget(), validate=lambda: None)
+            admissions[0].update(scopes[0], claim.claim_id, state="completed", measured_tokens=1)
     finally:
         for store in stores:
             store.close()

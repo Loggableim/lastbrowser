@@ -4815,6 +4815,49 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   )}
                 </SettingsCard>
 
+                {(() => {
+                  const connectionGroups = allModelGroups.filter(group => {
+                    const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
+                    return providerId === 'opencode-go' || providerId === 'opencode-go-free';
+                  });
+                  if (!connectionGroups.length) return null;
+                  const scope = { browserProfileId: activeProfileId, backendProfileName: activeBackendProfileName || 'default' };
+                  return <SettingsCard title={connectionGroups.map(group => settingsText(group.provider, '')).filter(Boolean).join(' · ')} description={t('settings.panels.providers.activeModelsDescription')}>
+                    {(catalogState.key !== providerCatalogKey || catalogState.loading) && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
+                    <div className="settings-connection-model-groups" data-testid="f3-model-switches">
+                      {connectionGroups.map(group => {
+                        const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
+                        const scanned = [...(Array.isArray(group.models) ? group.models : []), ...(Array.isArray(group.extra_models) ? group.extra_models : [])].filter(isRecord);
+                        const models = [...new Map(scanned.map(modelEntry => {
+                          const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
+                          return [parseProviderModelId(rawId, providerId).model, modelEntry] as const;
+                        }).filter(([modelId]) => Boolean(modelId))).values()];
+                        if (!providerId || !models.length) return null;
+                        return <fieldset className="settings-active-model-group settings-connection-model-group" key={providerId} data-connection-group={settingsText(group.provider, providerId)}>
+                          <legend>{settingsText(group.provider, providerId)}</legend>
+                          {models.map(modelEntry => {
+                            const rawId = settingsText(modelEntry.id || modelEntry.name, '').trim();
+                            const modelId = parseProviderModelId(rawId, providerId).model;
+                            if (!modelId) return null;
+                            const checked = isModelActive(window.localStorage, scope, providerId, modelId);
+                            return <label className="settings-active-model-row" key={`${providerId}:${modelId}`}>
+                              <input className="settings-model-switch" type="checkbox" role="switch" aria-checked={checked} checked={checked}
+                                onChange={event => {
+                                  try {
+                                    setModelActive(window.localStorage, scope, providerId, modelId, event.target.checked);
+                                  } catch {
+                                    showToast(t('settings.panels.providers.activeModelsSaveFailed'));
+                                  }
+                                }} />
+                              <span>{settingsText(modelEntry.label || modelEntry.name, modelId)} <small>{modelId}</small></span>
+                            </label>;
+                          })}
+                        </fieldset>;
+                      })}
+                    </div>
+                  </SettingsCard>;
+                })()}
+
                 <SettingsCard title={t('settings.panels.providers.activeModels')} description={t('settings.panels.providers.activeModelsDescription')}>
                   {(catalogState.key !== providerCatalogKey || catalogState.loading) && <EmptyState icon={<Loader2 size={16} className="spin" />} label={t('settings.panels.providers.loadingModels')} />}
                   {catalogState.key === providerCatalogKey && catalogState.error && <div role="alert" className="workspace-error">{catalogState.error}</div>}
@@ -4824,6 +4867,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     && <p role="status">{t('settings.panels.providers.noScannedModels')}</p>}
                   {sharedCatalogSelection && allModelGroups.map(group => {
                     const providerId = settingsText(group.provider_id || group.provider_id_canonical, '').trim();
+                    if (providerId === 'opencode-go' || providerId === 'opencode-go-free') return null;
                     if (selectedProvider.id === 'local-ai'
                       ? providerPresentation(providerId, undefined, typeof group.deployment === 'string' ? group.deployment : undefined).category !== 'local'
                       : providerId !== selectedProvider.id) return null;

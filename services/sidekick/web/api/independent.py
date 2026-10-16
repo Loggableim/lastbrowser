@@ -151,6 +151,27 @@ def startup():
             _schedule_adapter.install()
     # Restore existing run owners before first tick; never switch active profile.
     tuple(registered_managers())
+    # The first chat turn used to re-parse a large Space config many times.
+    # Warm that parse off the request path. A failure here leaves chat start
+    # correct; it just pays the parse on first use.
+    threading.Thread(target=_prewarm_profile_space_configs, name="space-config-prewarm", daemon=True).start()
+    threading.Thread(target=_prewarm_chat_workers, name="chat-worker-prewarm", daemon=True).start()
+
+
+def _prewarm_profile_space_configs() -> None:
+    try:
+        from web.api.space_engine import prewarm_space_configs
+        prewarm_space_configs(_BASE_HOME)
+    except Exception:
+        logging.getLogger(__name__).debug("space config prewarm skipped", exc_info=True)
+
+
+def _prewarm_chat_workers() -> None:
+    try:
+        from runtime.independent.native_chat_host import prewarm_persistent_chat_workers
+        prewarm_persistent_chat_workers()
+    except Exception:
+        logging.getLogger(__name__).debug("chat worker prewarm skipped", exc_info=True)
 
 
 def _scope(request: OperationRequest) -> Scope:

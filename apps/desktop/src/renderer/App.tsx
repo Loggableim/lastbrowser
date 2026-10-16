@@ -4456,6 +4456,9 @@ function AppContent(): JSX.Element {
     });
     const initialStart = prepareGuardedNativeChatStart(createGuardedStartInput());
     if (!initialStart.ok) {
+      // The optimistic user bubble is already on screen. A failed prepare never
+      // reaches the provider, so the draft must be restored and the bubble removed.
+      if (submission) submission.definitelyRejected = true;
       if (initialStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
       else if (initialStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
       else if (initialStart.reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'));
@@ -8134,6 +8137,7 @@ function NativeSpacesMain({
   onSelectSpace: (path: string) => void;
   onNewSession: () => void;
 }): JSX.Element {
+  const { t } = useDesktopI18n();
   const [path, setPath] = useState('');
   const [name, setName] = useState('');
   const [section, setSection] = useState(activeContextItem || 'Spaces');
@@ -8166,8 +8170,8 @@ function NativeSpacesMain({
         </div>
       </div>
       <div className="native-card-actions insights-tabs">
-        {['Spaces', 'Active workspace', 'Files', 'New chat'].map((item) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{item}</button>
+        {([['Spaces', 'Spaces'], ['Active workspace', 'Active workspace'], ['Files', 'Files'], ['New chat', t('chat.newSession')]] as const).map(([item, label]) => (
+          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{label}</button>
         ))}
       </div>
       <section className="native-work-card detail-json-card">

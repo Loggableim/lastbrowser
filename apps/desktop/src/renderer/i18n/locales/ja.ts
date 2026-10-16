@@ -375,6 +375,8 @@ export const desktopJaOverrides = {
   "mail.sendNow": shellCopyJa["mail.sendNow"],
   "mail.send": shellCopyJa["mail.send"],
   "mail.sent": shellCopyJa["mail.sent"],
+  "chat.invalidResponse": shellCopyJa["chat.invalidResponse"],
+  "chat.turnStillActive": shellCopyJa["chat.turnStillActive"],
   "commands.nova.newChat": shellCopyJa["commands.nova.newChat"],
   "commands.nova.newChatDesc": shellCopyJa["commands.nova.newChatDesc"],
   "commands.nova.analyzeForm": shellCopyJa["commands.nova.analyzeForm"],

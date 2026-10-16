@@ -351,6 +351,21 @@ def _clarify_timeout_seconds(default: int = 120) -> int:
         return default
 
 
+def _turn_failed_without_reply(result) -> bool:
+    """Older assistant turns in the transcript are not this turn's reply.
+
+    A provider 404 on a follow-up still returns the full history, so "any
+    assistant message exists" would hide the error and leave only the user text.
+    """
+    if not isinstance(result, dict):
+        return False
+    if result.get('failed') is True:
+        return True
+    error = result.get('error')
+    final = result.get('final_response')
+    return bool(error) and not str(final or '').strip()
+
+
 def _classify_provider_error(err_str: str, exc=None, *, silent_failure: bool = False) -> dict:
     """Classify provider/agent failure text for WebUI apperror UX.
 
@@ -3011,6 +3026,39 @@ def _run_agent_streaming(
                     put('stream_end', {'session_id': session_id})
             return
 
+        from runtime.opencode_free_chat import deliver_free_turn, is_free_official_chat
+        if is_free_official_chat(provider_context, model):
+            _metering_stop.set()
+            try:
+                home = getattr(_native_context, "profile_home", None)
+                deliver_free_turn(session=s, text=msg_text, put=put, cancel_event=cancel_event,
+                    profile_home=home, session_key=str(session_id))
+            except InterruptedError:
+                if getattr(s, "active_stream_id", None) == stream_id:
+                    s.active_stream_id = None
+                    s.pending_user_message = None
+                    s.pending_attachments = []
+                    s.pending_started_at = None
+                    try:
+                        s.save()
+                    except Exception:
+                        logger.warning("Could not save cancelled free chat turn")
+                put("cancel", {"message": "Cancelled", "session_id": session_id})
+            except Exception as exc:
+                logger.warning("Free official chat failed (%s)", type(exc).__name__)
+                if getattr(s, "active_stream_id", None) == stream_id:
+                    s.active_stream_id = None
+                    s.pending_user_message = None
+                    s.pending_attachments = []
+                    s.pending_started_at = None
+                    try:
+                        s.save()
+                    except Exception:
+                        logger.warning("Could not save failed free chat turn")
+                put("error", {"error": str(exc)[:500], "session_id": session_id})
+                put("stream_end", {"session_id": session_id, "processExited": True})
+            return
+
         # Teamwork / Smart Track requests are rejected before any model work
         # when the user's persisted preference disables that orchestration.
         orchestration = _requested_orchestration_mode(model, mode)
@@ -4380,13 +4428,13 @@ def _run_agent_streaming(
                 # an empty final_response without raising — the stream would end with
                 # a done event containing zero assistant messages, leaving the user with
                 # no feedback. Emit an apperror so the client shows an inline error.
-                _assistant_added = any(
+                _assistant_added = False if _turn_failed_without_reply(result) else any(
                     m.get('role') == 'assistant' and str(m.get('content') or '').strip()
                     for m in (result.get('messages') or [])
                 )
                 # History already contains assistant rows. A failed turn with no
                 # new answer must still surface; otherwise the user bubble stays
-                # and the provider error (404, admission denial) is silent.
+                # and the provider error (404, admission denial, invalid model) is silent.
                 _final_text = str(result.get('final_response') or '').strip()
                 _turn_failed_without_answer = (
                     not _token_sent and not _final_text
@@ -4507,7 +4555,7 @@ def _run_agent_streaming(
                                 # normal post-result persistence path by
                                 # leaving the error path suppressed (set below).
                                 _error_suppressed = True  # prevent re-entering guard
-                        if not _assistant_added:
+                        if not _error_suppressed:
                             # Self-heal didn't apply or retry failed — emit error
                             _err_label = 'Authentication failed'
                             _err_type = 'auth_mismatch'

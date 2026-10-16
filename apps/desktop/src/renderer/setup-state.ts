@@ -89,6 +89,7 @@ export async function openProviderOAuthUrl(
 
 const fallbackCloudProviders = [
   { id: 'openai-codex', label: 'OpenAI Codex (ChatGPT)', oauth_provider: 'openai-codex', oauth_label: 'ChatGPT Account' },
+  { id: 'opencode', label: 'OpenCode Free', key_optional: true },
   { id: 'opencode-go', label: 'OpenCode Go', key_optional: false },
   { id: 'opencode-zen', label: 'OpenCode Zen', key_optional: false },
   { id: 'xiaomi', label: 'Xiaomi MiMo', key_optional: false, requires_base_url: true, default_base_url: 'https://api.xiaomimimo.com/v1' },
@@ -103,6 +104,11 @@ const fallbackCloudProviders = [
 ];
 
 const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string }>> = {
+  opencode: [
+    { id: 'deepseek-v4.1-flash-free', label: 'DeepSeek V4.1 Flash (free)' },
+    { id: 'space-bunny-free', label: 'Space Bunny (free)' },
+    { id: 'glm-5.3-flash-free', label: 'GLM 5.3 Flash (free)' }
+  ],
   ollama: [
     { id: 'llama3.3', label: 'Llama 3.3 (70B)' },
     { id: 'llama3.2', label: 'Llama 3.2 (3B)' },
@@ -296,7 +302,7 @@ export function cloudProviderOptions(status: OnboardingStatus | null | undefined
     ? [
       ...(providers.some((provider) => provider.id === codexFallback.id) ? [] : [codexFallback]),
       ...fallbackCloudProviders
-        .filter((fallback) => ['antigravity', 'alibaba', 'opencode-go', 'opencode-zen', 'xiaomi'].includes(fallback.id) && !providers.some((provider) => provider.id === fallback.id)),
+        .filter((fallback) => ['antigravity', 'alibaba', 'opencode', 'opencode-go', 'opencode-zen', 'xiaomi'].includes(fallback.id) && !providers.some((provider) => provider.id === fallback.id)),
       ...providers
     ]
     : fallbackCloudProviders;

@@ -22,6 +22,8 @@ describe('profile and Space scoped session lists', () => {
     expect(resolveSessionBackendProfile(workScope, 'alpha', beta)).toBe('beta');
     expect(resolveSessionBackendProfile(beta, 'beta', beta)).toBe('beta');
     expect(resolveSessionBackendProfile(null, 'alpha', beta)).toBe('beta');
+    const discovered = { ...workScope, backendProfileName: 'default' };
+    expect(resolveSessionBackendProfile(discovered, 'default', workScope)).toBe('default');
   });
   it('rejects session-list responses from an earlier profile or Space', () => {
     expect(sessionListResponseMatchesScope(workScope, workScope)).toBe(true);

@@ -11,10 +11,28 @@ import {
   findDevelopmentResourcesDir,
   resolveServiceLayout,
   resolveExistingRuntimeDirectory,
+  resolveOpenCodeClientPath,
   sidecarPythonExecutableName
 } from '../src/main/services.js';
 
 describe('sidecar service layout', () => {
+  it('records the Electron pid and a bundled OpenCode client for free chat', () => {
+    const root = mkdtempResourceRoot();
+    const sidekickDir = path.join(root, 'services', 'sidekick');
+    const binary = path.join(sidekickDir, 'vendor', 'opencode', 'opencode');
+    mkdirSync(path.dirname(binary), { recursive: true });
+    writeFileSync(binary, '');
+    try {
+      expect(resolveOpenCodeClientPath({ sidekickDir }, 'linux')).toBe(binary);
+      const layout = resolveServiceLayout(root, path.join(root, 'user-data'), {}, 'linux');
+      const env = buildSidecarEnvironment(layout, 8791);
+      expect(env.LASTBROWSER_ELECTRON_PID).toBe(String(process.pid));
+      expect(env.LASTBROWSER_OPENCODE_BIN).toBe(binary);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('resolves an existing runtime alias but never adopts a foreign store parent', () => {
     const root = mkdtempResourceRoot();
     const home = path.join(root, 'home');

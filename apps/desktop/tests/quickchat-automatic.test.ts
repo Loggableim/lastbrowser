@@ -35,4 +35,32 @@ describe('direct Quickchat automatic model selection', () => {
     expect(chooseQuickchatModel(selection('xiaomi', ['mimo-v2.6-flash']), scope,
       { provider: 'xiaomi', model: 'missing' }, storage, true)).toBeNull();
   });
+
+  it('keeps an existing automatic choice ahead of the OpenRouter routers', () => {
+    const catalog: ScopedModelSelection = {
+      schemaVersion: 1, scope: nativeScope, revision: 1, model: 'deepseek-v4.1-flash-free', provider: 'opencode',
+      configured: true, supportsIndependent: true,
+      groups: [
+        selection('opencode', ['deepseek-v4.1-flash-free']).groups[0],
+        selection('openrouter', ['openrouter/auto', 'openrouter/free']).groups[0],
+      ],
+    };
+    expect(chooseQuickchatModel(catalog, scope, null, storage, false)).toEqual({
+      provider: 'opencode', model: 'deepseek-v4.1-flash-free', basis: 'estimated',
+    });
+    const withFlash: ScopedModelSelection = {
+      ...catalog,
+      groups: [selection('xiaomi', ['mimo-v2.6-flash']).groups[0], ...catalog.groups],
+    };
+    expect(chooseQuickchatModel(withFlash, scope, null, storage, true)).toEqual({
+      provider: 'xiaomi', model: 'mimo-v2.6-flash', basis: 'estimated',
+    });
+    const routersOnly = selection('openrouter', ['openrouter/auto', 'openrouter/free']);
+    expect(chooseQuickchatModel(routersOnly, scope, null, storage, false)).toEqual({
+      provider: 'openrouter', model: 'openrouter/free', basis: 'estimated',
+    });
+    expect(chooseQuickchatModel(routersOnly, scope, { provider: 'openrouter', model: 'openrouter/auto' }, storage, false)).toEqual({
+      provider: 'openrouter', model: 'openrouter/auto', basis: 'favorite',
+    });
+  });
 });

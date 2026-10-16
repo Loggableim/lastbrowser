@@ -178,11 +178,19 @@ export function getProviderModelEvidence(providerId: string, modelId: string, br
   return evidence && matchesActiveIdentity(evidence, storage) && isFresh(evidence, now) ? evidence : undefined;
 }
 
+const OPENROUTER_ROUTER_IDS = new Set(['openrouter/free', 'openrouter/auto']);
+
+/** The two official OpenRouter routers are picker models, not individual :free ids. */
+export function isOpenRouterRouterModel(providerId: string, modelId: string): boolean {
+  return normalizeProviderId(providerId) === 'openrouter' && OPENROUTER_ROUTER_IDS.has(modelId.trim());
+}
+
 export function isProviderModelQualified(providerId: string, modelId: string, browserProfileId: string,
   backendProfileName: string, storage: Pick<Storage, 'getItem' | 'setItem'>, now = Date.now()): boolean {
   // Stable release eligibility does not invent a successful chat record.
   // Callers still supply models from the scoped catalog and validate credentials.
   return Boolean(modelId.trim()) && (isStableProvider(providerId)
+    || isOpenRouterRouterModel(providerId, modelId)
     || Boolean(getProviderModelEvidence(providerId, modelId, browserProfileId, backendProfileName, storage, now)));
 }
 

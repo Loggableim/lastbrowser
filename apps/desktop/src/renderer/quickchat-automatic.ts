@@ -48,7 +48,8 @@ export function chooseQuickchatModel(selection: ScopedModelSelection, scope: Qui
     ? group.models.filter(model => model.supportsIndependent && canSelectNativeModel(group.providerId, model.nativeAvailability))
       .map(model => ({ provider: group.providerId, model: parseProviderModelId(model.id, group.providerId).model, label: model.label, deployment: group.deployment })) : [])
     .filter(choice => isModelActive(storage, scope, choice.provider, choice.model)
-      && (showBetas || choice.deployment === 'local' || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));
+      && (showBetas || choice.deployment === 'local' || choice.provider === 'opencode-go' || choice.provider === 'opencode-go-free'
+        || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));
   if (favorite) {
     const choice = candidates.find(row => row.provider === favorite.provider && row.model === favorite.model);
     // An explicit favorite must never silently send its prompt to another provider.
@@ -65,7 +66,13 @@ export function chooseQuickchatModel(selection: ScopedModelSelection, scope: Qui
   }).sort((a, b) => a.time - b.time || a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model));
   if (withMeasurements[0]) return { provider: withMeasurements[0].provider, model: withMeasurements[0].model, basis: 'measured' };
   // OpenCode receives no guessed provider winner while its measured benchmark is pending.
-  const estimatedRank = (candidate: Candidate) => /^(opencode)(?:[-_:]|$)/i.test(candidate.provider) ? 3 : initialRank(candidate.model);
+  // Router ranks sit behind every ordinary estimate so adding them cannot
+  // replace an existing automatic choice. Free still beats the paid auto router.
+  const estimatedRank = (candidate: Candidate) => {
+    if (candidate.provider === 'openrouter' && candidate.model === 'openrouter/auto') return 7;
+    if (candidate.provider === 'openrouter' && candidate.model === 'openrouter/free') return 6;
+    return /^(opencode)(?:[-_:]|$)/i.test(candidate.provider) ? 3 : initialRank(candidate.model);
+  };
   automaticCandidates.sort((a, b) => estimatedRank(a) - estimatedRank(b)
     || a.provider.localeCompare(b.provider) || a.model.localeCompare(b.model));
   return automaticCandidates[0] ? { provider: automaticCandidates[0].provider, model: automaticCandidates[0].model, basis: 'estimated' } : null;

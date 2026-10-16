@@ -42,7 +42,7 @@ import { useGeminiAccountStore } from '../stores/useGeminiAccountStore.js';
 import { useChatStore } from '../stores/useChatStore.js';
 import { loadSpaceModel, saveSpaceModel } from '../space-models.js';
 import { hasChosenChatModel, isMultiAgentModelSelection, parseProviderModelId, resolveLiteralCatalogModelSelection, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
-import { getProviderModelEvidence, isProviderModelQualified, useProviderChatEvidenceRevision } from '../provider-chat-evidence.js';
+import { getProviderModelEvidence, isOpenRouterRouterModel, isProviderModelQualified, useProviderChatEvidenceRevision } from '../provider-chat-evidence.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { IndependentAssistantClient } from '../independent-assistant-client.js';
 import { assistantScopeKey, sameAssistantScope, newIndependentRequestId, type ScopedModelSelection, type NativeModelAvailability } from '../independent-contracts.js';
@@ -79,7 +79,7 @@ import { hasCurrentTurnBrowserUse } from '../chat-browser-use.js';
 import { nativeGrillCopy } from '../i18n/native-grill-copy.js';
 
 const noCommandCapabilities:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
-const REQUESTED_CHAT_DEFAULT = { provider: 'openai-codex', model: 'gpt-6-luna' } as const;
+const REQUESTED_CHAT_DEFAULT = { provider: 'opencode', model: 'deepseek-v4.1-flash-free' } as const;
 const CHAT_DEFAULT_PREFERENCE_KEY = 'lastbrowser.chatDefaultPreference.v1';
 function readRequestedChatDefault(): { provider: string; model: string } {
   try {
@@ -459,8 +459,9 @@ export function NativeChatMain({
         activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
       const local=group.providerId==='local-store';
       const localDeployment=group.deployment==='local';
-      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence)||localDeployment, qualification: local?undefined:evidence,
-        label: local||evidence ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
+      const openRouterRouter=isOpenRouterRouterModel(group.providerId, entry.id);
+      return { ...entry, qualified: local?isLocalStoreModelQualified(group.providerId,entry):Boolean(evidence)||localDeployment||openRouterRouter, qualification: local?undefined:evidence,
+        label: local||evidence||openRouterRouter ? entry.label : `${entry.label} · ${t('settings.panels.providers.betaUntested')}` };
     });
     return models.length ? [{ ...group, models }] : [];
   }), [modelCatalog, activeBrowserProfileId, activeBackendProfileName, activeSession?.profile, isAntigravityCatalogUnverified, t, activeModelRevision, showUntestedBetas, providerEvidenceRevision]);
@@ -472,7 +473,7 @@ export function NativeChatMain({
   const requestedDefaultQualified = (!isAntigravityCatalogUnverified || requestedChatDefault.provider !== 'antigravity')
     && isProviderModelQualified(requestedChatDefault.provider, requestedChatDefault.model,
       activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
-  const requestedDefaultProviderLabel = requestedDefaultGroup?.provider || (requestedChatDefault.provider === 'openai-codex' ? 'OpenAI Codex' : requestedChatDefault.provider);
+  const requestedDefaultProviderLabel = requestedDefaultGroup?.provider || (requestedChatDefault.provider === 'opencode' ? 'OpenCode' : requestedChatDefault.provider);
   const requestedDefaultUnavailableReason = !modelCatalogLoaded ? '' : !requestedDefaultGroup
     ? t('settings.panels.providers.requestedModelUnavailable')
     : !requestedDefaultGroup.configured
@@ -1056,6 +1057,7 @@ export function NativeChatMain({
         modelProvider={modelProvider}
         modelProviderLabel={modelProviderLabel}
         modelOptions={visibleModelCatalog}
+        hideQualificationNotice={Boolean(chatError)}
         emptyQualifiedCatalog={emptyQualifiedCatalog}
         noActiveModels={modelCatalogLoaded && !visibleModelCatalog.some(group => group.configured && group.providerId
           && group.models.some(entry => entry.supportsIndependent && canSelectNativeModel(group.providerId, entry.nativeAvailability)))}

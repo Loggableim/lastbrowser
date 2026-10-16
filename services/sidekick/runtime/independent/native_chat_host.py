@@ -86,14 +86,17 @@ def build_native_environment(context: NativeChatContext, *, runtime_env=None) ->
     env.update({"SIDEKICK_HOME": str(home), "SIDEKICK_BASE_HOME": str(base),
         "LASTBROWSER_HOME": str(home), "HOME": str(home), "USERPROFILE": str(home),
         "APPDATA": str(home / "appdata"), "LOCALAPPDATA": str(home / "localappdata"),
-        "SIDEKICK_SESSION_ID": context.session_id,
+        # Session id and writer generation change every turn. They are stamped
+        # onto the process when that turn binds, so a warm worker can be reused
+        # for the next chat in the same profile, Space and workspace.
+        "SIDEKICK_SESSION_ID": "persistent",
         "SIDEKICK_WEBUI_ACTIVE_WORKSPACE": space.name,
         "SIDEKICK_WEBUI_SPACES_DIR": str(space.parent), "SIDEKICK_WEBUI_WORKSPACES_DIR": str(space.parent),
         "TERMINAL_CWD": context.workspace, "SIDEKICK_STREAM_RETRIES": "0",
         "LASTBROWSER_INTEGRATED": "1", "LASTBROWSER_NATIVE_CHAT_WORKER": "1",
         # Existing auth fences disallow shared-root/ambient CLI credentials.
         "LASTBROWSER_INDEPENDENT_WORKER": "1", "LASTBROWSER_INDEPENDENT_PURPOSE": "native_chat",
-        "LASTBROWSER_NATIVE_GENERATION": context.writer_generation,
+        "LASTBROWSER_NATIVE_GENERATION": "persistent",
         # Completion proofs belong to the owning desktop runtime. Without
         # this, each worker invents an unrelated generation and valid chats
         # can never qualify their provider/model in the renderer.
@@ -180,9 +183,8 @@ class NativeChatHost:
 
     def _fingerprint(self, env) -> str:
         """Every spawn-time input. A changed value starts a fresh worker, never a reused one."""
-        payload = {"env": env, "cwd": self.context.workspace,
-                   "python": str(self.python_executable), "root": str(self.sidekick_root)}
-        return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+        return native_worker_fingerprint(env=env, workspace=self.context.workspace,
+            python_executable=self.python_executable, sidekick_root=self.sidekick_root)
 
     def prepare(self, args, kwargs, *, runtime_env=None):
         """Reuse path: the same verification, turn encoding and fingerprint as start()."""
@@ -255,11 +257,19 @@ def _retire_worker(handle) -> None:
         logger.warning("native_chat_worker_retire_failed")
 
 
+def native_worker_fingerprint(*, env, workspace, python_executable, sidekick_root) -> str:
+    """Hash spawn inputs. Turn identity is not included; bind stamps it per turn."""
+    payload = {"env": env, "cwd": str(workspace),
+               "python": str(python_executable), "root": str(sidekick_root)}
+    return hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+
+
 class _NativeWorkerPool:
     """At most one idle persistent worker per Profile Home, Space and provider.
 
     A worker is reused only with an identical spawn fingerprint (environment,
-    workspace, interpreter, session). Idle workers expire after the TTL.
+    workspace and interpreter). The session and writer generation are applied
+    when the next turn binds. Idle workers expire after the TTL.
     """
     idle_ttl_seconds = 120.0
     max_turns = 64
@@ -304,6 +314,125 @@ class _NativeWorkerPool:
 
 
 NATIVE_WORKER_POOL = _NativeWorkerPool()
+_PREWARM_LIMIT = 4
+
+
+def prewarm_persistent_chat_workers() -> int:
+    """Import the chat runtime in an idle worker before the first send.
+
+    The first turn of a fresh process spends several seconds importing the
+    agent before the provider is contacted. A desktop that is already open
+    can pay that cost at startup. Failure leaves chat correct and cold.
+    Returns how many idle workers were parked.
+    """
+    if not persistent_worker_enabled() or os.environ.get("LASTBROWSER_INTEGRATED") != "1":
+        return 0
+    if os.environ.get("LASTBROWSER_CHAT_WORKER_PREWARM") == "0":
+        return 0
+    started = time.monotonic()
+    parked = 0
+    try:
+        from types import SimpleNamespace
+        from web.api.independent import hub
+        from .scope import ScopeResolver, canonical_path
+        from .scope_binding import provider_selection
+        from .worker_host import resolve_worker_python_executable
+        current = hub()
+        python_executable = canonical_path(resolve_worker_python_executable())
+        sidekick_root = Path(__file__).resolve().parents[2]
+        for profile in current.profiles():
+            if parked >= _PREWARM_LIMIT:
+                break
+            database = Path(profile["path"]) / "state.db"
+            if not database.is_file():
+                continue
+            try:
+                store = current.get(profile["name"])
+            except Exception:
+                logger.debug("native_chat_worker_prewarm profile skipped", exc_info=True)
+                continue
+            resolver = ScopeResolver(store, profiles_provider=current.profiles)
+            try:
+                bindings = store.list_bindings()
+            except Exception:
+                logger.debug("native_chat_worker_prewarm bindings skipped", exc_info=True)
+                continue
+            for binding in bindings:
+                if parked >= _PREWARM_LIMIT or binding.tombstoned_at is not None:
+                    continue
+                workspace = str(binding.workspace_locator or "")
+                if not workspace or not Path(workspace).is_dir():
+                    continue
+                try:
+                    resolved = resolver.resolve(binding.scope, authenticated_profile_name=profile["name"])
+                    selection, _digest = provider_selection(resolved)
+                except Exception:
+                    logger.debug("native_chat_worker_prewarm resolve skipped", exc_info=True)
+                    continue
+                provider = str(getattr(selection, "provider", "") or "").strip()
+                if not provider:
+                    continue
+                stub = SimpleNamespace(profile_home=str(resolved.profile_home),
+                    space_root=str(resolved.space_root), session_id="persistent",
+                    workspace=workspace, writer_generation="persistent",
+                    scope=binding.scope, partition_key=binding.partition_key)
+                try:
+                    env = build_native_environment(stub)
+                except Exception:
+                    logger.debug("native_chat_worker_prewarm environment skipped", exc_info=True)
+                    continue
+                fingerprint = native_worker_fingerprint(env=env, workspace=workspace,
+                    python_executable=python_executable, sidekick_root=sidekick_root)
+                key = (str(canonical_path(resolved.profile_home)), str(canonical_path(resolved.space_root)),
+                       "fixed", provider)
+                if _park_warm_worker(env, workspace, key, fingerprint, python_executable, sidekick_root):
+                    parked += 1
+    except Exception:
+        logger.info("native_chat_worker_prewarm skipped")
+        return parked
+    logger.info("native_chat_worker_prewarm ready elapsed_ms=%.0f workers=%s",
+        (time.monotonic() - started) * 1000, parked)
+    return parked
+
+
+def _park_warm_worker(env, workspace, key, fingerprint, python_executable, sidekick_root) -> bool:
+    """Start one imported worker and leave it idle. The warmup flag is not fingerprinted."""
+    from types import SimpleNamespace
+    spawn_env = dict(env)
+    spawn_env["LASTBROWSER_CHAT_WORKER_WARMUP"] = "1"
+    bootstrap = "import runpy,sys;sys.path.insert(0,sys.argv[1]);runpy.run_module(sys.argv[2],run_name='__main__')"
+    options = {"creationflags": subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {"start_new_session": True}
+    process = None
+    handle = None
+    try:
+        process = subprocess.Popen([str(python_executable), "-I", "-B", "-u", "-c", bootstrap,
+            str(sidekick_root), "runtime.independent.native_chat_worker"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            text=True, encoding="utf-8", errors="strict", bufsize=1,
+            cwd=workspace, env=spawn_env, close_fds=True, **options)
+        handle = NativeChatHandle(process, SimpleNamespace(run_id="warm", control_epoch=0))
+        message = handle.read_event(timeout=90)
+        if not isinstance(message, dict) or message.get("kind") != "worker_warm" or not handle._events.empty():
+            handle.terminate(grace_seconds=0, hard_seconds=1)
+            return False
+        handle.turns = 0
+        handle.fingerprint = fingerprint
+        handle.pool_key = key
+        NATIVE_WORKER_POOL.give_back(key, handle)
+        return True
+    except Exception:
+        logger.debug("native_chat_worker_prewarm spawn skipped", exc_info=True)
+        if handle is not None:
+            try:
+                handle.terminate(grace_seconds=0, hard_seconds=1)
+            except Exception:
+                pass
+        elif process is not None:
+            try:
+                process.kill()
+            except Exception:
+                pass
+        return False
 
 
 def _take_persistent_worker(host, args, kwargs, before_stop):

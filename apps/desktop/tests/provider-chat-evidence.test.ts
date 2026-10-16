@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { completedChatProviderEvidence, clearProviderChatEvidence, getProviderChatEvidence, getQualifiedProviderModels, isProviderModelQualified, recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from '../src/renderer/provider-chat-evidence.js';
+import { completedChatProviderEvidence, clearProviderChatEvidence, getProviderChatEvidence, getQualifiedProviderModels, isOpenRouterRouterModel, isProviderModelQualified, recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from '../src/renderer/provider-chat-evidence.js';
 import { providerVerification } from '../src/renderer/provider-verification.js';
 
 function memoryStorage(): Storage {
@@ -82,6 +82,16 @@ describe('provider chat evidence', () => {
       providerId: 'openrouter', modelId: 'model-a', recordedAt: 10,
     } }));
     expect(isProviderModelQualified('openrouter', 'model-a', 'profile-a', 'backend-a', storage, 11)).toBe(false);
+  });
+
+  it('treats only the two OpenRouter routers as selectable without chat evidence', () => {
+    const storage = memoryStorage();
+    expect(isOpenRouterRouterModel('openrouter', 'openrouter/free')).toBe(true);
+    expect(isOpenRouterRouterModel('OpenRouter', 'openrouter/auto')).toBe(true);
+    expect(isOpenRouterRouterModel('openrouter', 'moonshotai/kimi-k2.6:free')).toBe(false);
+    expect(isProviderModelQualified('openrouter', 'openrouter/free', 'profile-a', 'backend-a', storage, 16)).toBe(true);
+    expect(isProviderModelQualified('openrouter', 'openrouter/auto', 'profile-a', 'backend-a', storage, 16)).toBe(true);
+    expect(isProviderModelQualified('openrouter', 'moonshotai/kimi-k2.6:free', 'profile-a', 'backend-a', storage, 16)).toBe(false);
   });
 
   it('keeps catalog connectivity separate from exact successful chat evidence', () => {

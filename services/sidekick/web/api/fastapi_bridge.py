@@ -32,6 +32,9 @@ from starlette.requests import ClientDisconnect
 
 _END = object()
 _HEADER_WAIT_SECONDS = 20.0
+# Cold OpenCode catalog discovery can exceed the general bridge budget.
+# A shorter test override of _HEADER_WAIT_SECONDS still wins.
+_CHAT_START_HEADER_WAIT_SECONDS = 45.0
 _CHAT_START_BRIDGE_DIAGNOSTIC_INTERVAL_SECONDS = 5.0
 _RUNTIME_INIT_LOCK = threading.Lock()
 _RUNTIME_STATE_DIR: str | None = None
@@ -162,6 +165,14 @@ def _is_streaming_bridge_path(path: str) -> bool:
     return clean in _STREAMING_BRIDGE_PATHS or any(
         clean.startswith(prefix) for prefix in _STREAMING_BRIDGE_PREFIXES
     )
+
+
+def _header_wait_seconds(method: str, path: str) -> float:
+    clean = str(path or "").split("?", 1)[0].rstrip("/")
+    interactive = _is_chat_start_path(method, path) or (method.upper() == "POST" and clean in {"/api/quickchat/start", "/api/session/new"})
+    if interactive and _HEADER_WAIT_SECONDS >= 20.0:
+        return _CHAT_START_HEADER_WAIT_SECONDS
+    return _HEADER_WAIT_SECONDS
 
 
 def _is_chat_start_path(method: str, path: str) -> bool:
@@ -655,7 +666,8 @@ async def dispatch_route(request: Request) -> Response:
             headers={"Retry-After": "1"},
         )
     headers_ready = await asyncio.to_thread(
-        execution.handler.headers_ready.wait, _HEADER_WAIT_SECONDS
+        execution.handler.headers_ready.wait,
+        _header_wait_seconds(execution.handler.command, execution.handler.path),
     )
     if not headers_ready:
         if execution.chat_start_diagnostics is not None:

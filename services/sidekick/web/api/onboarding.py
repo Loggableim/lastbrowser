@@ -97,6 +97,19 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "models": list(_PROVIDER_MODELS.get("openai", [])),
         "category": "easy_start",
     },
+    "opencode": {
+        "label": "OpenCode Free",
+        "env_var": "",
+        "default_model": "deepseek-v4.1-flash-free",
+        "requires_base_url": False,
+        "key_optional": True,
+        "models": [
+            {"id": "deepseek-v4.1-flash-free", "label": "DeepSeek V4.1 Flash (free)"},
+            {"id": "space-bunny-free", "label": "Space Bunny (free)"},
+            {"id": "glm-5.3-flash-free", "label": "GLM 5.3 Flash (free)"},
+        ],
+        "category": "easy_start",
+    },
     "opencode-zen": {
         "label": "OpenCode Zen",
         "env_var": "OPENCODE_ZEN_API_KEY",

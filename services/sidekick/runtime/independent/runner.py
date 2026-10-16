@@ -138,6 +138,10 @@ def _discover_model_catalog(context, include_capabilities, *, available_models=N
             if group is None:
                 group = {"provider_id": provider_id, "provider": provider_id, "models": []}
                 raw["groups"].append(group)
+            # Connection groups already list every selectable model. Do not
+            # merge the flattened sibling catalog back into the paid group.
+            if group.get("catalog_source") == "connection":
+                continue
             group.setdefault("models", [])
             existing = {str(row.get("id")) for row in group["models"] if isinstance(row, dict)}
             group["models"].extend({"id": model_id, "label": model_id} for model_id in model_ids if model_id not in existing)

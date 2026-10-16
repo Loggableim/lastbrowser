@@ -3,7 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
+  assertRelocatableCPython,
   isPreparedRuntimeCompatible,
+  linuxStandalonePython,
   runtimeDependencyDigest,
   posixPythonLauncherScript,
   pythonRuntimeExecutableName,
@@ -14,6 +16,12 @@ import {
   verifyWheelhouse,
   writeLinuxWheelhouseManifest
 } from '../scripts/prepare-python-runtime.mjs';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { patchAppRunText } = require('../scripts/patch-linux-apprun.cjs') as {
+  patchAppRunText: (text: string) => string;
+};
 
 describe('desktop runtime packaging', () => {
   it('runs the Python runtime preparation before Windows packaging', () => {
@@ -22,7 +30,11 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.scripts['prepare:python']).toBe('node scripts/prepare-python-runtime.mjs');
     expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
     expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
-    expect(packageJson.scripts['package:linux']).toContain('npm run prepare:python && npm run build && electron-builder --linux tar.gz AppImage');
+    expect(packageJson.scripts['package:linux']).toContain('node scripts/stage-opencode-client.mjs');
+    expect(packageJson.scripts['package:linux']).toContain('electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus');
+    expect(packageJson.scripts['package:linux']).toContain('--config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/');
+    expect(packageJson.build.electronVersion).toBe('45.0.0-alpha.14+wvcus');
+    expect(packageJson.build.electronDownload.mirror).toBe('https://github.com/castlabs/electron-releases/releases/download/v');
     expect(packageJson.build.linux.target).toContain('AppImage');
     expect(packageJson.scripts['package:linux']).toContain('node scripts/write-linux-checksums.mjs');
     expect(packageJson.scripts['smoke:linux:fresh-profile']).toBe('node scripts/smoke-linux-fresh-profile.mjs');
@@ -42,7 +54,11 @@ describe('desktop runtime packaging', () => {
         expect.objectContaining({
           from: 'runtime/python',
           to: 'runtime/python',
-          filter: expect.arrayContaining(['!**/__pycache__/**', '!**/*.pyc', '!**/site-packages/tests/**'])
+          filter: expect.arrayContaining(['!**/*.cpython-3[!1]*.pyc', '!**/*.cpython-31[!2]*.pyc', '!**/__pycache__/**', '!**/*.pyc', '!**/site-packages/tests/**'])
+        }),
+        expect.objectContaining({
+          from: '../../services',
+          filter: expect.arrayContaining(['!sidekick/tests/**', '!**/__pycache__/**', '!**/*.pyc'])
         })
       ])
     );
@@ -73,7 +89,16 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).toContain("'anthropic>=0.39.0'");
     expect(prepareScript).toContain('import anthropic');
     expect(prepareScript).toContain("'--no-compile'");
-    expect(prepareScript).toContain('runtimeSchema: isLinux ? 8 : 6');
+    expect(prepareScript).toContain('runtimeSchema: 9');
+    expect(prepareScript).toContain('python-build-standalone');
+    expect(prepareScript).toContain(linuxStandalonePython.sha256);
+    expect(prepareScript).toContain('prepareLinuxStandalonePython');
+    const linuxPrepare = prepareScript.slice(
+      prepareScript.indexOf('function prepareLinuxStandalonePython'),
+      prepareScript.indexOf('export function verifyLinuxWheelhouse')
+    );
+    expect(linuxPrepare).toContain('python-build-standalone');
+    expect(linuxPrepare).not.toContain('venv');
     expect(prepareScript).toContain("'--no-index', '--find-links', wheelhouseDir");
     expect(prepareScript).toContain("import anthropic, requests, uvicorn, yaml");
     expect(prepareScript).toContain('yaml, PIL, psutil');
@@ -84,6 +109,36 @@ describe('desktop runtime packaging', () => {
     expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');
     expect(sidekickPyproject).toContain('exclude = ["tests", "tests.*"]');
+  });
+
+  it('rejects a venv and a host CPython for the Linux Sidekick runtime', () => {
+    const directory = mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-pyvenv-'));
+    try {
+      writeFileSync(path.join(directory, 'pyvenv.cfg'), 'home = /usr/bin\nversion = 3.12.3\n');
+      expect(() => assertRelocatableCPython(path.join(directory, 'python3'), directory)).toThrow(/pyvenv\.cfg/);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    if (existsSync('/usr/bin/python3')) {
+      expect(() => assertRelocatableCPython('/usr/bin/python3', os.tmpdir())).toThrow(/host/);
+    }
+  });
+
+  it('patches extracted AppRun so APPDIR does not collapse to /', () => {
+    const broken = `if [ -z "$APPDIR" ] ; then
+  path="$(dirname "$(readlink -f "\${THIS}")")"
+  while [[ "$path" != "" && ! -e "$path/$1" ]]; do
+    path=\${path%/*}
+  done
+  APPDIR="$path"
+fi
+BIN="$APPDIR/Lastbrowser"
+`;
+    const patched = patchAppRunText(broken);
+    expect(patched).toContain('APPDIR="$(dirname "$(readlink -f "${THIS}")")"');
+    expect(patched).not.toContain('"$path/$1"');
+    expect(patched).toContain('BIN="$APPDIR/Lastbrowser"');
+    expect(patchAppRunText(patched)).toBe(patched);
   });
 
   it('selects python.exe on Windows and python3 on Linux', () => {

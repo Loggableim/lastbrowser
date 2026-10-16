@@ -133,6 +133,7 @@ def attach_free_opencode_catalog(catalog: dict) -> dict:
             "auth_state": "not_required",
             "has_key": False,
             "oauth_connected": False,
+            "models": list(CANDIDATE_MODELS),
         })
     return catalog
 

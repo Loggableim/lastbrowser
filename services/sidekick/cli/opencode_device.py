@@ -286,15 +286,46 @@ def cancel_login(login_id):
         return {"ok": True, "status": "cancelled"}
 
 
-def _select_provider(config, provider_id):
+def _provider_entries(config, provider_id):
+    """Every configured workspace provider for this login, in preference order.
+
+    OpenCode Go credentials can list the subscription catalog and the free
+    catalog as sibling provider entries. The first entry stays preferred when
+    a model id exists in both; models that exist only on a later entry remain
+    selectable.
+    """
     providers = config.get("providers", {})
     if not isinstance(providers, dict):
         raise DeviceError("invalid_workspace_config")
+    entries = []
     for key in _PROVIDERS.get(provider_id, ()):
         entry = providers.get(key)
         if isinstance(entry, dict) and isinstance(entry.get("models"), dict) and entry["models"]:
-            return entry
-    raise DeviceError("workspace_provider_unavailable")
+            entries.append(entry)
+    if not entries:
+        raise DeviceError("workspace_provider_unavailable")
+    return entries
+
+
+def _select_provider(config, provider_id):
+    return _provider_entries(config, provider_id)[0]
+
+
+def _owning_provider_entry(config, provider_id, model):
+    entries = _provider_entries(config, provider_id)
+    if model is None:
+        return entries[0], next(iter(entries[0]["models"]))
+    for entry in entries:
+        if model in entry["models"]:
+            return entry, model
+    matches = []
+    for entry in entries:
+        for key, row in entry["models"].items():
+            if isinstance(row, dict) and row.get("modelID") == model:
+                matches.append((entry, key))
+    if len(matches) != 1:
+        raise DeviceError("workspace_model_unavailable")
+    return matches[0]
 
 
 def _current_credentials(provider_id):
@@ -332,16 +363,39 @@ def discovered_models(provider_id):
     return _supported_models(credential, provider_id)
 
 
+def device_model_context_length(provider_id, model_id):
+    """Public context window from the device catalog. No credentials are returned."""
+    try:
+        record = _read(get_sidekick_home()).get(provider_id)
+        config = record.get("config") if isinstance(record, dict) else None
+        if not isinstance(config, dict):
+            return None
+        entry, key = _owning_provider_entry(config, provider_id, model_id)
+    except (DeviceError, OSError, ValueError, TypeError):
+        return None
+    row = entry["models"].get(key)
+    limit = row.get("limit") if isinstance(row, dict) else None
+    value = limit.get("context") if isinstance(limit, dict) else None
+    if type(value) is int and 1 <= value <= 16_000_000:
+        return value
+    return None
+
+
 def _supported_models(credential, provider_id):
     result = []
     errors = []
-    for model in _select_provider(credential["config"], provider_id)["models"]:
-        try:
-            _validated_connection(credential, provider_id, model, None)
-            result.append(model)
-        except DeviceError as error:
-            errors.append(str(error))
-            continue
+    seen = set()
+    for entry in _provider_entries(credential["config"], provider_id):
+        for model in entry["models"]:
+            if model in seen:
+                continue
+            try:
+                _validated_connection(credential, provider_id, model, None)
+                result.append(model)
+                seen.add(model)
+            except DeviceError as error:
+                errors.append(str(error))
+                continue
     if not result:
         for reason in ("workspace_binding_changed", "unsupported_workspace_header", "invalid_workspace_config"):
             if reason in errors:
@@ -356,16 +410,13 @@ def resolve_connection(provider_id, model=None, session_id=None):
 
 
 def _validated_connection(credential, provider_id, model, session_id):
-    entry = _select_provider(credential["config"], provider_id)
-    models = entry["models"]
-    if model not in models:
-        # The live agent keeps the resolved wire ID between turns. Resolve
-        # it back to exactly one current catalog entry on credential refresh.
-        matches = [key for key, row in models.items() if isinstance(row, dict) and row.get("modelID") == model]
-        if len(matches) != 1:
-            raise DeviceError("workspace_model_unavailable")
-        model = matches[0]
-    model_config = models[model] if isinstance(models[model], dict) else {}
+    entry, model = _owning_provider_entry(credential["config"], provider_id, model)
+    models = []
+    for candidate in _provider_entries(credential["config"], provider_id):
+        for key in candidate["models"]:
+            if key not in models:
+                models.append(key)
+    model_config = entry["models"][model] if isinstance(entry["models"][model], dict) else {}
     if model_config.get("disabled") is True:
         raise DeviceError("workspace_model_unavailable")
     for record in (entry, model_config):

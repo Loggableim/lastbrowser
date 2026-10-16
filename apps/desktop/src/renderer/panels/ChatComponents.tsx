@@ -718,8 +718,7 @@ export function ChatComposer({
             title={`${group.provider} · ${entry.id} · ${evidenceDetails}`}
             aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
             <span className="composer-manual-model-name">{desiredDefault?'GPT-6 Luna':entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
-            <small>{group.provider} · {entry.id} · {local?evidenceDetails:entry.qualified?t('settings.panels.providers.lastSuccessfulChat'):t('settings.panels.providers.betaUntested')}
-              {!local&&entry.qualified?` · ${expiry}`:''}{unavailable?` · ${t('chat.modelUnavailableInSpace')}`:entry.supportsIndependent===false?` · ${t('chat.modelIndependentUnsupported')}`:''}</small>
+            <small>{group.provider} · {entry.id} · {unavailable?t('chat.modelUnavailableInSpace'):entry.supportsIndependent===false?t('chat.modelIndependentUnsupported'):local?evidenceDetails:entry.qualified?`${t('settings.panels.providers.lastSuccessfulChat')}${expiry?` · ${expiry}`:''}`:t('settings.panels.providers.betaUntested')}</small>
           </button>;})}
         </fieldset>)}
         {!manualModelGroups.some(group=>group.models.length>0)&&<p role="status">

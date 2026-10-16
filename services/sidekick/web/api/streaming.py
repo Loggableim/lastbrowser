@@ -4401,7 +4401,7 @@ def _run_agent_streaming(
                 )
                 # History already contains assistant rows. A failed turn with no
                 # new answer must still surface; otherwise the user bubble stays
-                # and the provider error (404, admission denial) is silent.
+                # and the provider error (404, admission denial, invalid model) is silent.
                 _final_text = str(result.get('final_response') or '').strip()
                 _turn_failed_without_answer = (
                     not _token_sent and not _final_text
@@ -4522,7 +4522,7 @@ def _run_agent_streaming(
                                 # normal post-result persistence path by
                                 # leaving the error path suppressed (set below).
                                 _error_suppressed = True  # prevent re-entering guard
-                        if not _assistant_added:
+                        if not _error_suppressed:
                             # Self-heal didn't apply or retry failed — emit error
                             _err_label = 'Authentication failed'
                             _err_type = 'auth_mismatch'

@@ -34,6 +34,8 @@ NATIVE_AVAILABILITY_REASONS = frozenset({
 _CATALOG_REUSE_SECONDS = 300.0
 _CATALOG_SETUP_LOCK = threading.Lock()
 _CATALOG_DISK_NAME = "model-catalog-cache.json"
+# Bump when device-catalog discovery changes, so a stale disk receipt is rebuilt.
+_CATALOG_DISCOVERY_REVISION = 3
 
 
 def _catalog_disk_path(profile_home):
@@ -41,7 +43,35 @@ def _catalog_disk_path(profile_home):
     return Path(profile_home) / _CATALOG_DISK_NAME
 
 
-def read_persistent_model_catalog(profile_home, digest: str):
+def opencode_model_identity(profile_home) -> str:
+    """Hash only public model ids from the device catalog, never credentials."""
+    from pathlib import Path
+    digest = hashlib.sha256()
+    path = Path(profile_home) / "opencode-device.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    except (OSError, ValueError, UnicodeError):
+        payload = {}
+    rows = []
+    if isinstance(payload, dict):
+        for provider, record in payload.items():
+            config = record.get("config") if isinstance(record, dict) else None
+            providers = config.get("providers") if isinstance(config, dict) else None
+            if not isinstance(providers, dict):
+                continue
+            for provider_name, entry in providers.items():
+                models = entry.get("models") if isinstance(entry, dict) else None
+                if not isinstance(models, dict):
+                    continue
+                for model_id, row in models.items():
+                    disabled = isinstance(row, dict) and row.get("disabled") is True
+                    rows.append((str(provider), str(provider_name), str(model_id), disabled))
+    for provider, provider_name, model_id, disabled in sorted(rows):
+        digest.update(f"{provider}\0{provider_name}\0{model_id}\0{int(disabled)}\n".encode())
+    return digest.hexdigest()
+
+
+def read_persistent_model_catalog(profile_home, digest: str, *, model_identity: str | None = None):
     """Return the startup catalog only when the saved provider connections still match."""
     try:
         payload = json.loads(_catalog_disk_path(profile_home).read_text(encoding="utf-8"))
@@ -49,19 +79,26 @@ def read_persistent_model_catalog(profile_home, digest: str):
         return None
     if not isinstance(payload, dict) or payload.get("digest") != digest:
         return None
+    if payload.get("discoveryRevision") != _CATALOG_DISCOVERY_REVISION:
+        return None
+    if model_identity is not None and payload.get("modelIdentity") != model_identity:
+        return None
     catalog = payload.get("catalog")
     if not isinstance(catalog, dict) or catalog.get("providerConfigurationDigest") != digest or not isinstance(catalog.get("groups"), list):
         return None
     return copy.deepcopy(catalog)
 
 
-def write_persistent_model_catalog(profile_home, digest: str, catalog: dict) -> None:
+def write_persistent_model_catalog(profile_home, digest: str, catalog: dict, *, model_identity: str | None = None) -> None:
     if not isinstance(catalog, dict) or catalog.get("providerConfigurationDigest") != digest or not isinstance(catalog.get("groups"), list):
         return
     path = _catalog_disk_path(profile_home)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".json.tmp")
-    temporary.write_text(json.dumps({"digest": digest, "catalog": catalog}, ensure_ascii=False), encoding="utf-8")
+    body = {"digest": digest, "discoveryRevision": _CATALOG_DISCOVERY_REVISION, "catalog": catalog}
+    if model_identity is not None:
+        body["modelIdentity"] = model_identity
+    temporary.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
     temporary.replace(path)
 
 
@@ -236,7 +273,14 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
                     from cli.codex_models import get_codex_model_context_length
                     length = get_codex_model_context_length(model_id)
                     length_source = "local_catalog" if length is not None else "unknown"
-                elif length is None:
+                if length is None and pid in {"opencode-go", "opencode-zen"}:
+                    try:
+                        from cli.opencode_device import device_model_context_length
+                        length = device_model_context_length(pid, model_id)
+                        length_source = "provided_catalog" if length is not None else "unknown"
+                    except Exception:
+                        length = None
+                if length is None and pid != "openai-codex":
                     # Provider-scoped exact metadata from the bundled models.dev
                     # registry. Unknown pairs remain without a context limit.
                     try:
@@ -274,7 +318,8 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
     selection, digest = provider_selection(resolved)
     space_state = _catalog_space_state(resolved)
     fingerprint = (evidence_digest(resolved.profile_home), _catalog_credential_state(resolved.profile_home))
-    stored = read_persistent_model_catalog(resolved.profile_home, digest)
+    model_identity = opencode_model_identity(resolved.profile_home)
+    stored = read_persistent_model_catalog(resolved.profile_home, digest, model_identity=model_identity)
     if stored is not None:
         from runtime.local_ai.store_provider_host import with_store_catalog
         return with_store_catalog(stored, scope, resolved.profile.name)
@@ -311,7 +356,7 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
         if not isinstance(result, dict) or result.get("providerConfigurationDigest") != digest or not isinstance(result.get("groups"), list):
             raise PolicyDenied("invalid_model_catalog")
         try:
-            write_persistent_model_catalog(resolved.profile_home, digest, result)
+            write_persistent_model_catalog(resolved.profile_home, digest, result, model_identity=model_identity)
         except OSError:
             pass
         with lock:

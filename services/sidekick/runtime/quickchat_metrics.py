@@ -53,14 +53,16 @@ def _read(path):
                 if not all(type(sample.get(k)) in {int, float} and math.isfinite(sample[k])
                            and 0 <= sample[k] <= 3600000 for k in _TIMINGS):
                     continue
-                row = {k: sample[k] for k in ("at", *_TIMINGS)}
+                # Keep the model row intact. Reusing its name here dropped
+                # provider/model and made the next catalog read raise KeyError.
+                cleaned = {k: sample[k] for k in ("at", *_TIMINGS)}
                 for key in _OPTIONAL_METRICS:
                     value = sample.get(key)
                     if type(value) in {int, float} and math.isfinite(value) and value >= 0:
-                        row[key] = value
+                        cleaned[key] = value
                 if sample.get("usage_estimated") is True:
-                    row["usage_estimated"] = True
-                samples.append(row)
+                    cleaned["usage_estimated"] = True
+                samples.append(cleaned)
             if samples:
                 result.append({"provider": row["provider"], "model": row["model"], "samples": samples})
         return result

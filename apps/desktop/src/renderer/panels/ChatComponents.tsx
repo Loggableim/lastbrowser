@@ -707,7 +707,7 @@ export function ChatComposer({
         {manualModelGroups.map(group=><fieldset key={group.providerId||group.provider} disabled={group.configured===false}>
           <legend>{group.provider}{group.configured===false&&` · ${t(group.disabledReason==='unavailable'?'chat.modelProviderUnavailable':'chat.modelProviderNotConfigured')}`}</legend>
           {group.models.map(entry=>{const unavailable=!canSelectNativeModel(group.providerId,entry.nativeAvailability);
-            const desiredDefault=group.providerId==='openai-codex'&&entry.id==='gpt-6-luna';
+            const desiredDefault=group.providerId==='opencode'&&entry.id==='deepseek-v4.1-flash-free';
             const expiry=entry.qualification?new Date(entry.qualification.recordedAt+24*60*60*1000).toLocaleString(locale):'';
             const local=group.providerId==='local-store';
             const localProof=locale.startsWith('de')?'Gerät und Werkzeugaufrufe geprüft':'Device and tool calls verified';
@@ -717,7 +717,7 @@ export function ChatComposer({
             return <button key={`${group.providerId}:${entry.id}`} type="button" disabled={group.configured===false||entry.supportsIndependent===false||unavailable||!ready||running}
             title={`${group.provider} · ${entry.id} · ${evidenceDetails}`}
             aria-pressed={model===entry.id&&modelProvider===group.providerId} onClick={()=>{onModelChange(qualifyModelForProvider(entry.id,group.providerId));setShowManualModels(false);setManualModelSearch('');manualModelTrigger.current?.focus();}}>
-            <span className="composer-manual-model-name">{desiredDefault?'GPT-6 Luna':entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
+            <span className="composer-manual-model-name">{entry.label}{desiredDefault?` · ${t('settings.panels.providers.requestedChatDefault')}`:''}</span>
             <small>{group.provider} · {entry.id} · {unavailable?t('chat.modelUnavailableInSpace'):entry.supportsIndependent===false?t('chat.modelIndependentUnsupported'):local?evidenceDetails:entry.qualified?`${t('settings.panels.providers.lastSuccessfulChat')}${expiry?` · ${expiry}`:''}`:t('settings.panels.providers.betaUntested')}</small>
           </button>;})}
         </fieldset>)}

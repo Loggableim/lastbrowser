@@ -79,7 +79,7 @@ import { hasCurrentTurnBrowserUse } from '../chat-browser-use.js';
 import { nativeGrillCopy } from '../i18n/native-grill-copy.js';
 
 const noCommandCapabilities:CommandCapabilities={plan:false,grill_me:false,boost:false,goal:false,gquota:false,plugins:false};
-const REQUESTED_CHAT_DEFAULT = { provider: 'openai-codex', model: 'gpt-6-luna' } as const;
+const REQUESTED_CHAT_DEFAULT = { provider: 'opencode', model: 'deepseek-v4.1-flash-free' } as const;
 const CHAT_DEFAULT_PREFERENCE_KEY = 'lastbrowser.chatDefaultPreference.v1';
 function readRequestedChatDefault(): { provider: string; model: string } {
   try {
@@ -472,7 +472,7 @@ export function NativeChatMain({
   const requestedDefaultQualified = (!isAntigravityCatalogUnverified || requestedChatDefault.provider !== 'antigravity')
     && isProviderModelQualified(requestedChatDefault.provider, requestedChatDefault.model,
       activeBrowserProfileId, activeBackendProfileName || (activeSession as any)?.profile || 'default', window.localStorage);
-  const requestedDefaultProviderLabel = requestedDefaultGroup?.provider || (requestedChatDefault.provider === 'openai-codex' ? 'OpenAI Codex' : requestedChatDefault.provider);
+  const requestedDefaultProviderLabel = requestedDefaultGroup?.provider || (requestedChatDefault.provider === 'opencode' ? 'OpenCode' : requestedChatDefault.provider);
   const requestedDefaultUnavailableReason = !modelCatalogLoaded ? '' : !requestedDefaultGroup
     ? t('settings.panels.providers.requestedModelUnavailable')
     : !requestedDefaultGroup.configured

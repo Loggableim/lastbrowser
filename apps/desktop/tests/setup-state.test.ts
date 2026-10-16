@@ -172,6 +172,7 @@ describe('cloud first-run setup state', () => {
     // wizard must offer Ollama and LM Studio alongside the cloud providers.
     expect(options.map((option) => option.id)).toEqual([
       'openai-codex',
+      'opencode',
       'opencode-go',
       'opencode-zen',
       'xiaomi',
@@ -215,6 +216,7 @@ describe('cloud first-run setup state', () => {
   it('shows cloud provider fallbacks before the onboarding API responds', () => {
     expect(cloudProviderOptions(null).map((option) => option.id)).toEqual([
       'openai-codex',
+      'opencode',
       'opencode-go',
       'opencode-zen',
       'xiaomi',
@@ -238,7 +240,7 @@ describe('cloud first-run setup state', () => {
       { id: 'openrouter', label: 'OpenRouter' },
       { id: 'ollama-cloud', label: 'Ollama Cloud' }
     ] } });
-    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'opencode-go', 'opencode-zen', 'xiaomi', 'alibaba', 'openrouter', 'ollama-cloud']);
+    expect(options.map((option) => option.id)).toEqual(['openai-codex', 'opencode', 'opencode-go', 'opencode-zen', 'xiaomi', 'alibaba', 'openrouter', 'ollama-cloud']);
     expect(modelsForProvider(null, 'antigravity')).toEqual([]);
   });
 
@@ -252,6 +254,7 @@ describe('cloud first-run setup state', () => {
       }
     }).map((option) => option.id)).toEqual([
       'openai-codex',
+      'opencode',
       'opencode-go',
       'opencode-zen',
       'xiaomi',

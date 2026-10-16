@@ -8164,15 +8164,21 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
 
     if parsed.path in {"/api/quickchat/start", "/api/quickchat/stop", "/api/quickchat/cancel"}:
         from web.api.quickchat import QuickChatError, cancel_quickchat, start_quickchat, stop_quickchat
-        operation = (start_quickchat if parsed.path.endswith("/start") else
-                     stop_quickchat if parsed.path.endswith("/stop") else cancel_quickchat)
         try:
-            result, status = operation(body, handler)
+            if parsed.path.endswith("/start"):
+                result, status = start_quickchat(body, handler, diag=diag)
+            else:
+                operation = stop_quickchat if parsed.path.endswith("/stop") else cancel_quickchat
+                result, status = operation(body, handler)
         except QuickChatError as exc:
             result, status = {"ok": False, "error": str(exc), "error_code": exc.code}, exc.status
         except Exception:
             logger.exception("Quickchat request failed")
             result, status = {"ok": False, "error": "Quickchat request failed", "error_code": "quickchat_internal_error"}, 500
+        finally:
+            if diag:
+                diag.stage("response_write")
+                diag.finish()
         return j(handler, result, status=status)
 
     if parsed.path == "/api/chat/mode":

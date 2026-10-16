@@ -239,8 +239,27 @@ def _release_turn_bindings(session_id: str) -> bool:
     return released
 
 
+def _prewarm_chat_imports() -> None:
+    """Load the turn runtime once per process, before the first user message waits."""
+    try:
+        import web.api.config  # noqa: F401
+        import web.api.profiles  # noqa: F401
+        import web.api.space_engine  # noqa: F401
+        import web.api.streaming as streaming
+        streaming._get_ai_agent()
+        import runtime.auxiliary_client  # noqa: F401
+        import runtime.quickchat_direct  # noqa: F401
+        import runtime.independent.native_browser_bridge  # noqa: F401
+        import runtime.independent.native_file_io  # noqa: F401
+        import runtime.independent.native_sdk_broker  # noqa: F401
+    except Exception:
+        # A failed import stays lazy. The turn still reports its own error.
+        pass
+
+
 def main():
     global _stage, _failure_sink
+    warmup = os.environ.pop("LASTBROWSER_CHAT_WORKER_WARMUP", "") == "1"
     protocol_output = sys.stdout
     # Isolated Python ignores PYTHONIOENCODING; Windows pipes need an explicit codec.
     protocol_output.reconfigure(encoding="utf-8", errors="strict")
@@ -255,6 +274,12 @@ def main():
             raise WorkerError("native_chat_message_too_large")
         with write_lock:
             protocol_output.write(encoded); protocol_output.flush()
+
+    _prewarm_chat_imports()
+    if warmup:
+        # Parent parks this process only after imports. The flag is not part of
+        # the spawn fingerprint and is already removed from the environment.
+        emit({"kind": "worker_warm"})
 
     # The single stdin owner. Bootstrap frames start the next turn; every other
     # frame goes to the running turn's handler. Any frame while idle, EOF or a

@@ -96,7 +96,7 @@ def _session_for_quickchat(body: dict[str, Any], actor: str, scope, workspace: s
     return session
 
 
-def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
+def start_quickchat(body: Any, handler: Any, diag=None) -> tuple[dict[str, Any], int]:
     if not isinstance(body, dict) or set(body) - {
         "quick_chat_id", "space_scope", "profile", "workspace", "prompt", "context", "model", "model_provider", "reasoning_effort"
     }:
@@ -194,7 +194,8 @@ def start_quickchat(body: Any, handler: Any) -> tuple[dict[str, Any], int]:
     response = routes._start_chat_stream_for_session(session, msg=message, attachments=[], workspace=workspace,
         model=model, model_provider=provider, normalized_model=normalized_model, goal_related=False, mode="",
         sandbox_disabled=False, grounding_context=grounding_context, confirmed_chat_profile=captured,
-        reasoning_effort=reasoning_effort, supported_reasoning_efforts=supported_reasoning_efforts)
+        reasoning_effort=reasoning_effort, supported_reasoning_efforts=supported_reasoning_efforts,
+        diag=diag)
     status = int(response.pop("_status", 200) or 200)
     if status >= 400 or not response.get("stream_id"):
         return {"ok": False, "error": response.get("error", "Quickchat could not start"),

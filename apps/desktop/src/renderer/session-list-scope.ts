@@ -56,9 +56,16 @@ export function resolveSessionBackendProfile(
   resolvedProfile: string | undefined,
   currentScope: SessionListScope
 ): string | undefined {
-  return sameSessionListScope(requestedScope, currentScope)
-    ? resolvedProfile || currentScope.backendProfileName
-    : currentScope.backendProfileName;
+  if (!requestedScope || requestedScope.profile !== currentScope.profile
+    || requestedScope.workspacePath !== currentScope.workspacePath) {
+    return currentScope.backendProfileName;
+  }
+  const currentName = currentScope.backendProfileName || '';
+  const requestedName = requestedScope.backendProfileName || '';
+  // An explicit choice on the current Space wins over a different resolved name.
+  // Filling in the name for the same Space must not drop it back to empty.
+  if (currentName && currentName !== requestedName) return currentScope.backendProfileName;
+  return resolvedProfile || requestedName || currentScope.backendProfileName;
 }
 
 export function sameSessionListScope(left: SessionListScope | null, right: SessionListScope): boolean {

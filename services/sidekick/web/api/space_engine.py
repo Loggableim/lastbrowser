@@ -408,6 +408,47 @@ class AgentNotFound(SpaceError):
 # Space Model
 # ═══════════════════════════════════════════════════════════════════════════════
 
+# Process-local parse cache. Chat start resolves the same Space config many
+# times; a large selection receipt makes each YAML parse take hundreds of
+# milliseconds. The key is path plus mtime and size, so a save is a miss.
+_SPACE_CONFIG_CACHE: dict[tuple, dict] = {}
+_SPACE_CONFIG_CACHE_LOCK = threading.Lock()
+_SPACE_CONFIG_CACHE_LIMIT = 8
+
+
+def _space_config_signature(path: Path):
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return (str(path), st.st_mtime_ns, st.st_size)
+
+
+def _drop_space_config_cache(path: Path | None = None) -> None:
+    with _SPACE_CONFIG_CACHE_LOCK:
+        if path is None:
+            _SPACE_CONFIG_CACHE.clear()
+            return
+        key = str(path)
+        for signature in [item for item in _SPACE_CONFIG_CACHE if item[0] == key]:
+            _SPACE_CONFIG_CACHE.pop(signature, None)
+
+
+def prewarm_space_configs(home: Path) -> None:
+    """Parse each Space config once so later chat turns reuse the process cache."""
+    base = Path(home)
+    for dirname in ("spaces", "workspaces"):
+        root = base / dirname
+        if not root.is_dir():
+            continue
+        for candidate in root.iterdir():
+            if candidate.is_dir() and not candidate.name.startswith(".") and (candidate / "space.yaml").is_file():
+                try:
+                    Space(candidate.name, custom_root=root).load_config()
+                except Exception:
+                    logger.debug("space config prewarm skipped for %s", candidate.name, exc_info=True)
+
+
 class Space:
     """A single Space with its own agents, sessions, kanban, memory."""
 
@@ -476,7 +517,27 @@ class Space:
     }
 
     def load_config(self) -> dict:
-        """Load space.yaml with sensible defaults for missing fields."""
+        """Load space.yaml with sensible defaults for missing fields.
+
+        Repeated reads of an unchanged file reuse one parse. Callers receive
+        their own copy, and a later save changes mtime so the next read misses.
+        """
+        signature = _space_config_signature(self.config_path) if self.config_path.exists() else None
+        if signature is not None:
+            with _SPACE_CONFIG_CACHE_LOCK:
+                cached = _SPACE_CONFIG_CACHE.get(signature)
+            if cached is not None:
+                return copy.deepcopy(cached)
+        result = self._read_space_config()
+        if signature is None:
+            return result
+        with _SPACE_CONFIG_CACHE_LOCK:
+            _SPACE_CONFIG_CACHE[signature] = copy.deepcopy(result)
+            while len(_SPACE_CONFIG_CACHE) > _SPACE_CONFIG_CACHE_LIMIT:
+                _SPACE_CONFIG_CACHE.pop(next(iter(_SPACE_CONFIG_CACHE)))
+        return copy.deepcopy(result)
+
+    def _read_space_config(self) -> dict:
         if not self.config_path.exists():
             return copy.deepcopy(self.CONFIG_DEFAULTS)
         try:
@@ -598,6 +659,7 @@ class Space:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temp_path, self.config_path)
+            _drop_space_config_cache(self.config_path)
         finally:
             if os.path.exists(temp_path):
                 os.unlink(temp_path)

@@ -9,9 +9,11 @@ it exports `LASTBROWSER_WEBUI_PYTHON` or `HERMES_WEBUI_PYTHON`. A missing
 bundled launcher is a packaging error; the packaged app does not fall back to
 the host's `/usr/bin/python3`.
 
-`libfuse2` is only a host requirement for mounting an AppImage. Starting with
-`--appimage-extract` (or `APPIMAGE_EXTRACT_AND_RUN=1`) avoids that mount. That
-release hint does not replace this bundled interpreter.
+The normal Linux start does not install or require a host `libfuse2` package.
+`apps/desktop/release/run-linux-preview.sh` is the command to run. It sets
+`APPIMAGE_EXTRACT_AND_RUN=1` and, when the package step found `libfuse.so.2`
+on the build host, points `LD_LIBRARY_PATH` at the bundled copy beside the
+launcher. That launcher does not replace the bundled Python interpreter.
 
 ## Prepare and build offline
 
@@ -64,16 +66,25 @@ variables to `/usr/bin/python3` to reproduce the original failure condition and
 prove the packaged app still uses its bundled interpreter. It terminates the
 app process group when finished.
 
-## AppImage without libfuse2
+## Start the Linux beta
 
-The AppImage runtime needs host `libfuse.so.2` to mount. Two ways avoid that:
+Run the launcher that `npm run package:linux` copies into `apps/desktop/release/`.
+That is the normal start. It does not need a host `libfuse2` package:
 
 ```sh
-APPIMAGE_EXTRACT_AND_RUN=1 ./Lastbrowser-0.1.57-demo.4-x86_64.AppImage
+apps/desktop/release/run-linux-preview.sh
 ```
 
-or extract and set `APPDIR` before `AppRun`. Without `APPDIR`, electron-builder's
-`AppRun` searches for `$1`, walks to `/`, and fails with
+The launcher sets `APPIMAGE_EXTRACT_AND_RUN=1` before it executes the AppImage.
+When `lib/libfuse.so.2` was bundled next to the launcher, it is added to
+`LD_LIBRARY_PATH`. Installing `libfuse2` is not part of this start.
+
+An optional FUSE mount of the raw AppImage still needs host `fusermount`.
+Set `LASTBROWSER_APPIMAGE_MOUNT=1` only for that mount mode. If the bundled
+library is absent, that optional mode also needs host `libfuse.so.2`.
+
+A manual extract still works. Without `APPDIR`, electron-builder's `AppRun`
+searches for `$1`, walks to `/`, and fails with
 `/Lastbrowser: No such file or directory`.
 
 ```sh

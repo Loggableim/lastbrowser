@@ -1,11 +1,13 @@
 #!/bin/sh
-# Run an extracted Lastbrowser AppDir without libfuse2.
+# Run an already extracted Lastbrowser AppDir.
 #
-# The AppImage file itself needs libfuse.so.2 unless the runtime is started
-# with APPIMAGE_EXTRACT_AND_RUN=1. After --appimage-extract, AppRun only finds
-# the Lastbrowser binary when APPDIR is the extracted directory. Without it,
+# The default start is apps/desktop/scripts/run-linux-preview.sh, which sets
+# APPIMAGE_EXTRACT_AND_RUN=1 and does not need a host libfuse2 package.
+# Use this helper only after a manual --appimage-extract. AppRun finds the
+# Lastbrowser binary when APPDIR is the extracted directory. Without it,
 # exec fails with "/Lastbrowser: No such file or directory".
 #
+#   ./run-linux-preview.sh
 #   ./Lastbrowser-*.AppImage --appimage-extract
 #   ./run-extracted-appimage.sh squashfs-root
 set -eu

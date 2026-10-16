@@ -11,6 +11,7 @@ import {
   findDevelopmentResourcesDir,
   resolveServiceLayout,
   resolveExistingRuntimeDirectory,
+  resolveOpenCodeClientPath,
   sidecarPythonExecutableName
 } from '../src/main/services.js';
 
@@ -53,6 +54,23 @@ describe('sidecar service layout', () => {
     expect(env.HERMES_WEBUI_AGENT_DIR).toBe(env.LASTBROWSER_WEBUI_AGENT_DIR);
     expect(env.LASTBROWSER_INTEGRATED).toBe('1');
     expect(env.PYTHONPATH).toContain('services');
+  });
+
+  it('points Sidekick at a bundled official OpenCode client and ignores a missing one', () => {
+    const root = mkdtempResourceRoot();
+    const sidekickDir = path.join(root, 'services', 'sidekick');
+    const binary = path.join(sidekickDir, 'vendor', 'opencode', 'opencode.exe');
+    mkdirSync(path.dirname(binary), { recursive: true });
+    writeFileSync(binary, '');
+    try {
+      expect(resolveOpenCodeClientPath({ sidekickDir }, 'win32')).toBe(binary);
+      const layout = resolveServiceLayout(root, path.join(root, 'user-data'), {}, 'win32');
+      expect(buildSidecarEnvironment(layout, 8787).LASTBROWSER_OPENCODE_BIN).toBe(binary);
+      rmSync(binary);
+      expect(resolveOpenCodeClientPath({ sidekickDir }, 'win32')).toBeUndefined();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('keeps services inside the packaged resources directory', () => {

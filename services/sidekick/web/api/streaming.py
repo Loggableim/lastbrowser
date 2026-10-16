@@ -3011,6 +3011,39 @@ def _run_agent_streaming(
                     put('stream_end', {'session_id': session_id})
             return
 
+        from runtime.opencode_free_chat import deliver_free_turn, is_free_official_chat
+        if is_free_official_chat(provider_context, model):
+            _metering_stop.set()
+            try:
+                home = getattr(_native_context, "profile_home", None)
+                deliver_free_turn(session=s, text=msg_text, put=put, cancel_event=cancel_event,
+                    profile_home=home, session_key=str(session_id))
+            except InterruptedError:
+                if getattr(s, "active_stream_id", None) == stream_id:
+                    s.active_stream_id = None
+                    s.pending_user_message = None
+                    s.pending_attachments = []
+                    s.pending_started_at = None
+                    try:
+                        s.save()
+                    except Exception:
+                        logger.warning("Could not save cancelled free chat turn")
+                put("cancel", {"message": "Cancelled", "session_id": session_id})
+            except Exception as exc:
+                logger.warning("Free official chat failed (%s)", type(exc).__name__)
+                if getattr(s, "active_stream_id", None) == stream_id:
+                    s.active_stream_id = None
+                    s.pending_user_message = None
+                    s.pending_attachments = []
+                    s.pending_started_at = None
+                    try:
+                        s.save()
+                    except Exception:
+                        logger.warning("Could not save failed free chat turn")
+                put("error", {"error": str(exc)[:500], "session_id": session_id})
+                put("stream_end", {"session_id": session_id, "processExited": True})
+            return
+
         # Teamwork / Smart Track requests are rejected before any model work
         # when the user's persisted preference disables that orchestration.
         orchestration = _requested_orchestration_mode(model, mode)
@@ -4384,8 +4417,17 @@ def _run_agent_streaming(
                     m.get('role') == 'assistant' and str(m.get('content') or '').strip()
                     for m in (result.get('messages') or [])
                 )
+                # History already contains assistant rows. A failed turn with no
+                # new answer must still surface; otherwise the user bubble stays
+                # and the provider error (404, invalid model) is silent.
+                _final_text = str(result.get('final_response') or '').strip()
+                _turn_failed_without_answer = (
+                    not _token_sent and not _final_text
+                    and (result.get('failed') is True or bool(str(result.get('error') or '').strip()))
+                )
                 # _token_sent tracks whether on_token() was called (any streamed text)
-                if not _assistant_added and not _token_sent:
+                if (not _assistant_added and not _token_sent) or _turn_failed_without_answer:
+                    _error_suppressed = False
                     if cancel_event.is_set() or getattr(s, 'active_stream_id', None) != stream_id:
                         return
                     _last_err = getattr(agent, '_last_error', None) or result.get('error') or ''
@@ -4496,9 +4538,9 @@ def _run_agent_streaming(
                                 )
                                 # Skip the error block — jump directly to the
                                 # normal post-result persistence path by
-                                # leaving _assistant_added truthy (set below).
-                                _assistant_added = True  # prevent re-entering guard
-                        if not _assistant_added:
+                                # leaving the error path suppressed (set below).
+                                _error_suppressed = True  # prevent re-entering guard
+                        if not _error_suppressed:
                             # Self-heal didn't apply or retry failed — emit error
                             _err_label = 'Authentication failed'
                             _err_type = 'auth_mismatch'
@@ -4520,8 +4562,8 @@ def _run_agent_streaming(
                         _err_type = _classification['type']
                         _err_hint = _classification['hint']
                     # Skip error emission if credential self-heal succeeded
-                    # (#1401) — _assistant_added is set True on successful retry.
-                    if _assistant_added:
+                    # (#1401) — only that retry sets _error_suppressed.
+                    if _error_suppressed:
                         # Self-heal succeeded: messages are already merged into s,
                         # fall through to normal post-result persistence below.
                         pass

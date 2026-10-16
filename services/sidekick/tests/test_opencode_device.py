@@ -212,6 +212,23 @@ def test_workspace_config_is_fail_closed(home, monkeypatch, mutation):
         device.resolve_connection("opencode-go", "synthetic-model", "session")
 
 
+def test_free_catalog_sibling_stays_selectable_beside_the_go_catalog(home):
+    value = config()
+    value["providers"]["opencode"] = {"package": "aisdk:@ai-sdk/openai-compatible",
+        "settings": {"baseURL": "https://opencode.ai/inference/openai/v1"},
+        "headers": {"x-opencode-org-id": "synthetic-org"},
+        "models": {"muse-spark-1.3-contributor-free": {}}}
+    device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": value}})
+    assert device.discovered_models("opencode-go") == ["synthetic-model", "muse-spark-1.3-contributor-free"]
+    connection = device.resolve_connection("opencode-go", "muse-spark-1.3-contributor-free", "session")
+    assert connection["model"] == "muse-spark-1.3-contributor-free"
+    assert connection["api_mode"] == "chat_completions"
+    assert "synthetic-access" not in str(connection["base_url"])
+    value["providers"]["opencode"]["models"]["muse-spark-1.3-contributor-free"] = {"limit": {"context": 1048576, "output": 131072}}
+    device._write(home, {"opencode-go": device._token_record(tokens()) | {"config": value}})
+    assert device.device_model_context_length("opencode-go", "muse-spark-1.3-contributor-free") == 1048576
+
+
 def test_canonical_console_provider_and_mixed_families_use_supported_actual_models(home):
     value = config()
     entry = value["providers"].pop("opencode-go")

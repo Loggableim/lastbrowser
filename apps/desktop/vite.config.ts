@@ -22,7 +22,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(desktopDir, 'src')
-    }
+    },
+    // React 19's dual CJS/ESM entry was landing in the bundle twice, so the
+    // renderer set one copy's dispatcher and components called hooks on the other.
+    dedupe: ['react', 'react-dom']
   },
   server: {
     host: '127.0.0.1',

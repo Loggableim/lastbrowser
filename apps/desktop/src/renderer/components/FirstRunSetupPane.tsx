@@ -72,6 +72,7 @@ import {
   OnboardingStatus,
   canSubmitCloudSetup,
   cloudProviderOptions,
+  fallbackModelsByProvider,
   firstRunStatus,
   openProviderOAuthUrl,
   type FirstRunAiChoice,
@@ -189,7 +190,9 @@ export function FirstRunSetupPane({
   const evidenceStorage = typeof window === 'undefined' ? undefined : window.localStorage;
   const qualifiedProviders = providers.filter(item => isStableProvider(item.id) || Boolean(browserProfileId && evidenceStorage
     && getProviderChatEvidence(item.id, browserProfileId, backendProfileName || 'default', evidenceStorage)));
-  const defaultProviderId = qualifiedProviders.some((p) => p.id === 'openai-codex')
+  const defaultProviderId = qualifiedProviders.some((p) => p.id === 'opencode')
+    ? 'opencode'
+    : qualifiedProviders.some((p) => p.id === 'openai-codex')
     ? 'openai-codex'
     : (qualifiedProviders[0]?.id || '');
 
@@ -383,13 +386,26 @@ export function FirstRunSetupPane({
       setModelCatalogKey(capturedKey);
       setLiveProviderModels(previous => ({ ...previous, [provider]: available }));
       setModel(previous => available.some(item => item.id === previous) ? previous : available[0]?.id || '');
+      if (!available.length && provider === 'opencode') {
+        available.push(...(fallbackModelsByProvider.opencode || []));
+        result.configured = true;
+      }
       if (!available.length) setModelProbeError(oauthProviderId ? shellText(locale, "Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.", "No models came back from the connected account. Check the sign-in and reload.") : shellText(locale, "Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.", "No models came back. Check saved credentials or enter a key and reload."));
       return available;
     } catch (cause) {
       if (current()) {
-        setModelProbeError(cause instanceof Error ? cause.message : 'Modelle konnten nicht geladen werden.');
-        setModelCatalogKey('');
-        setModel('');
+        const fallback = provider === 'opencode' ? (fallbackModelsByProvider.opencode || []) : [];
+        if (fallback.length) {
+          setProviderAuth({ key: capturedKey, configured: true });
+          setModelCatalogKey(capturedKey);
+          setLiveProviderModels(previous => ({ ...previous, [provider]: fallback }));
+          setModel(fallback[0].id);
+          setModelProbeError('');
+        } else {
+          setModelProbeError(cause instanceof Error ? cause.message : 'Modelle konnten nicht geladen werden.');
+          setModelCatalogKey('');
+          setModel('');
+        }
       }
       return [];
     } finally {

@@ -215,6 +215,7 @@ describe('cloud first-run setup state', () => {
   it('shows cloud provider fallbacks before the onboarding API responds', () => {
     expect(cloudProviderOptions(null).map((option) => option.id)).toEqual([
       'openai-codex',
+      'opencode',
       'opencode-go',
       'opencode-zen',
       'xiaomi',

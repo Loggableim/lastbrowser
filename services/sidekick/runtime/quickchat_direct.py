@@ -268,6 +268,11 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
         raise InterruptedError("Quickchat turn was superseded")
     if not provider or provider in {"auto", "main"} or not model:
         raise ValueError("Select a connected provider and model for Quickchat.")
+    from runtime.opencode_free_chat import deliver_free_turn, is_free_official_chat
+    if is_free_official_chat(provider, model):
+        deliver_free_turn(session=session, text=text, put=put, cancel_event=cancel_event,
+            profile_home=context.profile_home, session_key=str(session.session_id))
+        return
     local_capture = None
     if provider == 'local-store':
         runtime, local_capture = _local_quickchat_runtime(context, model, provider)

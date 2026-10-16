@@ -133,6 +133,8 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
             from .native_provider_capture import NativeAntigravityBinding
             antigravity_binding = NativeAntigravityBinding(account_id=binding["account_id"],
                 project_id=binding["project_id"], digest=binding["digest"])
+    if isinstance(model, str) and isinstance(provider, str) and model.startswith(f"@{provider}:"):
+        model = model[len(provider) + 2:]
     if not model or not provider or (not native_sdk_supported(provider)
             and not (provider == "antigravity" and antigravity_binding is not None)):
         raise PolicyDenied("native_fixed_sdk_adapter_unavailable")

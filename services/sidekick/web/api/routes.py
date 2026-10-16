@@ -1393,6 +1393,39 @@ def _kanban_unknown_endpoint(handler, parsed, method: str) -> bool:
     ) or True
 
 
+def _visible_chat_start_error(exc: BaseException) -> str:
+    """User-visible text for a start that never reached the provider."""
+    code = str(getattr(exc, "code", "") or "")
+    message = str(exc or "").strip()
+    if code == "native_fixed_model_not_in_bound_catalog" or "invalid model" in message.lower():
+        return "The selected model is not in the current catalog."
+    if "404" in message or "not found" in message.lower():
+        return "The assistant returned an invalid response."
+    if code:
+        return f"The chat could not start ({code})."
+    return message or "The chat could not start."
+
+
+def _record_visible_chat_start_error(session, exc: BaseException) -> None:
+    text = _visible_chat_start_error(exc)
+    messages = getattr(session, "messages", None)
+    if not isinstance(messages, list) or not text:
+        return
+    last = messages[-1] if messages else None
+    if isinstance(last, dict) and last.get("_error") is True and last.get("content") == text:
+        return
+    messages.append({
+        "role": "assistant",
+        "content": text,
+        "timestamp": int(time.time()),
+        "_error": True,
+    })
+    try:
+        session.save()
+    except Exception:
+        logger.warning("Could not persist the visible chat start error", exc_info=True)
+
+
 def _clear_stale_stream_state(session, *, materialize_pending: bool = True) -> bool:
     """Clear persisted streaming flags when the in-memory stream no longer exists.
 
@@ -8131,15 +8164,21 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
 
     if parsed.path in {"/api/quickchat/start", "/api/quickchat/stop", "/api/quickchat/cancel"}:
         from web.api.quickchat import QuickChatError, cancel_quickchat, start_quickchat, stop_quickchat
-        operation = (start_quickchat if parsed.path.endswith("/start") else
-                     stop_quickchat if parsed.path.endswith("/stop") else cancel_quickchat)
         try:
-            result, status = operation(body, handler)
+            if parsed.path.endswith("/start"):
+                result, status = start_quickchat(body, handler, diag=diag)
+            else:
+                operation = stop_quickchat if parsed.path.endswith("/stop") else cancel_quickchat
+                result, status = operation(body, handler)
         except QuickChatError as exc:
             result, status = {"ok": False, "error": str(exc), "error_code": exc.code}, exc.status
         except Exception:
             logger.exception("Quickchat request failed")
             result, status = {"ok": False, "error": "Quickchat request failed", "error_code": "quickchat_internal_error"}, 500
+        finally:
+            if diag:
+                diag.stage("response_write")
+                diag.finish()
         return j(handler, result, status=status)
 
     if parsed.path == "/api/chat/mode":
@@ -12642,6 +12681,8 @@ def _start_chat_stream_for_session(
                         # duplicate it in the transcript on that retry.
                         materialize_pending=goal_claim_turn is None,
                     )
+                    if goal_claim_turn is None:
+                        _record_visible_chat_start_error(s, exc)
             except Exception:
                 logger.warning("Could not roll back failed stream startup for %s", s.session_id, exc_info=True)
             if goal_claim_turn is not None:
@@ -13550,6 +13591,11 @@ def _handle_chat_start(handler, body, diag=None):
             model_provider = provider_context.get("provider")
         if not model and provider_context.get("model"):
             model = str(provider_context.get("model") or "")
+        if not model_provider and not provider_context.get("provider"):
+            from runtime.opencode_free_chat import free_default_choice
+            free_model, free_provider = free_default_choice()
+            if free_model and free_provider:
+                model, model_provider = free_model, free_provider
         if not model_provider and not provider_context.get("provider"):
             setup_error = provider_context.get("setup_error") or {
                 "code": "llm_provider_not_configured",

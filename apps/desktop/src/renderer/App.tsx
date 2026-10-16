@@ -4452,6 +4452,9 @@ function AppContent(): JSX.Element {
     });
     const initialStart = prepareGuardedNativeChatStart(createGuardedStartInput());
     if (!initialStart.ok) {
+      // The optimistic user bubble is already on screen. A failed prepare never
+      // reaches the provider, so the draft must be restored and the bubble removed.
+      if (submission) submission.definitelyRejected = true;
       if (initialStart.reason === 'multi_agent_beta_required') setChatError(t('settings.panels.providers.multiAgentBetaRequired'));
       else if (initialStart.reason === 'no_active_models') setChatError(t('settings.panels.providers.noActiveModels'));
       else if (initialStart.reason === 'model_inactive') setChatError(t('chat.modelUnavailableInSpace'));

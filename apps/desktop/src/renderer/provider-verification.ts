@@ -18,7 +18,7 @@ export type ProviderRuntimeEvidence = {
 /** Product release policy; this is independent of personal connection evidence. */
 export function isStableProvider(providerId: string): boolean {
   const id = providerId.trim().toLowerCase().replace(/_/g, '-');
-  return ['openai-codex', 'opencode-go']
+  return ['openai-codex', 'opencode-go', 'opencode']
     .includes(id === 'go' || id === 'opencode-go-sub' ? 'opencode-go' : id);
 }
 

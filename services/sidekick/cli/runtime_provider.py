@@ -979,6 +979,7 @@ def resolve_runtime_provider(
     explicit_api_key: Optional[str] = None,
     explicit_base_url: Optional[str] = None,
     target_model: Optional[str] = None,
+    session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Resolve runtime provider credentials for agent execution.
 
@@ -1007,7 +1008,12 @@ def resolve_runtime_provider(
             # Workspace config owns the model protocol and endpoint. Stale
             # persisted URLs and manually supplied keys must not override it.
             model = target_model or model_cfg.get("default", "")
-            connection = resolve_connection(requested_provider, model=model)
+            # An explicit turn id is preserved. With no id, resolve_connection
+            # creates or reuses a stable session and still sends the header.
+            if session_id:
+                connection = resolve_connection(requested_provider, model=model, session_id=session_id)
+            else:
+                connection = resolve_connection(requested_provider, model=model)
             return {**connection, "provider": requested_provider,
                     "source": "opencode_device", "requested_provider": requested_provider}
     stored_url_applies = not explicit_base_url and (not requested or requested_provider == configured_provider)

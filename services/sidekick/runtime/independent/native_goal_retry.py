@@ -121,7 +121,7 @@ def run_native_goal_retry(context, payload, *, execution_policy, put):
     from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
     selected = bridge.decision.selected_model
     runtime = resolve_runtime_provider_with_anthropic_env_lock(resolve_runtime_provider,
-        requested=selected.provider, target_model=selected.model)
+        requested=selected.provider, target_model=selected.model, session_id=context.session_id)
     if runtime.get('provider') != selected.provider or not runtime.get('api_key'):
         raise PolicyDenied('native_goal_retry_explicit_provider_required')
     bridge.validate_decision(bridge.decision)

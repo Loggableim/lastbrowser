@@ -13979,6 +13979,7 @@ def _handle_chat_sync_admitted(handler, body, s, msg, workspace, captured_space_
                 _rt = resolve_runtime_provider_with_anthropic_env_lock(
                     resolve_runtime_provider,
                     requested=_provider,
+                    session_id=s.session_id,
                 )
                 _api_key = _rt.get("api_key")
                 # Also use runtime provider/base_url if the webui config didn't resolve them

@@ -2359,6 +2359,7 @@ def _attempt_credential_self_heal(
         _new_rt = resolve_runtime_provider_with_anthropic_env_lock(
             resolve_runtime_provider,
             requested=provider_id,
+            session_id=session_id,
         )
 
         logger.info(
@@ -3677,6 +3678,7 @@ def _run_agent_streaming(
                         resolve_runtime_provider,
                         requested=resolved_provider,
                         target_model=resolved_model,
+                        session_id=session_id,
                     )
                 resolved_api_key = _rt.get("api_key")
                 _rt_provider = _rt.get("provider")

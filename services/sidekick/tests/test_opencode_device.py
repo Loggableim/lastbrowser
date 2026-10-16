@@ -343,6 +343,57 @@ def test_valid_oauth_credentials_survive_unsupported_catalog_without_claiming_co
     assert status["diagnostic"]["provider_match"] is True
 
 
+def _connected(home, monkeypatch):
+    login, _calls = start(home, monkeypatch)
+    device._PENDING[login]["next_poll"] = 0
+    assert device.login_status(login)["status"] == "connected"
+    assert device.has_credentials("opencode-go")
+
+
+def test_resolve_and_completion_send_a_stable_session_without_a_prior_id(home, monkeypatch):
+    _connected(home, monkeypatch)
+    monkeypatch.delenv("SIDEKICK_SESSION_KEY", raising=False)
+    monkeypatch.delenv("SIDEKICK_SESSION_ID", raising=False)
+    device._TURN_SESSION.set("")
+
+    first = device.resolve_connection("opencode-go", "synthetic-model")
+    header = first["headers"]["x-opencode-session"]
+    assert isinstance(header, str) and header
+    # The completion request reuses the same resolved session header.
+    completion_headers = dict(device.resolve_connection("opencode-go", "synthetic-model")["headers"])
+    assert completion_headers["x-opencode-session"] == header
+
+    import cli.runtime_provider as runtime
+    monkeypatch.setattr(runtime, "_get_model_config", lambda: {"provider": "opencode-go", "default": "synthetic-model"})
+    runtime_connection = runtime.resolve_runtime_provider(requested="opencode-go", target_model="synthetic-model")
+    assert runtime_connection["headers"]["x-opencode-session"] == header
+
+    from cli.auth import resolve_api_key_provider_credentials
+    auth_connection = resolve_api_key_provider_credentials("opencode-go")
+    assert auth_connection["headers"]["x-opencode-session"] == header
+
+    explicit = device.resolve_connection("opencode-go", "synthetic-model", "kept-session")
+    kept = explicit["headers"]["x-opencode-session"]
+    assert kept == device.session_header_value("kept-session")
+    assert kept != header
+    assert device.resolve_connection("opencode-go", "synthetic-model", "kept-session")["headers"]["x-opencode-session"] == kept
+    # An explicit id does not replace the stored session used when none is passed.
+    assert device.resolve_connection("opencode-go", "synthetic-model")["headers"]["x-opencode-session"] == header
+
+
+def test_active_turn_session_is_reused_and_explicit_id_wins(home, monkeypatch):
+    _connected(home, monkeypatch)
+    monkeypatch.setenv("SIDEKICK_SESSION_KEY", "chat-turn")
+    device._TURN_SESSION.set("")
+    turn = device.resolve_connection("opencode-go", "synthetic-model")
+    assert turn["headers"]["x-opencode-session"] == device.session_header_value("chat-turn")
+    device.bind_turn_session("quickchat-turn")
+    bound = device.resolve_connection("opencode-go", "synthetic-model")
+    assert bound["headers"]["x-opencode-session"] == device.session_header_value("quickchat-turn")
+    explicit = device.resolve_connection("opencode-go", "synthetic-model", "kept-session")
+    assert explicit["headers"]["x-opencode-session"] == device.session_header_value("kept-session")
+
+
 def test_catalog_errors_preserve_workspace_mismatch_reason(home):
     value = config()
     value["providers"]["opencode-go"]["headers"]["x-opencode-org-id"] = "foreign-org"

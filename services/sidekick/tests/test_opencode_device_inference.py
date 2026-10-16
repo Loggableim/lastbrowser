@@ -25,7 +25,9 @@ def device(monkeypatch):
                   "headers": {"User-Agent": "LastBrowser/0.1.55", "x-opencode-session": "chat-session"}}
     module = SimpleNamespace(has_credentials=Mock(return_value=True),
                              resolve_connection=Mock(return_value=connection),
-                             discovered_models=Mock(return_value=["configured-model"]))
+                             discovered_models=Mock(return_value=["configured-model"]),
+                             choose_session_id=lambda session_id=None: session_id or "generated-session",
+                             bind_turn_session=lambda session_id: None)
     monkeypatch.setitem(sys.modules, "cli.opencode_device", module)
     return module
 

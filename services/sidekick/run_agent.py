@@ -1283,10 +1283,12 @@ class AIAgent:
         self.log_prefix = f"{log_prefix} " if log_prefix else ""
         self._opencode_device_connection = None
         if provider in {"opencode-go", "opencode-zen"}:
-            from cli.opencode_device import has_credentials, resolve_connection
+            from cli.opencode_device import bind_turn_session, choose_session_id, has_credentials, resolve_connection
             if has_credentials(provider):
-                # The real chat session identity is stable across token refreshes.
-                session_id = session_id or f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+                # The real chat session identity is stable across token refreshes
+                # and across a later completion that did not receive an id.
+                session_id = choose_session_id(session_id)
+                bind_turn_session(session_id)
                 connection = resolve_connection(provider, model=model, session_id=session_id)
                 self._opencode_device_connection = connection
                 api_key, base_url, api_mode = connection["api_key"], connection["base_url"], connection["api_mode"]
@@ -7179,12 +7181,16 @@ class AIAgent:
         """Refresh profile-scoped device credentials before a new chat turn."""
         if self.provider not in {"opencode-go", "opencode-zen"}:
             return
-        from cli.opencode_device import has_credentials, resolve_connection
+        from cli.opencode_device import bind_turn_session, choose_session_id, has_credentials, resolve_connection
         if not has_credentials(self.provider):
             if getattr(self, "_opencode_device_connection", None) is not None:
                 raise PermissionError("opencode_device_login_required")
             return
-        connection = resolve_connection(self.provider, model=self.model, session_id=self.session_id)
+        turn_id = choose_session_id(self.session_id)
+        if not self.session_id:
+            self.session_id = turn_id
+        bind_turn_session(turn_id)
+        connection = resolve_connection(self.provider, model=self.model, session_id=turn_id)
         if connection["api_mode"] != self.api_mode:
             raise PermissionError("opencode_device_model_configuration_changed")
         self._opencode_device_connection = connection

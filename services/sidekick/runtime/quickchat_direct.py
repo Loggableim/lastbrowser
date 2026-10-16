@@ -281,15 +281,21 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
     else:
         from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
         from cli.runtime_provider import resolve_runtime_provider
+        runtime_kwargs = {"requested": provider, "target_model": model}
+        if provider in {"opencode-go", "opencode-zen"}:
+            from cli.opencode_device import bind_turn_session, choose_session_id
+            turn_session = choose_session_id(getattr(session, "session_id", None))
+            bind_turn_session(turn_session)
+            runtime_kwargs["session_id"] = turn_session
         runtime = resolve_runtime_provider_with_anthropic_env_lock(
-            resolve_runtime_provider, requested=provider, target_model=model)
+            resolve_runtime_provider, **runtime_kwargs)
     if runtime.get("provider") != provider:
         raise PermissionError("The selected Quickchat provider changed; select it again.")
     headers = {}
     if provider in {"opencode-go", "opencode-zen"}:
         from cli.opencode_device import has_credentials, resolve_connection
         if has_credentials(provider):
-            connection = resolve_connection(provider, model=model, session_id=session.session_id)
+            connection = resolve_connection(provider, model=model, session_id=turn_session)
             if connection.get("model") != model:
                 raise PermissionError("The selected Quickchat model changed; select it again.")
             runtime = {**runtime, **connection}

@@ -3080,7 +3080,7 @@ def get_auth_status(provider_id: Optional[str] = None) -> Dict[str, Any]:
     return {"logged_in": False}
 
 
-def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
+def resolve_api_key_provider_credentials(provider_id: str, session_id: Optional[str] = None) -> Dict[str, Any]:
     """Resolve API key and base URL for an API-key provider.
 
     Returns dict with: provider, api_key, base_url, source.
@@ -3090,7 +3090,11 @@ def resolve_api_key_provider_credentials(provider_id: str) -> Dict[str, Any]:
         if has_credentials(provider_id):
             from cli.models import get_default_model_for_provider
             model = get_default_model_for_provider(provider_id)
-            return {"provider": provider_id, "source": "opencode_device", **resolve_connection(provider_id, model=model)}
+            if session_id:
+                connection = resolve_connection(provider_id, model=model, session_id=session_id)
+            else:
+                connection = resolve_connection(provider_id, model=model)
+            return {"provider": provider_id, "source": "opencode_device", **connection}
     pconfig = PROVIDER_REGISTRY.get(provider_id)
     if not pconfig or pconfig.auth_type != "api_key":
         raise AuthError(

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,7 @@ _CLIENT = "lastbrowser"
 _PROVIDERS = {"opencode-go": ("opencode-go", "go", "opencode"), "opencode-zen": ("opencode", "opencode-zen", "zen")}
 _LOCK = threading.RLock()
 _PENDING = {}
+_TURN_SESSION = contextvars.ContextVar("opencode_turn_session", default="")
 
 
 class DeviceError(RuntimeError):
@@ -500,9 +502,79 @@ def _supported_models(credential, provider_id):
     return result
 
 
+def _clean_session_id(value):
+    text = str(value or "").strip()
+    if not text or len(text) > 256 or any(ord(char) < 32 for char in text):
+        return ""
+    return text
+
+
+def bind_turn_session(session_id):
+    """Remember the active chat or Quickchat id for later OpenCode calls."""
+    cleaned = _clean_session_id(session_id)
+    if not cleaned:
+        return None
+    return _TURN_SESSION.set(cleaned)
+
+
+def _read_profile_session(path):
+    try:
+        return _clean_session_id(Path(path).read_text("utf-8"))
+    except FileNotFoundError:
+        return ""
+    except OSError:
+        return ""
+
+
+def _load_or_create_profile_session():
+    """Reuse one profile session when the caller has no chat id yet.
+
+    The id is stored beside the device credentials so the provider resolve
+    and the later completion send the same ``x-opencode-session`` value.
+    """
+    home = Path(get_sidekick_home()).resolve()
+    home.mkdir(parents=True, exist_ok=True)
+    path = home / "opencode-session-id"
+    existing = _read_profile_session(path)
+    if existing:
+        return existing
+    created = "profile-" + uuid.uuid4().hex
+    try:
+        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+    except FileExistsError:
+        return _read_profile_session(path) or created
+    try:
+        os.write(descriptor, created.encode("utf-8"))
+    finally:
+        os.close(descriptor)
+    return created
+
+
+def choose_session_id(session_id=None):
+    """Prefer the caller's id, then the active turn, then a stored profile id."""
+    explicit = _clean_session_id(session_id)
+    if explicit:
+        return explicit
+    bound = _clean_session_id(_TURN_SESSION.get())
+    if bound:
+        return bound
+    for name in ("SIDEKICK_SESSION_KEY", "SIDEKICK_SESSION_ID"):
+        found = _clean_session_id(os.environ.get(name, ""))
+        if found:
+            return found
+    return _load_or_create_profile_session()
+
+
+def session_header_value(session_id):
+    return uuid.uuid5(
+        uuid.NAMESPACE_URL,
+        str(Path(get_sidekick_home()).resolve()) + ":" + str(session_id),
+    ).hex
+
+
 def resolve_connection(provider_id, model=None, session_id=None):
     credential = _current_credentials(provider_id)
-    return _validated_connection(credential, provider_id, model, session_id)
+    return _validated_connection(credential, provider_id, model, choose_session_id(session_id))
 
 
 def _validated_connection(credential, provider_id, model, session_id):
@@ -554,7 +626,7 @@ def _validated_connection(credential, provider_id, model, session_id):
             raise DeviceError("unsupported_workspace_header")
     headers["User-Agent"] = "LastBrowser/0.1.55"
     if session_id:
-        headers["x-opencode-session"] = uuid.uuid5(uuid.NAMESPACE_URL, str(get_sidekick_home().resolve()) + ":" + str(session_id)).hex
+        headers["x-opencode-session"] = session_header_value(session_id)
     sdk_base = base.rstrip("/")
     if mode == "anthropic_messages":
         # Anthropic SDK appends /v1/messages; runtime capture must use the

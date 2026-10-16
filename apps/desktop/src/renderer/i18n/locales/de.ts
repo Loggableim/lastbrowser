@@ -345,6 +345,7 @@ export const desktopDeOverrides = {
   'sidebar.companion.developer': 'Präzise und technisch. Bevorzugt eine konkrete Lösung und die Schritte dorthin.',
   'sidebar.companion.creative': 'Einfallsreich und offen. Zeigt ein paar Richtungen und führt eine weiter.',
   'sidebar.companion.mentor': 'Geduldig und klar. Erklärt einen Schritt nach dem anderen und lässt Raum für Fragen.',
+  'sidebar.companion.active': 'Aktiver Sidekick',
   'sidebar.drawer.aiTitle': 'Nova KI, Agenten & Fähigkeiten',
   'sidebar.drawer.flows': 'Abläufe',
   'sidebar.drawer.flowsTitle': 'Kanban, Aufgaben & Spaces',

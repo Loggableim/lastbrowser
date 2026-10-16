@@ -273,6 +273,7 @@ import { OptionalAiProfileContext, OptionalAiWorkspaceContext } from './optional
 import { ProfileResolutionContext } from './profile-resolution.js';
 import { readStandardChatCompanion } from './components/CompanionPicker.js';
 import { attachCompanionSnapshot, CompanionAppearanceProvider, normalizeCompanionSnapshot, readCompanionSnapshotEvent, type CompanionPersonality } from './personality-avatar.js';
+import { readQuickChatCompanion } from './components/CompanionPicker.js';
 import { attachMemoryUsage, readMemoryUsageEvent } from './memory-usage.js';
 import { CursorLoupeHUD } from './components/CursorLoupeHUD.js';
 import { SplitScreenMagnifier } from './components/SplitScreenMagnifier.js';
@@ -5203,8 +5204,10 @@ function AppContent(): JSX.Element {
     const preflightMs = Math.round(performance.now() - submittedAt);
     let pendingStart: { quickChatId: string; scopeKey: string; promise: Promise<QuickChatBinding> } | null = null;
     try {
+      const quickCompanion = readQuickChatCompanion();
       const startPromise = window.lastbrowser.quickChat.start({
         quickChatId: chatId, browserProfileId, workspacePath, ...(backendProfileName ? { backendProfileName } : {}), prompt,
+        companion: { personality: quickCompanion.personality, botName: quickCompanion.botName },
         ...(context ? { context } : {}), ...(selection.model ? { model: selection.model } : {}),
         ...(reasoningEffort ? { reasoningEffort } : {}),
         ...(selection.provider ? { modelProvider: selection.provider } : {})

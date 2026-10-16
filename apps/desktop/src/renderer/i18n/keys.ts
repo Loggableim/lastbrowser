@@ -1874,6 +1874,7 @@ export const desktopTranslationKeys = [
   , 'chat.latencyPlaceholder.mentor.late.11'
   , 'chat.latencyPlaceholder.mentor.12'
   , 'chat.latencyPlaceholder.mentor.late.12'
+  , 'sidebar.companion.active'
 ] as const;
 
 export type DesktopTranslationKey = (typeof desktopTranslationKeys)[number];

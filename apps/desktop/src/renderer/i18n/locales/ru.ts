@@ -361,6 +361,7 @@ const translations: DesktopCatalog = {
   'sidebar.companion.developer': 'Точно и технично. Предпочитает конкретное решение и шаги к нему.',
   'sidebar.companion.creative': 'Образно и открыто. Предлагает несколько направлений и развивает одно.',
   'sidebar.companion.mentor': 'Терпеливо и ясно. Объясняет по одному шагу и оставляет место для вопросов.',
+  'sidebar.companion.active': 'Активный Sidekick',
   'sidebar.drawer.aiTitle': 'Nova, агенты и навыки',
   'sidebar.drawer.flows': 'Рабочие процессы',
   'sidebar.drawer.flowsTitle': 'Канбан, задачи и пространства',

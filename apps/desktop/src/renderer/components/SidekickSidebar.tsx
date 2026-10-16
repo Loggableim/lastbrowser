@@ -828,6 +828,11 @@ export function SidekickSidebar({
           {/* AI Drawer Items */}
           {currentDrawerTab === 'ai' && (
             <div className="sidebar-drawer-content" role="region" aria-label={t('sidebar.drawer.aiRegion')}>
+              <div className="sidebar-active-sidekick">
+                <div className="sidebar-active-sidekick-kicker">{t('sidebar.companion.active')}</div>
+                <div className="sidebar-active-sidekick-name">{activeChatName}</div>
+                <AnimatedSidekick persona={enginePersona(activePersonality)} state={sidekickMotion} label={activeChatName} />
+              </div>
               {/* Prominent + New Chat button */}
               <div className="sidebar-ai-actions">
                 <button
@@ -897,8 +902,6 @@ export function SidekickSidebar({
                 </div>
               )}
 
-              <div className="drawer-section-title" style={{ marginTop: 12 }}>{activeChatName} AI</div>
-              <AnimatedSidekick persona={enginePersona(activePersonality)} state={sidekickMotion} label={`${activeChatName} AI`} />
               <div className="drawer-cards-list">
                 {aiDrawerItems.map((item) => {
                   const isCurrent = activePanel === item.id;

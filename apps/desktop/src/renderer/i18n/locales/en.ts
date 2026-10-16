@@ -345,6 +345,7 @@ export const desktopEnOverrides = {
   'sidebar.companion.developer': 'Precise and technical. Prefers a concrete fix and the steps that get there.',
   'sidebar.companion.creative': 'Imaginative and open. Offers a few directions and takes one further.',
   'sidebar.companion.mentor': 'Patient and clear. Explains one step at a time and leaves room to ask.',
+  'sidebar.companion.active': 'Active Sidekick',
   'sidebar.drawer.aiTitle': 'Nova AI, Agents & Skills',
   'sidebar.drawer.flows': 'Flows',
   'sidebar.drawer.flowsTitle': 'Kanban, Tasks & Spaces',

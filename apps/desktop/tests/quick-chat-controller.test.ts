@@ -45,6 +45,18 @@ function setup() {
 describe('QuickChatController', () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it('forwards a quickchat companion and rejects a companion the standard chat would store', async () => {
+    const h = setup();
+    const companion = { personality: 'developer' as const, botName: ' Patch ' };
+    await h.controller.start(h.event, { ...request, companion });
+    expect(h.backendStart).toHaveBeenCalledWith(expect.objectContaining({
+      companion: { personality: 'developer', botName: 'Patch' }
+    }));
+    expect(h.backendStart.mock.calls[0][0]).not.toHaveProperty('standardChatCompanion');
+    await expect(h.controller.start(h.event, { ...request, quickChatId: 'c'.repeat(32), companion: { personality: 'ghost', botName: 'Ghost' } }))
+      .rejects.toThrow('Invalid Quickchat request');
+  });
+
   it('binds a started stream and stamps only Main-validated identity/scope on events', async () => {
     const h = setup();
     const result = await h.controller.start(h.event, request);

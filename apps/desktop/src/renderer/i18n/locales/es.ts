@@ -344,6 +344,7 @@ export const desktopEsOverrides = {
   'sidebar.companion.developer': 'Precisa y técnica. Prefiere una solución concreta y los pasos para llegar.',
   'sidebar.companion.creative': 'Imaginativa y abierta. Propone varias direcciones y desarrolla una.',
   'sidebar.companion.mentor': 'Paciente y clara. Explica un paso cada vez y deja espacio para preguntar.',
+  'sidebar.companion.active': 'Sidekick activo',
   'sidebar.drawer.aiTitle': 'Nova IA, agentes y habilidades',
   'sidebar.drawer.flows': 'Flujos',
   'sidebar.drawer.flowsTitle': 'Kanban, tareas y espacios',

@@ -32,6 +32,41 @@ describe('conversation persona wiring', () => {
     const sidebar = source('components/SidekickSidebar.tsx');
     expect(sidebar).toContain('await companion.setSelection(personality, companionDefaultNames[personality])');
     expect(sidebar).not.toContain('writeStandardChatCompanion');
+    expect(sidebar).not.toContain('writeQuickChatCompanion');
+    expect(sidebar).not.toContain('lastbrowser.quickChatCompanion.v1');
+  });
+
+  it('writes a quickchat persona only to the quickchat key', () => {
+    const picker = source('components/CompanionPicker.tsx');
+    expect(picker).toContain("const QUICK_CHAT_COMPANION_KEY = 'lastbrowser.quickChatCompanion.v1';");
+    expect(picker).toContain('export function readQuickChatCompanion');
+    expect(picker).toContain('export function writeQuickChatCompanion');
+    expect(picker).toContain('export function useQuickChatCompanion');
+    expect(picker).toContain("target = 'standard'");
+    const save = picker.slice(picker.indexOf("if (target === 'quickchat')"));
+    expect(save.startsWith("if (target === 'quickchat') writeQuickChatCompanion(draft.personality, botNameToSave);")).toBe(true);
+    expect(save).toContain('else void companion.setSelection(draft.personality, botNameToSave);');
+    expect(picker).not.toContain('writeStandardChatCompanion(draft');
+    const split = source('components/CopilotSplitView.tsx');
+    expect(split).toContain('<CompanionSwitch target="quickchat" conversation={conversationCompanion} />');
+    expect(split).toContain('useQuickChatCompanion()');
+    expect(split).toContain('conversationCompanion ?? quickCompanion');
+    const app = source('App.tsx');
+    expect(app).toContain('const quickCompanion = readQuickChatCompanion();');
+    expect(app).toContain('companion: { personality: quickCompanion.personality, botName: quickCompanion.botName }');
+  });
+
+  it('names the active sidekick at the top of the AI drawer', () => {
+    const sidebar = source('components/SidekickSidebar.tsx');
+    const drawer = sidebar.slice(sidebar.indexOf('{/* AI Drawer Items */}'));
+    const sidekick = drawer.indexOf('className="sidebar-active-sidekick"');
+    expect(sidekick).toBeGreaterThan(-1);
+    expect(sidekick).toBeLessThan(drawer.indexOf("t('sidebar.drawer.recentSessions')"));
+    expect(sidekick).toBeLessThan(drawer.indexOf('className="drawer-cards-list"'));
+    expect(drawer).toContain("t('sidebar.companion.active')");
+    expect(drawer).toContain('<div className="sidebar-active-sidekick-name">{activeChatName}</div>');
+    expect(drawer).toContain('label={activeChatName}');
+    expect(drawer).not.toContain('{activeChatName} AI');
   });
 
   it('names the open conversation in the native header and the composer', () => {

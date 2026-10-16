@@ -14,6 +14,8 @@ export type QuickChatContext = Readonly<{
   selectedText?: string;
   pageText?: string;
 }>;
+const QUICK_CHAT_PERSONALITIES = ['nova', 'analytical', 'developer', 'creative', 'mentor'] as const;
+export type QuickChatCompanion = Readonly<{ personality: typeof QUICK_CHAT_PERSONALITIES[number]; botName: string }>;
 export type QuickChatStartRequest = Readonly<{
   quickChatId: string;
   browserProfileId: string;
@@ -24,6 +26,7 @@ export type QuickChatStartRequest = Readonly<{
   model?: string;
   modelProvider?: string | null;
   reasoningEffort?: string;
+  companion?: QuickChatCompanion;
 }>;
 export type QuickChatCancelRequest = Readonly<{
   quickChatId: string;
@@ -64,10 +67,21 @@ function boundedContext(value: unknown): QuickChatContext | undefined {
   if (total > MAX_CONTEXT) throw new Error('Quickchat page context is too large');
   return context;
 }
+function boundedCompanion(value: unknown): QuickChatCompanion | undefined {
+  if (value === undefined) return undefined;
+  const record = object(value);
+  if (!record || Object.keys(record).some(key => key !== 'personality' && key !== 'botName')) throw new Error('Invalid Quickchat request');
+  const personality = record.personality;
+  const botName = record.botName;
+  if (typeof personality !== 'string' || !(QUICK_CHAT_PERSONALITIES as readonly string[]).includes(personality)
+    || typeof botName !== 'string' || !botName.trim() || botName.length > 80 || /[\u0000-\u001f\u007f]/.test(botName))
+    throw new Error('Invalid Quickchat request');
+  return { personality: personality as QuickChatCompanion['personality'], botName: botName.trim() };
+}
 function validateStart(value: unknown): QuickChatStartRequest {
   const request = object(value);
   if (!request || Object.keys(request).some(key => ![
-    'quickChatId', 'browserProfileId', 'workspacePath', 'backendProfileName', 'prompt', 'context', 'model', 'modelProvider', 'reasoningEffort'
+    'quickChatId', 'browserProfileId', 'workspacePath', 'backendProfileName', 'prompt', 'context', 'model', 'modelProvider', 'reasoningEffort', 'companion'
   ].includes(key))) throw new Error('Invalid Quickchat request');
   if (typeof request.quickChatId !== 'string' || !ID.test(request.quickChatId)
     || typeof request.browserProfileId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(request.browserProfileId)
@@ -79,11 +93,13 @@ function validateStart(value: unknown): QuickChatStartRequest {
     || request.reasoningEffort !== undefined && (typeof request.reasoningEffort !== 'string'
       || !['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(request.reasoningEffort)))
     throw new Error('Invalid Quickchat request');
+  const companion = boundedCompanion(request.companion);
   return { quickChatId: request.quickChatId, browserProfileId: request.browserProfileId, workspacePath: request.workspacePath as string | null,
     ...(request.backendProfileName ? { backendProfileName: request.backendProfileName as string } : {}), prompt: request.prompt,
     ...(request.context === undefined ? {} : { context: boundedContext(request.context) }),
     ...(typeof request.model === 'string' ? { model: request.model } : {}),
     ...(typeof request.reasoningEffort === 'string' ? { reasoningEffort: request.reasoningEffort } : {}),
+    ...(companion ? { companion } : {}),
     ...(typeof request.modelProvider === 'string' || request.modelProvider === null ? { modelProvider: request.modelProvider as string | null } : {}) };
 }
 function sanitizeEventData(value: unknown, depth = 0): unknown {

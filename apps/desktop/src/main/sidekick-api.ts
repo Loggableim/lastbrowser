@@ -2745,6 +2745,7 @@ export type QuickChatBackendRequest = Readonly<{
   quickChatId: string; scope: NativeSpaceScope; profile: string; workspacePath: string | null;
   nativeBridgeNonce: string; prompt: string; context?: Readonly<Record<string, string>>;
   model?: string; modelProvider?: string | null; reasoningEffort?: string;
+  companion?: Readonly<{ personality: string; botName: string }>;
 }>;
 export type QuickChatBackendStreamRequest = Omit<QuickChatBackendRequest, 'prompt' | 'context' | 'model' | 'modelProvider' | 'reasoningEffort'> & { streamId: string };
 
@@ -2757,6 +2758,7 @@ export function startQuickChat(webuiUrl: string, request: QuickChatBackendReques
       nativeBridgeNonce: request.nativeBridgeNonce }),
     body: JSON.stringify({ quick_chat_id: request.quickChatId, space_scope: request.scope, profile: request.profile,
       workspace: request.workspacePath, prompt: request.prompt, context: request.context,
+      ...(request.companion ? { companion: { personality: request.companion.personality, botName: request.companion.botName } } : {}),
       ...(request.reasoningEffort ? { reasoning_effort: request.reasoningEffort } : {}),
       ...(request.model ? { model: request.model } : {}), ...(request.modelProvider ? { model_provider: request.modelProvider } : {}) })
   }, fetchImpl);

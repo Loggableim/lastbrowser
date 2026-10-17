@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from app.config import get_settings
+from app.config import ReasoningLevel, get_settings
 
 Tier = Literal["leicht", "mittel", "schwer"]
 QueueName = Literal["high", "standard", "low"]
@@ -26,6 +26,8 @@ class RouteDecision:
     queue: QueueName
     confidence: float
     model: str
+    reasoning: ReasoningLevel
+    think: bool | str
     reason: str
 
 
@@ -47,7 +49,6 @@ def classify_stub(features: Features) -> tuple[Tier, float]:
         return "leicht", 0.75
     if features.has_tools_hint or features.code_share > 0.25 or features.char_len > 4000:
         return "schwer", 0.7
-    # uncertain → mittel (Ami: under threshold → mittel)
     conf = 0.55 if features.char_len < 200 else 0.65
     if conf < threshold:
         return "mittel", conf
@@ -56,8 +57,8 @@ def classify_stub(features: Features) -> tuple[Tier, float]:
 
 def decide(prompt: str, opt_in: bool) -> RouteDecision:
     """
-    Opt-in → high queue for mittel/schwer.
-    Without opt-in: never escalate to schwer (Ami); only leicht/mittel, queue low/standard.
+    Opt-in → high queue; schwer (glm-5.3-flash, reasoning low) only with opt-in (Cid).
+    Without opt-in: never schwer — only leicht/mittel.
     """
     settings = get_settings()
     features = extract_features(prompt)
@@ -76,7 +77,12 @@ def decide(prompt: str, opt_in: bool) -> RouteDecision:
     else:
         queue = "standard"
 
-    model = settings.model_for(tier)
     return RouteDecision(
-        tier=tier, queue=queue, confidence=confidence, model=model, reason=reason
+        tier=tier,
+        queue=queue,
+        confidence=confidence,
+        model=settings.model_for(tier),
+        reasoning=settings.reasoning_for(tier),
+        think=settings.think_for(tier),
+        reason=reason,
     )

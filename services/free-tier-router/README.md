@@ -1,18 +1,22 @@
 # Free-Tier Router (M1) — `#320`
 
-Grundgerüst: FastAPI-Gateway, Redis-Queues (high/standard/low), Telemetrie, Ollama-Cloud-/LiteLLM-Anbindung.
+Grundgerüst: FastAPI-Gateway, Redis-Queues (high/standard/low), Telemetrie, Ollama-Cloud-Anbindung.
 
 **Kein Deploy.** Keine Kosten. API-Key nur per Env.
 
-## Modelle (Ollama Cloud, Cid)
+## Modelle (Ollama Cloud, Cid / PR #321)
 
-| Tier   | Modell |
-|--------|--------|
-| leicht | `nemotron-3-nano` (`MODEL_LIGHT`) |
-| mittel | `gpt-oss:120b` / Alt `glm-5.3-flash` (`MODEL_MID` / `MODEL_MID_ALT`) |
-| schwer | `deepseek-v4.1-flash` (`MODEL_HEAVY`) |
+| Tier | Modell | Reasoning | Ollama `think` | Wer |
+|------|--------|-----------|----------------|-----|
+| leicht | `nemotron-3-nano` | off | `false` | alle |
+| mittel | `gpt-oss:20b` | off | `false` | alle |
+| schwer | `glm-5.3-flash` | low | `"low"` | **nur Opt-in** |
 
-Tagesbudget: `DAILY_BUDGET_EUR` (Platzhalter-Betrag, setzt Cid). Key: `OLLAMA_CLOUD_API_KEY` (nie committen).
+Env: `MODEL_*`, `REASONING_*` (`off`\|`low`\|`high`\|`max`). Entfernt: `deepseek-v4.1-flash`, `gpt-oss:120b`.
+
+Thinking-API: [docs.ollama.com/capabilities/thinking](https://docs.ollama.com/capabilities/thinking), [glm-5.3-flash](https://ollama.com/library/glm-5.3-flash).
+
+Tagesbudget: `DAILY_BUDGET_EUR`. Key: `OLLAMA_CLOUD_API_KEY` (nie committen).
 
 ## Lokal
 
@@ -20,19 +24,13 @@ Tagesbudget: `DAILY_BUDGET_EUR` (Platzhalter-Betrag, setzt Cid). Key: `OLLAMA_CL
 cd services/free-tier-router
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # Key + Budget eintragen
+cp .env.example .env
 pytest -q
 uvicorn app.main:app --host 127.0.0.1 --port 8088
 ```
 
-Ohne erreichbares Redis → In-Memory-Queues. Live-Calls nur wenn Key gesetzt und `dry_run=False` (M1 default: Stub).
-
 ## Endpoints
 
-- `GET /health`
+- `GET /health` — inkl. Modell+Reasoning-Mapping
 - `GET /metrics`
-- `POST /v1/chat` (+ Header `X-Opt-In: true|false`)
-
-## Nicht in M1
-
-Klassifikator-Training (M3), Opt-in-UI/DSGVO (M4), Lasttest (M5), Rollout (M6).
+- `POST /v1/chat` (+ `X-Opt-In: true|false`)

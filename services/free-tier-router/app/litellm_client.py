@@ -3,6 +3,10 @@ Ollama Cloud backend client (M1 stub).
 
 No live API calls in default/test mode. API key only from env OLLAMA_CLOUD_API_KEY.
 Daily budget gate reads DAILY_BUDGET_EUR (Cid sets amount); M1 tracks spend in-memory only.
+
+Reasoning/think: per-tier config → Ollama `/api/chat` field `think`
+(false = off; "low"|"high"|"max" = effort). See https://docs.ollama.com/capabilities/thinking
+and https://ollama.com/library/glm-5.3-flash
 """
 from __future__ import annotations
 
@@ -45,7 +49,15 @@ class LiteLLMClient:
             self._budget = BudgetState(day_key=self._today(), spent_eur=0.0)
         self._budget.spent_eur += amount_eur
 
-    async def complete(self, *, model: str, prompt: str, tier: str) -> dict[str, Any]:
+    async def complete(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        tier: str,
+        think: bool | str = False,
+        reasoning: str = "off",
+    ) -> dict[str, Any]:
         if not self.budget_ok():
             return {
                 "ok": False,
@@ -61,24 +73,34 @@ class LiteLLMClient:
                 "backend": "ollama_cloud",
                 "model": model,
                 "tier": tier,
+                "reasoning": reasoning,
+                "think": think,
                 "base_url": self.settings.ollama_cloud_base_url,
-                "content": f"[stub] routed to {model} ({tier})",
+                "content": f"[stub] routed to {model} ({tier}, think={think!r})",
                 "prompt_chars": len(prompt),
                 "api_key_configured": bool(self.settings.ollama_cloud_api_key),
             }
 
-        # Live path reserved for later milestones; still no key logging.
         import httpx
 
         headers = {"Authorization": f"Bearer {self.settings.ollama_cloud_api_key}"}
-        payload = {
+        payload: dict[str, Any] = {
             "model": model,
             "messages": [{"role": "user", "content": prompt}],
             "stream": False,
+            "think": think,
         }
         url = self.settings.ollama_cloud_base_url.rstrip("/") + "/api/chat"
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(url, json=payload, headers=headers)
             resp.raise_for_status()
             data = resp.json()
-        return {"ok": True, "stub": False, "backend": "ollama_cloud", "model": model, "raw": data}
+        return {
+            "ok": True,
+            "stub": False,
+            "backend": "ollama_cloud",
+            "model": model,
+            "reasoning": reasoning,
+            "think": think,
+            "raw": data,
+        }

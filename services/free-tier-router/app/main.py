@@ -56,6 +56,8 @@ class ChatResponse(BaseModel):
     tier: str
     queue: str
     model: str
+    reasoning: str
+    think: bool | str
     confidence: float
     reason: str
     result: dict[str, Any]
@@ -102,11 +104,19 @@ async def chat(
             {
                 "tier": decision.tier,
                 "model": decision.model,
+                "reasoning": decision.reasoning,
+                "think": decision.think,
                 "opt_in": opt_in,
                 "prompt_chars": len(body.prompt),
             },
         )
-        result = await llm.complete(model=decision.model, prompt=body.prompt, tier=decision.tier)
+        result = await llm.complete(
+            model=decision.model,
+            prompt=body.prompt,
+            tier=decision.tier,
+            think=decision.think,
+            reasoning=decision.reasoning,
+        )
         status = "ok" if result.get("ok") else "error"
         if status != "ok":
             record_error(str(result.get("error", "unknown")))
@@ -116,6 +126,8 @@ async def chat(
             tier=decision.tier,
             queue=decision.queue,
             model=decision.model,
+            reasoning=decision.reasoning,
+            think=decision.think,
             confidence=decision.confidence,
             reason=decision.reason,
             result=result,

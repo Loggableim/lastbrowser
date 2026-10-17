@@ -1,0 +1,10 @@
+# LiteLLM / Ollama Cloud model mapping — configurable; Cid owns final names.
+backend: ollama_cloud
+models:
+  leicht: "${MODEL_LIGHT:-nemotron-3-nano}"
+  mittel: "${MODEL_MID:-gpt-oss:120b}"
+  mittel_alt: "${MODEL_MID_ALT:-glm-5.3-flash}"
+  schwer: "${MODEL_HEAVY:-deepseek-v4.1-flash}"
+budget:
+  daily_eur_env: DAILY_BUDGET_EUR
+  note: "Amount is a placeholder; Cid sets the real daily limit via env."

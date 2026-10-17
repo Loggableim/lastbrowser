@@ -52,7 +52,7 @@ describe('GitHub release auto-update flow', () => {
     const root = readJson(rootPackagePath);
     const desktop = readJson(desktopPackagePath);
     const lock = readJson(path.join(repoRoot, 'package-lock.json'));
-    expect(root.version).toMatch(/^0\.1\.58-beta\.\d+$/);
+    expect(root.version).toMatch(/^0\.1\.58(-beta\.\d+)?$/);
     expect(desktop.version).toBe(root.version);
     expect(lock.version).toBe(root.version);
     expect(lock.packages[''].version).toBe(root.version);

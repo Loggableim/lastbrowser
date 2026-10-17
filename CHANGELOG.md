@@ -5,6 +5,16 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.58] - 2026-10-17
+
+### Features and fixes
+- Add the Beta update subscription with a notice about unsigned daily builds (#283).
+- Add the release pipeline for the daily beta and stable channels (#282).
+- Complete the GPL-3.0 license follow-up (A-022, #175).
+- Fix the desktop build by resolving the hoisted React package in the Vite config.
+
+---
+
 ## [0.1.56] - 2026-10-12
 
 ### Features and fixes

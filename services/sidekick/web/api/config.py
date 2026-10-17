@@ -3048,6 +3048,65 @@ def _models_from_live_provider_ids(provider_id: str, live_ids: list[str]) -> lis
     return models
 
 
+# Providers whose catalog is presented as a paid tier plus a free tier in the
+# chat model picker. OpenCode Go is a flat-rate subscription catalog that also
+# carries limited-time free models.
+_OPENCODE_FREE_GROUP_PROVIDERS = frozenset({"opencode-go"})
+_OPENCODE_FREE_MODEL_SUFFIX = "-free"
+
+
+def _is_opencode_free_model(model_id: object) -> bool:
+    """Return True for free-tier entries in the OpenCode catalog.
+
+    The OpenCode gateway flags limited-time/free models with a ``-free`` suffix
+    on the catalog model id (for example ``beam-free`` or
+    ``longcat-2.5-preview-free``). Deriving the tier from the catalog keeps the
+    Go / Go Free split current without a hardcoded model list.
+    """
+    return str(model_id or "").strip().lower().endswith(_OPENCODE_FREE_MODEL_SUFFIX)
+
+
+def _split_opencode_free_groups(groups: list[dict]) -> list[dict]:
+    """Split OpenCode provider groups into a paid and a free picker group.
+
+    The live catalog is the source of truth: paid models stay in the provider's
+    normal group, free models move to a sibling group labelled ``<Provider>
+    Free``. Both groups keep the original ``provider_id`` so a selection still
+    routes through the same provider (``@opencode-go:<model>``); the extra
+    ``id`` field only disambiguates the two optgroups in the renderer.
+
+    Groups for other providers, and OpenCode groups without free entries, are
+    returned unchanged.
+    """
+    expanded: list[dict] = []
+    for group in groups:
+        provider_id = str(group.get("provider_id") or "").strip().lower()
+        if provider_id not in _OPENCODE_FREE_GROUP_PROVIDERS:
+            expanded.append(group)
+            continue
+        models = [model for model in (group.get("models") or []) if isinstance(model, dict)]
+        paid = [model for model in models if not _is_opencode_free_model(model.get("id"))]
+        free = [model for model in models if _is_opencode_free_model(model.get("id"))]
+        if not free:
+            expanded.append(group)
+            continue
+        label = str(group.get("provider") or "").strip() or _PROVIDER_DISPLAY.get(
+            provider_id, provider_id.title()
+        )
+        if paid:
+            paid_group = dict(group)
+            paid_group["id"] = provider_id
+            paid_group["provider"] = label
+            paid_group["models"] = paid
+            expanded.append(paid_group)
+        free_group = dict(group)
+        free_group["id"] = f"{provider_id}-free"
+        free_group["provider"] = f"{label} Free"
+        free_group["models"] = free
+        expanded.append(free_group)
+    return expanded
+
+
 def _apply_provider_model_allowlist(raw_models: list[dict], provider_cfg: object) -> list[dict]:
     """Apply an explicit provider model selection while preserving saved IDs.
 
@@ -4468,6 +4527,11 @@ def get_available_models() -> dict:
                                 "models": [{"id": default_model, "label": label}],
                             }
                         )
+
+        # Split the OpenCode Go catalog into a paid "Go" group and a free
+        # "Go Free" group. Catalog-derived (id suffix), so new free models
+        # appear without a hardcoded list; other providers are untouched.
+        groups = _split_opencode_free_groups(groups)
 
         # Post-process: ensure model IDs are globally unique across groups.
         # When multiple providers expose the same bare model ID, prefix

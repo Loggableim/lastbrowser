@@ -364,7 +364,7 @@ export type ChatComposerProps = {
   mode: ComposerMode;
   model: string;
   /** Selectable models, grouped by provider. The current model remains visible when empty. */
-  modelOptions: Array<{ provider: string; providerId?: string; models: Array<{ id: string; label: string }> }>;
+  modelOptions: Array<{ id?: string; provider: string; providerId?: string; models: Array<{ id: string; label: string }> }>;
   modelProvider?: string;
   reasoningEffort: string;
   reasoningEfforts: string[];
@@ -558,9 +558,9 @@ export function ChatComposer({
                 </option>
               )}
               {modelOptions.map((group) => (
-                <optgroup key={group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
+                <optgroup key={group.id || group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                   {group.models.map((m) => (
-                    <option key={`${group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                    <option key={`${group.id || group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
                       {m.label}
                     </option>
                   ))}

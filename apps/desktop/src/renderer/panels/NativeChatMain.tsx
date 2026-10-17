@@ -128,7 +128,7 @@ export function NativeChatMain({
   // Models the user can pick for this conversation. The catalog comes from the
   // same /api/models payload the settings panel uses, so the composer offers
   // exactly the providers that are actually connected.
-  const [modelCatalog, setModelCatalog] = useState<Array<{ provider: string; providerId: string; models: Array<{ id: string; label: string; reasoningEfforts: string[] }> }>>([]);
+  const [modelCatalog, setModelCatalog] = useState<Array<{ id?: string; provider: string; providerId: string; models: Array<{ id: string; label: string; reasoningEfforts: string[] }> }>>([]);
   const [modelCatalogLoaded, setModelCatalogLoaded] = useState(false);
   const [modelCatalogError, setModelCatalogError] = useState(false);
   const [modelCatalogRetry, setModelCatalogRetry] = useState(0);
@@ -152,6 +152,7 @@ export function NativeChatMain({
             const provider = String(record.provider || record.provider_id || 'Provider');
             const models = Array.isArray(record.models) ? record.models : [];
             return {
+              id: String(record.id || record.provider_id || record.provider || ''),
               provider,
               providerId: String(record.provider_id || record.provider || ''),
               models: models

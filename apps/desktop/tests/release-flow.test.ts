@@ -23,7 +23,8 @@ describe('GitHub release auto-update flow', () => {
     // action-gh-release. electron-builder must not publish unsigned artifacts.
     expect(pkg.scripts['package:win:publish']).toContain('--publish never');
     expect(pkg.build.afterSign).toBe('scripts/evs-sign.cjs');
-    expect(pkg.build.win.verifyUpdateCodeSignature).toBe(true);
+    // Unsigned tagesbeta installers; Authenticode verification stays in release.yml for stable tags.
+    expect(pkg.build.win.verifyUpdateCodeSignature).toBe(false);
     expect(pkg.build.nsis.oneClick).toBe(false);
     expect(pkg.build.publish).toEqual([
       {
@@ -51,7 +52,7 @@ describe('GitHub release auto-update flow', () => {
     const root = readJson(rootPackagePath);
     const desktop = readJson(desktopPackagePath);
     const lock = readJson(path.join(repoRoot, 'package-lock.json'));
-    expect(root.version).toMatch(/^0\.1\.57-beta\.\d+$/);
+    expect(root.version).toMatch(/^0\.1\.58-beta\.\d+$/);
     expect(desktop.version).toBe(root.version);
     expect(lock.version).toBe(root.version);
     expect(lock.packages[''].version).toBe(root.version);

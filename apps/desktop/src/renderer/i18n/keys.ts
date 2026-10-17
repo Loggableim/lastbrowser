@@ -679,6 +679,7 @@ export const desktopTranslationKeys = [
   'settings.panels.notifications.updateChannelDescription',
   'settings.panels.notifications.updateChannelStable',
   'settings.panels.notifications.updateChannelPreview',
+  'settings.panels.notifications.updateChannelBetaUnsigned',
   'settings.panels.providers.title',
   'settings.panels.providers.description',
   'settings.panels.providers.loading',

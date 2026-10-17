@@ -1,0 +1,102 @@
+name: Tagesbeta (unsigned)
+
+on:
+  workflow_dispatch:
+    inputs:
+      package_version:
+        description: 'Must match apps/desktop/package.json (e.g. 0.1.58-beta.1)'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-beta:
+    name: Windows unsigned beta installers
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify package version
+        shell: pwsh
+        env:
+          EXPECTED: ${{ inputs.package_version }}
+        run: |
+          $package = Get-Content 'apps/desktop/package.json' -Raw | ConvertFrom-Json
+          if ($package.version -ne $env:EXPECTED) {
+            throw "apps/desktop/package.json version '$($package.version)' does not match input '$env:EXPECTED'."
+          }
+          $resolved = node scripts/resolve-release-channel.mjs "v$env:EXPECTED" $env:EXPECTED | ConvertFrom-Json
+          if ($resolved.channel -ne 'beta') { throw "Tagesbeta expects a -beta.N version; got channel $($resolved.channel)." }
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Python for installer assets
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm run test:run
+
+      - name: Verify Microsoft Store release readiness
+        run: npm run verify:store
+
+      - name: Prepare Python runtime
+        run: npm --workspace apps/desktop run prepare:python
+
+      - name: Build desktop application
+        run: npm --workspace apps/desktop run build
+
+      - name: Package unsigned Windows installers
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          WIN_CSC_LINK: ''
+          WIN_CSC_KEY_PASSWORD: ''
+        run: |
+          npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never --config.win.signAndEditExecutable=false --config.win.verifyUpdateCodeSignature=false
+
+      - name: Collect beta updater metadata
+        shell: pwsh
+        env:
+          VERSION: ${{ inputs.package_version }}
+        run: |
+          $meta = Get-ChildItem -Path apps/desktop/release -Filter 'beta.yml' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $meta) {
+            $meta = Get-ChildItem -Path apps/desktop/release -Filter '*.yml' | Where-Object { $_.Name -match 'beta' } | Select-Object -First 1
+          }
+          if (-not $meta) { throw 'Expected beta.yml (or beta channel yml) in apps/desktop/release after build.' }
+          New-Item -ItemType Directory -Force -Path release-assets | Out-Null
+          Copy-Item $meta.FullName release-assets/beta.yml
+          Copy-Item apps/desktop/release/Lastbrowser-$env:VERSION-x64-setup.exe release-assets/ -ErrorAction Stop
+          Copy-Item apps/desktop/release/Lastbrowser-$env:VERSION-x64-portable.exe release-assets/ -ErrorAction Stop
+          Get-ChildItem release-assets
+
+      - name: Upload unsigned beta release (draft)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.package_version }}
+          name: LastBrowser ${{ inputs.package_version }} (unsigned beta)
+          body: |
+            Unsigned Tagesbeta build for the Beta update channel.
+            Do not treat as a signed Stable release.
+            Closes preparation for board issues #175, #282, #283 (draft).
+          draft: true
+          prerelease: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

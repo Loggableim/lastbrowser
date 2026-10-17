@@ -75,5 +75,11 @@ npm --workspace apps/desktop run start:dev
 
 ## Licensing and attribution
 
-Components have their own license and provenance records. Preserve those records when using or redistributing the source. Review the [Sidekick license](services/sidekick/LICENSE), [xterm provenance](apps/desktop/src/renderer/vendor/xterm/PROVENANCE.md), and other component notices. This README makes no claim about ownership or relicensing of third-party components.
+Eligible original LastBrowser material in this repository is offered under **GPL-3.0-only** where [LICENSE-SCOPE.md](LICENSE-SCOPE.md) applies. The root [LICENSE](LICENSE) is the unmodified GPL-3.0 text; it does not relicense the whole monorepo.
+
+- [NOTICE](NOTICE) and [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) — A-022 draft inventory and distribution notices (work in progress).
+- [Sidekick license](services/sidekick/LICENSE), [xterm provenance](apps/desktop/src/renderer/vendor/xterm/PROVENANCE.md), and other in-tree component notices.
+- Public product and privacy copy: [lastbrowser.com](https://lastbrowser.com/) (separate site repo).
+
+Preserve upstream license files when redistributing. This README does not grant rights beyond the applicable component licenses.
 

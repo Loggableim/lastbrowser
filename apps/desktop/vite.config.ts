@@ -1,10 +1,14 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { rendererBuildIdentity } from './scripts/renderer-build-identity.mjs';
 
 const desktopDir = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
+const reactDir = path.dirname(require.resolve('react/package.json'));
+const reactDomDir = path.dirname(require.resolve('react-dom/package.json'));
 
 export default defineConfig({
   root: desktopDir,
@@ -23,8 +27,8 @@ export default defineConfig({
     dedupe: ['react', 'react-dom'],
     alias: {
       '@': path.resolve(desktopDir, 'src'),
-      react: path.resolve(desktopDir, 'node_modules/react'),
-      'react-dom': path.resolve(desktopDir, 'node_modules/react-dom')
+      react: reactDir,
+      'react-dom': reactDomDir
     }
   },
   server: {

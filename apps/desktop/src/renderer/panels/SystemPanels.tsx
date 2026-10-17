@@ -4546,6 +4546,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         <option value="beta">{t('settings.panels.notifications.updateChannelPreview')}</option>
                       </select>
                     </SettingsField>
+                    {updateChannel === 'beta' && (
+                      <p className="settings-hint" role="alert">
+                        {t('settings.panels.notifications.updateChannelBetaUnsigned')}
+                      </p>
+                    )}
                   </div>
                 </SettingsCard>
                 {/* === Accessibility Card === */}

@@ -103,6 +103,11 @@ const rows: Partial<Record<DesktopTranslationKey, readonly [string, string, stri
   'settings.panels.notifications.updateChannelDescription': ['Stable receives verified stable releases. Beta offers prereleases starting with 0.1.57.', 'O canal Stable recebe versões estáveis verificadas. O Beta oferece versões preliminares a partir da 0.1.57.', 'Стабильный канал получает проверенные стабильные версии. Бета предлагает предварительные версии, начиная с 0.1.57.'],
   'settings.panels.notifications.updateChannelStable': ['Stable', 'Estável', 'Стабильный'],
   'settings.panels.notifications.updateChannelPreview': ['Beta', 'Beta', 'Бета'],
+  'settings.panels.notifications.updateChannelBetaUnsigned': [
+    'Beta updates may ship unsigned builds. Windows may warn before install. Stable stays signed.',
+    'Atualizações Beta podem trazer builds não assinados. O Windows pode avisar antes da instalação. Stable permanece assinado.',
+    'Обновления Beta могут поставляться без подписи. Windows может предупредить перед установкой. Stable остаётся подписанным.'
+  ],
   'settings.panels.providers.title': ['Connected providers', 'Provedores conectados', 'Подключённые провайдеры'],
   'settings.panels.providers.description': ['Choose which providers Sidekick can use and how to sign in.', 'Escolha quais provedores o Sidekick pode usar e como entrar.', 'Выберите провайдеры для Sidekick и способ входа.'],
   'settings.panels.providers.loading': ['Loading providers…', 'Carregando provedores…', 'Загрузка провайдеров…'],

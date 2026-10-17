@@ -1,9 +1,10 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.57-demo.4",
+  "version": "0.1.58-beta.1",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
+  "license": "GPL-3.0-only",
   "author": "LastBrowser",
   "main": "dist/main/boot.js",
   "scripts": {

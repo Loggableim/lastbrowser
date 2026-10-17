@@ -1,0 +1,13 @@
+LastBrowser — distribution notices (A-022 work in progress)
+
+Read LICENSE-SCOPE.md before treating the root LICENSE as applying to any file.
+Eligible original LastBrowser material is licensed under GPL-3.0-only only to
+the extent described there; the repository is not relicensed as a whole.
+
+Third-party components keep their own license terms. See THIRD-PARTY-LICENSES.md,
+services/sidekick/LICENSE, and component-specific notices in the tree.
+
+Public product and privacy pages: https://lastbrowser.com/
+
+This NOTICE is not a complete third-party inventory and is not approved for
+standalone redistribution until A-022 sign-off is complete.

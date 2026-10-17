@@ -1,6 +1,6 @@
 {
   "name": "lastbrowser",
-  "version": "0.1.57-demo.4",
+  "version": "0.1.58-beta.1",
   "private": true,
   "description": "Lastbrowser desktop browser shell with Sidekick integration.",
   "license": "GPL-3.0-only",

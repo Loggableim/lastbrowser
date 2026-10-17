@@ -111,6 +111,22 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "models": list(_PROVIDER_MODELS.get("openai", [])),
         "category": "easy_start",
     },
+    "opencode": {
+        # Keyless free route (#170): the official OpenCode server/CLI answers
+        # zero-cost ``opencode/…-free`` models, with keyless OpenRouter free as
+        # the fallback. No user API key is read or written.
+        "label": "OpenCode Free",
+        "env_var": "",
+        "default_model": "deepseek-v4.1-flash-free",
+        "requires_base_url": False,
+        "key_optional": True,
+        "models": [
+            {"id": "deepseek-v4.1-flash-free", "label": "DeepSeek V4.1 Flash (free)"},
+            {"id": "space-bunny-free", "label": "Space Bunny (free)"},
+            {"id": "glm-5.3-flash-free", "label": "GLM 5.3 Flash (free)"},
+        ],
+        "category": "easy_start",
+    },
     "alibaba": {
         "label": "Alibaba Cloud (DashScope)",
         "env_var": "DASHSCOPE_API_KEY",

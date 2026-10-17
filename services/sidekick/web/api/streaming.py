@@ -2893,6 +2893,32 @@ def _run_agent_streaming(
             put('cancel', {'message': 'Cancelled before start'})
             return
 
+        # Keyless free chat. A fresh profile with no user API key answers through
+        # the official OpenCode server/CLI, or keyless OpenRouter free. Direct
+        # calls to the zen/v1 free ids answer FreeTierError 403 (#170), so this
+        # route never sends a user key and never selects a paid model.
+        from runtime.opencode_free_chat import deliver_free_turn, is_free_official_chat
+        if is_free_official_chat(provider_context, model):
+            _metering_stop.set()
+            try:
+                deliver_free_turn(
+                    session=s,
+                    text=msg_text,
+                    put=put,
+                    cancel_event=cancel_event,
+                    profile_home=None,
+                    session_key=str(session_id),
+                )
+            except InterruptedError:
+                _clear_orchestration_pending_state(s, session_id, stream_id)
+                put('cancel', {'message': 'Cancelled', 'session_id': session_id})
+            except Exception as exc:
+                logger.warning("Free official chat failed (%s)", type(exc).__name__)
+                _clear_orchestration_pending_state(s, session_id, stream_id)
+                put('error', {'error': str(exc)[:500], 'session_id': session_id})
+                put('stream_end', {'session_id': session_id, 'processExited': True})
+            return
+
         # Teamwork / Smart Track requests are rejected before any model work
         # when the user's persisted preference disables that orchestration.
         orchestration = _requested_orchestration_mode(model, mode)

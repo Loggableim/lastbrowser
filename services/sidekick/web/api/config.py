@@ -766,7 +766,8 @@ _FALLBACK_MODELS = [
     #   ✅ openai/gpt-oss-20b:free
     #   ✅ openai/gpt-oss-120b:free
     #   ✅ liquid/lfm-2.5-1.2b-instruct:free
-    #   ❌ openrouter/free → empty content (finish_reason=length)
+    #   ⚠️ openrouter/free → empty content on a plain paid-keyless call; the
+    #      free-chat route (#170) uses it keyless and accepts only free answers.
     #   ❌ google/gemma-4-31b-it:free → 404
     #   ❌ google/gemma-4-26b-a4b-it:free → 429
     #   ❌ google/lyria-3-* → 502
@@ -782,6 +783,9 @@ _FALLBACK_MODELS = [
     #   ❌ z-ai/glm-4.5-air:free → empty content
     #   ❌ arcee-ai/trinity → 404
     # These entries also protect the picker when the live OpenRouter fetch is unavailable.
+    # ``openrouter/free`` is the keyless free router (#170): a fresh profile with no
+    # user API key can chat through it, and the free-chat route only accepts free answers.
+    {"provider": "OpenRouter", "id": "openrouter/free",                          "label": "OpenRouter Free (no key)"},
     {"provider": "OpenRouter", "id": "openrouter/owl-alpha",                        "label": "Owl Alpha (free)"},
     {"provider": "OpenRouter", "id": "moonshotai/kimi-k2.6:free",                   "label": "Kimi K2.6 (free)"},
     {"provider": "OpenRouter", "id": "nvidia/nemotron-3-super-120b-a12b:free",      "label": "Nemotron 3 Super (free)"},
@@ -808,6 +812,7 @@ _PROVIDER_DISPLAY = {
     "ollama": "Ollama",
     "ollama-cloud": "Ollama Cloud",
     "opencode-go": "OpenCode Go",
+    "opencode": "OpenCode (free, no key)",
     "lmstudio": "LM Studio",
     "morph": "Morph",
 }
@@ -844,7 +849,9 @@ _PROVIDER_ALIASES = {
     "deep-seek": "deepseek",
     "minimax-china": "minimax-cn",
     "minimax_cn": "minimax-cn",
-    "opencode": "opencode-zen",
+    # ``opencode`` is the keyless free provider (official server/CLI). Only the
+    # shorthand ``zen`` maps to OpenCode Zen, whose zen/v1 endpoint answers
+    # FreeTierError 403 for free ids (#170).
     "grok": "xai",
     "x-ai": "xai",
     "x.ai": "xai",
@@ -3268,6 +3275,21 @@ def _openai_api_key_provider_ids(env_values: dict) -> set[str]:
     return set()
 
 
+def _with_free_opencode_catalog(payload: dict) -> dict:
+    """Expose the keyless OpenCode free group when the official client exists.
+
+    Best-effort: a missing free client or import must never break the catalog
+    (#170 — free models are reachable without a user API key).
+    """
+    try:
+        from runtime.opencode_free_chat import attach_free_opencode_catalog
+
+        return attach_free_opencode_catalog(payload)
+    except Exception:
+        logger.debug("Could not attach the keyless free catalog", exc_info=True)
+        return payload
+
+
 def get_available_models() -> dict:
     """
     Return available models grouped by provider.
@@ -4052,7 +4074,6 @@ def get_available_models() -> dict:
                             # finish_reason=length (0 tokens). Excluding them from the
                             # picker to avoid user frustration. Re-test monthly.
                             _BROKEN_OR_FREE: set[str] = {
-                                "openrouter/free",
                                 "google/gemma-4-31b-it:free",
                                 "google/gemma-4-26b-a4b-it:free",
                                 "google/lyria-3-pro-preview",
@@ -4619,7 +4640,7 @@ def get_available_models() -> dict:
             cached = _get_fresh_memory_models_cache(time.monotonic())
             if cached is not None:
                 _annotate_model_reasoning_efforts(cached.get("groups"))
-                return cached
+                return _with_free_opencode_catalog(copy.deepcopy(cached))
 
         # Reload config if changed
         if _cfg_changed:
@@ -4634,7 +4655,7 @@ def get_available_models() -> dict:
         cached = _get_fresh_memory_models_cache(now)
         if cached is not None:
             _annotate_model_reasoning_efforts(cached.get("groups"))
-            return cached
+            return _with_free_opencode_catalog(copy.deepcopy(cached))
 
         # Cold path: disk cache hit — use it (fast, no lock contention)
         if disk_groups is not None:
@@ -4643,7 +4664,7 @@ def get_available_models() -> dict:
             _available_models_cache_ts = now
             _available_models_cache_source_fingerprint = _models_cache_source_fingerprint()
             _save_models_cache_to_disk(disk_groups)
-            return copy.deepcopy(disk_groups)
+            return _with_free_opencode_catalog(copy.deepcopy(disk_groups))
 
         # Cold path: full rebuild — only one thread reaches here at a time
         with _cache_build_cv:
@@ -4663,7 +4684,7 @@ def get_available_models() -> dict:
             _cache_build_in_progress = False
             _cache_build_cv.notify_all()
         _save_models_cache_to_disk(result)
-        return copy.deepcopy(result)
+        return _with_free_opencode_catalog(copy.deepcopy(result))
 
 
 # ── Static file path ─────────────────────────────────────────────────────────

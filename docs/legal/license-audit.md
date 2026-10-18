@@ -57,9 +57,9 @@ Ein NOTICE-Entwurf erfüllt diese Prüfung nicht. Bis Cid die Kette belegt, blei
 
 ## 4. Detailliertes Abhängigkeiten-Inventar & GPL-3.0-Kompatibilität
 
-### 4.1 Desktop-Frontend & Shell (406 npm-Pakete aus package-lock.json)
+### 4.1 Desktop-Frontend & Shell (486 npm-Lockfile-Einträge)
 
-Maßgeblich ist `docs/legal/inventory/dependency-licenses.md`, erzeugt mit `node scripts/legal-inventory.mjs` am 2026-10-13T05:27:09.614Z. Lockfile-Lizenzen: MIT 332, ISC 28, MPL-2.0 12, Apache-2.0 9, BSD-2-Clause 7, BlueOak-1.0.0 6, BSD-3-Clause 6, dazu je ein Paket (MIT OR CC0-1.0), (WTFPL OR MIT), CC-BY-4.0, Python-2.0, WTFPL und WTFPL OR ISC. Kein Paket ohne Lizenzfeld. Das ist eine Zählung, kein Kompatibilitätsgutachten.
+Maßgeblich ist das A-022-Inventar `docs/legal/inventory/dependency-licenses.md`, erzeugt mit `node scripts/legal-inventory.mjs` am 2026-10-18. Es listet jeden der 486 Einträge einzeln mit Version, Lizenz, Art (direkt/transitiv) und Quelle; 19 davon sind direkt. Lockfile-Lizenzen: MIT 391, ISC 47, MPL-2.0 12, Apache-2.0 9, BlueOak-1.0.0 8, BSD-2-Clause 7, BSD-3-Clause 6, dazu je ein Paket (MIT OR CC0-1.0), (WTFPL OR MIT), CC-BY-4.0, Python-2.0, WTFPL und WTFPL OR ISC. Kein Paket ohne Lizenzfeld. Das ist eine Zählung, kein Kompatibilitätsgutachten.
 
 ### 4.1a Frühere Handzählung (345 npm-Pakete)
 

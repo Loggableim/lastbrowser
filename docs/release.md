@@ -35,6 +35,10 @@ The release gate requires exactly one version-matched setup executable and one p
 - The workflow runs the Sidekick Python syntax check and full Python tests, desktop tests, and Store preflight before packaging. A local installer build does not establish that either Authenticode or VMP signing succeeded.
 - The `publish` config in `apps/desktop/package.json` points to `Loggableim/lastbrowser`.
 
+## Checksums and GPG Signature
+
+After the signed artifacts are final, generate a deterministic `SHA256SUMS` and a detached GPG signature (`SHA256SUMS.asc`) so downloads can be verified independently of GitHub. The private signing key and passphrase stay local with Cid; only the public `SHA256SUMS` and `SHA256SUMS.asc` are published. See `docs/release-checksums.md` for the reproducible procedure, commands, and exit codes.
+
 ## Manual Build
 
 `npm run release:win` builds the Windows artifacts locally without publishing them. Use a version tag and the GitHub Actions workflow for the supported signed release path.

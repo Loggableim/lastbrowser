@@ -1,4 +1,4 @@
-declare module '../../../../../docs/design/startup-animation/startup-animation.js' {
+declare module '*/startup-animation.js' {
   export const TIMING_DATA: Record<string, {
     durationMs: number;
     mainPeakMs: number;
@@ -13,8 +13,4 @@ declare module '../../../../../docs/design/startup-animation/startup-animation.j
     ready: () => void;
     destroy: () => void;
   };
-}
-
-declare module '../../../docs/design/startup-animation/startup-animation.js' {
-  export const I18N_TEXTS: Record<string, unknown>;
 }

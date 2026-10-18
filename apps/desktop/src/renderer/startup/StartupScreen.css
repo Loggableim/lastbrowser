@@ -169,51 +169,6 @@
   cursor: pointer;
 }
 
-.startup-screen__auth {
-  width: min(100%, 520px);
-  margin-top: 24px;
-  color: #ffdce1;
-  text-align: left;
-}
-
-.startup-screen__auth h1 {
-  margin: 0 0 8px;
-  font-size: 19px;
-}
-
-.startup-screen__auth > p {
-  margin: 0 0 16px;
-  color: #e3d3dc;
-}
-
-.startup-screen__auth form {
-  display: grid;
-  gap: 10px;
-}
-
-.startup-screen__auth input {
-  min-height: 42px;
-  padding: 0 12px;
-  border: 1px solid rgb(167 200 255 / 28%);
-  border-radius: 10px;
-  background: #0a1b31;
-  color: #fff;
-  font: inherit;
-}
-
-.startup-screen__auth button {
-  min-height: 42px;
-  padding: 0 18px;
-  border: 1px solid rgb(167 200 255 / 28%);
-  border-radius: 10px;
-  background: #213957;
-  color: #fff;
-  font: inherit;
-  cursor: pointer;
-}
-
-.startup-screen__auth button:disabled { opacity: 0.55; cursor: default; }
-
 .startup-background-status {
   position: fixed;
   z-index: 1200;
@@ -298,7 +253,6 @@
   .startup-screen { padding: 24px; }
   .startup-screen__brand { margin-bottom: 17px; }
   .startup-screen__phase { margin-top: 18px; }
-  .startup-screen__auth { margin-top: 18px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

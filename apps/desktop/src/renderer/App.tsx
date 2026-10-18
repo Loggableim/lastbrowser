@@ -208,6 +208,7 @@ import { canCallSidekickApi } from './runtime-readiness.js';
 import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
 import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
 import { StartupScreen } from './startup/StartupScreen.js';
+import { StartupPlaceholder } from './startup/StartupPlaceholder.js';
 import { StartupAnimationLayer } from './startup/StartupAnimationLayer.js';
 import { FirstLaunchCompletion } from './startup/FirstLaunchCompletion.js';
 import { chooseStartupSound, playStartupSound, readStartupPreferences, startupAnimations, useStartupPreferences, type StartupSound } from './startup/startup-preferences.js';
@@ -5703,6 +5704,17 @@ function AppContent(): JSX.Element {
     />
   ) : null;
   if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged) {
+    if (accessAuthRequired) {
+      return (
+        <StartupPlaceholder
+          locale={locale}
+          phase={startupPhase}
+          error={startupError}
+          onRetry={startupFailureStage === 'session' ? retryAccessAuthStatus : retryStartupChecks}
+          retryContent={accessAuthForm}
+        />
+      );
+    }
     const showStartupAnimation = accessAuthChecked && !accessAuthRequired && !startupFailureStage && !startupAnimDismissed;
     return (
       <>

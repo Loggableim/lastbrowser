@@ -39,12 +39,20 @@ export function revealBrowserWindows(windows: TrayWindowTarget[], preferred?: Tr
   target?.focus();
 }
 
-export function resolveTrayIconPath(resourcesDir?: string): string {
+export function resolveTrayIconPath(resourcesDir?: string, appPath?: string): string {
   const candidates: string[] = [];
   if (resourcesDir) {
     candidates.push(path.join(resourcesDir, 'icon.ico'));
     candidates.push(path.join(resourcesDir, 'apps', 'desktop', 'build', 'icon.ico'));
+    candidates.push(path.join(resourcesDir, 'dist', 'renderer', 'Lastbrowser.ico'));
     candidates.push(path.join(resourcesDir, 'dist', 'renderer', 'app-icon-16.png'));
+  }
+  // The packaged renderer lives inside app.asar, so the icon is reachable via
+  // app.getAppPath() even though it is not next to resourcesDir on disk.
+  const resolvedAppPath = appPath ?? (typeof app?.getAppPath === 'function' ? app.getAppPath() : undefined);
+  if (resolvedAppPath) {
+    candidates.push(path.join(resolvedAppPath, 'dist', 'renderer', 'Lastbrowser.ico'));
+    candidates.push(path.join(resolvedAppPath, 'dist', 'renderer', 'app-icon-16.png'));
   }
   candidates.push(path.join(process.cwd(), 'apps', 'desktop', 'build', 'icon.ico'));
   candidates.push(path.join(process.cwd(), 'build', 'icon.ico'));

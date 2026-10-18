@@ -6,6 +6,7 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     status: (workspace: string) => ipcRenderer.invoke('lastbrowser:localAi:status', workspace),
     scan: () => ipcRenderer.invoke('lastbrowser:localAi:scan'),
     download: (id: string) => ipcRenderer.invoke('lastbrowser:localAi:download', id),
+    installRuntime: (backend: string) => ipcRenderer.invoke('lastbrowser:localAi:installRuntime', backend),
     cancel: () => ipcRenderer.invoke('lastbrowser:localAi:cancel'),
     start: (id: string, backend: string) => ipcRenderer.invoke('lastbrowser:localAi:start', id, backend),
     stop: () => ipcRenderer.invoke('lastbrowser:localAi:stop'),

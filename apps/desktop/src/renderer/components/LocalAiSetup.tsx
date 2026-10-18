@@ -41,7 +41,10 @@ export function LocalAiSetup({ workspace, onActivated }: { workspace: string; on
       {state.hardware.gpus.map((gpu) => <p key={gpu.name}>{gpu.name} · VRAM {gpu.vramBytes === null ? label('nicht verlässlich ermittelt', 'not reliably detected') : size(gpu.vramBytes)}</p>)}
       {state.hardware.warnings.map((warning) => <p key={warning}>{warning}</p>)}
     </div>}
-    {!state?.runtimeAvailable && <p role="status">{label('Windows-x64-Runtime nicht verfügbar.', 'Windows x64 runtime unavailable.')}</p>}
+    {state && !state.runtimeBackends.includes(backend) && <div>
+      <p role="status">{state.runtimeBackends.length ? label(`Runtime für ${backend} nicht installiert.`, `${backend} runtime is not installed.`) : label('Windows-x64-Runtime nicht verfügbar.', 'Windows x64 runtime unavailable.')}</p>
+      <button type="button" disabled={busy} onClick={() => void run(() => window.lastbrowser.localAi.installRuntime(backend))}>{label('Lokale Runtime herunterladen', 'Download local runtime')}</button>
+    </div>}
     {state?.scope && <button type="button" disabled={busy} onClick={() => void run(() => window.lastbrowser.localAi.clearSpace(workspace))}>{label('Lokale KI in diesem Space deaktivieren', 'Disable local AI in this Space')}</button>}
     <label>{label('Rechenmodus', 'Compute mode')} <select value={backend} disabled={busy} onChange={(e) => setBackend(e.target.value as 'cpu' | 'vulkan')}><option value="cpu">CPU</option><option value="vulkan">GPU (Vulkan, {label('Test erforderlich', 'test required')})</option></select></label>
     <div className="local-ai-models">{state?.catalog.map((model) => <article key={model.id}>
@@ -70,7 +73,7 @@ export function LocalAiSetup({ workspace, onActivated }: { workspace: string; on
       <button type="button" disabled={busy} onClick={() => void run(() => window.lastbrowser.localAi.stop())}>{label('Runtime stoppen / RAM freigeben', 'Stop runtime / release RAM')}</button>
     </>}
     {saved && <p role="status">{label('Space-Konfiguration gespeichert.', 'Space configuration saved.')}</p>}
-    <p>{label('Downloads enthalten nur Modellgewichte. Die Runtime ist bereits enthalten. Antworten werden von KI erzeugt.', 'Downloads contain model weights only. The runtime is included. Responses are AI generated.')}</p>
+    <p>{label('Die lokale Runtime wird bei Bedarf einmalig heruntergeladen. Modellgewichte werden weiterhin separat geladen. Antworten werden von KI erzeugt.', 'The local runtime is downloaded once on demand. Model weights are still downloaded separately. Responses are AI generated.')}</p>
     <p>{label('Lokaler Agent: nur lesende Werkzeuge, höchstens sechs Schritte und 8192 Tokens Kontext. Bei langen Gesprächen einen neuen Chat beginnen.', 'Local agent: read-only tools, up to six steps and 8192 tokens of context. Start a new chat for long conversations.')}</p>
     <p>{label('Nach fünf Minuten ohne Chat wird die Runtime automatisch entladen.', 'The runtime unloads automatically after five minutes without a chat.')}</p>
     <button type="button" onClick={() => void window.lastbrowser.system.openExternal('https://lastbrowser.com/support')}>{label('Problem mit KI-Antwort melden', 'Report an AI response issue')}</button>

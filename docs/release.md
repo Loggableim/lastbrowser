@@ -38,3 +38,10 @@ The release gate requires exactly one version-matched setup executable and one p
 ## Manual Build
 
 `npm run release:win` builds the Windows artifacts locally without publishing them. Use a version tag and the GitHub Actions workflow for the supported signed release path.
+
+## Unsigned Beta / Tagesbeta and Stable artifacts
+
+Unsigned installers for the Beta and Stable channels (including the daily
+Tagesbeta) are built and uploaded by `.github/workflows/release-pipeline.yml`
+without secrets and without signing; Cid signs them locally before any release.
+See [release-pipeline.md](release-pipeline.md) for the channel and version rules.

@@ -52,6 +52,7 @@ import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isModelDisabled, setModelEnabled, useDisabledModels } from '../model-visibility.js';
+import { modelGroupLabel } from '../model-group-labels.js';
 import type { DoctorReport } from '../shell-state.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
 import {
@@ -2854,10 +2855,14 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
         {!defaultModel && <option value="">Server default</option>}
         {defaultModel && !hasCurrentModel && <option value={defaultModel}>{defaultModel}</option>}
         {modelGroups.map((group) => {
-          const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
+          const providerLabel = modelGroupLabel({
+            id: settingsText(group.id, ''),
+            providerId: settingsText(group.provider_id, ''),
+            provider: settingsText(group.provider, '')
+          }, t) || settingsText(group.provider || group.provider_id || 'Provider');
           const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
           return (
-            <optgroup key={`${providerLabel}-${settingsText(group.provider_id, providerLabel)}`} label={providerLabel}>
+            <optgroup key={`${settingsText(group.id || group.provider_id, providerLabel)}-${settingsText(group.provider_id, providerLabel)}`} label={providerLabel}>
               {models.map((model) => (
                 <option key={settingsText(model.id || model.name || model.label)} value={settingsText(model.id || model.name || model.label)}>
                   {settingsText(model.label || model.name || model.id)}
@@ -2880,28 +2885,35 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
       return <></>;
     }
     return (
-      <div className="settings-field-grid">
-        {modelGroups.flatMap((group, groupIndex) => {
-          const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
-          const providerId = settingsText(group.provider_id || group.provider, '');
-          const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
-          return models.map((model, modelIndex) => {
-            const modelId = settingsText(model.id || model.name || model.label, '');
-            if (!modelId) return null;
-            return (
-              <SettingsToggle
-                key={`${providerId}:${modelId}:${groupIndex}-${modelIndex}`}
-                label={settingsText(model.label || model.name || model.id, modelId)}
-                description={providerLabel}
-                checked={!isModelDisabled(disabledModels, providerId, modelId)}
-                onChange={(value) => {
-                  setModelEnabled(window.localStorage, providerId, modelId, value);
-                }}
-              />
-            );
-          });
-        })}
-      </div>
+      <>
+        <div className="settings-field-grid">
+          {modelGroups.flatMap((group, groupIndex) => {
+            const providerLabel = modelGroupLabel({
+              id: settingsText(group.id, ''),
+              providerId: settingsText(group.provider_id, ''),
+              provider: settingsText(group.provider, '')
+            }, t) || settingsText(group.provider_id || group.provider || 'Provider');
+            const providerId = settingsText(group.provider_id || group.provider, '');
+            const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
+            return models.map((model, modelIndex) => {
+              const modelId = settingsText(model.id || model.name || model.label, '');
+              if (!modelId) return null;
+              return (
+                <SettingsToggle
+                  key={`${providerId}:${modelId}:${groupIndex}-${modelIndex}`}
+                  label={settingsText(model.label || model.name || model.id, modelId)}
+                  description={providerLabel}
+                  checked={!isModelDisabled(disabledModels, providerId, modelId)}
+                  onChange={(value) => {
+                    setModelEnabled(window.localStorage, providerId, modelId, value);
+                  }}
+                />
+              );
+            });
+          })}
+        </div>
+        <p className="settings-hint">{t('settings.panels.providers.modelVisibilityHint')}</p>
+      </>
     );
   }
 
@@ -3043,10 +3055,14 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
                       >
                         <option value="">{t('settings.panels.conversation.none')}</option>
                         {modelGroups.map((group) => {
-                          const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
+                          const providerLabel = modelGroupLabel({
+                            id: settingsText(group.id, ''),
+                            providerId: settingsText(group.provider_id, ''),
+                            provider: settingsText(group.provider, '')
+                          }, t) || settingsText(group.provider || group.provider_id || 'Provider');
                           const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
                           return (
-                            <optgroup key={`fb-${providerLabel}`} label={providerLabel}>
+                            <optgroup key={`fb-${settingsText(group.id || group.provider_id, providerLabel)}`} label={providerLabel}>
                               {models.map((model) => {
                                 const id = settingsText(model.id || model.name || model.label);
                                 return <option key={id} value={id}>{settingsText(model.label || model.name || model.id)}</option>;

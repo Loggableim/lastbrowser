@@ -46,6 +46,7 @@ import { useDesktopI18n } from '../i18n.js';
 import { isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { isModelDisabled, useDisabledModels } from '../model-visibility.js';
+import { modelGroupLabel } from '../model-group-labels.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 
 export interface AvailableModelItem {
@@ -226,7 +227,7 @@ export function CopilotSplitView({
         const res = (await window.lastbrowser.sidekick.requestWebui({
           method: 'GET',
           path: '/api/models'
-        })) as { groups?: Array<{ provider_id?: string; provider?: string; account?: string; models?: Array<any> }> } | null;
+        })) as { groups?: Array<{ id?: string; provider_id?: string; provider?: string; account?: string; models?: Array<any> }> } | null;
         if (!alive) return;
         if (!res || !Array.isArray(res.groups)) {
           setModelList(AVAILABLE_MODELS);
@@ -247,7 +248,7 @@ export function CopilotSplitView({
           const gAccount = g.account;
 
           let category: 'gemini' | 'claude' | 'openai' | 'local' | 'other' = 'other';
-          let providerLabel = g.provider || pid;
+          let providerLabel = modelGroupLabel({ id: g.id, providerId: g.provider_id, provider: g.provider }, t) || pid;
           let badgeClass = 'other';
 
           if (pid.includes('antigravity') || pid.includes('gemini') || pid.includes('google')) {
@@ -329,7 +330,7 @@ export function CopilotSplitView({
     return () => {
       alive = false;
     };
-  }, [modelProvider, setSelectedModel, setSelectedModelProvider]);
+  }, [modelProvider, setSelectedModel, setSelectedModelProvider, t]);
 
   const visibleModelList = useMemo(() => modelList.filter((model) => {
     if (model.id === 'teamwork') return teamworkEnabled;
@@ -392,9 +393,9 @@ export function CopilotSplitView({
     setSelectedModelProvider(fallback.providerId || '');
     onSelectModel?.(fallback.id, fallback.providerId);
     if (modelDisabled) {
-      setVisibilityNotice(`"${activeModelId}" ist ausgeblendet – gewechselt zu "${fallback.label}".`);
+      setVisibilityNotice(t('chat.modelHiddenSwitched', { model: activeModelId, label: fallback.label }));
     }
-  }, [activeModelId, activeModelProvider, disabledModels, onSelectModel, setSelectedModel, setSelectedModelProvider, smartTrackEnabled, teamworkEnabled, visibleModelList]);
+  }, [activeModelId, activeModelProvider, disabledModels, onSelectModel, setSelectedModel, setSelectedModelProvider, smartTrackEnabled, teamworkEnabled, visibleModelList, t]);
 
   useEffect(() => {
     if (scrollRef.current) {

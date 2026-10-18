@@ -40,6 +40,7 @@ import type { NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
 import { filterVisibleModelGroups, firstEnabledCatalogModel, isModelDisabled, useDisabledModels } from '../model-visibility.js';
+import { modelGroupLabel } from '../model-group-labels.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type ComposerMode = 'action' | 'plan';
@@ -137,8 +138,9 @@ export function NativeChatMain({
   // shared through localStorage + a window event so both chat surfaces react.
   const disabledModels = useDisabledModels();
   const visibleModelCatalog = useMemo(
-    () => filterVisibleModelGroups(modelCatalog, disabledModels),
-    [modelCatalog, disabledModels]
+    () => filterVisibleModelGroups(modelCatalog, disabledModels)
+      .map((group) => ({ ...group, provider: modelGroupLabel(group, t) })),
+    [modelCatalog, disabledModels, t]
   );
   const modelProvider = spaceModelSelection?.provider
     || selectedModelProvider
@@ -208,7 +210,7 @@ export function NativeChatMain({
     if (!isModelDisabled(disabledModels, modelProvider, model)) return;
     const fallback = firstEnabledCatalogModel(modelCatalog, disabledModels);
     if (!fallback) {
-      setStatusMessage('All models are hidden. Enable a model in Settings to continue.');
+      setStatusMessage(t('chat.modelHiddenAll'));
       return;
     }
     if (activeSpacePath) {
@@ -219,8 +221,8 @@ export function NativeChatMain({
     void window.lastbrowser.sidekick.setDefaultModel({
       model: qualifyModelForProvider(fallback.id, fallback.providerId)
     }).catch(() => undefined);
-    setStatusMessage(`${model} is hidden — switched to ${fallback.label}`);
-  }, [modelCatalogLoaded, modelCatalog, disabledModels, model, modelProvider, activeSpacePath, setSelectedModel, setSelectedModelProvider]);
+    setStatusMessage(t('chat.modelHiddenSwitched', { model, label: fallback.label }));
+  }, [modelCatalogLoaded, modelCatalog, disabledModels, model, modelProvider, activeSpacePath, setSelectedModel, setSelectedModelProvider, t]);
 
   /** Switch the model for this conversation (persists as the new default). */
   const handleComposerModelChange = useCallback((selection: string) => {

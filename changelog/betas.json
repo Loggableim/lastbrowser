@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "1.0",
+  "channel": "beta",
+  "releases": [
+    {
+      "version": "0.1.57-demo.4",
+      "label": "Beta 0.1.57",
+      "date": "2026-10-16",
+      "build": "demo4-final",
+      "commit": "ae4a367982c164facc12713329a1a3369769a81b",
+      "signed": false,
+      "sinceStable": "0.1.56",
+      "changes": [
+        {
+          "kind": "feature",
+          "title": "F3-Modellwahl",
+          "description": "Der Demo.4-Build enthält die F3-Modellwahl."
+        }
+      ],
+      "notes": [
+        "Unsignierter Tagesbeta-Build.",
+        "Kein Stable-Tag; Basis bleibt 0.1.56."
+      ]
+    }
+  ]
+}

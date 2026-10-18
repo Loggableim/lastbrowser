@@ -10,6 +10,8 @@
     "test:run": "npm --workspace apps/desktop run test:run",
     "package:win": "npm --workspace apps/desktop run package:win",
     "release:win": "npm --workspace apps/desktop run package:win:publish",
+    "changelog:validate": "node scripts/beta-changelog.mjs",
+    "changelog:write": "node scripts/beta-changelog.mjs --write",
     "verify:store": "powershell -ExecutionPolicy Bypass -File scripts/verify-store-readiness.ps1"
   },
   "workspaces": [

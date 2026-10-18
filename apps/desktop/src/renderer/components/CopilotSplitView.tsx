@@ -45,6 +45,7 @@ import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
 import { isProviderModelSelected, parseProviderModelId } from '../provider-model-selection.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
+import { isModelDisabled, useDisabledModels } from '../model-visibility.js';
 import { ReasoningEffortPicker } from './ReasoningEffortPicker.js';
 
 export interface AvailableModelItem {
@@ -168,10 +169,12 @@ export function CopilotSplitView({
   const [workflowCategory, setWorkflowCategory] = useState<string>('all');
   const [workflowSearch, setWorkflowSearch] = useState<string>('');
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+  const [visibilityNotice, setVisibilityNotice] = useState<string | null>(null);
   const [copiedMsgIdx, setCopiedMsgIdx] = useState<number | null>(null);
   const [upvotedIndices, setUpvotedIndices] = useState<Set<number>>(new Set());
 
   const { selectedModel, selectedModelProvider, setSelectedModel, setSelectedModelProvider } = useChatStore();
+  const disabledModels = useDisabledModels();
   const selectedModelProviderRef = useRef(selectedModelProvider);
   selectedModelProviderRef.current = selectedModelProvider;
   const onSelectModelRef = useRef(onSelectModel);
@@ -331,8 +334,8 @@ export function CopilotSplitView({
   const visibleModelList = useMemo(() => modelList.filter((model) => {
     if (model.id === 'teamwork') return teamworkEnabled;
     if (model.id.startsWith('smart-track')) return smartTrackEnabled;
-    return true;
-  }), [modelList, smartTrackEnabled, teamworkEnabled]);
+    return !isModelDisabled(disabledModels, model.providerId, model.id);
+  }), [modelList, smartTrackEnabled, teamworkEnabled, disabledModels]);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const workflowDropdownRef = useRef<HTMLDivElement | null>(null);
@@ -381,13 +384,17 @@ export function CopilotSplitView({
   useEffect(() => {
     const orchestrationDisabled = (activeModelId === 'teamwork' && !teamworkEnabled)
       || (activeModelId.startsWith('smart-track') && !smartTrackEnabled);
-    if (!orchestrationDisabled) return;
+    const modelDisabled = isModelDisabled(disabledModels, activeModelProvider, activeModelId);
+    if (!orchestrationDisabled && !modelDisabled) return;
     const fallback = visibleModelList.find((model) => model.category !== 'teamwork');
     if (!fallback) return;
     setSelectedModel(fallback.id);
     setSelectedModelProvider(fallback.providerId || '');
     onSelectModel?.(fallback.id, fallback.providerId);
-  }, [activeModelId, onSelectModel, setSelectedModel, smartTrackEnabled, teamworkEnabled, visibleModelList]);
+    if (modelDisabled) {
+      setVisibilityNotice(`"${activeModelId}" ist ausgeblendet – gewechselt zu "${fallback.label}".`);
+    }
+  }, [activeModelId, activeModelProvider, disabledModels, onSelectModel, setSelectedModel, setSelectedModelProvider, smartTrackEnabled, teamworkEnabled, visibleModelList]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -924,6 +931,7 @@ export function CopilotSplitView({
 
       {/* Messages Stream */}
       {chatError && <p role="alert" className="copilot-text-p">{chatError}</p>}
+      {visibilityNotice && <p role="status" className="copilot-text-p">{visibilityNotice}</p>}
       <div className="copilot-messages-container" ref={scrollRef}>
         {messages.length === 0 ? (
           <div className="copilot-empty-state">

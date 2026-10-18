@@ -2346,6 +2346,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
   const updateCurrentVersion = settingsText(updatesState.data?.currentVersion, '');
   const updateAvailableVersion = settingsText(updatesState.data?.availableVersion, '');
   const updateMessage = settingsText(updatesState.data?.message, '');
+  const updateChannel = updatesState.data?.channel === 'beta' ? 'beta' : 'stable';
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
   const providerOptions = useMemo(() => cloudProviderOptions(onboardingStatus), [onboardingStatus]);
   const fallbackState = useApiState(() => window.lastbrowser.sidekick.getFallbackModel(), [ready], ready);
@@ -2553,6 +2554,16 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
       await window.lastbrowser.sidekick.lockAccessWindows();
     } catch (error) {
       showToast(`Sign out failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  async function setUpdateChannel(channel: 'stable' | 'beta'): Promise<void> {
+    try {
+      const result = await window.lastbrowser.updates.setChannel(channel);
+      if (result?.ok === false) showToast(result.error || t('settings.panels.system.updateChannelFailed'));
+      await updatesState.refresh();
+    } catch (error) {
+      showToast(`${t('settings.panels.system.updateChannelFailed')} ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
@@ -4351,6 +4362,13 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
                       onChange={(value) => updateDraftToggle('debug', value)}
                     />
                     <SettingsToggle
+                      label={t('settings.panels.system.updateChannelBeta')}
+                      description={t('settings.panels.system.updateChannelBetaDescription')}
+                      checked={updateChannel === 'beta'}
+                      disabled={updateState === 'disabled'}
+                      onChange={(value) => void setUpdateChannel(value ? 'beta' : 'stable')}
+                    />
+                    <SettingsToggle
                       label={t('settings.panels.system.authEnabled')}
                       description={authEnabled ? t('settings.panels.system.authActive') : t('settings.panels.system.authDisabled')}
                       checked={authEnabled}
@@ -4361,6 +4379,11 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
                   {passwordEnvLocked && (
                     <div className="settings-env-lock">
                     {t('settings.panels.system.environmentPasswordNotice')}
+                    </div>
+                  )}
+                  {updateChannel === 'beta' && (
+                    <div className="settings-env-lock" role="status">
+                      {t('settings.panels.system.updateChannelBetaUnsignedNotice')}
                     </div>
                   )}
                   <div className="settings-system-actions">
@@ -4382,6 +4405,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
                   )}
                   <div className="settings-system-status">
                     <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>
+                    <span className={`settings-badge ${updateChannel === 'beta' ? 'warning' : ''}`}>{t('settings.panels.system.updateChannel', { channel: t(updateChannel === 'beta' ? 'settings.panels.system.updateChannelBeta' : 'settings.panels.system.updateChannelStable') })}</span>
                     {updateCurrentVersion && <span className="settings-badge">{t('settings.panels.system.currentVersion', { version: updateCurrentVersion })}</span>}
                     {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
                     {updateState === 'downloading' && <span className="settings-badge">{t('browser.chrome.updateDownloading', { percent: updatesState.data?.percent ?? 0 })}</span>}

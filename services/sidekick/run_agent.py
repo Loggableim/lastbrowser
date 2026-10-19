@@ -1807,6 +1807,13 @@ class AIAgent:
             self._fallback_chain = [fallback_model]
         else:
             self._fallback_chain = []
+        # Models switched off in Settings must never be used by an automatic
+        # fallback. Drop them from the chain before it is activated.
+        try:
+            from runtime.model_visibility import filter_fallback_chain
+            self._fallback_chain = list(filter_fallback_chain(self._fallback_chain) or [])
+        except Exception:
+            pass
         self._fallback_index = 0
         self._fallback_activated = getattr(self, "_fallback_activated", False)
         # Legacy attribute kept for backward compat (tests, external callers)

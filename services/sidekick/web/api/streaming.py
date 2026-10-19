@@ -3589,6 +3589,12 @@ def _run_agent_streaming(
 
             # Fallback model from profile config (e.g. for rate-limit recovery)
             _fallback = _cfg.get('fallback_model') or _cfg.get('fallback_providers') or None
+            if _fallback:
+                try:
+                    from runtime.model_visibility import filter_fallback_chain
+                    _fallback = filter_fallback_chain(_fallback)
+                except Exception:
+                    pass
             _fallback_resolved = None
             if _fallback:
                 # Normalize: support both single dict (legacy) and list (chained fallback).

@@ -738,6 +738,11 @@ def _try_resolve_fallback_provider() -> dict | None:
             return None
         # Normalize to list
         fb_list = fb if isinstance(fb, list) else [fb]
+        try:
+            from runtime.model_visibility import filter_fallback_chain
+            fb_list = list(filter_fallback_chain(fb_list) or [])
+        except Exception:
+            pass
         for entry in fb_list:
             if not isinstance(entry, dict):
                 continue
@@ -2501,7 +2506,13 @@ class GatewayRunner:
                     cfg = _y.safe_load(_f) or {}
                 fb = cfg.get("fallback_providers") or cfg.get("fallback_model") or None
                 if fb:
-                    return fb
+                    try:
+                        from runtime.model_visibility import filter_fallback_chain
+                        fb = filter_fallback_chain(fb)
+                    except Exception:
+                        pass
+                    if fb:
+                        return fb
         except Exception:
             pass
         return None

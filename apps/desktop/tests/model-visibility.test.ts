@@ -10,6 +10,8 @@ import {
   loadDisabledModels,
   modelVisibilityKey,
   notifyModelVisibilityChanged,
+  pullDisabledModelsFromBackend,
+  pushDisabledModelsToBackend,
   saveDisabledModels,
   setModelEnabled
 } from '../src/renderer/model-visibility.js';
@@ -114,6 +116,52 @@ describe('model visibility storage (issue #172 F3)', () => {
     expect(firstEnabledCatalogModel(groups, new Set(['go:a', 'go:b']))).toEqual({ providerId: 'go-free', id: 'c', label: 'c' });
     expect(firstEnabledCatalogModel(groups, new Set(['go:a', 'go:b', 'go-free:c']))).toBeNull();
   });
+
+  it('covers every provider group, not only OpenCode Go and Go Free', () => {
+    const groups = [
+      { id: 'go', provider: 'OpenCode Go', providerId: 'opencode-go', models: [{ id: 'go-model' }] },
+      { id: 'go-free', provider: 'OpenCode Go Free', providerId: 'opencode-go-free', models: [{ id: 'free-model' }] },
+      { id: 'openrouter', provider: 'OpenRouter', providerId: 'openrouter', models: [{ id: 'router-model' }] },
+      { id: 'ollama', provider: 'Ollama', providerId: 'ollama', models: [{ id: 'local-model' }] }
+    ];
+    const filtered = filterVisibleModelGroups(groups, new Set(['openrouter:router-model']));
+
+    expect(filtered.map((group) => group.providerId)).toEqual(['opencode-go', 'opencode-go-free', 'ollama']);
+    expect(filtered.flatMap((group) => group.models.map((model) => model.id))).toEqual([
+      'go-model',
+      'free-model',
+      'local-model'
+    ]);
+  });
+
+  it('mirrors every provider switch to the backend with a sorted payload', async () => {
+    const calls: Array<{ method: string; path: string; body?: unknown }> = [];
+    const requester = async (request: { method: string; path: string; body?: unknown }) => {
+      calls.push(request);
+      return { ok: true };
+    };
+
+    await expect(pushDisabledModelsToBackend(['openrouter:z', ' ollama:a ', ''], requester)).resolves.toBe(true);
+    expect(calls).toEqual([
+      {
+        method: 'PUT',
+        path: '/api/models/visibility',
+        body: { disabled_models: ['ollama:a', 'openrouter:z'] }
+      }
+    ]);
+  });
+
+  it('hydrates the disabled set from the backend and tolerates failures', async () => {
+    await expect(pullDisabledModelsFromBackend(async () => ({
+      disabled_models: ['ollama:a', ' openrouter:z ', 7]
+    }))).resolves.toEqual(new Set(['ollama:a', 'openrouter:z', '7']));
+    await expect(pullDisabledModelsFromBackend(async () => ({ disabled_models: 'broken' })))
+      .resolves.toEqual(new Set());
+    await expect(pullDisabledModelsFromBackend(async () => { throw new Error('offline'); }))
+      .resolves.toBeNull();
+    await expect(pushDisabledModelsToBackend(['go:a'], async () => { throw new Error('offline'); }))
+      .resolves.toBe(false);
+  });
 });
 
 describe('model visibility wiring', () => {
@@ -129,6 +177,14 @@ describe('model visibility wiring', () => {
     expect(source).toContain('checked={!isModelDisabled(disabledModels, providerId, modelId)}');
     expect(source).toContain('description={providerLabel}');
     expect(source).toContain('setModelEnabled(window.localStorage, providerId, modelId, value)');
+    expect(source).toContain('modelGroups.flatMap((group, groupIndex) =>');
+  });
+
+  it('mirrors switches to the backend and hydrates from it', () => {
+    const source = read('../src/renderer/model-visibility.ts');
+    expect(source).toContain("const VISIBILITY_PATH = '/api/models/visibility';");
+    expect(source).toContain('pushDisabledModelsToBackend(saved, requester)');
+    expect(source).toContain('pullDisabledModelsFromBackend()');
   });
 
   it('filters the full chat composer catalog and falls back when the model is off', () => {

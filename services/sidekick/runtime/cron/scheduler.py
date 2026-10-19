@@ -1383,6 +1383,11 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             logger.warning("Job '%s': primary auth failed (%s), trying fallback", job_id, auth_exc)
             fb = _cfg.get("fallback_providers") or _cfg.get("fallback_model")
             fb_list = (fb if isinstance(fb, list) else [fb]) if fb else []
+            try:
+                from runtime.model_visibility import filter_fallback_chain
+                fb_list = list(filter_fallback_chain(fb_list) or [])
+            except Exception:
+                pass
             runtime = None
             for entry in fb_list:
                 if not isinstance(entry, dict):
@@ -1405,6 +1410,11 @@ def run_job(job: dict) -> tuple[bool, str, str, Optional[str]]:
             raise RuntimeError(message) from exc
 
         fallback_model = _cfg.get("fallback_providers") or _cfg.get("fallback_model") or None
+        try:
+            from runtime.model_visibility import filter_fallback_chain
+            fallback_model = filter_fallback_chain(fallback_model)
+        except Exception:
+            pass
         credential_pool = None
         runtime_provider = str(runtime.get("provider") or "").strip().lower()
         if runtime_provider:

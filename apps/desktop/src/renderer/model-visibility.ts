@@ -11,11 +11,79 @@
 import { useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'lastbrowser.disabledModels.v1';
+const VISIBILITY_PATH = '/api/models/visibility';
 
 /** Fired on `window` whenever the disabled-model set changes. */
 export const MODEL_VISIBILITY_EVENT = 'lastbrowser:model-visibility-changed';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
+
+export type ModelVisibilityRequester = (request: {
+  method: string;
+  path: string;
+  body?: unknown;
+}) => Promise<Record<string, unknown>>;
+
+function defaultRequester(): ModelVisibilityRequester | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const bridge = window.lastbrowser?.sidekick;
+  if (!bridge || typeof bridge.requestWebui !== 'function') return undefined;
+  return (request) => bridge.requestWebui(request as Parameters<typeof bridge.requestWebui>[0]);
+}
+
+function normaliseKeys(entries: Iterable<unknown>): Set<string> {
+  return new Set(Array.from(entries, (entry) => String(entry ?? '').trim()).filter(Boolean));
+}
+
+/**
+ * Mirror the switches to the backend. Automatic orchestration (Smart Track,
+ * Teamwork and fallback chains) reads that state file, so a failed write only
+ * degrades routing to the last synced set; it must never break the settings UI.
+ */
+export async function pushDisabledModelsToBackend(
+  disabled: Iterable<string>,
+  requester?: ModelVisibilityRequester,
+): Promise<boolean> {
+  const request = requester ?? defaultRequester();
+  if (!request) return false;
+  try {
+    await request({
+      method: 'PUT',
+      path: VISIBILITY_PATH,
+      body: { disabled_models: Array.from(normaliseKeys(disabled)).sort() },
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Read the backend's disabled set so a fresh renderer (or a second window)
+ * starts from the same switches the orchestrators use. Returns null when the
+ * bridge is unavailable or the response is malformed.
+ */
+export async function pullDisabledModelsFromBackend(
+  requester?: ModelVisibilityRequester,
+): Promise<Set<string> | null> {
+  const request = requester ?? defaultRequester();
+  if (!request) return null;
+  try {
+    const response = await request({ method: 'GET', path: VISIBILITY_PATH });
+    const entries = Array.isArray(response?.disabled_models) ? response.disabled_models : [];
+    return normaliseKeys(entries);
+  } catch {
+    return null;
+  }
+}
+
+function sameKeys(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const key of a) {
+    if (!b.has(key)) return false;
+  }
+  return true;
+}
 
 /**
  * Announce a switch change so every mounted chat surface (full chat, quickchat)
@@ -69,6 +137,7 @@ export function setModelEnabled(
   providerId: string | undefined | null,
   modelId: string,
   enabled: boolean,
+  requester?: ModelVisibilityRequester,
 ): Set<string> {
   const key = modelVisibilityKey(providerId, modelId);
   const disabled = loadDisabledModels(storage);
@@ -77,7 +146,10 @@ export function setModelEnabled(
   if (enabled) disabled.delete(key);
   else disabled.add(key);
   const saved = saveDisabledModels(storage, disabled);
-  if (enabled ? wasDisabled : !wasDisabled) notifyModelVisibilityChanged();
+  if (enabled ? wasDisabled : !wasDisabled) {
+    notifyModelVisibilityChanged();
+    void pushDisabledModelsToBackend(saved, requester);
+  }
   return saved;
 }
 
@@ -154,7 +226,28 @@ export function useDisabledModels(
     const sync = () => setDisabled(loadDisabledModels(storage));
     sync();
     window.addEventListener(MODEL_VISIBILITY_EVENT, sync);
-    return () => window.removeEventListener(MODEL_VISIBILITY_EVENT, sync);
+    let alive = true;
+    // Reconcile with the backend copy used by automatic orchestration. The
+    // local set is migrated on first run; afterwards the backend wins so a
+    // second window and the orchestrators agree on what is switched off.
+    void (async () => {
+      const backend = await pullDisabledModelsFromBackend();
+      if (!alive || !backend) return;
+      const local = loadDisabledModels(storage);
+      if (backend.size === 0 && local.size > 0) {
+        await pushDisabledModelsToBackend(local);
+        return;
+      }
+      if (!sameKeys(backend, local)) {
+        saveDisabledModels(storage, backend);
+        setDisabled(new Set(backend));
+        notifyModelVisibilityChanged();
+      }
+    })();
+    return () => {
+      alive = false;
+      window.removeEventListener(MODEL_VISIBILITY_EVENT, sync);
+    };
   }, [storage]);
   return disabled;
 }

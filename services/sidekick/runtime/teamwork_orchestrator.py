@@ -224,7 +224,10 @@ def classify_model_tier(model_id: str, provider: str = "") -> str:
 def get_teamwork_model_pool() -> List[Dict[str, Any]]:
     """Return all currently available and ready models categorized by provider and tier."""
     from web.api.config import get_available_models
+    from runtime.model_visibility import is_model_disabled, load_disabled_models
+
     catalog = get_available_models()
+    disabled_models = load_disabled_models()
     models: List[Dict[str, Any]] = []
     seen_ids = set()
 
@@ -276,6 +279,9 @@ def get_teamwork_model_pool() -> List[Dict[str, Any]]:
             if provider_id == "ollama-cloud" and call_model not in ollama_cloud_models:
                 continue
             if call_model.lower() == "teamwork" or raw_id in seen_ids:
+                continue
+            # Only switched-on models may take part in agent/worker calls.
+            if is_model_disabled(disabled_models, provider_id, raw_id) or is_model_disabled(disabled_models, provider_id, call_model):
                 continue
             seen_ids.add(raw_id)
             name = m.get("name") or call_model
@@ -756,7 +762,11 @@ def run_teamwork_turn(
     pool = plan["pool"]
     eligible_worker_pool = plan.get("worker_pool") or pool
     if not workers or not critic_model or not synth_model:
-        raise RuntimeError("Teamwork hat keine aktuell verfügbaren Modelle. Verbinde zuerst mindestens einen Modellanbieter.")
+        raise RuntimeError(
+            "Teamwork hat keine aktuell verfügbaren Modelle. "
+            "Verbinde zuerst mindestens einen Modellanbieter oder schalte in den "
+            "Einstellungen mindestens ein Modell ein."
+        )
     if min_quorum > len(workers):
         raise RuntimeError(
             "Teamwork-Mindestquorum ist nicht erreichbar: "

@@ -25,6 +25,18 @@ describe('desktop runtime packaging', () => {
     );
   });
 
+  it('excludes Sidekick bytecode and tests from packaged services', () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
+    const services = packageJson.build.extraResources.find(
+      (entry: { from?: string }) => entry.from === '../../services'
+    );
+
+    expect(services).toBeDefined();
+    expect(services.filter).toEqual(
+      expect.arrayContaining(['!**/__pycache__/**', '!**/*.pyc', '!**/tests/**'])
+    );
+  });
+
   it('keeps Sidekick in-tree and has no external sync or patch scripts', () => {
     const desktopRoot = process.cwd();
     const repoRoot = path.resolve(desktopRoot, '..', '..');

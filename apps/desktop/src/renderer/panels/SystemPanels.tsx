@@ -5234,6 +5234,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     <SettingsField label={t('settings.panels.system.accessPassword')} description={t('settings.panels.system.passwordKeepDescription')}>
                       <input
                         type="password"
+                        autoComplete="new-password"
                         value={passwordDraft}
                         disabled={passwordEnvLocked}
                         onChange={(event) => {

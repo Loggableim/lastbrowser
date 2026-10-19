@@ -43,8 +43,8 @@ export function StartupPlaceholder({ locale, phase, error = null, onRetry, retry
         </section>
       ) : (
         <>
-          {phase && <p className="startup-placeholder__phase" aria-live="polite">{copy.phases[phase]}</p>}
           {retryContent}
+          {phase && <p className="startup-placeholder__phase" aria-live="polite">{copy.phases[phase]}</p>}
         </>
       )}
     </main>

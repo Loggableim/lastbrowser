@@ -20,6 +20,39 @@
   gap: 10px;
 }
 
+.startup-screen__auth-password {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.startup-screen__auth .startup-screen__auth-reveal {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: grid;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #b9c9dc;
+  place-items: center;
+  transform: translateY(-50%);
+}
+
+.startup-screen__auth .startup-screen__auth-reveal:hover { color: #fff; }
+
+.startup-screen__auth-status,
+.startup-screen__auth-hint {
+  margin: 0;
+  color: #b9c9dc;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.startup-screen__auth-hint { margin-top: 14px; }
+
 .startup-screen__auth input {
   min-height: 42px;
   padding: 0 12px;
@@ -29,6 +62,8 @@
   color: #fff;
   font: inherit;
 }
+
+.startup-screen__auth-password input { width: 100%; padding-right: 44px; }
 
 .startup-screen__auth button {
   min-height: 42px;

@@ -1731,6 +1731,22 @@ OPTIONAL_ENV_VARS = {
         "category": "provider",
         "advanced": True,
     },
+    "GROQ_API_KEY": {
+        "description": "Groq API key for the beta chat provider. The user supplies this key.",
+        "prompt": "Groq API Key",
+        "url": "https://console.groq.com/keys",
+        "password": True,
+        "category": "provider",
+        "advanced": True,
+    },
+    "GROQ_BASE_URL": {
+        "description": "Groq OpenAI-compatible base URL override",
+        "prompt": "Groq Base URL",
+        "url": "https://api.groq.com/openai/v1",
+        "password": False,
+        "category": "provider",
+        "advanced": True,
+    },
     "DEEPSEEK_API_KEY": {
         "description": "DeepSeek API key for direct DeepSeek access",
         "prompt": "DeepSeek API Key",

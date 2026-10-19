@@ -181,7 +181,8 @@ describe('cloud first-run setup state', () => {
       'openai',
       'anthropic',
       'gemini',
-      'deepseek'
+      'deepseek',
+      'groq'
     ]);
     expect(modelsForProvider(null, 'ollama-cloud')).toContainEqual({
       id: 'deepseek-v4.1-flash',
@@ -230,6 +231,8 @@ describe('cloud first-run setup state', () => {
     expect(modelsForProvider(null, 'ollama')[0]?.id).toBe('llama3.3');
     expect(modelsForProvider(null, 'openai')[0]?.id).toBe('gpt-5.5');
     expect(modelsForProvider(null, 'openrouter')[0]?.id).toBe('anthropic/claude-sonnet-4.6');
+    // Groq has no static catalog: the model list is loaded live from GET /models.
+    expect(modelsForProvider(null, 'groq')).toEqual([]);
   });
 
   it('prefers provider-supplied models over fallback models', () => {

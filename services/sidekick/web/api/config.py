@@ -815,6 +815,7 @@ _PROVIDER_DISPLAY = {
     "opencode": "OpenCode (free, no key)",
     "lmstudio": "LM Studio",
     "morph": "Morph",
+    "groq": "Groq",
 }
 
 # Provider alias → canonical slug.  Users configure providers using the
@@ -1116,6 +1117,8 @@ _PROVIDER_MODELS = {
         {"id": "deepseek-chat", "label": "DeepSeek V3 (Chat)"},
         {"id": "deepseek-reasoner", "label": "DeepSeek R1 (Reasoner)"},
     ],
+    # Groq's catalog is fetched live from GET /models; no static entries.
+    "groq": [],
     "nous": [
         {"id": "@nous:anthropic/claude-opus-4.6",     "label": "Claude Opus 4.6 (via Nous)"},
         {"id": "@nous:anthropic/claude-sonnet-4.6",   "label": "Claude Sonnet 4.6 (via Nous)"},

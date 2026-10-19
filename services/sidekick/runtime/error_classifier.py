@@ -16,6 +16,8 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
+from runtime.groq_errors import groq_public_error
+
 logger = logging.getLogger(__name__)
 
 
@@ -607,11 +609,13 @@ def _classify_by_status(
         # the retryability check in run_agent.py.  If those succeed, the
         # loop `continue`s.  If they fail, retryable=False ensures we
         # hit the client-error abort path (which tries fallback first).
+        notice = groq_public_error(401) if provider == "groq" else None
         return result_fn(
             FailoverReason.auth,
             retryable=False,
             should_rotate_credential=True,
             should_fallback=True,
+            **({"message": notice} if notice else {}),
         )
 
     if status_code == 403:
@@ -671,11 +675,13 @@ def _classify_by_status(
 
     if status_code == 429:
         # Already checked long_context_tier above; this is a normal rate limit
+        notice = groq_public_error(429) if provider == "groq" else None
         return result_fn(
             FailoverReason.rate_limit,
             retryable=True,
             should_rotate_credential=True,
             should_fallback=True,
+            **({"message": notice} if notice else {}),
         )
 
     if status_code == 400:

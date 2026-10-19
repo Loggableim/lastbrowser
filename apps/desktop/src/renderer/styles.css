@@ -13184,6 +13184,11 @@ html.theme-light .browser-start-search input {
   color: #38bdf8;
 }
 
+.model-provider-badge.groq {
+  background: rgba(245, 80, 54, 0.2);
+  color: #f55036;
+}
+
 .model-option-text {
   display: flex;
   flex-direction: column;
@@ -16029,6 +16034,12 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
   background: rgba(77, 107, 254, 0.2);
   color: #8fa5ff;
   border: 1px solid rgba(77, 107, 254, 0.35);
+}
+
+.model-provider-badge.groq {
+  background: rgba(245, 80, 54, 0.2);
+  color: #ff8a72;
+  border: 1px solid rgba(245, 80, 54, 0.35);
 }
 
 .model-provider-badge.ollama {

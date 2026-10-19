@@ -2,7 +2,7 @@ import type { DesktopLocaleId } from './keys.js';
 
 type ProviderDescriptionId =
   | 'openai-codex' | 'anthropic' | 'google-gemini-cli' | 'antigravity' | 'openai' | 'openrouter' | 'alibaba' | 'ollama-cloud'
-  | 'gemini' | 'deepseek' | 'mistralai' | 'nvidia' | 'xiaomi' | 'zai' | 'x-ai'
+  | 'gemini' | 'deepseek' | 'groq' | 'mistralai' | 'nvidia' | 'xiaomi' | 'zai' | 'x-ai'
   | 'ollama' | 'lmstudio' | 'custom';
 
 const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string>> = {
@@ -50,6 +50,10 @@ const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string
   deepseek: {
     en: 'DeepSeek API key for its reasoning models.', de: 'DeepSeek-API-Schlüssel für die Reasoning-Modelle.', es: 'Clave de API de DeepSeek para sus modelos de razonamiento.', fr: 'Clé API DeepSeek pour ses modèles de raisonnement.',
     it: 'Chiave API DeepSeek per i suoi modelli di ragionamento.', 'pt-BR': 'Chave de API da DeepSeek para modelos de raciocínio.', ru: 'Ключ API DeepSeek для моделей рассуждения.'
+  },
+  groq: {
+    en: 'Groq beta: OpenAI-compatible chat with a live model list. Use your own key.', de: 'Groq-Beta: OpenAI-kompatibler Chat mit Live-Modellliste. Eigener Schlüssel erforderlich.', es: 'Groq beta: chat compatible con OpenAI con lista de modelos en vivo. Usa tu propia clave.', fr: 'Groq bêta : chat compatible OpenAI avec liste de modèles en direct. Utilisez votre propre clé.',
+    it: 'Groq beta: chat compatibile OpenAI con elenco modelli live. Usa la tua chiave.', 'pt-BR': 'Groq beta: chat compatível com OpenAI com lista de modelos ao vivo. Use sua própria chave.', ru: 'Groq (бета): чат, совместимый с OpenAI, с актуальным списком моделей. Нужен собственный ключ.'
   },
   mistralai: {
     en: 'Mistral API key for models hosted in Europe.', de: 'Mistral-API-Schlüssel für in Europa gehostete Modelle.', es: 'Clave de API de Mistral para modelos alojados en Europa.', fr: 'Clé API Mistral pour des modèles hébergés en Europe.',

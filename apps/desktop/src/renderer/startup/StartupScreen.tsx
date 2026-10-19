@@ -4,6 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type AnimationEvent, type
 import { startupScreenCopy, resolveStartupLocale } from './startup-screen-copy.js';
 import { chooseStartupQuoteIndex, nextStartupQuoteIndex, type StartupIconId, type StartupPhaseId } from './startup-screen-state.js';
 import './StartupScreen.css';
+import './startup-auth.css';
 import { getSoundOpeningTheme, readStartupAudioClock, soundOpeningFrame, STARTUP_AUDIO_CLOCK_EVENT } from './sound-opening.js';
 
 const iconSources: Record<StartupIconId, string> = {

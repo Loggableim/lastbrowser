@@ -623,3 +623,35 @@ const startupUpdateCopy: Record<string, Partial<DesktopCatalog>> = {
   }
 };
 for (const locale of Object.keys(startupUpdateCopy)) Object.assign(browserChromeTranslations[locale], startupUpdateCopy[locale]);
+
+const releaseNotesCopy: Record<string, Partial<DesktopCatalog>> = {
+  "en": {
+    "browser.chrome.releaseNotesTitle": "What's new",
+    "browser.chrome.releaseNotesSince": "Changes since version {version}"
+  },
+  "de": {
+    "browser.chrome.releaseNotesTitle": "Was hat sich getan?",
+    "browser.chrome.releaseNotesSince": "Änderungen seit Version {version}"
+  },
+  "es": {
+    "browser.chrome.releaseNotesTitle": "Novedades",
+    "browser.chrome.releaseNotesSince": "Cambios desde la versión {version}"
+  },
+  "fr": {
+    "browser.chrome.releaseNotesTitle": "Nouveautés",
+    "browser.chrome.releaseNotesSince": "Changements depuis la version {version}"
+  },
+  "it": {
+    "browser.chrome.releaseNotesTitle": "Novità",
+    "browser.chrome.releaseNotesSince": "Modifiche dalla versione {version}"
+  },
+  "pt-BR": {
+    "browser.chrome.releaseNotesTitle": "Novidades",
+    "browser.chrome.releaseNotesSince": "Alterações desde a versão {version}"
+  },
+  "ru": {
+    "browser.chrome.releaseNotesTitle": "Что нового",
+    "browser.chrome.releaseNotesSince": "Изменения с версии {version}"
+  }
+};
+for (const locale of Object.keys(releaseNotesCopy)) Object.assign(browserChromeTranslations[locale], releaseNotesCopy[locale]);

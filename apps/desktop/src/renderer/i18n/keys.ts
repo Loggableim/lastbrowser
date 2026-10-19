@@ -301,6 +301,8 @@ export const desktopTranslationKeys = [
   'browser.chrome.updateDontShowAgain',
   'browser.chrome.updateLater',
   'browser.chrome.updateNoticeSaveError',
+  'browser.chrome.releaseNotesTitle',
+  'browser.chrome.releaseNotesSince',
   'browser.chrome.updates',
   'browser.omnibox.addBookmark',
   'browser.omnibox.addressLabel',

@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Was diese Woche neu ist: LastBrowser 0.1.56 und 0.1.58 – LastBrowser Blog</title>
+<meta name="description" content="LastBrowser 0.1.56 bringt Arbeitsplatz, verschlüsselten CSV-Passwortimport und Startanimationen. 0.1.58 ergänzt Beta-Abo und signierte Builds. Ein Überblick.">
+<meta property="og:title" content="Was diese Woche neu ist: LastBrowser 0.1.56 und 0.1.58">
+<meta property="og:description" content="Arbeitsplatz, Passwortimport und Startanimationen in 0.1.56; Beta-Kanal und signierte Builds in 0.1.58. Die Änderungen im Überblick.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lastbrowser.com/blog/update-0-1-56-0-1-58/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/blog/update-0-1-56-0-1-58/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<link rel="stylesheet" href="/assets/css/blog.css">
+<script src="/assets/js/theme.js"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "Was diese Woche neu ist: LastBrowser 0.1.56 und 0.1.58",
+  "description": "LastBrowser 0.1.56 bringt Arbeitsplatz, verschlüsselten CSV-Passwortimport und Startanimationen. 0.1.58 ergänzt Beta-Abo und signierte Builds. Ein Überblick.",
+  "datePublished": "2026-10-19",
+  "dateModified": "2026-10-19",
+  "inLanguage": "de",
+  "articleSection": "News & Updates",
+  "author": { "@type": "Organization", "name": "LastBrowser" },
+  "publisher": { "@type": "Organization", "name": "LastBrowser", "logo": { "@type": "ImageObject", "url": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png" } },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": "https://lastbrowser.com/blog/update-0-1-56-0-1-58/" },
+  "image": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png"
+}
+</script>
+</head>
+<body class="blog-page">
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Tech-Magazin</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/blog/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/blog/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/blog/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/blog/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/blog/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/blog/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/blog/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container" style="padding: 60px 0 80px;">
+  <article class="article-wrap">
+    <a class="badge badge-cyan" href="/blog/#news" style="align-self:flex-start;margin-bottom:12px;">News &amp; Updates</a>
+    <h1>Was diese Woche neu ist: LastBrowser 0.1.56 und 0.1.58</h1>
+    <div class="article-meta">
+      <span>📅 19. Oktober 2026</span>
+      <span>·</span>
+      <span>⏱️ 4 Min. Lesezeit</span>
+    </div>
+
+    <div class="article-body">
+      <p>
+        Zwei Releases innerhalb weniger Tage: LastBrowser 0.1.56 erschien am 13. Oktober, 0.1.58 folgte am 17. Oktober. Hier findest du die Änderungen aus den offiziellen Release-Notes im Überblick.
+      </p>
+
+      <h2>0.1.56: Arbeitsplatz, Passwortimport und Startanimationen</h2>
+      <p>
+        Die wichtigste Neuerung ist der Arbeitsplatz mit Widgets, Notizen und Aufgaben. Er bündelt diese Bausteine an einer Stelle: Widgets zeigen dir Informationen, Notizen halten Gedanken fest, und Aufgaben sorgen dafür, dass offene Punkte nicht verloren gehen.
+      </p>
+      <p>
+        Dazu kommt ein lokal verschlüsselter CSV-Passwortimport. Du kannst Passwörter also aus einer CSV-Datei übernehmen, wobei die Daten lokal verschlüsselt abgelegt werden. Außerdem gibt es vier Startanimationen mit optionalen Sounds sowie die kompakte Recherche-Leiste. Mehrere Fixes aus dem Feedback sind ebenfalls eingeflossen. Zusammen mit dem Passwortimport deckt das Release damit sowohl die tägliche Organisation als auch den Umzug bestehender Zugangsdaten ab.
+      </p>
+      <p>
+        Setup und Portable sind für Windows x64 Authenticode-signiert und mit einem Zeitstempel versehen. Die SHA-256-Prüfsummen stehen auf GitHub.
+      </p>
+
+      <h2>0.1.58: Beta-Kanal und signierte Builds</h2>
+      <p>
+        0.1.58 führt ein Abo für Beta-Updates ein. Dazu gehört ein klarer Hinweis: Die täglichen Beta-Builds sind nicht signiert. Ergänzend gibt es eine Release-Pipeline für den täglichen Beta- und den Stable-Kanal.
+      </p>
+      <p>
+        Unter der Haube wurde der Desktop-Build repariert, und die festgeschriebenen Python-Laufzeit-Abhängigkeiten für Sidekick sind jetzt vollständig. Setup, Portable und Lastbrowser.exe sind Authenticode-signiert und mit einem Zeitstempel versehen; die Prüfsummen liegen in <code>SHA256SUMS</code>.
+      </p>
+      <p>
+        Die neue Pipeline trennt den täglichen Beta-Kanal vom Stable-Kanal. Beide Veröffentlichungswege laufen damit getrennt voneinander.
+      </p>
+
+      <h2>Was das für dich heißt</h2>
+      <p>
+        Wenn du den Stable-Kanal nutzt, bekommst du weiterhin die signierten Pakete. Der Beta-Kanal liefert früher neue Builds, die täglich erscheinen – aber eben unsigniert sind. Wer schneller an Neuerungen teilhaben will, wählt bewusst diesen Weg; wer signierte Installationen bevorzugt, bleibt beim Stable-Kanal.
+      </p>
+      <p>
+        Der Arbeitsplatz und der lokale Passwortimport sind direkt in 0.1.56 enthalten. Von den beiden Releases ist 0.1.58 das neuere Paket, das den Beta-Kanal und die vollständigen Sidekick-Abhängigkeiten mitbringt.
+      </p>
+      <p>
+        Für die Installation bedeutet das: Die Pakete von 0.1.56 und 0.1.58 sind signiert und mit einem Zeitstempel versehen, die Prüfsummen lassen sich vor dem Start vergleichen. Nur die täglichen Beta-Builds fallen aus diesem Rahmen, weil sie unsigniert erscheinen.
+      </p>
+      <p>
+        Die Reihenfolge der Releases zeigt auch, wie die beiden Ebenen zusammenspielen: 0.1.56 liefert die sichtbaren Neuerungen für den Alltag, 0.1.58 schafft die Grundlage dafür, dass diese Änderungen künftig schneller und auf getrennten Kanälen ankommen. Wenn du beide Pakete vergleichst, nimm das jeweils neueste, sofern du nicht bewusst eine ältere Version benötigst.
+      </p>
+    </div>
+
+    <div class="article-cta">
+      <h2>Ausprobieren</h2>
+      <p>
+        Du kannst LastBrowser für Windows und Linux herunterladen. Linux ist als Preview verfügbar.
+      </p>
+      <div class="btn-group">
+        <a class="btn btn-primary" href="https://lastbrowser.com/download/">Zum Download</a>
+        <a class="btn btn-ghost" href="https://github.com/Loggableim/lastbrowser/releases">Release-Notes auf GitHub</a>
+      </div>
+      <p style="margin-top:18px;margin-bottom:0;">Feedback: <a href="mailto:hello@lastbrowser.com">hello@lastbrowser.com</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
+        <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Browser für Windows und Linux mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      <nav class="footer-social-links" aria-label="Social media">
+          <a href="https://x.com/lastbrowser" target="_blank" rel="noopener noreferrer" aria-label="X"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68L14.54 10.98l9.452 11.867h-7.406l-5.8-7.584-6.64 7.584H.464l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.606h2.039L6.486 3.132h-2.19z"/></svg><span>X</span></a>
+          <a href="https://bsky.app/profile/lastbrowser.bsky.social" target="_blank" rel="noopener noreferrer" aria-label="Bluesky"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M5.36 2.25c2.72 2.04 5.65 6.17 6.64 8.39.99-2.22 3.92-6.35 6.64-8.39 1.96-1.47 5.14-2.61 5.14 1.01 0 .72-.41 6.07-.65 6.94-.83 2.99-3.84 3.76-6.52 3.3 4.69.79 5.89 3.41 3.31 6.03-4.9 4.99-7.04-1.25-7.59-2.84-.1-.3-.15-.44-.33-.44s-.23.14-.33.44c-.55 1.59-2.69 7.83-7.59 2.84-2.58-2.62-1.38-5.24 3.31-6.03-2.68.46-5.69-.31-6.52-3.3C.63 9.33.22 3.98.22 3.26c0-3.62 3.18-2.48 5.14-1.01Z"/></svg><span>Bluesky</span></a>
+        </nav>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js?v=linux56-20261014"></script>
+</body>
+</html>

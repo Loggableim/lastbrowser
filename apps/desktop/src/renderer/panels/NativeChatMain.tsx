@@ -38,7 +38,8 @@ import { loadSpaceModelSelection, saveSpaceModel } from '../space-models.js';
 import { qualifyModelForProvider, resolveCatalogModelSelection, resolvePreferredChatModel } from '../provider-model-selection.js';
 import type { NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
-import { loadChatReasoningEffort, normalizeReasoningEfforts, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
+import { loadChatReasoningEffort, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
+import { parseModelCatalogGroups } from '../model-catalog.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type ComposerMode = 'action' | 'plan';
@@ -146,29 +147,7 @@ export function NativeChatMain({
         const data = await window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models' });
         if (!alive) return;
         const groups = Array.isArray(data?.groups) ? data.groups : [];
-        const rawParsed = groups
-          .map((group) => {
-            const record = (group || {}) as Record<string, unknown>;
-            const provider = String(record.provider || record.provider_id || 'Provider');
-            const models = Array.isArray(record.models) ? record.models : [];
-            return {
-              id: String(record.id || record.provider_id || record.provider || ''),
-              provider,
-              providerId: String(record.provider_id || record.provider || ''),
-              models: models
-                .map((entry) => {
-                  const m = (entry || {}) as Record<string, unknown>;
-                  const id = String(m.id || m.name || m.label || '');
-              return {
-                id,
-                label: String(m.label || m.name || m.id || id),
-                reasoningEfforts: normalizeReasoningEfforts(m.reasoning_efforts),
-              };
-                })
-                .filter((m) => m.id)
-            };
-          })
-          .filter((group) => group.models.length > 0);
+        const rawParsed = parseModelCatalogGroups(groups);
 
         const defaultSelection = resolveCatalogModelSelection(data?.default_model, rawParsed, data?.active_provider);
         setCatalogDefaultModel(defaultSelection.model);

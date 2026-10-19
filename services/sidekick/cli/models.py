@@ -389,7 +389,9 @@ _PROVIDER_ALIASES = {
     "claude-code": "anthropic",
     "deep-seek": "deepseek",
     # ``opencode`` is the keyless free provider (official server/CLI), not Zen.
-    # Only the shorthand ``zen`` maps to OpenCode Zen (#170).
+    # Only the shorthand ``zen`` maps to OpenCode Zen (#170). Keep an explicit
+    # identity entry so provider:model syntax accepts the free provider.
+    "opencode": "opencode",
     "zen": "opencode-zen",
     "go": "opencode-go",
     "opencode-go-sub": "opencode-go",

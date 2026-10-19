@@ -1,0 +1,439 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lastbrowser.com/schemas/specialist-manifest.schema.json",
+  "title": "LastBrowser Specialist Manifest",
+  "description": "Einheitliches Manifest fuer lokale KI-Spezialisten (LoRA-Personas, kleine Einzelaufgaben-Modelle und Laufzeit-Module). Es beschreibt Basis-Hash, Aufgabe, Benchmark, Groesse und Hardware-Stufe, damit Module zwischen Installationen austauschbar und reproduzierbar pruefbar sind. Alle Felder sind lokal; Telemetrie ist ausschliesslich Opt-in.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "manifestVersion",
+    "id",
+    "name",
+    "version",
+    "task",
+    "base",
+    "artifact",
+    "size",
+    "benchmark",
+    "hardware",
+    "license",
+    "telemetry"
+  ],
+  "properties": {
+    "manifestVersion": {
+      "const": "1.0",
+      "description": "Version dieses Manifest-Schemas. Bestimmt, welche Felder verpflichtend sind."
+    },
+    "id": {
+      "$ref": "#/$defs/slug",
+      "description": "Eindeutige Spezialisten-ID (klein, punkt-getrennt), z. B. 'pdf-ocr' oder 'neuron.zen-lora'."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120,
+      "description": "Anzeigename im LastBrowser-Store."
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 280,
+      "description": "Kurzbeschreibung fuer Store-Karten."
+    },
+    "version": {
+      "$ref": "#/$defs/semver",
+      "description": "Version des Spezialisten. Aendert sich mit Gewichten, Benchmark oder Laufzeitvertrag."
+    },
+    "publisher": {
+      "type": "string",
+      "maxLength": 120,
+      "description": "Herausgeber (Person oder Organisation)."
+    },
+    "homepage": {
+      "type": "string",
+      "format": "uri",
+      "description": "Dokumentations- oder Quell-URL."
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "kind", "category"],
+      "description": "Was der Spezialist tut. Ersetzt die bisher uneinheitlichen Beschreibungen einzelner Module.",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/slug",
+          "description": "Aufgaben-ID, stabil ueber Versionen, z. B. 'sentinel' oder 'pdf-scan'."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Menschenlesbarer Aufgabenname."
+        },
+        "kind": {
+          "enum": ["lora-adapter", "standalone-model", "runtime-module"],
+          "description": "lora-adapter: Persona-Adapter auf eingefrorenem Basismodell (#307). standalone-model: kleines eigenstaendiges Modell fuer eine Einzelaufgabe. runtime-module: nachinstallierbares Laufzeit- oder Werkzeugmodul."
+        },
+        "category": {
+          "enum": [
+            "security",
+            "code",
+            "data",
+            "release",
+            "refactor",
+            "document",
+            "speech",
+            "vision",
+            "translation",
+            "general",
+            "other"
+          ],
+          "description": "Store-Kategorie."
+        },
+        "inputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Akzeptierte Eingabearten, z. B. 'text/plain', 'application/pdf', 'audio/wav'."
+        },
+        "outputs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Erzeugte Ausgabearten, z. B. 'text/plain', 'audio/wav', 'application/json'."
+        },
+        "tools": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Optionale Sidekick-Werkzeuge, die der Spezialist nutzen darf."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Grenzen und bekannte Einschraenkungen der Aufgabe."
+        }
+      }
+    },
+    "base": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sha256"],
+      "description": "Eingefrorenes Basismodell. Der sha256 ist der Basis-Hash aus #309 und die Kompatibilitaetsgrenze: ein Spezialist darf nur auf einem Basismodell mit exakt diesem Hash geladen werden.",
+      "properties": {
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Interne ID des Basismodells, z. B. 'neuron-synapse'."
+        },
+        "family": {
+          "type": "string",
+          "description": "Modellfamilie, z. B. 'IBM Granite' oder 'Neuron'."
+        },
+        "repository": {
+          "type": "string",
+          "description": "Quell-Repository, z. B. 'ibm-granite/granite-3.1-8b-instruct'."
+        },
+        "revision": {
+          "type": "string",
+          "description": "Unveraenderliche Revision (Commit-Hash oder Tag)."
+        },
+        "filename": {
+          "type": "string",
+          "description": "Dateiname des Basismodells."
+        },
+        "format": {
+          "enum": ["gguf", "safetensors", "onnx", "other"],
+          "description": "Dateiformat des Basismodells."
+        },
+        "quantization": {
+          "type": "string",
+          "description": "Quantisierung des Basismodells, z. B. 'Q4_K_M'."
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "Basis-Hash (SHA-256 ueber die Basisgewichte)."
+        },
+        "license": {
+          "$ref": "#/$defs/licenseId"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "url", "sha256", "bytes"],
+      "description": "Die nachinstallierbare Datei des Spezialisten (LoRA-Adapter, GGUF, ONNX oder Laufzeitarchiv).",
+      "properties": {
+        "type": {
+          "enum": ["lora-adapter", "gguf", "onnx", "runtime-archive", "other"],
+          "description": "Art des Artefakts."
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "description": "Download-URL, bevorzugt mit unveraenderlicher Revision (Hugging Face / GitHub Releases)."
+        },
+        "filename": {
+          "type": "string",
+          "description": "Dateiname nach dem Download."
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha256",
+          "description": "SHA-256 des Artefakts. Pruefsumme ist vor der Installation verpflichtend."
+        },
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Exakte Groesse des Artefakts in Bytes."
+        },
+        "format": {
+          "enum": ["gguf", "safetensors", "onnx", "zip", "tar", "other"],
+          "description": "Container-/Dateiformat."
+        },
+        "signature": {
+          "$ref": "#/$defs/signature"
+        }
+      }
+    },
+    "size": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["bytes"],
+      "description": "Groesse des Spezialisten (Groesse aus #309).",
+      "properties": {
+        "bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Artefaktgroesse in Bytes; muss mit artifact.bytes uebereinstimmen."
+        },
+        "parameters": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Parameteranzahl, falls bekannt."
+        },
+        "quantization": {
+          "type": "string",
+          "description": "Quantisierung des Spezialisten, z. B. 'Q4_K_M' oder 'F16'."
+        },
+        "minDiskBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Mindestens noetiger freier Speicher inkl. Reserve."
+        }
+      }
+    },
+    "benchmark": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suite", "measuredAt", "metrics"],
+      "description": "Benchmark aus #309. Er belegt die Eignung des Spezialisten und ist die Freigabegrundlage (TIES-/DARE-Mischen nur mit eigenem Benchmark, #307).",
+      "properties": {
+        "suite": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name der Benchmark-Suite."
+        },
+        "suiteVersion": {
+          "type": "string",
+          "description": "Version der Benchmark-Suite."
+        },
+        "dataset": {
+          "type": "string",
+          "description": "Verwendeter Datensatz oder Referenz-Corpus."
+        },
+        "harness": {
+          "type": "string",
+          "description": "Ausfuehrende Pruefroutine, z. B. 'apps/desktop/scripts/evaluate-local-ai.mjs'."
+        },
+        "measuredAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Zeitpunkt der Messung (ISO-8601)."
+        },
+        "referenceHardware": {
+          "$ref": "#/$defs/hardwareProfile",
+          "description": "Hardware, auf der die Benchmark-Zahlen gemessen wurden."
+        },
+        "metrics": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "value"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Metrikname, z. B. 'exact_match', 'wer', 'tokens_per_second'."
+              },
+              "value": {
+                "type": "number",
+                "description": "Gemessener Wert."
+              },
+              "unit": {
+                "type": "string",
+                "description": "Einheit, z. B. 'percent', 'ratio', 'tokens/s', 'bytes'."
+              },
+              "threshold": {
+                "type": "number",
+                "description": "Mindestwert fuer die Freigabe."
+              },
+              "passed": {
+                "type": "boolean",
+                "description": "Ob der Wert die Schwelle erreicht."
+              }
+            }
+          }
+        },
+        "thresholdsMet": {
+          "type": "boolean",
+          "description": "Gesamtergebnis gegen alle Schwellen. Muss fuer eine Store-Freigabe true sein."
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 1000,
+          "description": "Einschraenkungen der Aussage, z. B. kurze Messung oder Einzelhardware."
+        }
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minTier", "tiers"],
+      "description": "Hardware-Stufe aus #309. Die Stufen entsprechen der Einstufung des Installers (CPU_TIERS/GPU_TIERS).",
+      "properties": {
+        "minTier": {
+          "$ref": "#/$defs/tier",
+          "description": "Niedrigste Stufe, auf der der Spezialist lauffaehig ist."
+        },
+        "tiers": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/tier" },
+          "description": "Alle unterstuetzten Stufen."
+        },
+        "requirements": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ramBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Mindest-RAM (Systemspeicher), in Bytes."
+            },
+            "vramBytes": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Mindest-VRAM (dedizierte GPU), in Bytes. 0 bedeutet CPU-Betrieb."
+            },
+            "cpuFeatures": {
+              "type": "array",
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Notwendige CPU-Features, z. B. 'avx2'."
+            },
+            "os": {
+              "type": "array",
+              "items": { "enum": ["windows", "linux", "macos"] },
+              "description": "Unterstuetzte Betriebssysteme."
+            }
+          }
+        }
+      }
+    },
+    "license": {
+      "$ref": "#/$defs/licenseId",
+      "description": "Lizenz des Spezialisten. Modelle mit kommerziellen Einschraenkungen muessen als solche gekennzeichnet sein."
+    },
+    "telemetry": {
+      "const": "opt-in",
+      "description": "Fester Wert: Der Spezialist darf ohne ausdrueckliche Nutzerfreigabe keine Telemetrie senden (#309)."
+    },
+    "dependencies": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/slug" },
+      "description": "Weitere Spezialisten, die vor diesem installiert sein muessen."
+    },
+    "signature": {
+      "$ref": "#/$defs/signature",
+      "description": "Optionale Signatur des Manifests bzw. Artefakts."
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Hexadezimaler SHA-256 (64 Kleinbuchstaben)."
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:[.-][a-z0-9]+)*$",
+      "maxLength": 64,
+      "description": "Kleingeschriebene ID mit '.'- oder '-'-Trennern."
+    },
+    "semver": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$",
+      "description": "Semantische Version (SemVer 2.0.0)."
+    },
+    "licenseId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9.+-]+$",
+      "description": "SPDX-Kennung, z. B. 'Apache-2.0', 'MIT', 'Llama3.1' oder 'other'."
+    },
+    "tier": {
+      "enum": [
+        "cpu_low",
+        "cpu_medium",
+        "cpu_high",
+        "gpu_low",
+        "gpu_medium",
+        "gpu_high"
+      ],
+      "description": "Hardware-Stufe. cpu_* = kein dedizierter Grafikspeicher; gpu_* = dedizierte GPU."
+    },
+    "hardwareProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "tier": { "$ref": "#/$defs/tier" },
+        "cpu": {
+          "type": "string",
+          "description": "Prozessorname, z. B. 'AMD Ryzen 9 5950X'."
+        },
+        "ramBytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "gpu": {
+          "type": "string",
+          "description": "Grafikname, z. B. 'Intel Arc A770'."
+        },
+        "vramBytes": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scheme", "value"],
+      "properties": {
+        "scheme": {
+          "enum": ["authenticode", "minisign", "gpg", "sigstore", "other"],
+          "description": "Signaturverfahren."
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Signaturwert oder Referenz."
+        },
+        "issuer": {
+          "type": "string",
+          "description": "Aussteller oder Zertifikatskennung."
+        }
+      }
+    }
+  }
+}

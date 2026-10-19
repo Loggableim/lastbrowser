@@ -34,7 +34,7 @@ describe('GitHub release auto-update flow', () => {
   it('exposes a root release command for the Windows GitHub release build', () => {
     const pkg = readJson(rootPackagePath);
 
-    expect(pkg.scripts['release:win']).toBe('npm --workspace apps/desktop run package:win:publish');
+    expect(pkg.scripts['release:win']).toBe('pnpm --filter @lastbrowser/desktop run package:win:publish');
   });
 
   it('builds and publishes Windows updater artifacts from version tags', () => {
@@ -50,10 +50,10 @@ describe('GitHub release auto-update flow', () => {
     expect(workflow).toContain('actions/upload-artifact@v4');
     expect(workflow).toContain('actions/download-artifact@v4');
     expect(workflow).toContain('token: ${{ secrets.GITHUB_TOKEN }}');
-    expect(workflow).toContain('npm --workspace apps/desktop run prepare:python');
+    expect(workflow).toContain('pnpm --filter @lastbrowser/desktop run prepare:python');
     expect(workflow).not.toContain('build:installer-assets');
-    expect(workflow).toContain('npm --workspace apps/desktop run build');
-    expect(workflow).toContain('npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never');
+    expect(workflow).toContain('pnpm --filter @lastbrowser/desktop run build');
+    expect(workflow).toContain('pnpm --filter @lastbrowser/desktop exec -- electron-builder --win nsis portable --publish never');
     expect(workflow).toContain('apps/desktop/release/*.blockmap');
     expect(workflow).toContain('release-assets/*.blockmap');
   });

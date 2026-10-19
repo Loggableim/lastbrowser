@@ -8,7 +8,7 @@ describe('desktop runtime packaging', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
 
     expect(packageJson.scripts['prepare:python']).toBe('node scripts/prepare-python-runtime.mjs');
-    expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
+    expect(packageJson.scripts['package:win']).toContain('pnpm run prepare:python');
   });
 
   it('ships the prepared Python runtime as an Electron resource', () => {

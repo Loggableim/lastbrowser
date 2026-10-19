@@ -5,7 +5,7 @@ Lastbrowser Windows releases are published through GitHub Releases from version 
 ## Release Steps
 
 1. Update the version in the root `package.json` and `apps/desktop/package.json`.
-2. Run `npm run test:run`.
+2. Run `pnpm run test:run`.
 3. Create a tag that matches the app version, for example:
 
    ```powershell
@@ -29,6 +29,8 @@ The release gate requires exactly one version-matched setup executable and one p
 
 ## Requirements
 
+- Install pnpm 10.34.7 (matching the root `packageManager` field) and run `pnpm install --frozen-lockfile`; `package-lock.json` is no longer used.
+
 - The GitHub Release must not remain a draft, because draft releases are invisible to `electron-updater`.
 - The build/signing job runs with `contents: read`; only the separate publisher job receives `contents: write` and `${{ secrets.GITHUB_TOKEN }}`, after the signed artifacts have been verified and transferred as a workflow artifact.
 - GitHub Actions must have all five Azure Trusted Signing secrets configured: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, and `AZURE_CERTIFICATE_PROFILE`, plus the Castlabs EVS credentials `EVS_ACCOUNT_NAME` and `EVS_PASSWD`. The workflow stops before building if any are missing, requires exactly the expected setup and portable executables, and publishes only after Authenticode verification succeeds for both and the packaged VMP signature verifies.
@@ -37,4 +39,4 @@ The release gate requires exactly one version-matched setup executable and one p
 
 ## Manual Build
 
-`npm run release:win` builds the Windows artifacts locally without publishing them. Use a version tag and the GitHub Actions workflow for the supported signed release path.
+`pnpm run release:win` builds the Windows artifacts locally without publishing them. Use a version tag and the GitHub Actions workflow for the supported signed release path.

@@ -33,9 +33,10 @@ From the repository root:
 
 ```powershell
 $env:CI='true'
-npm test
-npm run verify:store
-npm --workspace apps/desktop run build
+pnpm install --frozen-lockfile
+pnpm test
+pnpm run verify:store
+pnpm --filter @lastbrowser/desktop run build
 python -m compileall -q services/sidekick
 $env:PYTHONPATH=(Resolve-Path services/sidekick).Path
 python -m pytest services/sidekick/tests/test_local_inference.py -q

@@ -265,7 +265,7 @@ if ($Quick) {
     Report-Pass "Vitest Test Suite" "Skipped due to -Quick flag"
 } else {
     Write-Host "  Running Vitest system integration suite..." -ForegroundColor Gray
-    $testResult = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "test:run", "--", "tests/system-integration.test.ts" -NoNewWindow -PassThru -Wait
+    $testResult = Start-Process -FilePath "pnpm.cmd" -ArgumentList "run", "test:run", "tests/system-integration.test.ts" -NoNewWindow -PassThru -Wait
     if ($testResult.ExitCode -eq 0) {
         Report-Pass "Store Policy Integration Tests" "tests/system-integration.test.ts passed completely"
     } else {

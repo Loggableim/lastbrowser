@@ -43,7 +43,7 @@ c:/projekte/lastbrowser/
 
 2. **NO External Cloning or Syncing:**
    - **DO NOT** attempt to clone, fetch, or sync from `Loggableim/sidekick-agent` or any external repository at build time, test time, or runtime.
-   - The packaging pipeline (`npm run package:win`) bundles `services/sidekick/` directly. Builds must remain 100% offline-capable, deterministic, and free from external network dependencies.
+   - The packaging pipeline (`pnpm run package:win`) bundles `services/sidekick/` directly. Builds must remain 100% offline-capable, deterministic, and free from external network dependencies.
 
 3. **NO Monkey-Patching / Regex Replacement Scripts:**
    - **DO NOT** write or maintain find-and-replace patch scripts (such as legacy `sidekick-patches.mjs`).
@@ -64,10 +64,14 @@ Before committing or pushing any changes, all agents must verify the following p
 
 | Step | Command | Acceptance Criteria |
 | :--- | :--- | :--- |
-| **Unit & Integration Tests** | `npm test` | All 64+ test suites pass (514+ tests green) |
-| **Store Release Preflight** | `npm run verify:store` | All 27 automated checks pass (`[PASS]`), 0 failures |
-| **Desktop Shell Build** | `npm --workspace apps/desktop run build` | 0 TypeScript errors, 0 Vite errors |
+| **Dependency Install** | `pnpm install --frozen-lockfile` | `pnpm-lock.yaml` is current; dependencies are hardlinked from the shared pnpm store |
+| **Unit & Integration Tests** | `pnpm test` | All test suites pass (platform-specific release tests excepted) |
+| **Store Release Preflight** | `pnpm run verify:store` | All 27 automated checks pass (`[PASS]`), 0 failures (Windows only) |
+| **Desktop Shell Build** | `pnpm --filter @lastbrowser/desktop run build` | 0 TypeScript errors, 0 Vite errors |
 | **Python Syntax Check** | `python -m compileall -q services/sidekick` | Exits with code 0, 0 warnings |
+
+This repository uses pnpm (see the root `packageManager` field) with a shared
+content-addressable store. Do not add `package-lock.json` or run `npm install`.
 
 ---
 

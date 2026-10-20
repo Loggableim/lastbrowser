@@ -179,6 +179,9 @@ jobs:
       - name: Refresh signed installer checksum and differential blockmap
         run: node scripts/refresh-signed-release-metadata.mjs apps/desktop/release node_modules/app-builder-bin/win/x64/app-builder.exe
 
+      - name: Verify embedded installer payload archives
+        run: node scripts/verify-installer-payload.mjs apps/desktop/release
+
       - name: Verify Authenticode Signature
         shell: powershell
         run: |

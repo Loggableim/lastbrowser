@@ -138,8 +138,8 @@ describe('pre-NSIS packaged payload guard', () => {
 
 describe('release pipeline wiring', () => {
   it('runs both payload gates on Windows release builds', () => {
-    const workflow = readFileSync(
-      path.join(repoRoot, '.github', 'workflows', 'release.yml'),
+    const metadataScript = readFileSync(
+      path.join(repoRoot, 'scripts', 'refresh-signed-release-metadata.mjs'),
       'utf8'
     );
     const hook = readFileSync(
@@ -147,7 +147,8 @@ describe('release pipeline wiring', () => {
       'utf8'
     );
 
-    expect(workflow).toContain('node scripts/verify-installer-payload.mjs apps/desktop/release');
+    expect(metadataScript).toContain('verifyInstallerPayload(filePath)');
+    expect(metadataScript).toContain("[['setup', setupPath], ['portable', portablePath]]");
     expect(hook).toContain('auditPackagedPayload(context.appOutDir)');
   });
 });

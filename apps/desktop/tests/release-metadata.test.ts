@@ -3,8 +3,27 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { crc32 } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 import yaml from 'js-yaml';
+
+const SEVEN_ZIP_SIGNATURE = Buffer.from([0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]);
+
+function installerFixture(marker: string): Buffer {
+  const nextHeader = Buffer.from(marker);
+  const padding = Buffer.alloc(44);
+  const file = Buffer.alloc(32 + padding.length + nextHeader.length);
+  SEVEN_ZIP_SIGNATURE.copy(file, 0);
+  file.writeUInt8(0, 6);
+  file.writeUInt8(4, 7);
+  file.writeBigUInt64LE(BigInt(padding.length), 12);
+  file.writeBigUInt64LE(BigInt(nextHeader.length), 20);
+  file.writeUInt32LE(crc32(nextHeader) >>> 0, 28);
+  padding.copy(file, 32);
+  nextHeader.copy(file, 32 + padding.length);
+  file.writeUInt32LE(crc32(file.subarray(12, 32)) >>> 0, 8);
+  return file;
+}
 
 describe('signed release metadata refresh', () => {
   it('rebuilds differential metadata from the exact signed installer bytes', () => {
@@ -14,8 +33,8 @@ describe('signed release metadata refresh', () => {
     const releaseDir = mkdtempSync(path.join(tmpdir(), 'lastbrowser-release-metadata-'));
     const installerName = 'Lastbrowser-0.1.35-x64-setup.exe';
     const portableName = 'Lastbrowser-0.1.35-x64-portable.exe';
-    const installerBytes = Buffer.from('signed installer fixture');
-    const portableBytes = Buffer.from('signed portable fixture');
+    const installerBytes = installerFixture('signed installer fixture');
+    const portableBytes = installerFixture('signed portable fixture');
     try {
       mkdirSync(releaseDir, { recursive: true });
       writeFileSync(path.join(releaseDir, installerName), installerBytes);

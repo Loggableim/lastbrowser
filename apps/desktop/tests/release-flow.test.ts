@@ -205,6 +205,34 @@ describe('GitHub release auto-update flow', () => {
     }
   });
 
+  it('keeps bundled local AI signing optional for on-demand installers', () => {
+    const workflow = readFileSync(releaseWorkflowPath, 'utf8').replace(/\r\n/g, '\n');
+    const selectIndex = workflow.indexOf('- name: Select bundled local AI signing targets');
+    const signingIndex = workflow.indexOf('- name: Sign bundled local AI runtime before packaging');
+    const verifyIndex = workflow.indexOf('- name: Verify bundled local AI signatures');
+    const packageIndex = workflow.indexOf('- name: Package Windows installers with VMP signing');
+
+    expect(selectIndex).toBeGreaterThan(-1);
+    expect(signingIndex).toBeGreaterThan(selectIndex);
+    expect(verifyIndex).toBeGreaterThan(signingIndex);
+    expect(packageIndex).toBeGreaterThan(verifyIndex);
+
+    const selectStep = workflow.slice(selectIndex, signingIndex);
+    const signingStep = workflow.slice(signingIndex, verifyIndex);
+    const verifyStep = workflow.slice(verifyIndex, packageIndex);
+    const afterPack = readFileSync(
+      path.join(repoRoot, 'apps', 'desktop', 'scripts', 'verify-local-ai-signatures.cjs'),
+      'utf8'
+    );
+
+    // Engines are optional: the on-demand catalog ships without cpu/vulkan.
+    expect(selectStep).toContain('if (-not (Test-Path -LiteralPath $dir)) { continue }');
+    expect(verifyStep).toContain('if (-not (Test-Path -LiteralPath $dir)) { continue }');
+    expect(signingStep).toContain("if: steps.local-ai-signing.outputs.files != ''");
+    expect(afterPack).not.toContain('Local AI engines are not bundled. A release needs signed on-demand archives');
+    expect(afterPack).toContain('No bundled engines. The pinned archives are verified by SHA-256 when downloaded.');
+  });
+
   it('documents the tag-based GitHub Releases flow and required update metadata', () => {
     expect(existsSync(releaseDocPath)).toBe(true);
     const docs = readFileSync(releaseDocPath, 'utf8');

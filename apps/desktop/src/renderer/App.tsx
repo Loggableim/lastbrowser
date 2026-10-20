@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
+import { StartupPlaceholder } from './startup/StartupPlaceholder.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { ChatUiOwnership } from './chat-ui-ownership.js';
@@ -3766,33 +3767,35 @@ function AppContent(): JSX.Element {
     auth_enabled: accessAuthRequired || !accessAuthChecked,
     logged_in: accessAuthChecked && !accessAuthRequired
   })) {
+    const accessAuthForm = accessAuthRequired ? (
+      <section className="startup-screen__auth" aria-labelledby="access-lock-title">
+        <h1 id="access-lock-title">{t('access.lock.title')}</h1>
+        <p>{t('access.lock.description')}</p>
+        <form onSubmit={(event) => void unlockBrowser(event)}>
+          <label htmlFor="access-lock-password">{t('access.lock.password')}</label>
+          <input id="access-lock-password" autoFocus type="password" autoComplete="current-password" value={accessPassword} onChange={(event) => setAccessPassword(event.target.value)} />
+          {accessAuthError && <div className="access-lock-error" role="alert">{accessAuthError}</div>}
+          <button type="submit" disabled={!accessPassword || accessAuthBusy}>{accessAuthBusy ? t('access.lock.unlocking') : t('access.lock.unlock')}</button>
+        </form>
+      </section>
+    ) : null;
     return (
-      <main className="access-lock-screen">
-        <section className="access-lock-card" aria-labelledby="access-lock-title">
-          <div className="access-lock-icon"><ShieldCheck size={28} /></div>
-          <p className="eyebrow">Lastbrowser</p>
-          <h1 id="access-lock-title">{accessAuthRequired ? t('access.lock.title') : t('access.lock.checking')}</h1>
-          <p>{accessAuthRequired
-            ? t('access.lock.description')
-            : (accessAuthError || t('access.lock.checking'))}</p>
-          {accessAuthRequired ? (
-            <form onSubmit={(event) => void unlockBrowser(event)}>
-              <label htmlFor="access-lock-password">{t('access.lock.password')}</label>
-              <input id="access-lock-password" autoFocus type="password" autoComplete="current-password" value={accessPassword} onChange={(event) => setAccessPassword(event.target.value)} />
-              {accessAuthError && <div className="access-lock-error" role="alert">{accessAuthError}</div>}
-              <button type="submit" disabled={!accessPassword || accessAuthBusy}>{accessAuthBusy ? t('access.lock.unlocking') : t('access.lock.unlock')}</button>
-            </form>
-          ) : (
-            <button type="button" onClick={() => {
-              void window.lastbrowser.sidekick.getAccessAuthStatus().then((auth) => {
-                setAccessAuthRequired(Boolean(auth.auth_enabled && !auth.logged_in));
-                setAccessAuthChecked(true);
-                setAccessAuthError('');
-              }).catch((error) => setAccessAuthError(error instanceof Error ? error.message : String(error)));
-            }}>{t('access.lock.retry')}</button>
-          )}
-        </section>
-      </main>
+      <div className="access-lock-screen">
+        <StartupPlaceholder
+          status={!accessAuthChecked && !accessAuthError ? t('access.lock.checking') : null}
+          error={!accessAuthChecked ? accessAuthError || null : null}
+          errorTitle={t('access.lock.title')}
+          retryLabel={t('access.lock.retry')}
+          onRetry={() => {
+            void window.lastbrowser.sidekick.getAccessAuthStatus().then((auth) => {
+              setAccessAuthRequired(Boolean(auth.auth_enabled && !auth.logged_in));
+              setAccessAuthChecked(true);
+              setAccessAuthError('');
+            }).catch((error) => setAccessAuthError(error instanceof Error ? error.message : String(error)));
+          }}
+          retryContent={accessAuthForm}
+        />
+      </div>
     );
   }
 

@@ -92,8 +92,9 @@ Source Maps. `__pycache__`, `.pyc`, `.pytest_cache` und
   `cpu/`- oder `vulkan/`-Binaries.
 - `prepare-local-ai.mjs` prüft die Archive weiterhin offline. Entpacken
   passiert nur mit `LASTBROWSER_BUNDLE_LOCAL_AI_RUNTIME=1`.
-- `verify-local-ai-signatures.cjs` schlägt bei `EVS_REQUIRED=1` bewusst fehl,
-  solange keine signierten On-Demand-Archive existieren (fail closed).
+- `verify-local-ai-signatures.cjs` prüft nur tatsächlich gebündelte Engines.
+  Ohne `cpu/`/`vulkan/` überspringt der Gate den Windows-Build; sind Engines
+  gebündelt, bleibt er bei `EVS_REQUIRED=1` fail closed.
 - Tests: `apps/desktop/tests/local-ai-runtime.test.ts` deckt Erfolg,
   manipuliertes Archiv, fehlende Datei, falschen Dateihash, unsichere
   Katalogpfade, fremde Plattform und Idempotenz ab.
@@ -116,7 +117,9 @@ Branch enthält keine Release-Artefakte.
    Default muss der Release-Prozess die Engine-Archive signieren, gehashte
    Kopien auf einer eigenen Download-Domain hosten und die App die
    Authenticode-Signatur zusätzlich zur SHA-256 prüfen. Bis dahin bleibt der
-   Prototyp fail-closed und nicht release-fähig.
+   Prototyp nicht release-fähig; der Windows-Build wird aber nicht mehr durch
+   den `afterPack`-Gate blockiert, weil das Paket keine Engine-PE-Dateien
+   enthält.
 2. **Offline-Installation**: Ein Setup ohne Netz kann Local AI nicht
    bereitstellen. Cloud-Chat und Browser bleiben nutzbar; die UI muss das
    klar sagen. Optional ist ein separates Offline-Engine-Paket möglich.
@@ -133,7 +136,9 @@ Branch enthält keine Release-Artefakte.
 - Kein Release, kein Tag, kein Merge.
 - Keine Änderung an Modellkatalog, Modell-Downloads oder Cloud-Providern.
 - Keine Lockerung der Python-Pins oder Test-Skips.
-- Keine Signatur-Abmilderung: der `afterPack`-Gate bleibt fail closed.
+- Keine Signatur-Abmilderung: gebündelte Engines bleiben fail closed; der
+  `afterPack`-Gate wird nur dann übersprungen, wenn gar keine Engine im Paket
+  liegt (On-Demand-Katalog wird per SHA-256 geprüft).
 
 ## 9. Abnahmekriterien für die Folgearbeit
 

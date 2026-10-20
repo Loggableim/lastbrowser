@@ -55,7 +55,7 @@ The Electron smoke explicitly sets a separate application home, tests two Space 
 
 The Windows unpacked test package contains the engine catalog, licenses and the complete Python backend. Engine binaries are downloaded on demand in this prototype; model weights and development archives are never packaged. Only the server executable is installed for each backend; unrelated conversion/benchmark executables are excluded.
 
-`verify-local-ai-signatures.cjs` is a read-only `afterPack` gate: when `EVS_REQUIRED=1`, every bundled local AI executable and DLL must have a valid Authenticode signature before a release can proceed. The existing installer signature checks alone do not cover these embedded components.
+`verify-local-ai-signatures.cjs` is a read-only `afterPack` gate: when engines are bundled and `EVS_REQUIRED=1`, every local AI executable and DLL must have a valid Authenticode signature before a release can proceed. The existing installer signature checks alone do not cover these embedded components. On-demand packages bundle no engines, so the gate skips them and relies on the pinned SHA-256 manifest instead of failing the Windows build.
 
 The user authorized an additional invocation of the already used `Azure/trusted-signing-action@v0.5.1`, with the same Azure signing secrets, before installer packaging. The release workflow selects explicit server/DLL paths, signs them, verifies them, then packages them. See `local-ai-signing-proposal.md`. Functional unsigned development packages are available; signed Store-release readiness is not claimed until this signing path and resulting signatures are verified in CI. A workflow entry alone does not prove Azure account or certificate setup.
 

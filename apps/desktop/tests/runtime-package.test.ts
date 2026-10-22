@@ -25,6 +25,22 @@ describe('desktop runtime packaging', () => {
     );
   });
 
+  it('excludes model weights from packaged resources and Python build inputs from app.asar', () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
+    const localAiResource = packageJson.build.extraResources.find((resource: { from: string }) => resource.from === 'vendor/local-ai');
+
+    expect(localAiResource.filter).toEqual(expect.arrayContaining(['!**/*.gguf', '!**/*.safetensors', '!**/models/**']));
+    expect(packageJson.build.files).toEqual(
+      expect.arrayContaining([
+        '!runtime/python/**',
+        '!castlabs-venv/**',
+        '!installer-asset-tools/**',
+        '!wheelhouse/**',
+        '!src/**'
+      ])
+    );
+  });
+
   it('keeps Sidekick in-tree and has no external sync or patch scripts', () => {
     const desktopRoot = process.cwd();
     const repoRoot = path.resolve(desktopRoot, '..', '..');

@@ -63,7 +63,12 @@
       "dist/**/*",
       "!dist/*smoke*.png",
       "package.json",
-      "node_modules/node-pty/**/*"
+      "node_modules/node-pty/**/*",
+      "!runtime/python/**",
+      "!castlabs-venv/**",
+      "!installer-asset-tools/**",
+      "!wheelhouse/**",
+      "!src/**"
     ],
     "asarUnpack": [
       "node_modules/node-pty/**/*"
@@ -72,7 +77,7 @@
       {
         "from": "vendor/local-ai",
         "to": "local-ai",
-        "filter": ["cpu/llama-server.exe", "cpu/*.dll", "cpu/LICENSE*", "vulkan/llama-server.exe", "vulkan/*.dll", "vulkan/LICENSE*", "models.json", "runtime-lock.json", "LICENSE*"]
+        "filter": ["cpu/llama-server.exe", "cpu/*.dll", "cpu/LICENSE*", "vulkan/llama-server.exe", "vulkan/*.dll", "vulkan/LICENSE*", "models.json", "runtime-lock.json", "LICENSE*", "!**/*.gguf", "!**/*.safetensors", "!**/models/**"]
       },
       {
         "from": "../../services",

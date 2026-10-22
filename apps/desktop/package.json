@@ -75,6 +75,11 @@
       "!dist/*smoke*.png",
       "package.json",
       "node_modules/node-pty/**/*",
+      "!runtime/python/**",
+      "!castlabs-venv/**",
+      "!installer-asset-tools/**",
+      "!wheelhouse/**",
+      "!src/**",
       "!node_modules/node-pty/prebuilds/darwin-*/**/*"
     ],
     "asarUnpack": [
@@ -84,7 +89,7 @@
       {
         "from": "runtime/local-ai",
         "to": "apps/desktop/runtime/local-ai",
-        "filter": ["**/*", "!**/*.partial"]
+        "filter": ["**/*", "!**/*.partial", "!**/*.gguf", "!**/*.safetensors", "!**/models/**"]
       },
       {
         "from": "../../services",

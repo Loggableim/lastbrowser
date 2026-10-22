@@ -72,8 +72,9 @@ describe('desktop runtime packaging', () => {
 
   it('excludes model weights from packaged resources and Python build inputs from app.asar', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
-    const localAiResource = packageJson.build.extraResources.find((resource: { from: string }) => resource.from === 'vendor/local-ai');
+    const localAiResource = packageJson.build.extraResources.find((resource: { from: string }) => resource.from === 'runtime/local-ai');
 
+    expect(localAiResource.to).toBe('apps/desktop/runtime/local-ai');
     expect(localAiResource.filter).toEqual(expect.arrayContaining(['!**/*.gguf', '!**/*.safetensors', '!**/models/**']));
     expect(packageJson.build.files).toEqual(
       expect.arrayContaining([

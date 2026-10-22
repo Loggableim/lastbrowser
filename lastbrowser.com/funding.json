@@ -1,0 +1,104 @@
+{
+  "$schema": "https://fundingjson.org/schema/v1.1.0.json",
+  "version": "v1.1.0",
+  "entity": {
+    "type": "individual",
+    "role": "owner",
+    "name": "Dominik Rainer",
+    "email": "hello@lastbrowser.com",
+    "phone": "",
+    "description": "Independent developer based in Tirol, Austria. I build and maintain LastBrowser, a free and open-source (GPL-3.0) desktop browser with a local-first design, as a small self-funded project.",
+    "webpageUrl": {
+      "url": "https://lastbrowser.com"
+    }
+  },
+  "projects": [
+    {
+      "guid": "lastbrowser",
+      "name": "LastBrowser",
+      "description": "LastBrowser is an open-source (GPL-3.0) web browser for Windows and Linux (Linux preview); an Apple version is planned. It is local-first: history, tabs, sessions and passwords stay on the user's machine, with no hidden telemetry. Features include a collapsible vertical tab sidebar with workspaces, a split view, a command palette, incognito mode, one-click browsing data cleanup, session snapshots, bookmark import/export and Manifest V3 WebExtensions support (e.g. uBlock Origin Lite, Bitwarden, Dark Reader). It ships with Sidekick, a built-in AI agent that users can connect to providers of their choice (bring your own key). LastBrowser currently has a few hundred users.",
+      "webpageUrl": {
+        "url": "https://lastbrowser.com"
+      },
+      "repositoryUrl": {
+        "url": "https://github.com/Loggableim/lastbrowser",
+        "wellKnown": "https://github.com/Loggableim/lastbrowser/blob/main/.well-known/funding-manifest-urls"
+      },
+      "licenses": [
+        "spdx:GPL-3.0"
+      ],
+      "tags": [
+        "web-browser",
+        "privacy",
+        "desktop",
+        "local-first",
+        "windows",
+        "linux",
+        "ai",
+        "productivity",
+        "webextensions",
+        "open-source"
+      ]
+    }
+  ],
+  "funding": {
+    "channels": [
+      {
+        "guid": "paypal",
+        "type": "payment-provider",
+        "address": "rainer@dominik.in",
+        "description": "PayPal. For bank transfer details please e-mail hello@lastbrowser.com."
+      }
+    ],
+    "plans": [
+      {
+        "guid": "maintainer-yearly",
+        "status": "active",
+        "name": "Maintainer support",
+        "description": "Covers one developer working part-time on LastBrowser maintenance, security fixes, the Linux build and releases for one year.",
+        "amount": 35000,
+        "currency": "USD",
+        "frequency": "yearly",
+        "channels": [
+          "paypal"
+        ]
+      },
+      {
+        "guid": "infra-monthly",
+        "status": "active",
+        "name": "Infrastructure",
+        "description": "Build servers, CI, website and update hosting.",
+        "amount": 150,
+        "currency": "USD",
+        "frequency": "monthly",
+        "channels": [
+          "paypal"
+        ]
+      },
+      {
+        "guid": "supporter-monthly",
+        "status": "active",
+        "name": "Supporter",
+        "description": "Small monthly sponsorship.",
+        "amount": 25,
+        "currency": "USD",
+        "frequency": "monthly",
+        "channels": [
+          "paypal"
+        ]
+      },
+      {
+        "guid": "goodwill",
+        "status": "active",
+        "name": "Goodwill",
+        "description": "Any amount, one-time.",
+        "amount": 0,
+        "currency": "USD",
+        "frequency": "one-time",
+        "channels": [
+          "paypal"
+        ]
+      }
+    ]
+  }
+}

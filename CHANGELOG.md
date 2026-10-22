@@ -5,6 +5,13 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.59] - 2026-10-22
+
+### Features and fixes
+- Reduce the Windows installer size by excluding local model weights and development runtimes; align the installer test with the 0.1.58 local AI path (#355).
+
+---
+
 ## [0.1.58] - 2026-10-17
 
 ### Features and fixes

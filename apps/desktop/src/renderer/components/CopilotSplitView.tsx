@@ -41,7 +41,7 @@ import {
   type AgenticWorkflowTemplate
 } from '../workflow-templates.js';
 import type { ScopedModelSelection } from '../independent-contracts.js';
-import { conversationCompanionAppearance, messageCompanionAppearance } from '../personality-avatar.js';
+import { assistantDisplayName, conversationCompanionAppearance, messageCompanionAppearance } from '../personality-avatar.js';
 import { CompanionSwitch, useQuickChatCompanion } from './CompanionPicker.js';
 import { useDesktopI18n } from '../i18n.js';
 import { localizeKnownChatStatus } from '../chat-live-stream.js';
@@ -186,7 +186,7 @@ export function CopilotSplitView({
     if (messages[index].role === 'assistant') conversationCompanion = conversationCompanionAppearance(messages[index].companion);
   }
   const fallbackCompanion = conversationCompanion ?? quickCompanion;
-  const companionName = fallbackCompanion.botName;
+  const companionName = assistantDisplayName(fallbackCompanion.botName);
   const activeModelRevision = useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const [inputText, setInputText] = useState('');
@@ -1174,7 +1174,7 @@ export function CopilotSplitView({
                   className={`copilot-message-row ${isUser ? 'user-row' : 'assistant-row'}`}
                 >
                   {!isUser && (
-                    <div className="copilot-avatar-circle" title={messageAppearance.botName}>
+                    <div className="copilot-avatar-circle" title={assistantDisplayName(messageAppearance.botName)}>
                       <img src={messageAppearance.avatar} alt="" className="copilot-msg-avatar" draggable={false} />
                     </div>
                   )}

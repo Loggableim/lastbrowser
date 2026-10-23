@@ -6,6 +6,7 @@ This gate is not an OS sandbox; the dedicated process owns its profile files.
 """
 from __future__ import annotations
 import os
+import json
 import stat
 from pathlib import Path
 from typing import Mapping
@@ -13,15 +14,25 @@ from .native_chat_protocol import NativeChatContext, verify_native_context
 
 _context: NativeChatContext | None = None
 _SAFE_TOOLS = frozenset({"read_file", "search_files", "write_file", "patch", "clarify", "delegate_task"})
+_terminal_enabled = False
 
 
 def bind_native_policy(context: NativeChatContext) -> None:
-    global _context
+    global _context, _terminal_enabled
     if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") != "1" or os.getenv("SIDEKICK_HOME") != context.profile_home:
         raise PermissionError("Native policy may only bind its private worker")
     verify_native_context(context)
     if _context is not None and _context != context:
         raise PermissionError("A native worker cannot change its binding")
+    session_path = Path(context.sessions_dir) / (context.session_id + ".json")
+    try:
+        session = json.loads(session_path.read_text("utf-8"))
+    except (OSError, ValueError, TypeError):
+        raise PermissionError("Native chat tool preferences are unavailable") from None
+    if not isinstance(session, dict) or session.get("session_id") != context.session_id:
+        raise PermissionError("Native chat tool preferences do not match the accepted chat")
+    enabled_toolsets = session.get("enabled_toolsets")
+    _terminal_enabled = isinstance(enabled_toolsets, list) and "terminal" in enabled_toolsets
     # Spawn keeps these stable so one warm process can serve the next session.
     # The bound turn overwrites them before any tool or child reads the env.
     os.environ["LASTBROWSER_NATIVE_GENERATION"] = context.writer_generation
@@ -35,8 +46,9 @@ def bind_native_policy(context: NativeChatContext) -> None:
 
 def release_native_policy() -> None:
     """Turn boundary of a persistent worker: the next accepted turn binds afresh."""
-    global _context
+    global _context, _terminal_enabled
     _context = None
+    _terminal_enabled = False
 
 
 def has_bound_native_policy() -> bool:
@@ -123,6 +135,8 @@ def native_tool_denial(name: str, arguments: Mapping | None, *, context=None) ->
         verify_native_context(bound)
     except Exception:
         return "native_chat_binding_unavailable"
+    if name == "terminal":
+        return None if _terminal_enabled else "native_chat_tool_requires_bound_broker"
     if name not in _SAFE_TOOLS:
         from .native_browser_contracts import NATIVE_BROWSER_TOOLS
         if name in NATIVE_BROWSER_TOOLS:

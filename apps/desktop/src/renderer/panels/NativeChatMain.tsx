@@ -2,7 +2,7 @@ import { isRetiredProvider } from '../retired-providers.js';
 import { CATALOG_VISIBLE_WAIT_MS, MODEL_CATALOG_EVENT, publishModelCatalog, readModelCatalogGroups } from '../model-catalog-prefetch.js';
 import { classifyCatalogNotice, classifyConnectionNotice, connectionNoticeCopy, type ConnectionNotice } from '../connection-notice.js';
 import { useStandardChatCompanion } from '../components/CompanionPicker.js';
-import { conversationCompanionAppearance } from '../personality-avatar.js';
+import { assistantDisplayName, conversationCompanionAppearance } from '../personality-avatar.js';
 /**
  * Native chat panel for Lastbrowser.
  *
@@ -948,7 +948,7 @@ export function NativeChatMain({
           <img src={headerCompanion ? headerCompanion.avatar : brandAssets.sidekickAvatar} alt="" />
           <div className="native-chat-title-copy">
             <h1>{activeSession ? sessionTitle(activeSession) : t('chat.newSession')}</h1>
-            {headerCompanion && <span className="native-chat-space-context">{headerCompanion.botName} AI</span>}
+            {headerCompanion && <span className="native-chat-space-context">{assistantDisplayName(headerCompanion.botName)} AI</span>}
             <span className="native-chat-space-context">{activeSession ? ((activeSession.workspace || activeSpacePath).split(/[\\/]/).filter(Boolean).at(-1) || t('chat.workspace')) : t('chat.kicker')}</span>
             {activeSessionId && <span className="native-chat-session-id">{shortSessionId(activeSessionId)}</span>}
           </div>

@@ -143,6 +143,7 @@ export type SidekickMessageRequest = {
   mode?: 'action' | 'plan';
   chatMode?: string;
   sandboxDisabled?: boolean;
+  terminalEnabled?: boolean;
   groundingContext?: {
     url?: string;
     title?: string;
@@ -2484,6 +2485,7 @@ async function startChat(webuiUrl: string, session: SessionShape, request: Sidek
   if (request.providerAccountEmail?.trim()) body.provider_account_email = request.providerAccountEmail.trim().toLowerCase();
   if (request.spaceScope) body.space_scope = request.spaceScope;
   if (request.reasoningEffort?.trim()) body.reasoning_effort = request.reasoningEffort.trim();
+  if (request.terminalEnabled !== undefined) body.terminal_enabled = request.terminalEnabled;
   if (request.groundingContext && typeof request.groundingContext === 'object') {
     body.grounding_context = {
       url: request.groundingContext.url || '',

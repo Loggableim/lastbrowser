@@ -8,7 +8,7 @@ export type NativeChatControlAck=Readonly<{schemaVersion:1;scope:IndependentScop
 export type NativeChatBinding=Readonly<{scope:IndependentScope;sessionId:string;streamId:string;workspacePath:string;browserProfileId:string}>;
 export type NativeAutoRouteReceipt=Readonly<{turnId:string;provider:string;model:string;locality:'local'|'remote';reason:string}>;
 export type NativeAutoRouteState=Readonly<{binding:NativeChatBinding;receipt:NativeAutoRouteReceipt}>;
-export type NativeChatPending=Readonly<{requestId:string;kind:'approval'|'clarify';command?:string;description?:string;question?:string;choices?:readonly string[]}>;
+export type NativeChatPending=Readonly<{requestId:string;kind:'approval'|'clarify';command?:string;description?:string;perCommand?:boolean;question?:string;choices?:readonly string[]}>;
 type RecordView=Readonly<{binding:NativeChatBinding;pending:readonly NativeChatPending[];writerGeneration?:string;processExited?:boolean}>;
 export type NativeControlSnapshot=Readonly<{schemaVersion:1;scope:IndependentScope;sessionId:string;streamId:string;writerGeneration:string;processExited:boolean;status:'running'|'stopping';
   pendingControls:readonly Readonly<{schemaVersion:1;type:'approval'|'clarify';requestId:string;scope:IndependentScope;sessionId:string;streamId:string;writerGeneration:string;data:Readonly<Record<string,unknown>>}>[]}>;
@@ -91,7 +91,7 @@ export const useNativeChatControls=create<{records:Readonly<Record<string,Record
     const choices=data.choices??data.choices_offered;
     if(choices!==undefined&&choices!==null&&(!Array.isArray(choices)||choices.length>4||!choices.every(choice=>typeof choice==='string'&&choice.length<=4096)))return state;
     const pending:NativeChatPending={requestId:data.requestId,kind,...(typeof data.command==='string'?{command:data.command}:{}),
-      ...(typeof data.description==='string'?{description:data.description.slice(0,16384)}:{}),...(typeof data.question==='string'?{question:data.question}:{}),
+      ...(typeof data.description==='string'?{description:data.description.slice(0,16384)}:{}),...(data.per_command===true?{perCommand:true}:{}),...(typeof data.question==='string'?{question:data.question}:{}),
       ...(Array.isArray(choices)?{choices}: {})};
     if(row.pending.length>=32&&!row.pending.some(entry=>entry.requestId===pending.requestId))return state;
     return{records:{...state.records,[payload.streamId]:{...row,pending:[...row.pending.filter(entry=>entry.requestId!==pending.requestId),pending]}}};

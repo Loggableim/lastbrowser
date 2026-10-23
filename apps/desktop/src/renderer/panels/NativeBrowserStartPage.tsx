@@ -25,6 +25,7 @@ import type { BrowserVisit } from '../history.js';
 import { normalizeNavigationInput } from '../tabs.js';
 import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
+import { assistantDisplayName } from '../personality-avatar.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
 import { browserStartSpaceCopy, browserStartHistoryCopy, browserStartWallpaperCopy } from '../i18n/browser-start-space-copy.js';
 import { DEFAULT_WALLPAPER_PREFERENCE, START_PAGE_WALLPAPERS, parseStartPageWallpaperPreference,
@@ -331,7 +332,7 @@ export function NativeBrowserStartPage({
     return () => window.cancelAnimationFrame(frame);
   }, [focusSearchOnMount, onSearchFocusConsumed]);
 
-  const effectiveBotName = botName.trim() || 'Nova';
+  const effectiveBotName = assistantDisplayName(botName.trim() || 'Nova');
   const greeting = useMemo(() => getDashboardGreeting(currentTime), [currentTime]);
   const timeString = useMemo(() => formatDashboardTime(currentTime), [currentTime]);
   const dateLocale = locale === 'en' ? 'en-US' : locale === 'pt-BR' ? 'pt-BR' : `${locale}-${({ de: 'DE', es: 'ES', fr: 'FR', it: 'IT', ru: 'RU', ja: 'JP' } as const)[locale]}`;

@@ -253,6 +253,12 @@ class QuickAnswerBot:
         return text, response
 
 
+def _opencode_session_header(session_id):
+    """Stable OpenCode session header for every request in one chat."""
+    from cli.opencode_device import session_header_value
+    return session_header_value(session_id)
+
+
 def run_quickchat_direct(*, session, context, bridge, model, provider, text,
                          grounding_context, attachments, cancel_event, put,
                          register, ephemeral=False, supported_reasoning_efforts=None,
@@ -287,6 +293,11 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
             turn_session = choose_session_id(getattr(session, "session_id", None))
             bind_turn_session(turn_session)
             runtime_kwargs["session_id"] = turn_session
+            # OpenCode Go requires this on every inference request. Keep it
+            # stable for the whole chat even if its credential resolver is not
+            # available (the normal connection path may still use another
+            # configured endpoint).
+            opencode_session_header = _opencode_session_header(turn_session)
         runtime = resolve_runtime_provider_with_anthropic_env_lock(
             resolve_runtime_provider, **runtime_kwargs)
     if runtime.get("provider") != provider:
@@ -294,12 +305,14 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
     headers = {}
     if provider in {"opencode-go", "opencode-zen"}:
         from cli.opencode_device import has_credentials, resolve_connection
+        headers["x-opencode-session"] = opencode_session_header
         if has_credentials(provider):
             connection = resolve_connection(provider, model=model, session_id=turn_session)
             if connection.get("model") != model:
                 raise PermissionError("The selected Quickchat model changed; select it again.")
             runtime = {**runtime, **connection}
-            headers = dict(connection.get("headers") or {})
+            headers.update(connection.get("headers") or {})
+            headers["x-opencode-session"] = opencode_session_header
     if provider == "openai-codex":
         from runtime.auxiliary_client import _codex_cloudflare_headers
         headers = _codex_cloudflare_headers(runtime.get("api_key"))

@@ -5,7 +5,7 @@ import { enginePersona } from '../sidekick-motion.js';
 import type { SessionDeleteOutcome } from '../session-list-scope.js';
 import { nextSessionDeleteStep, pruneSessionDeleteErrors, settleSessionDeleteArm, settleSessionDeleteErrors, type SessionDeleteArm } from '../session-delete-arm.js';
 import { AnimatedSidekick } from './AnimatedSidekick.js';
-import { companionDefaultNames, personalityAvatar, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
+import { assistantDisplayName, companionDefaultNames, personalityAvatar, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 import { DownloadDockTrigger } from '../NativeDownloads.js';
 import {
   Archive,
@@ -336,7 +336,7 @@ export function SidekickSidebar({
   const companion = useCompanionAppearance();
   const savedCompanion = readStandardChatCompanion();
   const standardCompanion = useStandardChatCompanion();
-  const activeChatName = standardCompanion.stored ? standardCompanion.botName : botName;
+  const activeChatName = assistantDisplayName(standardCompanion.stored ? standardCompanion.botName : botName);
   const activePersonality = standardCompanion.stored ? standardCompanion.personality : savedCompanion.personality;
   useEffect(() => {
     if (!personalityOpen) return undefined;

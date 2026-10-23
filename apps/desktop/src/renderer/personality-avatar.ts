@@ -12,6 +12,11 @@ export const personalityAvatars = {
 } as const;
 export type CompanionPersonality = keyof typeof personalityAvatars;
 export const companionDefaultNames: Record<CompanionPersonality, string> = { nova: 'Nova', analytical: 'Orion', developer: 'Patch', creative: 'Spark', mentor: 'Zen' };
+
+/** Show the product name in chat chrome while keeping Nova selectable as a character. */
+export function assistantDisplayName(name: string): string {
+  return name === 'Nova' ? 'Sidekick' : name;
+}
 export function personalityAvatar(personality: unknown): string {
   return typeof personality === 'string' && Object.hasOwn(personalityAvatars, personality)
     ? personalityAvatars[personality as CompanionPersonality] : personalityAvatars.nova;

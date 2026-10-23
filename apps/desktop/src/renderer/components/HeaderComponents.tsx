@@ -55,6 +55,7 @@ import { type SpaceSummary, spaceDisplayName } from '../shell-state.js';
 import type { BrowserTab } from '../tabs.js';
 import { prepareSnapTabDrag } from '../types/snap-layouts.js';
 import { useDesktopI18n } from '../i18n.js';
+import { assistantDisplayName } from '../personality-avatar.js';
 import { shouldShowStartupUpdateNotice, setStartupUpdateNoticeHidden } from '../update-notice.js';
 
 export type UpdateStatus = Awaited<ReturnType<typeof window.lastbrowser.updates.status>>;
@@ -915,6 +916,7 @@ export function ModernTitlebar({
   onToggleLoupe
 }: ModernTitlebarProps): React.JSX.Element {
   const { t } = useDesktopI18n();
+  const quickChatName = assistantDisplayName(botName);
   const downloadsOpen = usePanelStore((state) => state.downloadsOpen);
   const { isMaximized, handleDoubleClick, handleMouseDown } = useWindowDrag();
   const isZen = zenMode ?? sidebarMode === 'hidden';
@@ -1116,8 +1118,8 @@ export function ModernTitlebar({
         <button
           type="button"
           className={`titlebar-tool-btn copilot-toggle-btn ${copilotOpen ? 'active' : ''}`}
-          title={`${botName} · ${t('copilot.quickChat')}`}
-          aria-label={`${botName} · ${t('copilot.quickChat')}`}
+          title={`${quickChatName} · ${t('copilot.quickChat')}`}
+          aria-label={`${quickChatName} · ${t('copilot.quickChat')}`}
           aria-pressed={copilotOpen}
           onClick={onToggleCopilot}
         >

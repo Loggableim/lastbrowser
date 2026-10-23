@@ -532,10 +532,16 @@ def resolve_gateway_approval(session_key: str, choice: str,
         if not queue:
             return 0
         if resolve_all:
-            targets = list(queue)
-            queue.clear()
+            # Native terminal prompts are bound to their exact chat control
+            # request. Generic approve-all/YOLO routes must never satisfy them.
+            targets = [entry for entry in queue if not entry.data.get("per_command")]
+            queue[:] = [entry for entry in queue if entry.data.get("per_command")]
         else:
-            targets = [queue.pop(0)]
+            index = next((i for i, entry in enumerate(queue)
+                if not entry.data.get("per_command")), None)
+            if index is None:
+                return 0
+            targets = [queue.pop(index)]
         if not queue:
             _gateway_queues.pop(session_key, None)
 
@@ -1024,7 +1030,7 @@ def _format_tirith_description(tirith_result: dict) -> str:
 
 
 def check_all_command_guards(command: str, env_type: str,
-                             approval_callback=None) -> dict:
+                             approval_callback=None, *, require_explicit=False) -> dict:
     """Run all pre-exec security checks and return a single approval decision.
 
     Gathers findings from tirith and dangerous-command detection, then
@@ -1033,7 +1039,7 @@ def check_all_command_guards(command: str, env_type: str,
     other was shown to the user.
     """
     # Skip containers for both checks
-    if env_type in {"docker", "singularity", "modal", "daytona", "vercel_sandbox"}:
+    if env_type in {"docker", "singularity", "modal", "daytona", "vercel_sandbox"} and not require_explicit:
         return {"approved": True, "message": None}
 
     # Hardline floor: unconditional block for catastrophic commands
@@ -1059,7 +1065,7 @@ def check_all_command_guards(command: str, env_type: str,
     # --yolo or approvals.mode=off: bypass all approval prompts.
     # Gateway /yolo is session-scoped; CLI --yolo remains process-scoped.
     approval_mode = _get_approval_mode()
-    if is_truthy_value(os.getenv("SIDEKICK_YOLO_MODE")) or is_current_session_yolo_enabled() or approval_mode == "off":
+    if not require_explicit and (is_truthy_value(os.getenv("SIDEKICK_YOLO_MODE")) or is_current_session_yolo_enabled() or approval_mode == "off"):
         return {"approved": True, "message": None}
 
     is_cli = os.getenv("SIDEKICK_INTERACTIVE")
@@ -1068,7 +1074,7 @@ def check_all_command_guards(command: str, env_type: str,
 
     # Preserve the existing non-interactive behavior: outside CLI/gateway/ask
     # flows, we do not block on approvals and we skip external guard work.
-    if not is_cli and not is_gateway and not is_ask:
+    if not require_explicit and not is_cli and not is_gateway and not is_ask:
         # Cron sessions: respect cron_mode config
         if os.getenv("SIDEKICK_CRON_SESSION"):
             if _get_cron_approval_mode() == "deny":
@@ -1087,7 +1093,15 @@ def check_all_command_guards(command: str, env_type: str,
                     }
         return {"approved": True, "message": None}
 
-    # --- Phase 1: Gather findings from both checks ---
+    # --- Phase 1/2: Gather findings and decide ---
+    session_key = get_current_session_key()
+    warnings = []  # list of (pattern_key, description, is_tirith)
+    if require_explicit:
+        # Native chat terminal access is opt-in, but every individual command
+        # still needs a fresh UI decision. This deliberately ignores saved
+        # allowlists, smart approval, session yolo and global approval mode.
+        warnings.append(("native-terminal-command",
+            "Sidekick requests approval to run this terminal command.", False))
 
     # Tirith check — wrapper guarantees no raise for expected failures.
     # Only catch ImportError (module not installed).
@@ -1101,28 +1115,16 @@ def check_all_command_guards(command: str, env_type: str,
     # Dangerous command check (detection only, no approval)
     is_dangerous, pattern_key, description = detect_dangerous_command(command)
 
-    # --- Phase 2: Decide ---
-
-    # Collect warnings that need approval
-    warnings = []  # list of (pattern_key, description, is_tirith)
-
-    session_key = get_current_session_key()
-
-    # Tirith block/warn → approvable warning with rich findings.
-    # Previously, tirith "block" was a hard block with no approval prompt.
-    # Now both block and warn go through the approval flow so users can
-    # inspect the explanation and approve if they understand the risk.
     if tirith_result["action"] in {"block", "warn"}:
         findings = tirith_result.get("findings") or []
         rule_id = findings[0].get("rule_id", "unknown") if findings else "unknown"
         tirith_key = f"tirith:{rule_id}"
         tirith_desc = _format_tirith_description(tirith_result)
-        if not is_approved(session_key, tirith_key):
+        if require_explicit or not is_approved(session_key, tirith_key):
             warnings.append((tirith_key, tirith_desc, True))
 
-    if is_dangerous:
-        if not is_approved(session_key, pattern_key):
-            warnings.append((pattern_key, description, False))
+    if is_dangerous and (require_explicit or not is_approved(session_key, pattern_key)):
+        warnings.append((pattern_key, description, False))
 
     # Nothing to warn about
     if not warnings:
@@ -1132,7 +1134,7 @@ def check_all_command_guards(command: str, env_type: str,
     # When approvals.mode=smart, ask the aux LLM before prompting the user.
     # Inspired by OpenAI Codex's Smart Approvals guardian subagent
     # (openai/codex#13860).
-    if approval_mode == "smart":
+    if approval_mode == "smart" and not require_explicit:
         combined_desc_for_llm = "; ".join(desc for _, desc, _ in warnings)
         verdict = _smart_approve(command, combined_desc_for_llm)
         if verdict == "approve":
@@ -1180,6 +1182,7 @@ def check_all_command_guards(command: str, env_type: str,
                 "pattern_key": primary_key,
                 "pattern_keys": all_keys,
                 "description": combined_desc,
+                **({"per_command": True} if require_explicit else {}),
             }
             entry = _ApprovalEntry(approval_data)
             with _lock:
@@ -1290,14 +1293,23 @@ def check_all_command_guards(command: str, env_type: str,
                     "description": combined_desc,
                 }
 
+            if require_explicit and choice != "once":
+                return {
+                    "approved": False,
+                    "message": "BLOCKED: Terminal commands can only be approved individually. Do NOT retry this command.",
+                    "pattern_key": primary_key,
+                    "description": combined_desc,
+                }
+
             # User approved — persist based on scope (same logic as CLI)
-            for key, _, is_tirith in warnings:
-                if choice == "session" or (choice == "always" and is_tirith):
-                    approve_session(session_key, key)
-                elif choice == "always":
-                    approve_session(session_key, key)
-                    approve_permanent(key)
-                    save_permanent_allowlist(_permanent_approved)
+            if not require_explicit:
+                for key, _, is_tirith in warnings:
+                    if choice == "session" or (choice == "always" and is_tirith):
+                        approve_session(session_key, key)
+                    elif choice == "always":
+                        approve_session(session_key, key)
+                        approve_permanent(key)
+                        save_permanent_allowlist(_permanent_approved)
                 # choice == "once": no persistence — command allowed this
                 # single time only, matching the CLI's behavior.
 
@@ -1311,6 +1323,7 @@ def check_all_command_guards(command: str, env_type: str,
             "pattern_key": primary_key,
             "pattern_keys": all_keys,
             "description": combined_desc,
+            **({"per_command": True} if require_explicit else {}),
         })
         return {
             "approved": False,

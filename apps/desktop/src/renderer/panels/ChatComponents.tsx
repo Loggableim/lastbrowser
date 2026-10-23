@@ -29,7 +29,7 @@ import {
   StopCircle,
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
-import { conversationCompanionAppearance, messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
+import { assistantDisplayName, conversationCompanionAppearance, messageCompanionAppearance, useCompanionAppearance } from '../personality-avatar.js';
 import { useStandardChatCompanion } from '../components/CompanionPicker.js';
 import { describeChatContent } from '../chat-display.js';
 import { RichTextRenderer } from '../NativeRichText.js';
@@ -194,7 +194,7 @@ export function ChatTranscript({
           </div>
           <div className="message-body">
             <div className="message-meta">
-              <strong>{message.role === 'user' ? nativeMessageCopy[locale].you : message.role === 'system' ? nativeMessageCopy[locale].system : messageAppearance.botName}</strong>
+              <strong>{message.role === 'user' ? nativeMessageCopy[locale].you : message.role === 'system' ? nativeMessageCopy[locale].system : assistantDisplayName(messageAppearance.botName)}</strong>
               {(message.pending || (message.isPartial === true && message.streaming && (independentRunState === 'running' || independentRunState === 'pausing'))) && <Loader2 size={13} className="spin" />}
               {message.isPartial === true && <span className="chat-partial-label">{nativeMessageCopy[locale].partial}</span>}
             </div>

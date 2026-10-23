@@ -160,17 +160,20 @@ export function detectPageCategory(
 /**
  * Returns contextual quick action chips tailored to the detected page category.
  */
-export function getQuickActionChips(category: PageCategory, _url?: string): QuickActionChip[] {
+export function getQuickActionChips(category: PageCategory, _url?: string, locale: string = 'de'): QuickActionChip[] {
+  const german = locale === 'de';
   switch (category) {
     case 'code':
       return [
         {
           id: 'extract-code',
           category: 'code',
-          label: '💻 Code extrahieren',
+          label: german ? '💻 Code extrahieren' : '💻 Extract code',
           icon: '💻',
-          tooltip: 'Code-Beispiele, APIs und Snippets dieser Seite extrahieren',
-          promptTemplate: 'Extrahiere die wichtigsten Code-Beispiele, CLI-Befehle und API-Signaturen dieser Seite mit kurzer Erklärung der Funktionsweise.'
+          tooltip: german ? 'Code-Beispiele, APIs und Snippets dieser Seite extrahieren' : 'Extract code examples, APIs, and snippets from this page',
+          promptTemplate: german
+            ? 'Extrahiere die wichtigsten Code-Beispiele, CLI-Befehle und API-Signaturen dieser Seite mit kurzer Erklärung der Funktionsweise.'
+            : 'Extract the most important code examples, CLI commands, and API signatures from this page, with a brief explanation of how they work.'
         },
         {
           id: 'tldr',

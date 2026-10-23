@@ -1,4 +1,4 @@
-from runtime.quickchat_direct import _select_quickchat_history
+from runtime.quickchat_direct import _opencode_session_header, _select_quickchat_history
 
 
 def test_select_quickchat_history_caps_multi_turn_messages():
@@ -15,3 +15,8 @@ def test_select_quickchat_history_drops_pending_duplicate_user_turn():
     history = [{"role": "assistant", "content": "Earlier answer"}, {"role": "user", "content": "Same prompt"}]
     selected = _select_quickchat_history(history, "Same prompt")
     assert selected == [{"role": "assistant", "content": "Earlier answer"}]
+
+
+def test_opencode_session_header_is_stable_for_chat_session():
+    assert _opencode_session_header("chat-session") == _opencode_session_header("chat-session")
+    assert _opencode_session_header("chat-session")

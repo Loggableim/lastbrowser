@@ -156,12 +156,13 @@ def _pending_control_view(context,kind,data):
         raise ValueError("Invalid actual pending control identity")
     # Exact typed fields, bounded display values; never generic metadata/config.
     allowed={"clarify":("question","choices_offered","requested_at","timeout_seconds","expires_at"),
-        "approval":("command","description","pattern_key","pattern_keys","requested_at","timeout_seconds","expires_at")}[kind]
+        "approval":("command","description","pattern_key","pattern_keys","per_command","requested_at","timeout_seconds","expires_at")}[kind]
     fields={}
     for key in allowed:
         value=data.get(key)
         if isinstance(value,str): fields[key]=value[:8192]
         elif isinstance(value,list) and all(isinstance(item,str) for item in value): fields[key]=[item[:1024] for item in value[:32]]
+        elif type(value) is bool: fields[key]=value
         elif type(value) in {int,float}: fields[key]=value
     return {"schemaVersion":1,"type":kind,"requestId":request_id,
         "scope":context.scope.model_dump(mode="json",by_alias=True),
@@ -509,6 +510,8 @@ def control_native_chat(session_id: str, stream_id: str, *, actor: str, scope,
             if pending is None or pending["type"] != command or handle is None:
                 return False
             if command == "approval" and choice not in {"once", "session", "always", "deny"}:
+                return False
+            if command == "approval" and pending.get("data", {}).get("per_command") is True and choice not in {"once", "deny"}:
                 return False
             if command == "clarify" and (not isinstance(response, str) or len(response) > 16384):
                 return False

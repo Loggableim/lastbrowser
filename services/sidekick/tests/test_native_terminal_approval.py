@@ -6,6 +6,12 @@ def _check(command_choice, monkeypatch):
     monkeypatch.setenv("SIDEKICK_SESSION_KEY", session)
     monkeypatch.setenv("SIDEKICK_SESSION_PLATFORM", "webui")
     monkeypatch.delenv("SIDEKICK_YOLO_MODE", raising=False)
+    from gateway import session_context
+    session_tokens = {
+        name: session_context._VAR_MAP[name].set(value)
+        for name, value in (("SIDEKICK_SESSION_KEY", session), ("SIDEKICK_SESSION_PLATFORM", "webui"))
+    }
+    approval_token = approval.set_current_session_key(session)
     events = []
 
     def notify(data):
@@ -22,6 +28,9 @@ def _check(command_choice, monkeypatch):
         )
     finally:
         approval.unregister_gateway_notify(session)
+        approval.reset_current_session_key(approval_token)
+        for name, token in session_tokens.items():
+            session_context._VAR_MAP[name].reset(token)
     return result, events
 
 

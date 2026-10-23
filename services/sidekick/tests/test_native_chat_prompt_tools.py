@@ -1,4 +1,5 @@
-"""Native standard chat must not advertise skill_view or MCP skills it cannot call."""
+"""Native standard chat only advertises tools available to its bound worker."""
+import json
 from pathlib import Path
 
 from run_agent import AIAgent
@@ -72,6 +73,28 @@ def test_native_standard_chat_prompt_matches_the_sandboxed_tool_list(tmp_path, m
         enabled = _prompt(agent)
         assert "skill_view(name='sidekick-agent')" in enabled
         assert catalog_calls
+    finally:
+        policy.release_native_policy()
+        store.close()
+
+
+def test_native_chat_offers_terminal_only_when_enabled_for_bound_session(tmp_path, monkeypatch):
+    context, store = fixture_context(tmp_path, "terminal-prompt")
+    session_path = Path(context.sessions_dir) / f"{context.session_id}.json"
+    session = json.loads(session_path.read_text("utf-8"))
+    session["enabled_toolsets"] = ["terminal"]
+    session_path.write_text(json.dumps(session), "utf-8")
+    try:
+        for key, value in build_native_environment(context).items():
+            monkeypatch.setenv(key, value)
+        monkeypatch.setattr(policy, "_context", None)
+        policy.bind_native_policy(context)
+
+        definitions = get_tool_definitions(enabled_toolsets=["terminal"], quiet_mode=True)
+        names = {row["function"]["name"] for row in definitions}
+
+        assert "terminal" in names
+        assert policy.native_tool_denial("terminal", {"command": "printf approval-test"}) is None
     finally:
         policy.release_native_policy()
         store.close()

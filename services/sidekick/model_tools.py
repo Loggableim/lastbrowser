@@ -292,12 +292,14 @@ def get_tool_definitions(
     if os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1":
         from runtime.independent.native_browser_bridge import has_bound_native_browser_bridge
         from runtime.independent.native_browser_contracts import native_browser_tool_definitions
-        from runtime.independent.native_chat_policy import get_bound_native_context, _SAFE_TOOLS
-        context = get_bound_native_context()
+        from runtime.independent import native_chat_policy
+        context = native_chat_policy.get_bound_native_context()
         browser = context is not None and has_bound_native_browser_bridge(context)
         browser_defs = native_browser_tool_definitions() if browser else []
         browser_names = {row["function"]["name"] for row in browser_defs}
-        allowed = set(_SAFE_TOOLS) if context is not None else set()
+        allowed = set(native_chat_policy._SAFE_TOOLS) if context is not None else set()
+        if context is not None and native_chat_policy._terminal_enabled:
+            allowed.add("terminal")
         allowed.update(browser_names)
         names = set()
         if enabled_toolsets is not None:

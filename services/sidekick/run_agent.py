@@ -1753,8 +1753,6 @@ class AIAgent:
                             client_kwargs["default_headers"] = dict(_ph.default_headers)
                     except Exception:
                         pass
-                if self._opencode_session_header:
-                    client_kwargs.setdefault("default_headers", {})["x-opencode-session"] = self._opencode_session_header
             else:
                 # No explicit creds — use the centralized provider router
                 if self._native_auto_bridge is not None:
@@ -1837,6 +1835,12 @@ class AIAgent:
                             "select a provider, or run `sidekick setup` for first-time "
                             "configuration."
                         )
+
+            # Apply the session header after either explicit-credential setup
+            # or centralized provider routing; both paths may issue OpenCode
+            # requests, including when credentials came from the environment.
+            if self._opencode_session_header and self.provider in {"opencode-go", "opencode-zen"}:
+                client_kwargs.setdefault("default_headers", {})["x-opencode-session"] = self._opencode_session_header
             
             if self.provider == "google-gemini-cli" and google_account_email:
                 client_kwargs["account_email"] = str(google_account_email).strip()

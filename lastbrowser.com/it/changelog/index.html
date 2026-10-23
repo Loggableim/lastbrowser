@@ -20,6 +20,9 @@
 <link rel="alternate" hreflang="pt" href="https://lastbrowser.com/pt/changelog/">
 <link rel="alternate" hreflang="ja" href="https://lastbrowser.com/ja/changelog/">
 <link rel="alternate" hreflang="x-default" href="https://lastbrowser.com/changelog/">
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css">
+<script src="/assets/js/theme.js"></script>
 <style>
 @font-face {
   font-family: 'Inter';
@@ -60,18 +63,6 @@ body:before{
 a{color:var(--cyan);text-decoration:none}
 a:hover{text-decoration:underline}
 h1,h2,h3,h4{font-family:Outfit,Inter,sans-serif;font-weight:700}
-
-/* Nav */
-nav{position:sticky;top:0;z-index:30;backdrop-filter:blur(20px);background:rgba(7,10,18,.82);border-bottom:1px solid rgba(42,53,80,.68)}
-nav .inner{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0}
-.logo{display:flex;align-items:center;gap:12px;text-decoration:none;color:inherit}
-.logo img{width:42px;height:42px;border-radius:11px;border:1px solid rgba(42,53,80,.9);box-shadow:0 0 16px rgba(37,99,255,.25)}
-.logo strong{display:block;font-size:18px;letter-spacing:-.02em}
-.logo span{display:block;color:var(--cyan);font-size:12px;margin-top:2px;font-weight:600}
-.links{display:flex;gap:20px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.links a{color:var(--muted);font-size:14px;font-weight:600;transition:.2s color}
-.links a:hover,.links a.active{color:var(--text);text-decoration:none}
-.links a.active{color:var(--cyan)}
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;padding:12px 22px;border-radius:14px;text-decoration:none;font-weight:700;font-size:15px;border:1px solid transparent;transition:all .2s ease;cursor:pointer}
@@ -128,18 +119,35 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
 <nav>
   <div class="container inner">
     <a href="/it/" class="logo">
-      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser">
-      <div><strong>Lastbrowser</strong><span>v0.1.43 Beta · AI-Nativo</span></div>
+      <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
+      <div><strong>Lastbrowser</strong><span>Changelog</span></div>
     </a>
-    <div class="links">
-      <a href="/it/">Home</a>
+    <div class="nav-links">
       <a href="/it/features/">Funzionalità</a>
-      <a href="/it/download/">Download</a>
-      <a href="/it/changelog/" class="active">Changelog</a>
-      <a href="/it/support/">Supporto</a>
-      <a href="/it/privacy/">Privacy</a>
-      <a href="/changelog/">Deutsch (DE)</a>
-      <a href="/en/changelog/">English (EN)</a>
+      <a href="/spaces/">Spazi</a>
+      <a href="/docs/terminal/">Terminale</a>
+      <a href="/hub/">Hub MCP</a>
+      <a href="/docs/">Documentazione</a>
+      <a href="/it/enterprise/">Enterprise</a>
+      <a href="/blog/">Blog</a>
+      <a href="/it/download/">Scarica</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Scegli lingua">🇮🇹 IT ▾</button>
+        <div class="lang-menu">
+          <a href="/changelog/" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/changelog/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/changelog/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/changelog/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/changelog/" class="active" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/changelog/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/changelog/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Cambia tema">☀️</button>
+      <a href="/it/download/" class="btn btn-primary btn-sm">Scarica</a>
+      <button class="mobile-toggle" aria-label="Apri menu">☰</button>
     </div>
   </div>
 </nav>
@@ -336,5 +344,6 @@ footer{padding:40px 0 50px;border-top:1px solid rgba(42,53,80,.6);color:var(--mu
   </div>
 </footer>
 
+<script src="/assets/js/app.js"></script>
 </body>
 </html>

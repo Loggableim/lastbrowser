@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -195,12 +195,12 @@ function materializePython3Binary(runtimeRoot) {
   chmodSync(alias, 0o755);
 }
 
-function extractLinuxStandalonePython(tarball) {
-  mkdirSync(pythonRuntimeDir, { recursive: true });
-  run('tar', ['-xzf', tarball, '-C', pythonRuntimeDir, '--strip-components=1']);
-  const pythonExe = join(pythonRuntimeDir, 'bin', 'python3.12');
+function extractLinuxStandalonePython(tarball, destination = pythonRuntimeDir) {
+  mkdirSync(destination, { recursive: true });
+  run('tar', ['-xzf', tarball, '-C', destination, '--strip-components=1']);
+  const pythonExe = join(destination, 'bin', 'python3.12');
   if (!existsSync(pythonExe)) {
-    throw new Error(`[prepare:python] Standalone archive did not contain bin/python3.12 under ${pythonRuntimeDir}`);
+    throw new Error(`[prepare:python] Standalone archive did not contain bin/python3.12 under ${destination}`);
   }
   return pythonExe;
 }
@@ -213,16 +213,18 @@ function prepareLinuxStandalonePython() {
   if (isOnline || isDownloadOnly) {
     mkdirSync(wheelhouseDir, { recursive: true });
     console.log(`[prepare:python] Downloading Linux x64 wheels from ${requirementsPath} -> ${wheelhouseDir}`);
-    const hostPython = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
-    const hostExe = hostPython.stdout?.trim();
-    if (hostPython.status !== 0 || !hostExe) {
-      throw new Error('Downloading the Linux wheelhouse needs a host python3 with pip. The packaged runtime does not use it.');
-    }
-    run(hostExe, ['-m', 'pip', 'download', '--only-binary=:all:', '--dest', wheelhouseDir, '-r', requirementsPath]);
-    writeLinuxWheelhouseManifest(wheelhouseDir);
-    if (isDownloadOnly) {
-      console.log(`[prepare:python] Linux wheelhouse and standalone CPython are ready.`);
-      return;
+    mkdirSync(runtimeDir, { recursive: true });
+    const builderRoot = mkdtempSync(join(runtimeDir, '.python-312-wheel-builder-'));
+    try {
+      const bundledPython = extractLinuxStandalonePython(tarball, builderRoot);
+      run(bundledPython, ['-m', 'pip', 'download', '--only-binary=:all:', '--dest', wheelhouseDir, '-r', requirementsPath]);
+      writeLinuxWheelhouseManifest(wheelhouseDir);
+      if (isDownloadOnly) {
+        console.log(`[prepare:python] Linux wheelhouse and standalone CPython are ready.`);
+        return;
+      }
+    } finally {
+      rmSync(builderRoot, { recursive: true, force: true });
     }
   }
 
@@ -629,6 +631,12 @@ function requirePythonHome(home) {
   const resolved = resolve(home);
   const pythonExe = join(resolved, 'python.exe');
   if (!existsSync(pythonExe)) throw new Error(`Python source does not contain python.exe: ${resolved}`);
+  const version = spawnSync(pythonExe, ['-I', '-c', 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'], {
+    encoding: 'utf8'
+  });
+  if (version.status !== 0 || version.stdout?.trim() !== '3.12') {
+    throw new Error(`Python runtime source must be CPython 3.12: ${resolved}`);
+  }
   return resolved;
 }
 

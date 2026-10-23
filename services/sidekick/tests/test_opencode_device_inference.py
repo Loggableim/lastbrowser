@@ -27,6 +27,7 @@ def device(monkeypatch):
                              resolve_connection=Mock(return_value=connection),
                              discovered_models=Mock(return_value=["configured-model"]),
                              choose_session_id=lambda session_id=None: session_id or "generated-session",
+                             session_header_value=lambda session_id: session_id,
                              bind_turn_session=lambda session_id: None)
     monkeypatch.setitem(sys.modules, "cli.opencode_device", module)
     return module

@@ -323,6 +323,7 @@ import { createQuickChatScopeKey, selectScopedQuickChatValue, updateScopedQuickC
 import { CommandPalette } from './components/CommandPalette.js';
 import { LiveAutomationBanner } from './components/LiveAutomationBanner.js';
 import { detectPageCategory, executeQuickAction, getQuickActionChips } from './quick-actions.js';
+import { readTerminalEnabled } from './terminal-feature.js';
 import { SnapGhostOverlay } from './components/SnapGhostOverlay.js';
 import { SnapBarFlyout } from './components/SnapBarFlyout.js';
 import { MultiviewGridContainer } from './components/MultiviewGridContainer.js';
@@ -4470,6 +4471,7 @@ function AppContent(): JSX.Element {
         || 'default',
       storage: window.localStorage,
       ...(reasoningEffort ? { reasoningEffort } : {}),
+      terminalEnabled: readTerminalEnabled(),
       ...(groundingContext ? { groundingContext } : {})
     });
     const initialStart = prepareGuardedNativeChatStart(createGuardedStartInput());
@@ -5754,8 +5756,8 @@ function AppContent(): JSX.Element {
     if (!activeTab.url || activeTab.url.startsWith('lastbrowser://') || activeTab.url.startsWith('about:') || activeTab.url.startsWith('chrome://')) {
       return [];
     }
-    return getQuickActionChips(activePageCategory, activeTab.url);
-  }, [activePageCategory, activeTab.url]);
+    return getQuickActionChips(activePageCategory, activeTab.url, locale);
+  }, [activePageCategory, activeTab.url, locale]);
 
   const handleExecuteQuickAction = useCallback((chip: QuickActionChip) => {
     if (!isQuickChatAction(chip.id)) {

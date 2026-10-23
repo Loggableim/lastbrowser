@@ -306,6 +306,7 @@ declare global {
           chatMode?: string;
           sandboxDisabled?: boolean;
           reasoningEffort?: string;
+          terminalEnabled?: boolean;
           groundingContext?: { url?: string; title?: string; snippet?: string } | null;
         }) => Promise<{ sessionId: string; streamId: string }>;
         chatMode:(request:import('./chat-mode-client.js').ChatModeRequest)=>Promise<Record<string,unknown>>;

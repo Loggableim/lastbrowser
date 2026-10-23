@@ -27,6 +27,7 @@ import { renderAppIcon } from './PinnedAppGrid.js';
 import { useDesktopI18n } from '../i18n.js';
 import { shellText } from '../i18n/shell-text.js';
 import { useStandardChatCompanion } from './CompanionPicker.js';
+import { assistantDisplayName } from '../personality-avatar.js';
 import { canDragFloatingDock, createDockAutoHideController, resolveDockOrientationForPanel } from '../dock-auto-hide.js';
 import type { BrowserTab } from '../tabs.js';
 import { canAcceptPinnedTabDrag, canPinBrowserTab, resolvePinnedTabDrop } from '../pinned-tab-drop.js';
@@ -78,7 +79,7 @@ export function NovaDock({
 }: NovaDockProps): React.JSX.Element {
   const { t, locale } = useDesktopI18n();
   const standardCompanion = useStandardChatCompanion();
-  const shownName = standardCompanion.stored ? standardCompanion.botName : botName;
+  const shownName = assistantDisplayName(standardCompanion.stored ? standardCompanion.botName : botName);
   const shownAvatar = standardCompanion.stored ? standardCompanion.avatar : brandAssets.sidekickAvatar;
   const dockSettings = usePanelStore((s) => s.dockSettings);
   const setDockSettings = usePanelStore((s) => s.setDockSettings);
@@ -359,7 +360,7 @@ export function NovaDock({
         ref={dockRef}
         className={`nova-dock pos-${effectivePosition} ${floatingInSettings ? 'settings-safe-position' : ''} ${isHorizontal ? 'is-horizontal' : 'is-vertical'} anim-${dockSettings.animation} ${isRevealed ? 'is-revealed' : 'is-hidden'} ${isDragging ? 'is-dragging' : ''}`}
         style={{ ...floatingStyle, ...animDurationStyle }}
-        aria-label="Nova Dock"
+        aria-label="Sidekick Dock"
         onMouseEnter={handleMouseEnter}
         onMouseMove={(event) => {
           // Track the physical pointer continuously; React mouse-enter can be
@@ -398,7 +399,7 @@ export function NovaDock({
             aria-label={`${shownName} AI`}
           >
             <div className="dock-brand-circle">
-              <AnimatedSidekick persona={sidekickPersona} state={sidekickMotion} mini label={`${botName} AI`} />
+              <AnimatedSidekick persona={sidekickPersona} state={sidekickMotion} mini label={`${shownName} AI`} />
             </div>
             <span className="dock-online-dot" />
           </button>

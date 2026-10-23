@@ -131,6 +131,19 @@ def test_start_normalizes_resolved_windows_path_before_stream_persistence(monkey
     assert type(request["workspace"]) is str
 
 
+def test_start_rejects_opencode_go_gemini_protocol_before_creating_a_session(monkeypatch, tmp_path):
+    handler, body, starts = _setup(monkeypatch, tmp_path)
+    body.update(model="gemini-4-argon-contributor", model_provider="opencode-go")
+
+    with pytest.raises(quickchat.QuickChatError) as caught:
+        quickchat.start_quickchat(body, handler)
+
+    assert caught.value.status == 400
+    assert caught.value.code == "quickchat_model_protocol_unsupported"
+    assert not starts
+    assert QUICK_ID not in models.SESSIONS
+
+
 def test_failed_start_preserves_existing_quickchat_session(monkeypatch, tmp_path):
     handler, body, starts = _setup(monkeypatch, tmp_path)
     quickchat.start_quickchat(body, handler)

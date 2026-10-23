@@ -319,10 +319,11 @@ from tools.approval import (
 )
 
 
-def _check_all_guards(command: str, env_type: str) -> dict:
+def _check_all_guards(command: str, env_type: str, *, require_explicit=False) -> dict:
     """Delegate to consolidated guard (tirith + dangerous cmd) with CLI callback."""
     return _check_all_guards_impl(command, env_type,
-                                  approval_callback=_get_approval_callback())
+                                  approval_callback=_get_approval_callback(),
+                                  require_explicit=require_explicit)
 
 
 # Allowlist: characters that can legitimately appear in directory paths.
@@ -1833,8 +1834,9 @@ def terminal_tool(
         # Pre-exec security checks (tirith + dangerous command detection)
         # Skip check if force=True (user has confirmed they want to run it)
         approval_note = None
-        if not force:
-            approval = _check_all_guards(command, env_type)
+        native_chat_command = os.getenv("LASTBROWSER_NATIVE_CHAT_WORKER") == "1"
+        if not force or native_chat_command:
+            approval = _check_all_guards(command, env_type, require_explicit=native_chat_command)
             if not approval["approved"]:
                 # Check if this is an approval_required (gateway ask mode)
                 if approval.get("status") == "approval_required":

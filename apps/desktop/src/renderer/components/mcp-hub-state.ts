@@ -83,7 +83,7 @@ export class McpHubStateModel {
     try {
       checked(await this.client.saveServers({ mcpServers: config }));
       if (version !== this.version) return false;
-      this.update({ notice: 'MCP-Konfiguration gespeichert. Nova neu starten, damit die Änderung wirksam wird.' });
+      this.update({ notice: 'MCP-Konfiguration gespeichert. Sidekick neu starten, damit die Änderung wirksam wird.' });
       await this.read(version, capturedEditor);
       return true;
     } catch (error) { if (version === this.version) this.update({ error: error instanceof Error ? error.message : String(error) }); return false; }

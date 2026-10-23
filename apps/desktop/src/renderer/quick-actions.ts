@@ -6,6 +6,7 @@ export interface QuickActionChip {
   label: string;
   icon: string;
   tooltip: string;
+  tooltipKey?: 'browser.quickActions.codeSummaryTooltip';
   promptTemplate: string;
 }
 
@@ -160,24 +161,28 @@ export function detectPageCategory(
 /**
  * Returns contextual quick action chips tailored to the detected page category.
  */
-export function getQuickActionChips(category: PageCategory, _url?: string): QuickActionChip[] {
+export function getQuickActionChips(category: PageCategory, _url?: string, locale: string = 'de'): QuickActionChip[] {
+  const german = locale === 'de';
   switch (category) {
     case 'code':
       return [
         {
           id: 'extract-code',
           category: 'code',
-          label: '💻 Code extrahieren',
+          label: german ? 'Code extrahieren' : 'Extract code',
           icon: '💻',
-          tooltip: 'Code-Beispiele, APIs und Snippets dieser Seite extrahieren',
-          promptTemplate: 'Extrahiere die wichtigsten Code-Beispiele, CLI-Befehle und API-Signaturen dieser Seite mit kurzer Erklärung der Funktionsweise.'
+          tooltip: german ? 'Code-Beispiele, APIs und Snippets dieser Seite extrahieren' : 'Extract code examples, APIs, and snippets from this page',
+          promptTemplate: german
+            ? 'Extrahiere die wichtigsten Code-Beispiele, CLI-Befehle und API-Signaturen dieser Seite mit kurzer Erklärung der Funktionsweise.'
+            : 'Extract the most important code examples, CLI commands, and API signatures from this page, with a brief explanation of how they work.'
         },
         {
           id: 'tldr',
           category: 'code',
-          label: '⚡ TL;DR',
+          label: 'TL;DR',
           icon: '⚡',
-          tooltip: 'Kompakte technische Zusammenfassung der Seite',
+          tooltip: 'Compact technical summary of the page',
+          tooltipKey: 'browser.quickActions.codeSummaryTooltip',
           promptTemplate: 'Erstelle eine kurze technische TL;DR-Zusammenfassung dieser Dokumentation/Bibliothek.'
         }
       ];
@@ -195,7 +200,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string): Quic
         {
           id: 'tldr',
           category: 'tabular',
-          label: '⚡ TL;DR',
+          label: 'TL;DR',
           icon: '⚡',
           tooltip: 'Produkte, Preise und wichtigste Merkmale zusammenfassen',
           promptTemplate: 'Fasse die wichtigsten Produkte, Preise und Kennzahlen dieser Seite kurz zusammen.'
@@ -207,7 +212,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string): Quic
         {
           id: 'tldr',
           category: 'news',
-          label: '⚡ TL;DR',
+          label: 'TL;DR',
           icon: '⚡',
           tooltip: 'Die 3 wichtigsten Kernaussagen dieses Artikels zusammenfassen',
           promptTemplate: 'Erstelle eine prägnante TL;DR-Zusammenfassung mit den 3 wichtigsten Kernaussagen dieses Artikels.'
@@ -228,7 +233,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string): Quic
         {
           id: 'tldr',
           category: 'general',
-          label: '⚡ TL;DR',
+          label: 'TL;DR',
           icon: '⚡',
           tooltip: 'Kompakte Zusammenfassung der aktuellen Webseite',
           promptTemplate: 'Erstelle eine prägnante Zusammenfassung der Kernaussagen dieser Seite.'

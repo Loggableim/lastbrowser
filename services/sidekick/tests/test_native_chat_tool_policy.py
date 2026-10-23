@@ -115,6 +115,17 @@ def test_missing_paths_unknown_tools_and_marker_drift_fail_closed(bound,monkeypa
     assert policy.native_tool_denial("write_file",{"path":"project.txt"}) == "native_chat_context_missing"
 
 
+def test_terminal_is_available_only_when_saved_session_opted_in(bound):
+    context, _ = bound
+    assert policy.native_tool_denial("terminal", {}) == "native_chat_tool_requires_bound_broker"
+    session_path = Path(context.sessions_dir) / (context.session_id + ".json")
+    session = json.loads(session_path.read_text("utf-8"))
+    session["enabled_toolsets"] = ["browser", "file", "terminal"]
+    session_path.write_text(json.dumps(session), encoding="utf-8")
+    policy.bind_native_policy(context)
+    assert policy.native_tool_denial("terminal", {}) is None
+
+
 def test_hard_link_to_session_is_not_a_project_file(bound):
     context,_=bound
     target=Path(context.sessions_dir)/(context.session_id+".json")

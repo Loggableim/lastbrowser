@@ -130,6 +130,17 @@ describe('Contextual Quick-Action Chips (Phase 10.5)', () => {
     expect(generalChips[0].label).toContain('TL;DR');
   });
 
+  it('localizes the code extraction action for English UI', () => {
+    const chip = getQuickActionChips('code', undefined, 'en').find((item) => item.id === 'extract-code');
+    expect(chip?.label).toBe('Extract code');
+    expect(chip?.icon).toBe('💻');
+    expect(chip?.tooltip).toContain('Extract code examples');
+    const summary = getQuickActionChips('code', undefined, 'en').find((item) => item.id === 'tldr');
+    expect(summary?.label).toBe('TL;DR');
+    expect(summary?.icon).toBe('⚡');
+    expect(summary?.tooltipKey).toBe('browser.quickActions.codeSummaryTooltip');
+  });
+
   it('executes quick-action and formats context block with prepared prompt', async () => {
     const sendPromptMock = vi.fn();
     const testTab = {

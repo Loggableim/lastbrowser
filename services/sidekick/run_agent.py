@@ -1282,13 +1282,18 @@ class AIAgent:
         self.log_prefix_chars = log_prefix_chars
         self.log_prefix = f"{log_prefix} " if log_prefix else ""
         self._opencode_device_connection = None
+        self._opencode_session_header = None
         if provider in {"opencode-go", "opencode-zen"}:
             from cli.opencode_device import bind_turn_session, choose_session_id, has_credentials, resolve_connection
+            session_id = choose_session_id(session_id)
+            if not getattr(self, "session_id", None):
+                self.session_id = session_id
+            bind_turn_session(session_id)
+            from cli.opencode_device import session_header_value
+            self._opencode_session_header = session_header_value(session_id)
             if has_credentials(provider):
                 # The real chat session identity is stable across token refreshes
                 # and across a later completion that did not receive an id.
-                session_id = choose_session_id(session_id)
-                bind_turn_session(session_id)
                 connection = resolve_connection(provider, model=model, session_id=session_id)
                 self._opencode_device_connection = connection
                 api_key, base_url, api_mode = connection["api_key"], connection["base_url"], connection["api_mode"]
@@ -1651,8 +1656,11 @@ class AIAgent:
                 # the third-party identity-injection bug.
                 from runtime.anthropic_adapter import _is_oauth_token as _is_oat
                 self._is_anthropic_oauth = _is_oat(effective_key) if _is_native_anthropic else False
+                _anthropic_headers = dict((self._opencode_device_connection or {}).get("headers") or {})
+                if self._opencode_session_header:
+                    _anthropic_headers["x-opencode-session"] = self._opencode_session_header
                 self._anthropic_client = build_anthropic_client(effective_key, base_url, timeout=_provider_timeout,
-                    default_headers=(self._opencode_device_connection or {}).get("headers"))
+                    default_headers=_anthropic_headers)
                 if self._native_auto_bridge is not None:
                     self._anthropic_client = self._native_auto_bridge.wrap(self._anthropic_client, agent=self)
                 # No OpenAI client needed for Anthropic mode
@@ -1827,6 +1835,12 @@ class AIAgent:
                             "select a provider, or run `sidekick setup` for first-time "
                             "configuration."
                         )
+
+            # Apply the session header after either explicit-credential setup
+            # or centralized provider routing; both paths may issue OpenCode
+            # requests, including when credentials came from the environment.
+            if self._opencode_session_header and self.provider in {"opencode-go", "opencode-zen"}:
+                client_kwargs.setdefault("default_headers", {})["x-opencode-session"] = self._opencode_session_header
             
             if self.provider == "google-gemini-cli" and google_account_email:
                 client_kwargs["account_email"] = str(google_account_email).strip()
@@ -7190,6 +7204,8 @@ class AIAgent:
         if not self.session_id:
             self.session_id = turn_id
         bind_turn_session(turn_id)
+        from cli.opencode_device import session_header_value
+        self._opencode_session_header = session_header_value(turn_id)
         connection = resolve_connection(self.provider, model=self.model, session_id=turn_id)
         if connection["api_mode"] != self.api_mode:
             raise PermissionError("opencode_device_model_configuration_changed")
@@ -7199,7 +7215,7 @@ class AIAgent:
             from runtime.anthropic_adapter import build_anthropic_client
             client = build_anthropic_client(self.api_key, self.base_url,
                 timeout=get_provider_request_timeout(self.provider, self.model),
-                default_headers=connection["headers"])
+                default_headers={**connection["headers"], "x-opencode-session": self._opencode_session_header})
             old_client = self._anthropic_client
             self._anthropic_client = self._native_auto_bridge.wrap(client, agent=self) if self._native_auto_bridge is not None else client
             self._anthropic_api_key, self._anthropic_base_url = self.api_key, self.base_url
@@ -7209,7 +7225,7 @@ class AIAgent:
                 pass
         else:
             self._client_kwargs.update(api_key=self.api_key, base_url=self.base_url,
-                default_headers=dict(connection["headers"]))
+                default_headers={**connection["headers"], "x-opencode-session": self._opencode_session_header})
             if not self._replace_primary_openai_client(reason="opencode_device_refresh"):
                 raise PermissionError("opencode_device_client_refresh_failed")
 
@@ -7331,8 +7347,12 @@ class AIAgent:
     def _apply_client_headers_for_base_url(self, base_url: str) -> None:
         from runtime.auxiliary_client import _AI_GATEWAY_HEADERS, build_or_headers
 
-        if getattr(self, "_opencode_device_connection", None) is not None and self.provider in {"opencode-go", "opencode-zen"}:
-            self._client_kwargs["default_headers"] = dict(self._opencode_device_connection["headers"])
+        if getattr(self, "provider", None) in {"opencode-go", "opencode-zen"}:
+            headers = dict((getattr(self, "_opencode_device_connection", None) or {}).get("headers")
+                or self._client_kwargs.get("default_headers") or {})
+            if getattr(self, "_opencode_session_header", None):
+                headers["x-opencode-session"] = self._opencode_session_header
+            self._client_kwargs["default_headers"] = headers
         elif base_url_host_matches(base_url, "openrouter.ai"):
             self._client_kwargs["default_headers"] = build_or_headers()
         elif base_url_host_matches(base_url, "ai-gateway.vercel.sh"):

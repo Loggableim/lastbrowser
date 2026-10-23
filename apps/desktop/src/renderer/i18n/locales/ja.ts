@@ -18,6 +18,10 @@ export const desktopJaOverrides = {
   'chat.assistantInvalidResponse': 'アシスタントが無効な応答を返しました。',
   'chat.activeTurnBusy': 'このチャットは進行中のターンがまだ書き込んでいます。変更または削除する前に、そのターンを停止してください。',
   'app.title': 'LastBrowser',
+  'browser.quickActions.codeSummaryTooltip': 'ページの簡潔な技術的要約',
+  'copilot.message.copy': 'メッセージをコピー',
+  'copilot.message.upvote': '良い回答（高評価）',
+  'copilot.message.feedback': '問題を報告（フィードバック）',
   'whatsNew.title': '更新内容',
   'whatsNew.intro': '今回の更新で変更された内容です。',
   'whatsNew.version': 'バージョン {version}',
@@ -487,3 +491,19 @@ export const desktopJaOverrides = {
   "commands.cli.insights": shellCopyJa["commands.cli.insights"],
   "commands.cli.version": shellCopyJa["commands.cli.version"],
 } satisfies Record<DesktopTranslationKey, string>;
+
+Object.assign(desktopJaOverrides, {
+  'sidebar.drawer.aiTitle': 'Sidekick AI、エージェント、スキル',
+  'sidebar.drawer.aiHeading': 'Sidekick AIとエージェント',
+  'sidebar.items.chat.title': 'Sidekickチャット',
+  'sidebar.utilities.extensions.desc': 'Chrome MV3とSidekick MCPスキル',
+  'firstRun.preferredModelLabel': 'Sidekick AIの優先モデル：',
+  'firstRun.runtimeReady': 'Sidekick AIランタイム：準備完了',
+  'firstRun.runtimeStarting': 'Sidekick AIランタイム：起動中…',
+  'commands.category.nova': 'Sidekick AI',
+  'settings.panels.appearance.presetNovaBottom': 'Sidekick · 下部',
+  'settings.panels.appearance.actionBarDescription': 'ブラウザー内のフローティングSidekickメニューの既定の位置。',
+  'settings.panels.appearance.dockTitle': 'Sidekickドック（操作バーと魚眼効果）',
+  'settings.panels.appearance.presetsDescription': 'すぐに使えるSidekickドックのレイアウトを選択します。',
+  'settings.panels.appearance.dockPositionDescription': 'ブラウザー内で折りたたまれたSidekickバーの位置。',
+});

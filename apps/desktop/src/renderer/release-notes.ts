@@ -201,7 +201,7 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
       "Arbeitsplatz mit konfigurierbaren Widgets, lokalen Notizen, Aufgaben, Fokustimer und Plugins. Passwortimport aus Browser-CSV mit lokal verschlüsseltem Speicher und bewusstem Ausfüllen auf passenden HTTPS-Seiten.",
       "Vier Übergänge nach dem Entsperren und fünf optionale Startklänge mit passender Dauer, Lautstärke und Zufallsauswahl; Rainbow ist abschaltbar.",
       "Automatische Chattitel sowie Pinnen, Archivieren und Löschen in der Sidebar. Conversation ist in Preferences integriert; Working Models enthält ChatGPT/Codex und OpenCode Go, weitere Anbieter stehen unter Beta Models.",
-      "Kompakte Nova-Research-Leiste, korrigierte Gmail-Seitenleistennavigation und erhaltene Schutzheader für eingebettete Loginseiten."
+      "Kompakte Sidekick-Research-Leiste, korrigierte Gmail-Seitenleistennavigation und erhaltene Schutzheader für eingebettete Loginseiten."
     ],
     "en": [
       "New start page with selectable wallpapers, dimming and blur for each profile and Space.",
@@ -216,7 +216,7 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
       "Workspace with configurable widgets, local notes, tasks, focus timer and plugins. Import browser CSV passwords into encrypted local storage and explicitly fill matching HTTPS sites.",
       "Four unlock transitions and five optional opening sounds with matching duration, volume and random selection; the rainbow border can be disabled.",
       "Automatic chat titles and sidebar pin, archive and delete. Conversation is part of Preferences; Working Models contains ChatGPT/Codex and OpenCode Go, with other providers under Beta Models.",
-      "Compact Nova Research toolbar, corrected Gmail sidepanel navigation and retained framing protections for embedded login pages."
+      "Compact Sidekick Research toolbar, corrected Gmail sidepanel navigation and retained framing protections for embedded login pages."
     ],
     "es": [
       "Nueva página de inicio con fondos seleccionables, oscurecimiento y desenfoque por perfil y Space.",
@@ -230,7 +230,7 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
       "Elige el canal Stable o Beta; las versiones beta empiezan con 0.1.57.",
       "Espacio de trabajo con widgets, notas locales, tareas, temporizador y plugins. Importación CSV de contraseñas con almacenamiento local cifrado y rellenado en sitios HTTPS correspondientes.",
       "Cuatro transiciones y cinco sonidos opcionales sincronizados, con volumen, selección aleatoria y borde arcoíris configurables. Títulos de chat automáticos, fijar, archivar y eliminar; Working Models y Beta Models separados.",
-      "Barra Nova Research compacta, navegación Gmail corregida y protección conservada para páginas de acceso incrustadas."
+      "Barra Sidekick Research compacta, navegación Gmail corregida y protección conservada para páginas de acceso incrustadas."
     ],
     "fr": [
       "Nouvelle page de démarrage avec fonds au choix, assombrissement et flou par profil et Space.",
@@ -244,7 +244,7 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
       "Choisissez le canal Stable ou Beta ; les versions bêta commencent avec 0.1.57.",
       "Espace de travail avec widgets, notes locales, tâches, minuteur et plugins. Importation CSV des mots de passe avec stockage local chiffré et remplissage sur les sites HTTPS correspondants.",
       "Quatre transitions et cinq sons facultatifs synchronisés, avec volume, choix aléatoire et bordure arc-en-ciel réglables. Titres de chat automatiques, épingler, archiver et supprimer ; séparation Working Models et Beta Models.",
-      "Barre Nova Research compacte, navigation Gmail corrigée et protections conservées pour les pages de connexion intégrées."
+      "Barre Sidekick Research compacte, navigation Gmail corrigée et protections conservées pour les pages de connexion intégrées."
     ],
     "it": [
       "Nuova pagina iniziale con sfondi selezionabili, oscuramento e sfocatura per profilo e Space.",
@@ -258,7 +258,7 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
       "Scegli il canale Stable o Beta; le versioni beta iniziano con 0.1.57.",
       "Area di lavoro con widget, note locali, attività, timer e plugin. Importazione CSV delle password con archiviazione locale cifrata e compilazione sui siti HTTPS corrispondenti.",
       "Quattro transizioni e cinque suoni opzionali sincronizzati, con volume, scelta casuale e bordo arcobaleno configurabili. Titoli chat automatici, fissare, archiviare ed eliminare; Working Models e Beta Models separati.",
-      "Barra Nova Research compatta, navigazione Gmail corretta e protezioni mantenute per le pagine di accesso incorporate."
+      "Barra Sidekick Research compatta, navigazione Gmail corretta e protezioni mantenute per le pagine di accesso incorporate."
     ],
     "pt-BR": [
       "Nova página inicial com fundos selecionáveis, escurecimento e desfoque por perfil e Space.",
@@ -272,7 +272,7 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
       "Escolha o canal Stable ou Beta; as versões beta começam em 0.1.57.",
       "Área de trabalho com widgets, notas locais, tarefas, temporizador e plugins. Importação CSV de senhas com armazenamento local criptografado e preenchimento nos sites HTTPS correspondentes.",
       "Quatro transições e cinco sons opcionais sincronizados, com volume, escolha aleatória e borda arco-íris configuráveis. Títulos de chat automáticos, fixar, arquivar e excluir; Working Models e Beta Models separados.",
-      "Barra Nova Research compacta, navegação Gmail corrigida e proteções mantidas para páginas de login incorporadas."
+      "Barra Sidekick Research compacta, navegação Gmail corrigida e proteções mantidas para páginas de login incorporadas."
     ],
     "ru": [
       "Новая стартовая страница с выбором фона, затемнением и размытием для каждого профиля и Space.",
@@ -286,7 +286,7 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
       "Выбор канала обновлений Stable или Beta; бета-версии начинаются с 0.1.57.",
       "Рабочий стол с виджетами, локальными заметками, задачами, таймером и плагинами. Импорт паролей из CSV с локальным шифрованием и заполнением на соответствующих HTTPS-сайтах.",
       "Четыре перехода и пять необязательных звуков с синхронизацией, громкостью и случайным выбором; радужная рамка отключается. Автоматические названия чатов, закрепление, архивирование и удаление; Working Models и Beta Models разделены.",
-      "Компактная панель Nova Research, исправленная навигация Gmail и сохранение защиты встроенных страниц входа."
+      "Компактная панель Sidekick Research, исправленная навигация Gmail и сохранение защиты встроенных страниц входа."
     ],
     "ja": [
       "プロファイルとSpaceごとに背景画像、暗さ、ぼかしを選べる新しいスタートページ。",
@@ -300,7 +300,7 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
       "更新チャネルをStableとBetaから選択。ベータ版は0.1.57から開始。",
       "ウィジェット、ローカルメモ、タスク、タイマー、プラグインを備えたワークスペース。CSVからパスワードを読み込み、ローカルで暗号化し、一致するHTTPSサイトに入力できます。",
       "4種類の画面遷移と5種類の任意の起動音を同期。音量、ランダム選択、虹色の枠を設定できます。チャットの自動タイトル、固定、アーカイブ、削除と、Working Models・Beta Modelsの分離。",
-      "コンパクトなNova Research、Gmailのナビゲーション修正、埋め込みログインページの保護維持。"
+      "コンパクトなSidekick Research、Gmailのナビゲーション修正、埋め込みログインページの保護維持。"
     ]
   }
 },
@@ -348,56 +348,56 @@ const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, re
     version: '0.1.46',
     changes: {
       en: [
-        'Open Zen Mode directly from the compact NovaDock.',
+        'Open Zen Mode directly from the compact Sidekick Dock.',
         'Fixed Quickchat startup on Windows.',
         'Choose Teamwork models from the manual model picker.',
         'Authentication status checks remain read-only.',
         'Reasoning-only output is no longer used as a finished draft.'
       ],
       de: [
-        'Zen Mode lässt sich direkt über das kompakte NovaDock öffnen.',
+        'Zen Mode lässt sich direkt über das kompakte Sidekick Dock öffnen.',
         'Der Quickchat-Start unter Windows wurde korrigiert.',
         'Teamwork-Modelle sind in der manuellen Modellauswahl verfügbar.',
         'Authentifizierungsstatus-Abfragen bleiben lesend.',
         'Reine Reasoning-Ausgaben werden nicht mehr als fertiger Entwurf verwendet.'
       ],
       it: [
-        'Apri direttamente la modalità Zen e Focus dal NovaDock compatto.',
+        'Apri direttamente la modalità Zen e Focus dal Sidekick Dock compatto.',
         'Corretto l’avvio di Quickchat su Windows.',
         'I modelli Teamwork sono disponibili nella selezione manuale.',
         'I controlli dello stato di autenticazione restano in sola lettura.',
         'Le sole spiegazioni del ragionamento non vengono più usate come bozze complete.'
       ],
       es: [
-        'Abre los modos Zen y Enfoque directamente desde NovaDock compacto.',
+        'Abre los modos Zen y Enfoque directamente desde el Sidekick Dock compacto.',
         'Se corrigió el inicio de Quickchat en Windows.',
         'Los modelos Teamwork están disponibles en la selección manual.',
         'Las comprobaciones del estado de autenticación siguen siendo de solo lectura.',
         'Las respuestas que solo contienen razonamiento ya no se usan como borradores terminados.'
       ],
       fr: [
-        'Ouvrez directement les modes Zen et Concentration depuis le NovaDock compact.',
+        'Ouvrez directement les modes Zen et Concentration depuis le Sidekick Dock compact.',
         'Le démarrage de Quickchat sous Windows a été corrigé.',
         'Les modèles Teamwork sont disponibles dans le sélecteur manuel.',
         'Les vérifications de l’état d’authentification restent en lecture seule.',
         'Les sorties contenant uniquement le raisonnement ne sont plus utilisées comme brouillons terminés.'
       ],
       'pt-BR': [
-        'Abra os modos Zen e Foco diretamente pelo NovaDock compacto.',
+        'Abra os modos Zen e Foco diretamente pelo Sidekick Dock compacto.',
         'A inicialização do Quickchat no Windows foi corrigida.',
         'Os modelos Teamwork estão disponíveis na seleção manual.',
         'As verificações do estado de autenticação continuam somente para leitura.',
         'Saídas que contêm apenas raciocínio não são mais usadas como rascunhos concluídos.'
       ],
       ru: [
-        'Открывайте режимы Zen и «Фокус» прямо из компактного NovaDock.',
+        'Открывайте режимы Zen и «Фокус» прямо из компактной панели Sidekick.',
         'Исправлен запуск Quickchat в Windows.',
         'Модели Teamwork доступны в ручном выборе модели.',
         'Проверки состояния аутентификации остаются только для чтения.',
         'Вывод только с рассуждениями больше не используется как готовый черновик.'
       ],
       ja: [
-        'コンパクトな NovaDock から Zen／フォーカスモードを直接開けます。',
+        'コンパクトなSidekick DockからZen／フォーカスモードを直接開けます。',
         'Windows で Quickchat が起動しない問題を修正しました。',
         '手動モデル選択で Teamwork モデルを選べます。',
         '認証状態の確認は引き続き読み取り専用です。',

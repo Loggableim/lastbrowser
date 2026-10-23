@@ -128,6 +128,11 @@ describe('desktop runtime packaging', () => {
     const requirements = readFileSync(path.resolve(process.cwd(), 'scripts/requirements-runtime.txt'), 'utf8');
     expect(requirements).toContain('Pillow==12.3.0');
     expect(requirements).toContain('psutil==7.2.2');
+    expect(requirements).toMatch(/^pywin32==312\s*;\s*sys_platform == "win32"$/m);
+    expect(linuxPrepare).toContain('extractLinuxStandalonePython(tarball, builderRoot)');
+    expect(linuxPrepare).toContain("run(bundledPython, ['-m', 'pip', 'download'");
+    expect(linuxPrepare).not.toContain("spawnSync('python3'");
+    expect(prepareScript).toContain("version.stdout?.trim() !== '3.12'");
     expect(prepareScript).toContain("--no-build-isolation");
     expect(prepareScript).not.toContain('marker.packageVersion === desired.packageVersion');
     const sidekickPyproject = readFileSync(path.resolve(process.cwd(), '..', '..', 'services', 'sidekick', 'pyproject.toml'), 'utf8');

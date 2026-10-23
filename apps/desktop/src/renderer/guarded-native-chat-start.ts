@@ -30,6 +30,7 @@ export type NativeChatStartPayload = Readonly<{
   workspace: string;
   backendProfileName?: string;
   reasoningEffort?: string;
+  terminalEnabled?: boolean;
   groundingContext?: TeamworkGroundingContext;
 }>;
 
@@ -45,6 +46,7 @@ export type GuardedNativeChatStartInput = Readonly<{
   qualificationBackendProfileName: string;
   storage: Pick<Storage, 'getItem' | 'setItem'>;
   reasoningEffort?: string;
+  terminalEnabled?: boolean;
   groundingContext?: TeamworkGroundingContext;
 }>;
 
@@ -119,6 +121,7 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
       workspace: input.captured.spacePath,
       ...(input.captured.backendProfileName.trim() ? { backendProfileName: input.captured.backendProfileName } : {}),
       ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
+      ...(input.terminalEnabled !== undefined ? { terminalEnabled: input.terminalEnabled } : {}),
       ...(input.groundingContext ? { groundingContext: input.groundingContext } : {}),
     },
   };

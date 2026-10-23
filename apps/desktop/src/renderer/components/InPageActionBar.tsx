@@ -295,7 +295,7 @@ export function InPageActionBar({
   if (variant === 'sidebar') {
     if (activeDock !== 'sidebar') return null;
     return <details className="sidebar-research-tools" data-nova-research-sidebar>
-      <summary><Sparkles size={15} /><span>Nova Research</span></summary>
+      <summary><Sparkles size={15} /><span>Sidekick Research</span></summary>
       <div className="sidebar-research-actions">
         <button type="button" disabled={busy} onClick={() => void onAction('summarize-page')}><Sparkles size={14} />{t('browser.actions.summarize')}</button>
         <button type="button" disabled={busy} onClick={() => void onAction('explain-selection')}><MessageSquare size={14} />{t('browser.actions.explain')}</button>
@@ -308,7 +308,7 @@ export function InPageActionBar({
       </div>
       {overlayTools && <div className="sidebar-research-actions">{overlayTools}</div>}
       <label className="sidebar-research-position"><Layout size={14} /><span>Position</span>
-        <select value={normalizedDock} onChange={event => handleSelectDock(event.target.value as ActionBarDock)} aria-label="Nova Research Position">
+        <select value={normalizedDock} onChange={event => handleSelectDock(event.target.value as ActionBarDock)} aria-label="Sidekick Research Position">
           {DOCK_SELECTION_OPTIONS.map(mode => <option key={mode} value={mode}>{copy.dock[mode]}</option>)}
         </select>
       </label>
@@ -335,14 +335,14 @@ export function InPageActionBar({
             event.preventDefault(); setIsPinned(true);
             requestAnimationFrame(() => document.getElementById(flyoutId)?.querySelector<HTMLButtonElement>('button')?.focus());
           }}
-          title="Nova Research · Hover / click · Esc" aria-label="Nova Research" aria-expanded={isFlyoutOpen} aria-controls={flyoutId}>
+          title="Sidekick Research · Hover / click · Esc" aria-label="Sidekick Research" aria-expanded={isFlyoutOpen} aria-controls={flyoutId}>
           <Sparkles size={14} className="research-sparkles-icon" />
         </button>
         <button type="button" className={`titlebar-tool-btn mute-trigger ${muted ? 'active' : ''}`} onClick={onToggleMute}
           title={muted ? copy.unmute : copy.mute} aria-label={muted ? copy.unmuteShort : copy.muteShort} aria-pressed={muted}>
           {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
         </button>
-        {isFlyoutOpen && <div id={flyoutId} className="titlebar-research-flyout research-toolbar" role="toolbar" aria-label="Nova Research">
+        {isFlyoutOpen && <div id={flyoutId} className="titlebar-research-flyout research-toolbar" role="toolbar" aria-label="Sidekick Research">
           <div className="research-primary-actions">
             <button type="button" className="research-action" disabled={busy} onClick={() => void onAction('summarize-page')}
               title={t('browser.actions.summarize')} aria-label={t('browser.actions.summarize')}><Sparkles size={14} /><span>{t('browser.actions.summarize')}</span></button>
@@ -408,7 +408,7 @@ export function InPageActionBar({
         ref={containerRef}
         className={`browser-action-strip dock-${activeDock} ${isDragging ? 'is-dragging' : ''}`}
         style={styleObj}
-        aria-label="Nova In-Page AI Actions"
+        aria-label="Sidekick In-Page AI Actions"
       >
       {/* Drag Grip Handle */}
       <div

@@ -12419,6 +12419,7 @@ def _start_chat_stream_for_session(
     sandbox_disabled: bool = False,
     grounding_context: str = "",
     reasoning_effort: str | None = None,
+    terminal_enabled: bool | None = None,
     supported_reasoning_efforts: list[str] | None = None,
     confirmed_chat_profile=None,
 ):
@@ -12578,6 +12579,14 @@ def _start_chat_stream_for_session(
                 s.child_parent_turns = [*previous_turns[-31:], stream_id]
             if not quickchat and reasoning_effort is not None:
                 s.reasoning_selection = {"schemaVersion": 1, "provider": model_provider, "model": model, "effort": reasoning_effort}
+            if not quickchat and terminal_enabled is not None and getattr(s, "space_scope", None) is not None:
+                # Capture the saved Hub preference into this chat session.
+                # Native policy requires a fresh user decision for each command.
+                native_toolsets = list(_resolve_cli_toolsets())
+                native_toolsets = [name for name in native_toolsets if str(name).lower() != "terminal"]
+                if terminal_enabled:
+                    native_toolsets.append("terminal")
+                s.enabled_toolsets = native_toolsets
             if not quickchat:
                 activate_kanban_orchestration(s, msg, _resolve_cli_toolsets())
             _prepare_chat_start_session_for_stream(
@@ -13522,6 +13531,9 @@ def _handle_chat_start(handler, body, diag=None):
         msg = str(body.get("message", "")).strip()
         if not msg:
             return bad(handler, "message is required")
+        terminal_enabled = body.get("terminal_enabled")
+        if terminal_enabled is not None and type(terminal_enabled) is not bool:
+            return bad(handler, "terminal_enabled must be a boolean")
         diag.stage("normalize_attachments") if diag else None
         attachments = _normalize_chat_attachments(body.get("attachments") or [])[:20]
         diag.stage("resolve_workspace") if diag else None
@@ -13708,6 +13720,7 @@ def _handle_chat_start(handler, body, diag=None):
             sandbox_disabled=sandbox_disabled,
             grounding_context=grounding_context,
             reasoning_effort=reasoning_effort,
+            terminal_enabled=terminal_enabled,
             supported_reasoning_efforts=supported_reasoning_efforts,
         )
         status = int(response.pop("_status", 200) or 200)
@@ -16860,5 +16873,3 @@ def _handle_mcp_server_update(handler, name, body):
     _save_yaml_config_file(_get_config_path(), cfg)
     reload_config()
     return j(handler, {"ok": True, "server": _server_summary(name, server_cfg)})
-
-

@@ -433,7 +433,7 @@ export function SidekickSidebar({
   return (
     <aside className={`sidekick-sidebar ${mode} dock-pos-${effectiveDockPos} ${researchToolbar ? 'has-research-toolbar' : ''} ${isFloatingOverlay ? 'zen-floating-sidebar' : ''}`}>
       {researchToolbar && <div className="sidebar-research-host">
-        {mode === 'slim' ? <button type="button" className="sidebar-research-reveal" title="Nova Research" aria-label={shellText(locale, "Nova Research öffnen", "Open Nova Research")}
+        {mode === 'slim' ? <button type="button" className="sidebar-research-reveal" title={shellText(locale, "Sidekick Research", "Sidekick Research")} aria-label={shellText(locale, "Sidekick Research öffnen", "Open Sidekick Research")}
           onClick={() => {
             onSetMode('expanded');
             requestAnimationFrame(() => requestAnimationFrame(() => {

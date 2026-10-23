@@ -61,7 +61,7 @@ export interface CommandItem {
   id: string;
   title: string;
   description?: string;
-  category: 'Nova AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows' | 'Apps' | 'Sidekick CLI';
+  category: 'Sidekick AI' | 'Tabs' | 'Navigation' | 'System' | 'Offene Tabs' | 'Workflows' | 'Apps' | 'Sidekick CLI';
   icon: React.ReactNode;
   shortcut?: string;
   keywords?: string[];
@@ -149,7 +149,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-mcp-tools',
       title: '> Sidekick: mcp tools',
-      description: t ? t('commands.cli.mcpTools') : 'View registered MCP tools and Nova function-calling schemas with the security model',
+      description: t ? t('commands.cli.mcpTools') : 'View registered MCP tools and Sidekick function-calling schemas with the security model',
       category: 'Sidekick CLI',
       icon: <Code2 size={16} />,
       keywords: ['mcp', 'tools', 'schema', 'nova', 'functions', 'permissions', 'security'],
@@ -286,7 +286,7 @@ export function buildSidekickCliCommands(
     {
       id: 'sidekick-cli-model-switch',
       title: '> Sidekick: model switch',
-      description: t ? t('commands.cli.modelSwitch') : 'Switch the default inference model for Nova AI',
+      description: t ? t('commands.cli.modelSwitch') : 'Switch the default inference model for Sidekick AI',
       category: 'Sidekick CLI',
       icon: <Shuffle size={16} />,
       keywords: ['model', 'switch', 'wechseln', 'auswahl', 'standard', 'umschalten'],
@@ -588,12 +588,12 @@ export function CommandPalette({
   // Build command catalog
   const staticCommands = useMemo<CommandItem[]>(() => {
     const cmds: CommandItem[] = [
-      // --- Nova AI ---
+      // --- Sidekick AI ---
       {
         id: 'sidekick-chat',
         title: t('commands.nova.newChat'),
         description: t('commands.nova.newChatDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Sparkles size={16} />,
         keywords: ['ai', 'chat', 'sidekick', 'gpt', 'claude', 'gemini', 'frage', 'dialog'],
         action: () => {
@@ -604,7 +604,7 @@ export function CommandPalette({
         id: 'ai-discover-form',
         title: t('commands.nova.analyzeForm'),
         description: t('commands.nova.analyzeFormDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Sparkles size={16} />,
         keywords: ['formular', 'form', 'felder', 'inputs', 'ausfüllen', 'analyse', 'autofill'],
         action: () => {
@@ -616,7 +616,7 @@ export function CommandPalette({
         id: 'ai-paginate',
         title: t('commands.nova.paginate'),
         description: t('commands.nova.paginateDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <ExternalLink size={16} />,
         keywords: ['paginieren', 'weiter', 'nächste seite', 'next', 'pagination', 'blättern'],
         action: () => {
@@ -628,7 +628,7 @@ export function CommandPalette({
         id: 'ai-abort-automation',
         title: t('commands.nova.abort'),
         description: t('commands.nova.abortDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <X size={16} />,
         shortcut: 'Esc',
         keywords: ['abbrechen', 'stop', 'abort', 'cancel', 'halt'],
@@ -641,7 +641,7 @@ export function CommandPalette({
         id: 'sidekick-doctor',
         title: t('commands.nova.doctor'),
         description: t('commands.nova.doctorDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Cpu size={16} />,
         keywords: ['doctor', 'health', 'diagnose', 'system', 'check', 'status', 'prüfen'],
         action: () => {
@@ -652,7 +652,7 @@ export function CommandPalette({
         id: 'sidekick-supermemory',
         title: t('commands.nova.supermemory'),
         description: t('commands.nova.supermemoryDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Database size={16} />,
         keywords: ['memory', 'gedächtnis', 'supermemory', 'fakten', 'kontext', 'vektor'],
         action: () => {
@@ -663,7 +663,7 @@ export function CommandPalette({
         id: 'sidekick-profiles',
         title: t('commands.nova.profiles'),
         description: t('commands.nova.profilesDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Users size={16} />,
         keywords: ['profil', 'profile', 'identität', 'user', 'persona', 'account'],
         action: () => {
@@ -674,7 +674,7 @@ export function CommandPalette({
         id: 'sidekick-models',
         title: t('commands.nova.models'),
         description: t('commands.nova.modelsDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Bot size={16} />,
         keywords: ['modell', 'model', 'provider', 'ollama', 'anthropic', 'openai', 'gemini', 'openrouter'],
         action: () => {
@@ -685,7 +685,7 @@ export function CommandPalette({
         id: 'sidekick-terminal',
         title: t('commands.nova.terminal'),
         description: t('commands.nova.terminalDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Terminal size={16} />,
         keywords: ['terminal', 'tui', 'shell', 'bash', 'cmd', 'powershell', 'cli'],
         action: () => {
@@ -696,7 +696,7 @@ export function CommandPalette({
         id: 'sidekick-agents',
         title: t('commands.nova.agents'),
         description: t('commands.nova.agentsDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Bot size={16} />,
         keywords: ['agent', 'agenten', 'worker', 'subagent', 'aufgaben', 'bot'],
         action: () => {
@@ -707,7 +707,7 @@ export function CommandPalette({
         id: 'sidekick-skills',
         title: t('commands.nova.skills'),
         description: t('commands.nova.skillsDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Puzzle size={16} />,
         keywords: ['skill', 'fähigkeiten', 'mcp', 'tools', 'werkzeuge'],
         action: () => {
@@ -718,7 +718,7 @@ export function CommandPalette({
         id: 'sidekick-kanban',
         title: t('commands.nova.kanban'),
         description: t('commands.nova.kanbanDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Kanban size={16} />,
         keywords: ['kanban', 'tasks', 'board', 'aufgaben', 'triage', 'todo'],
         action: () => {
@@ -729,7 +729,7 @@ export function CommandPalette({
         id: 'sidekick-workspaces',
         title: t('commands.nova.workspaces'),
         description: t('commands.nova.workspacesDesc'),
-        category: 'Nova AI',
+        category: 'Sidekick AI',
         icon: <Folder size={16} />,
         keywords: ['workspace', 'spaces', 'verzeichnis', 'projekt', 'dateien'],
         action: () => {
@@ -1019,7 +1019,7 @@ export function CommandPalette({
     ];
 
     const categoryMap: Record<string, string> = {
-      'Nova AI': t('commands.category.nova'),
+      'Sidekick AI': t('commands.category.nova'),
       'Tabs': t('commands.category.tabs'),
       'Navigation': t('commands.category.navigation'),
       'System': t('commands.category.system'),

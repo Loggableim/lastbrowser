@@ -1217,7 +1217,7 @@ export function CopilotSplitView({
                         <button
                           type="button"
                           className="msg-action-icon-btn"
-                          title="Nachricht kopieren"
+                          title={t('copilot.message.copy')}
                           onClick={() => {
                             navigator.clipboard.writeText(msg.content || '').catch(() => {});
                             setCopiedMsgIdx(index);
@@ -1229,7 +1229,7 @@ export function CopilotSplitView({
                         <button
                           type="button"
                           className={`msg-action-icon-btn ${upvotedIndices.has(index) ? 'voted' : ''}`}
-                          title="Gute Antwort (Upvote)"
+                          title={t('copilot.message.upvote')}
                           onClick={() => {
                             setUpvotedIndices((prev) => {
                               const next = new Set(prev);
@@ -1244,7 +1244,7 @@ export function CopilotSplitView({
                         <button
                           type="button"
                           className="msg-action-icon-btn"
-                          title="Problem melden (Feedback)"
+                          title={t('copilot.message.feedback')}
                           onClick={() => setFeedbackMessage(msg.content || '')}
                         >
                           <ThumbsDown size={12} />

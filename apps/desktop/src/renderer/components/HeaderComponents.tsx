@@ -1036,9 +1036,10 @@ export function ModernTitlebar({
                 key={chip.id}
                 type="button"
                 className="titlebar-quick-chip"
-                title={chip.tooltip}
+                title={chip.tooltipKey ? t(chip.tooltipKey) : chip.tooltip}
                 onClick={() => onExecuteQuickAction(chip)}
               >
+                <span aria-hidden="true">{chip.icon}</span>
                 <span>{chip.label}</span>
               </button>
             ))}

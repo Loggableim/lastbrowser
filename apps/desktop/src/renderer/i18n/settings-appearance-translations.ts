@@ -12,7 +12,7 @@ const rows: Partial<Record<DesktopTranslationKey, Record<DesktopLocaleId, string
   'settings.panels.appearance.actionTopLeft': { en: 'Top left', de: 'Oben links', es: 'Arriba a la izquierda', fr: 'En haut à gauche', it: 'In alto a sinistra', 'pt-BR': 'Superior esquerda', ru: 'Сверху слева' },
   'settings.panels.appearance.actionTopRight': { en: 'Top right', de: 'Oben rechts', es: 'Arriba a la derecha', fr: 'En haut à droite', it: 'In alto a destra', 'pt-BR': 'Superior direita', ru: 'Сверху справа' },
   'settings.panels.appearance.actionFloating': { en: 'Floating', de: 'Schwebend', es: 'Flotante', fr: 'Flottant', it: 'Mobile', 'pt-BR': 'Flutuante', ru: 'Плавающее' },
-  'settings.panels.appearance.presetNovaBottom': { en: 'Nova · bottom', de: 'Nova · unten', es: 'Nova · abajo', fr: 'Nova · bas', it: 'Nova · in basso', 'pt-BR': 'Nova · inferior', ru: 'Nova · снизу' },
+  'settings.panels.appearance.presetNovaBottom': { en: 'Sidekick · bottom', de: 'Sidekick · unten', es: 'Sidekick · abajo', fr: 'Sidekick · bas', it: 'Sidekick · in basso', 'pt-BR': 'Sidekick · inferior', ru: 'Sidekick · снизу' },
   'settings.panels.appearance.presetClassicLeft': { en: 'Classic · left', de: 'Klassisch · links', es: 'Clásico · izquierda', fr: 'Classique · gauche', it: 'Classico · a sinistra', 'pt-BR': 'Clássico · esquerda', ru: 'Классический · слева' },
   'settings.panels.appearance.presetFloating': { en: 'Floating', de: 'Schwebend', es: 'Flotante', fr: 'Flottant', it: 'Mobile', 'pt-BR': 'Flutuante', ru: 'Плавающее' },
   'settings.panels.appearance.presetMinimal': { en: 'Minimal', de: 'Minimal', es: 'Minimalista', fr: 'Minimal', it: 'Minimale', 'pt-BR': 'Minimalista', ru: 'Минимальное' },

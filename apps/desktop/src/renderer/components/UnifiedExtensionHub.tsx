@@ -564,7 +564,7 @@ export function UnifiedExtensionHub({
               </article>}
               {showMcpConfig && <section className="eh-config" aria-label={text('MCP-Konfiguration', 'MCP configuration')}>
                 <h4>{text('Verbindungen konfigurieren', 'Configure connections')}</h4>
-                <p>{text('Serverkonfiguration für stdio oder HTTP. Änderungen benötigen einen Neustart von Nova. Maskierte Zugangsdaten bleiben erhalten.', 'Server configuration for stdio or HTTP. Changes require restarting Nova. Masked credentials are preserved.')}</p>
+                <p>{text('Serverkonfiguration für stdio oder HTTP. Änderungen benötigen einen Neustart von Sidekick. Maskierte Zugangsdaten bleiben erhalten.', 'Server configuration for stdio or HTTP. Changes require restarting Sidekick. Masked credentials are preserved.')}</p>
                 <textarea aria-label={text('MCP-Serverkonfiguration', 'MCP server configuration')} value={mcp.editor} onChange={event => mcpModel.setEditor(event.target.value)} rows={8} spellCheck={false} />
                 <p className="eh-muted" role="status">{mcp.editor === mcp.savedEditor ? text('Gespeichert', 'Saved') : text('Ungespeicherter Entwurf', 'Unsaved draft')}</p>
                 <div className="eh-actions"><button type="button" className="eh-primary" onClick={handleApplyMcpConfig} disabled={!mcp.loaded || mcp.busy}>{text('Speichern', 'Save')}</button>

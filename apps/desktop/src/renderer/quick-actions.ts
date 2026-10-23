@@ -6,6 +6,7 @@ export interface QuickActionChip {
   label: string;
   icon: string;
   tooltip: string;
+  tooltipKey?: 'browser.quickActions.codeSummaryTooltip';
   promptTemplate: string;
 }
 
@@ -168,7 +169,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string, local
         {
           id: 'extract-code',
           category: 'code',
-          label: german ? '💻 Code extrahieren' : '💻 Extract code',
+          label: german ? 'Code extrahieren' : 'Extract code',
           icon: '💻',
           tooltip: german ? 'Code-Beispiele, APIs und Snippets dieser Seite extrahieren' : 'Extract code examples, APIs, and snippets from this page',
           promptTemplate: german
@@ -178,9 +179,10 @@ export function getQuickActionChips(category: PageCategory, _url?: string, local
         {
           id: 'tldr',
           category: 'code',
-          label: '⚡ TL;DR',
+          label: 'TL;DR',
           icon: '⚡',
-          tooltip: 'Kompakte technische Zusammenfassung der Seite',
+          tooltip: 'Compact technical summary of the page',
+          tooltipKey: 'browser.quickActions.codeSummaryTooltip',
           promptTemplate: 'Erstelle eine kurze technische TL;DR-Zusammenfassung dieser Dokumentation/Bibliothek.'
         }
       ];
@@ -198,7 +200,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string, local
         {
           id: 'tldr',
           category: 'tabular',
-          label: '⚡ TL;DR',
+          label: 'TL;DR',
           icon: '⚡',
           tooltip: 'Produkte, Preise und wichtigste Merkmale zusammenfassen',
           promptTemplate: 'Fasse die wichtigsten Produkte, Preise und Kennzahlen dieser Seite kurz zusammen.'
@@ -210,7 +212,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string, local
         {
           id: 'tldr',
           category: 'news',
-          label: '⚡ TL;DR',
+          label: 'TL;DR',
           icon: '⚡',
           tooltip: 'Die 3 wichtigsten Kernaussagen dieses Artikels zusammenfassen',
           promptTemplate: 'Erstelle eine prägnante TL;DR-Zusammenfassung mit den 3 wichtigsten Kernaussagen dieses Artikels.'
@@ -231,7 +233,7 @@ export function getQuickActionChips(category: PageCategory, _url?: string, local
         {
           id: 'tldr',
           category: 'general',
-          label: '⚡ TL;DR',
+          label: 'TL;DR',
           icon: '⚡',
           tooltip: 'Kompakte Zusammenfassung der aktuellen Webseite',
           promptTemplate: 'Erstelle eine prägnante Zusammenfassung der Kernaussagen dieser Seite.'

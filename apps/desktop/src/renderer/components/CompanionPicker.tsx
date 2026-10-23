@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { companionDefaultNames, personalityAvatar, STANDARD_CHAT_COMPANION_EVENT, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
+import { assistantDisplayName, companionDefaultNames, personalityAvatar, STANDARD_CHAT_COMPANION_EVENT, useCompanionAppearance, type CompanionPersonality } from '../personality-avatar.js';
 import { useDesktopI18n } from '../i18n.js';
 
 export type CompanionSelection = { personality: CompanionPersonality; botName: string };
@@ -116,7 +116,7 @@ export function CompanionSwitch({ compact = false, conversation = null, target =
       style={{ background: 'transparent', border: 0, color: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 8 }}
       onClick={event => { event.stopPropagation(); setDraft({ personality: globalPersonality, botName: globalBotName }); setOpen(current => !current); }}>
       <img src={personalityAvatar(personality)} alt="" style={compact ? { width: 22, height: 22, objectFit: 'contain' } : undefined} className={compact ? undefined : 'copilot-header-avatar'} draggable={false} />
-      <span className={compact ? undefined : 'copilot-header-title'}>{botName}{compact ? '' : ' AI'}</span>
+      <span className={compact ? undefined : 'copilot-header-title'}>{assistantDisplayName(botName)}{compact ? '' : ' AI'}</span>
     </button>
     {open && <section role="dialog" aria-label={t('copilot.personalityDialog')} onClick={event => event.stopPropagation()} style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, width: 300, boxSizing: 'border-box', maxWidth: 'calc(100vw - 32px)', padding: 16, borderRadius: 12, border: '1px solid var(--border-color)', background: 'var(--bg-primary, #101522)', color: 'var(--text-primary)', zIndex: 1000, boxShadow: '0 12px 32px rgba(0,0,0,.4)' }}>
       <strong>{t('copilot.personalityTitle')}</strong>

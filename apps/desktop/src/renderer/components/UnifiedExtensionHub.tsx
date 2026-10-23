@@ -50,7 +50,7 @@ export interface McpSkillItem {
 
 const BUILTIN_SKILL_ENGLISH: Record<string, { name: string; description: string }> = {
   'mcp-terminal': {
-    name: 'ConPTY Terminal Executor',
+    name: 'Terminal Executor',
     description: 'Runs shell commands, CLI tools (node, python, git), and sidekick doctor in the native pseudo-terminal.'
   },
   'mcp-supermemory': {
@@ -75,10 +75,14 @@ const BUILTIN_SKILL_ENGLISH: Record<string, { name: string; description: string 
   }
 };
 
+export function terminalSkillDisplayName(platform: string): string {
+  return /^win/i.test(platform) ? 'ConPTY Terminal Executor' : 'Terminal Executor';
+}
+
 export const BUILTIN_MCP_SKILLS: McpSkillItem[] = [
   {
     id: 'mcp-terminal',
-    name: 'ConPTY Terminal Executor',
+    name: 'Terminal Executor',
     description: 'Führt Shell-Befehle, CLI-Tools (node, python, git) und sidekick doctor im nativen Pseudo-Terminal aus.',
     category: 'system',
     icon: '💻',
@@ -589,7 +593,9 @@ export function UnifiedExtensionHub({
       network_outbound: text('Internet', 'Internet'), agent_autonomy: text('Selbstständige Aktionen', 'Autonomous actions')
     };
     const english = BUILTIN_SKILL_ENGLISH[skill.id];
-    const skillName = text(skill.name, english?.name ?? skill.name);
+    const skillName = skill.id === 'mcp-terminal'
+      ? terminalSkillDisplayName(window.navigator.platform)
+      : text(skill.name, english?.name ?? skill.name);
     const skillDescription = text(skill.description, english?.description ?? skill.description);
     return <article key={skill.id} className="eh-card">
       <div className="eh-card-head"><span className="eh-card-icon">{skill.icon}</span><div className="eh-card-title"><h4>{skillName}</h4>

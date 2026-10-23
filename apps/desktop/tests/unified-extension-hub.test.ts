@@ -5,7 +5,8 @@ import { matchBrowserShortcut } from '../src/main/shortcuts.js';
 import { usePanelStore } from '../src/renderer/stores/usePanelStore.js';
 import {
   BUILTIN_MCP_SKILLS,
-  MCP_PERMISSION_LABELS
+  MCP_PERMISSION_LABELS,
+  terminalSkillDisplayName
 } from '../src/renderer/components/UnifiedExtensionHub.js';
 
 function readRendererFile(fileName: string): string {
@@ -111,6 +112,10 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
 
       // Terminal executor permissions & scope
       const terminalSkill = BUILTIN_MCP_SKILLS.find((s) => s.id === 'mcp-terminal');
+      expect(terminalSkill?.name).toBe('Terminal Executor');
+      expect(terminalSkillDisplayName('Win32')).toBe('ConPTY Terminal Executor');
+      expect(terminalSkillDisplayName('Linux x86_64')).toBe('Terminal Executor');
+      expect(terminalSkillDisplayName('MacIntel')).toBe('Terminal Executor');
       expect(terminalSkill?.permissions).toContain('terminal_execute');
       expect(terminalSkill?.permissions).toContain('filesystem_write');
       expect(terminalSkill?.workspaceScope).toBe('coding');
@@ -173,4 +178,3 @@ describe('Phase 14: Unified Extension & Skill Hub (Zwei-Säulen-Architektur)', (
     });
   });
 });
-

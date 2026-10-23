@@ -1,4 +1,4 @@
-import { roadmapCatalog } from './roadmap-catalog.js?v=3';
+import { roadmapCatalog } from './roadmap-catalog.js?v=4';
 
 const locale = document.documentElement.lang.toLowerCase().split('-')[0];
 const wordsByLocale = {

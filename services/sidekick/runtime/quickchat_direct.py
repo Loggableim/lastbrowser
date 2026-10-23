@@ -51,6 +51,19 @@ _QUICKCHAT_MAX_HISTORY_MESSAGES = 4
 _QUICKCHAT_MAX_HISTORY_CHARS = 6000
 
 
+def direct_quickchat_protocol_supported(provider, model):
+    """Whether Quickchat's direct SDK adapters can speak this provider/model API."""
+    provider_id = str(provider or "").strip().lower()
+    model_id = str(model or "").strip().lower()
+    if model_id.startswith("@") and ":" in model_id:
+        model_id = model_id.split(":", 1)[1]
+    model_id = model_id.rsplit("/", 1)[-1]
+    # OpenCode Go exposes Gemini through its Google GenAI endpoint. Quickchat's
+    # direct worker only implements chat completions, Responses and Messages;
+    # sending this model to chat.completions returns ModelProtocolUnsupported.
+    return not (provider_id == "opencode-go" and model_id.startswith("gemini-"))
+
+
 def _select_quickchat_history(history, text):
     """Keep multi-turn Quickchat prompts bounded so provider TTFT stays stable."""
     simple = _simple_question(text)

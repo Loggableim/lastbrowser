@@ -10,6 +10,11 @@ const UNSUPPORTED = new Set(['antigravity', 'gemini', 'copilot-acp', 'google-gem
 export function isDirectQuickchatProvider(provider: string): boolean {
   return !!provider.trim() && !UNSUPPORTED.has(provider.trim().toLowerCase());
 }
+export function supportsDirectQuickchatModel(provider: string, model: string): boolean {
+  // OpenCode Go's Gemini models use Google's GenAI protocol, not one of the
+  // OpenAI/Responses/Anthropic protocols implemented by the direct adapter.
+  return !(provider.trim().toLowerCase() === 'opencode-go' && /^gemini-/i.test(model.trim().split('/').pop() || ''));
+}
 export type QuickchatChoice = { provider: string; model: string; basis: 'favorite' | 'measured' | 'estimated' };
 type Candidate = { provider: string; model: string; label: string; deployment?: string };
 const normalizedName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -47,7 +52,8 @@ export function chooseQuickchatModel(selection: ScopedModelSelection, scope: Qui
   const candidates = mapScopedModelPickerOptions(selection).flatMap(group => group.configured && isDirectQuickchatProvider(group.providerId)
     ? group.models.filter(model => model.supportsIndependent && canSelectNativeModel(group.providerId, model.nativeAvailability))
       .map(model => ({ provider: group.providerId, model: parseProviderModelId(model.id, group.providerId).model, label: model.label, deployment: group.deployment })) : [])
-    .filter(choice => isModelActive(storage, scope, choice.provider, choice.model)
+    .filter(choice => supportsDirectQuickchatModel(choice.provider, choice.model)
+      && isModelActive(storage, scope, choice.provider, choice.model)
       && (showBetas || choice.deployment === 'local'
         || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));
   if (favorite) {

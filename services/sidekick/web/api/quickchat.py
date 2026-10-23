@@ -180,6 +180,10 @@ def start_quickchat(body: Any, handler: Any, diag=None) -> tuple[dict[str, Any],
             model, provider = free_model, free_provider
     if not provider:
         raise QuickChatError("Choose and save a provider before using Quickchat", 409, "quickchat_provider_unavailable")
+    from runtime.quickchat_direct import direct_quickchat_protocol_supported
+    if not direct_quickchat_protocol_supported(provider, model):
+        raise QuickChatError("This OpenCode Go model uses the Google GenAI protocol, which direct Quickchat does not support yet.",
+                             400, "quickchat_model_protocol_unsupported")
     from web.api.config import _known_reasoning_efforts_for_model
     supported_reasoning_efforts = _known_reasoning_efforts_for_model(model, provider)
     reasoning_effort = None

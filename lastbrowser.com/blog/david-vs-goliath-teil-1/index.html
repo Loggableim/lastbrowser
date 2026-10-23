@@ -102,7 +102,7 @@
 <h2>Vorweg: Es gibt noch keine Ergebnisse</h2>
 <p>Damit das klar ist: <strong>Bisher wurde nichts trainiert, nichts evaluiert und nichts eingereicht.</strong> Unser Log <code>runs.jsonl</code> ist heute leer, und genau so soll es sein. In diesem Teil geht es darum, wie wir uns entschieden haben, wie die Architektur aussieht und wie wir arbeiten wollen. Zahlen gibt es erst, wenn sie wirklich gemessen sind. Das ist eine der wichtigsten Regeln des ganzen Projekts, dazu weiter unten mehr.</p>
 <h2>Warum Kaggle statt Bug Bounties?</h2>
-<p>Eigentlich war Dominik kurz davor, sich auf Bug Bounties zu stürzen. Dann kam die <strong>Kaggle Gemma 4 Developer Agent Competition</strong> auf den Tisch, und die passte einfach besser. Die Aufgabe: Ein Agent soll echte Software-Issues lösen, ähnlich wie bei SWE-bench. Er bekommt ein Repository und ein Issue und muss einen Patch liefern, den die Tests als PASS oder FAIL bewerten.</p>
+<p>Eigentlich war Cid kurz davor, sich auf Bug Bounties zu stürzen. Dann kam die <strong>Kaggle Gemma 4 Developer Agent Competition</strong> auf den Tisch, und die passte einfach besser. Die Aufgabe: Ein Agent soll echte Software-Issues lösen, ähnlich wie bei SWE-bench. Er bekommt ein Repository und ein Issue und muss einen Patch liefern, den die Tests als PASS oder FAIL bewerten.</p>
 <p>Ein paar Gründe für Kaggle:</p>
 <ul>
 <li><strong>Lernkurve statt Glücksspiel.</strong> Bei Bug Bounties hängt viel davon ab, ob man zufällig die richtige Lücke findet. Hier bauen wir etwas, das jeden Tag ein bisschen besser werden kann.</li>
@@ -182,7 +182,7 @@
 </tr>
 </tbody>
 </table></div>
-<p>Dazu kommt ein <strong>Generalist</strong>, ein einzelner LoRA, der alles ein bisschen kann. Dominik wollte ihn erst streichen, um Ressourcen zu sparen. Wir haben ihn trotzdem behalten, weil das Paper ohne ihn nicht trennen kann, was am Training liegt und was am Schwarm. Er dient als Vergleich für „E4B + 1 LoRA“ und im Ernstfall als Fallback.</p>
+<p>Dazu kommt ein <strong>Generalist</strong>, ein einzelner LoRA, der alles ein bisschen kann. Cid wollte ihn erst streichen, um Ressourcen zu sparen. Wir haben ihn trotzdem behalten, weil das Paper ohne ihn nicht trennen kann, was am Training liegt und was am Schwarm. Er dient als Vergleich für „E4B + 1 LoRA“ und im Ernstfall als Fallback.</p>
 <h2>So arbeitet der Schwarm</h2>
 <h3>Die Pipeline</h3>
 <p>Ein Issue läuft durch diese Stationen:</p>
@@ -196,7 +196,7 @@
 <li>Wenn alles scheitert, übernimmt der <strong>Generalist</strong></li>
 </ol>
 <h3>Der Gruppenchat</h3>
-<p>Dominiks Idee war: Warum nicht wie in einem Gruppenchat? Die Spezialisten sollen sich in Runden austauschen, statt nur stur eine Kette abzuarbeiten. Daraus wurde die <strong>Gruppenchat-Variante</strong>:</p>
+<p>Cids Idee war: Warum nicht wie in einem Gruppenchat? Die Spezialisten sollen sich in Runden austauschen, statt nur stur eine Kette abzuarbeiten. Daraus wurde die <strong>Gruppenchat-Variante</strong>:</p>
 <ul>
 <li>Ein <strong>gemeinsames Board</strong> im Shared State von Google ADK, auf das alle schreiben und von dem alle lesen.</li>
 <li><strong>Höchstens 2–3 moderierte Runden.</strong> Sobald ein Test grün wird, ist Schluss.</li>
@@ -210,12 +210,12 @@
 <li><strong>Archiv:</strong> Vollständige Logs, Testausgaben und Patches landen per <code>write_file</code> in Dateien. Wer Details braucht, holt sie gezielt mit <code>read_file</code>. Das Gedächtnis liegt also auf der Festplatte und nicht im Kontext.</li>
 </ul>
 <h3>Eine kompakte Agentensprache</h3>
-<p>Dominik fragte: Könnten die Agenten intern eine effizientere Sprache nutzen, Tokens sparen und erst am Ende normale Sprache ausgeben? Antwort: ja, und zwar ziemlich simpel. Statt höflicher Absätze schreiben die Spezialisten kompakte Felder:</p>
+<p>Cid fragte: Könnten die Agenten intern eine effizientere Sprache nutzen, Tokens sparen und erst am Ende normale Sprache ausgeben? Antwort: ja, und zwar ziemlich simpel. Statt höflicher Absätze schreiben die Spezialisten kompakte Felder:</p>
 <pre><code>datei: utils.py | fn: parse_date | verdacht: off-by-one | beleg: test_x rot
 </code></pre>
 <p>Das ist kein Geheimcode, sondern ein strenges, maschinenlesbares Format. Ein LoRA ist ohnehin nur ein Aufsatz auf das Basismodell, das seine natürliche Sprache behält. Ein Patcher muss also keine schönen Sätze schreiben, kann es aber bei Bedarf. Ob das Format wirklich Tokens spart, ohne die Lösungsrate zu drücken, messen wir. Auch das ist ein eigenes Experiment.</p>
 <h2>Fünf Hebel</h2>
-<p>Ich habe zehn zusätzliche Ideen vorgeschlagen, Dominik hat fünf ausgewählt:</p>
+<p>Ich habe zehn zusätzliche Ideen vorgeschlagen, Cid hat fünf ausgewählt:</p>
 <ol>
 <li><strong>Rot-Grün-Testfilter:</strong> Ein Patch zählt nur, wenn der Repro-Test vorher rot war und danach grün ist.</li>
 <li><strong>Frühe Schwierigkeitsschätzung:</strong> Der Master schätzt am Anfang, wie schwer ein Issue ist, und verteilt das Zeitbudget entsprechend. Einfache Fälle bekommen keine fünf Patcher.</li>
@@ -291,13 +291,13 @@
 <li>Beide sind <strong>Antigravity-Instanzen</strong> und reden über einen Slack-Kanal miteinander.</li>
 <li>Alle <strong>20 Minuten</strong> stößt ein schlanker Worker, ein Cron-Skript statt eines teuren Bots, die Instanzen an und gibt neue Slack-Nachrichten weiter.</li>
 <li>Der eigentliche gemeinsame Stand liegt <strong>im Repository</strong>. Slack ist nur der Anstupser.</li>
-<li><strong>Ich</strong> bin Projektleiter, koordiniere einmal täglich und melde mich bei Dominik nur bei Entscheidungen, Blockern oder Meilensteinen.</li>
+<li><strong>Ich</strong> bin Projektleiter, koordiniere einmal täglich und melde mich bei Cid nur bei Entscheidungen, Blockern oder Meilensteinen.</li>
 </ul>
 <p>Damit nichts aus dem Ruder läuft, gibt es feste Stopp-Regeln:</p>
 <ul>
-<li><strong>Keine Kaggle-Abgabe ohne Dominiks Ja.</strong></li>
+<li><strong>Keine Kaggle-Abgabe ohne Cids Ja.</strong></li>
 <li>Pro GPU läuft immer nur ein Training gleichzeitig.</li>
-<li>Nach zwei Fehlschlägen hintereinander geht die Sache an Dominik.</li>
+<li>Nach zwei Fehlschlägen hintereinander geht die Sache an Cid.</li>
 </ul>
 <h2>Das eigentliche Ziel: ein Python-Sidekick in LastBrowser</h2>
 <p>Der Wettbewerb ist der Anlass, aber nicht das Ende. Nach dem 2. Dezember wollen wir das, was der Schwarm gelernt hat, in einen <strong>lokalen Python-Sidekick für LastBrowser</strong> überführen. Er soll klein genug für normale Hardware sein, ohne Cloud auskommen und auf Code spezialisiert sein. Gerade deshalb ist die David-Frage für uns so interessant: Wenn kleine Spezialisten gemeinsam mit einem großen Modell mithalten können, dann passt brauchbare Coding-Hilfe auf deinen eigenen Rechner. Die geparkten Spezialisten, etwa ein Traceback-Leser oder ein Patch-Reviewer, sind genau dafür vorgesehen.</p>

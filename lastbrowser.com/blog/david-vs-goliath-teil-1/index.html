@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>David vs. Goliath – Teil 1: Acht kleine Spezialisten gegen einen Riesen – LastBrowser Blog</title>
+<meta name="description" content="Teil 1 der Serie: Acht kleine E4B-Spezialisten gegen ein 31B-Modell im Kaggle-Wettbewerb. Plan, Architektur und Regeln, noch ohne Ergebnisse.">
+<meta property="og:title" content="David vs. Goliath – Teil 1: Acht kleine Spezialisten gegen einen Riesen">
+<meta property="og:description" content="Teil 1 der Serie: Acht kleine E4B-Spezialisten gegen ein 31B-Modell im Kaggle-Wettbewerb. Plan, Architektur und Regeln, noch ohne Ergebnisse.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lastbrowser.com/blog/david-vs-goliath-teil-1/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/blog/david-vs-goliath-teil-1/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<link rel="stylesheet" href="/assets/css/blog.css">
+<script src="/assets/js/theme.js"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "David vs. Goliath – Teil 1: Acht kleine Spezialisten gegen einen Riesen",
+  "description": "Teil 1 der Serie: Acht kleine E4B-Spezialisten gegen ein 31B-Modell im Kaggle-Wettbewerb. Plan, Architektur und Regeln, noch ohne Ergebnisse.",
+  "datePublished": "2026-10-23",
+  "dateModified": "2026-10-23",
+  "inLanguage": "de",
+  "articleSection": "Hintergrund",
+  "author": { "@type": "Organization", "name": "LastBrowser" },
+  "publisher": { "@type": "Organization", "name": "LastBrowser", "logo": { "@type": "ImageObject", "url": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png" } },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": "https://lastbrowser.com/blog/david-vs-goliath-teil-1/" },
+  "image": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png"
+}
+</script>
+</head>
+<body class="blog-page">
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="40" height="40">
+      <div><strong>LastBrowser</strong><span>Tech-Magazin</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/blog/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/blog/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/blog/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/blog/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/blog/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/blog/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/blog/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container" style="padding: 60px 0 80px;">
+  <article class="article-wrap">
+    <a class="badge badge-cyan" href="/blog/#hintergrund" style="align-self:flex-start;margin-bottom:12px;">Hintergrund</a>
+    <h1>David vs. Goliath – Teil 1: Acht kleine Spezialisten gegen einen Riesen</h1>
+    <div class="article-meta">
+      <span>📅 23. Oktober 2026</span>
+      <span>·</span>
+      <span>⏱️ 10 Min. Lesezeit</span>
+    </div>
+    <div class="article-body">
+<p><em>Wir bloggen ein KI-Projekt von der ersten Idee bis zur letzten Abgabe. Hier ist der Anfang: noch kein Training, keine Ergebnisse, nur ein Plan, eine Frage und eine Menge Neugier.</em></p>
+<hr />
+<h2>Vorweg: Es gibt noch keine Ergebnisse</h2>
+<p>Damit das klar ist: <strong>Bisher wurde nichts trainiert, nichts evaluiert und nichts eingereicht.</strong> Unser Log <code>runs.jsonl</code> ist heute leer, und genau so soll es sein. In diesem Teil geht es darum, wie wir uns entschieden haben, wie die Architektur aussieht und wie wir arbeiten wollen. Zahlen gibt es erst, wenn sie wirklich gemessen sind. Das ist eine der wichtigsten Regeln des ganzen Projekts, dazu weiter unten mehr.</p>
+<h2>Warum Kaggle statt Bug Bounties?</h2>
+<p>Eigentlich war Dominik kurz davor, sich auf Bug Bounties zu stürzen. Dann kam die <strong>Kaggle Gemma 4 Developer Agent Competition</strong> auf den Tisch, und die passte einfach besser. Die Aufgabe: Ein Agent soll echte Software-Issues lösen, ähnlich wie bei SWE-bench. Er bekommt ein Repository und ein Issue und muss einen Patch liefern, den die Tests als PASS oder FAIL bewerten.</p>
+<p>Ein paar Gründe für Kaggle:</p>
+<ul>
+<li><strong>Lernkurve statt Glücksspiel.</strong> Bei Bug Bounties hängt viel davon ab, ob man zufällig die richtige Lücke findet. Hier bauen wir etwas, das jeden Tag ein bisschen besser werden kann.</li>
+<li><strong>Ein Paper Track.</strong> Neben der Hauptwertung gibt es einen eigenen Wettbewerb für wissenschaftliche Writeups mit 35.000 $ für die drei besten Papers. Bewertet werden Novelty, Qualität, Relevanz, Verifizierbarkeit und Klarheit. Eine gute Forschungsfrage zählt dort also mindestens so viel wie der Platz auf dem Leaderboard.</li>
+<li><strong>Ein Bonus für kleine Modelle.</strong> Für die beste Abgabe mit E2B oder E4B, den kleinsten Gemma-4-Varianten, gibt es 10.000 $ extra.</li>
+<li><strong>Es passt zu LastBrowser.</strong> Was wir hier lernen, soll später ein lokaler Coding-Helfer werden (mehr dazu am Ende).</li>
+</ul>
+<p>Deshalb liegt unser Fokus auf dem <strong>Paper Track, Abgabe am 12. November</strong>, und auf dem kleinen Modell <strong>E4B</strong>. Nur E4B wird trainiert.</p>
+<h2>Die Spielregeln in Kurzform</h2>
+<p>Die Rahmenbedingungen bestimmen fast jede Designentscheidung, deshalb hier die wichtigsten:</p>
+<ul>
+<li><strong>Ein Basismodell pro Abgabe</strong>, aus den 4-Bit-QAT-Varianten von Gemma 4 (31B, 12B, E4B, E2B).</li>
+<li>Abgegeben wird eine <code>submission.zip</code> mit <code>agent.yaml</code>, Prompts, Skills, Sub-Agenten und Adaptern. Das ist eine Google-ADK-Konfiguration, <strong>eigener Code läuft auf dem Host nicht</strong>.</li>
+<li><strong>Offline</strong>: kein Internet, keine externen Modelle.</li>
+<li><strong>12 Stunden auf 4× L4 (96 GB)</strong> für alle Tasks inklusive Sandbox-Setup. Bei grob 120 Tasks bleiben also etwa <strong>6 Minuten pro Issue</strong>.</li>
+<li>Mehrere E4B-Sub-Agenten mit unterschiedlichen LoRAs parallel sind erlaubt.</li>
+</ul>
+<p>Zwei Punkte sind noch offen und werden geprüft, sobald wir angemeldet sind: ob es ein Limit von 8 LoRAs gibt und ob E4B wirklich 32k Kontext bekommt. Bis dahin behandeln wir beides als Annahme.</p>
+<h2>Die große Frage: David gegen Goliath</h2>
+<p>Daraus ergibt sich unsere Forschungsfrage, und die gibt der Serie ihren Namen:</p>
+<blockquote style="border-left:3px solid var(--accent,#22d3ee);padding-left:16px;margin:16px 0;">
+<p><strong>Schlägt ein Schwarm kleiner E4B-Spezialisten mit eigenen LoRAs ein einzelnes 31B-Modell, das nur mit Prompts arbeitet, bei gleichem Compute-Budget?</strong></p>
+</blockquote>
+<p>Auf der einen Seite steht Goliath: das große 31B-Modell, stark, aber schwer und langsam. Auf der anderen David: viele kleine E4B-Instanzen, jede mit einem schmalen LoRA-Adapter auf eine bestimmte Aufgabe trainiert. Sie laufen parallel und reden miteinander. Gleiche Hardware, gleiche 12 Stunden.</p>
+<p>Das Paper heißt entsprechend: <strong>„David vs. Goliath: Eight E4B LoRA Specialists Against a 31B Prompt-Only Agent at Equal Compute“</strong>. Ein Entwurf existiert schon, natürlich noch ohne Ergebnisse. An den Stellen, wo später Zahlen hingehören, stehen Platzhalter.</p>
+<p>Ob David gewinnt? Wir wissen es nicht. Genau das macht es spannend. Wenn er verliert, ist das trotzdem ein ehrliches und nützliches Ergebnis.</p>
+<h2>Die acht Spezialisten</h2>
+<p>Am Anfang standen 16 mögliche Spezialisten auf der Liste. Wir haben uns bewusst auf <strong>acht</strong> beschränkt, weil uns lieber acht gut trainierte Adapter sind als 16 halbgare. Die übrigen Kandidaten sind als „Ausbaustufe Sidekick“ geparkt.</p>
+<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+<thead>
+<tr>
+<th>#</th>
+<th>Spezialist</th>
+<th>Aufgabe</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Router/Planer</strong></td>
+<td>Master-Agent: analysiert das Issue, verteilt Arbeit, fasst zusammen (Kompressor)</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Graph-Lokalisierer</strong></td>
+<td>findet über Code-Struktur und Aufrufe die verdächtigen Stellen</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Test-Schreiber</strong></td>
+<td>schreibt einen Reproduktions-Test, der den Bug rot zeigt</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>Minimal-Patcher</strong></td>
+<td>der kleinste mögliche Fix</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>Ursachen-Patcher</strong></td>
+<td>repariert die eigentliche Ursache statt des Symptoms</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>Randfall-Patcher</strong></td>
+<td>denkt an Grenzfälle wie leere Listen, None oder Off-by-one</td>
+</tr>
+<tr>
+<td>7</td>
+<td><strong>Test-Ausleser</strong></td>
+<td>liest Testausgaben und Tracebacks und meldet zurück, was schiefging</td>
+</tr>
+<tr>
+<td>8</td>
+<td><strong>Selektor</strong></td>
+<td>wählt am Ende den besten Patch aus</td>
+</tr>
+</tbody>
+</table></div>
+<p>Dazu kommt ein <strong>Generalist</strong>, ein einzelner LoRA, der alles ein bisschen kann. Dominik wollte ihn erst streichen, um Ressourcen zu sparen. Wir haben ihn trotzdem behalten, weil das Paper ohne ihn nicht trennen kann, was am Training liegt und was am Schwarm. Er dient als Vergleich für „E4B + 1 LoRA“ und im Ernstfall als Fallback.</p>
+<h2>So arbeitet der Schwarm</h2>
+<h3>Die Pipeline</h3>
+<p>Ein Issue läuft durch diese Stationen:</p>
+<ol>
+<li><strong>Analyse</strong> durch den Master-Agenten (Router/Planer)</li>
+<li><strong>Lokalisierung</strong>, parallel</li>
+<li><strong>Roter Repro-Test</strong>: Erst wenn ein Test den Bug zeigt, wissen wir, wonach wir suchen</li>
+<li><strong>Mehrere Patch-Kandidaten</strong> von Minimal-, Ursachen- und Randfall-Patcher</li>
+<li><strong>Test-Feedback-Schleife</strong> mit höchstens 1–2 Reparaturrunden</li>
+<li><strong>Selektor</strong> wählt aus und ruft <code>submit_patch</code> auf</li>
+<li>Wenn alles scheitert, übernimmt der <strong>Generalist</strong></li>
+</ol>
+<h3>Der Gruppenchat</h3>
+<p>Dominiks Idee war: Warum nicht wie in einem Gruppenchat? Die Spezialisten sollen sich in Runden austauschen, statt nur stur eine Kette abzuarbeiten. Daraus wurde die <strong>Gruppenchat-Variante</strong>:</p>
+<ul>
+<li>Ein <strong>gemeinsames Board</strong> im Shared State von Google ADK, auf das alle schreiben und von dem alle lesen.</li>
+<li><strong>Höchstens 2–3 moderierte Runden.</strong> Sobald ein Test grün wird, ist Schluss.</li>
+<li>Der Master-Agent moderiert und entscheidet, wer als Nächstes dran ist.</li>
+</ul>
+<p>Pipeline und Gruppenchat wollen wir im Paper direkt gegeneinander antreten lassen.</p>
+<h3>Kompressor und Archiv</h3>
+<p>Kleine Modelle haben ein knappes Kontextfenster. Würde jeder Spezialist den kompletten Chatverlauf mitlesen, wäre der Kontext nach zwei Runden voll. Deshalb gibt es zwei Bausteine:</p>
+<ul>
+<li><strong>Kompressor:</strong> Nach jeder Runde fasst der Master das Board knapp zusammen. Weitergereicht wird nur das Wesentliche.</li>
+<li><strong>Archiv:</strong> Vollständige Logs, Testausgaben und Patches landen per <code>write_file</code> in Dateien. Wer Details braucht, holt sie gezielt mit <code>read_file</code>. Das Gedächtnis liegt also auf der Festplatte und nicht im Kontext.</li>
+</ul>
+<h3>Eine kompakte Agentensprache</h3>
+<p>Dominik fragte: Könnten die Agenten intern eine effizientere Sprache nutzen, Tokens sparen und erst am Ende normale Sprache ausgeben? Antwort: ja, und zwar ziemlich simpel. Statt höflicher Absätze schreiben die Spezialisten kompakte Felder:</p>
+<pre><code>datei: utils.py | fn: parse_date | verdacht: off-by-one | beleg: test_x rot
+</code></pre>
+<p>Das ist kein Geheimcode, sondern ein strenges, maschinenlesbares Format. Ein LoRA ist ohnehin nur ein Aufsatz auf das Basismodell, das seine natürliche Sprache behält. Ein Patcher muss also keine schönen Sätze schreiben, kann es aber bei Bedarf. Ob das Format wirklich Tokens spart, ohne die Lösungsrate zu drücken, messen wir. Auch das ist ein eigenes Experiment.</p>
+<h2>Fünf Hebel</h2>
+<p>Ich habe zehn zusätzliche Ideen vorgeschlagen, Dominik hat fünf ausgewählt:</p>
+<ol>
+<li><strong>Rot-Grün-Testfilter:</strong> Ein Patch zählt nur, wenn der Repro-Test vorher rot war und danach grün ist.</li>
+<li><strong>Frühe Schwierigkeitsschätzung:</strong> Der Master schätzt am Anfang, wie schwer ein Issue ist, und verteilt das Zeitbudget entsprechend. Einfache Fälle bekommen keine fünf Patcher.</li>
+<li><strong>Abstimmung nach Testverhalten:</strong> Bei mehreren Kandidaten entscheidet, wie sie sich in den Tests verhalten, und nicht, wie überzeugt ein Modell klingt.</li>
+<li><strong>Repo-Profil im Archiv:</strong> Wissen über ein Repository, also Struktur, Test-Kommandos und Eigenheiten, wird einmal gesammelt und wiederverwendet.</li>
+<li><strong>Kosten pro gelöstem Task</strong> als Metrik im Paper. Bei David gegen Goliath zählt nicht nur, wer gewinnt, sondern auch, wie teuer jeder Sieg ist.</li>
+</ol>
+<h2>Die Experimente</h2>
+<p>Damit das Paper eine saubere Aussage machen kann, planen wir diese Läufe:</p>
+<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+<thead>
+<tr>
+<th>Lauf</th>
+<th>Setup</th>
+<th>Wozu</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(a)</td>
+<td>E4B prompt-only</td>
+<td>Baseline: Was kann David ohne Training?</td>
+</tr>
+<tr>
+<td>(b)</td>
+<td>E4B + 1 LoRA (Generalist)</td>
+<td>Was bringt Training allein?</td>
+</tr>
+<tr>
+<td>(c)</td>
+<td>E4B-Schwarm mit 8 Spezialisten</td>
+<td>Hauptmethode</td>
+</tr>
+<tr>
+<td>(d)</td>
+<td>31B prompt-only</td>
+<td>Goliath, nur als Referenz, ohne Training</td>
+</tr>
+<tr>
+<td>(e)</td>
+<td>optional: Schwarm prompt-only, ohne Adapter</td>
+<td>Was bringt die Schwarm-Struktur allein?</td>
+</tr>
+</tbody>
+</table></div>
+<p>Erst mit (a), (b), (c) und (e) zusammen lässt sich sauber trennen, was das Training beiträgt und was die Orchestrierung.</p>
+<h2>Der Zeitplan</h2>
+<ul>
+<li><strong>KW43:</strong> Setup, Regeln lesen, beitreten (das passiert gerade)</li>
+<li><strong>KW44:</strong> Baselines (a) und (d) auf Kaggle, lokales Eval mit vLLM und einem SWE-bench-Subset, frühe Tests, ob die Adapter unter vLLM wirken</li>
+<li><strong>KW45:</strong> Trajektorien-Datensatz bauen, LoRAs trainieren, Schwarm einreichen, prüfen, ob wir unter 6 Minuten pro Task bleiben</li>
+<li><strong>KW46:</strong> Ergebnisse bis 10.11. einfrieren, Paper fertigschreiben (max. 3.000 Wörter) und <strong>am 12.11. einreichen</strong></li>
+<li><strong>KW47–48:</strong> E4B weiter verbessern, Team-Merge-Deadline am 25.11., finale Abgaben am 2.12.</li>
+</ul>
+<h2>Disziplin beim Logging</h2>
+<p>Bei einem Paper ist Glaubwürdigkeit alles, deshalb gilt eine strenge Regel:</p>
+<blockquote style="border-left:3px solid var(--accent,#22d3ee);padding-left:16px;margin:16px 0;">
+<p><strong>Was nicht im Log steht, ist nicht passiert und darf nicht zitiert werden.</strong></p>
+</blockquote>
+<p>Jeder Lauf, ob Training, lokales Eval, Benchmark-Sweep oder Kaggle-Abgabe, bekommt <strong>vor dem Start</strong> einen <code>start</code>-Eintrag mit der vollen Konfiguration: Basismodell, Adapter und Version, Datensatz und Hash, Hyperparameter, Hardware, Seed. <strong>Nach dem Ende</strong> folgt ein <code>finish</code>-Eintrag, auch bei Abstürzen, Out-of-Memory oder Timeouts. Die Datei <code>runs.jsonl</code> wird nur ergänzt und nie überschrieben. Ein kleines Python-Tool ohne Abhängigkeiten erledigt das und hat eigene Tests.</p>
+<p>Ins Paper kommen Zahlen nur aus diesem Log, nie aus dem Gedächtnis. Deshalb steht in diesem Blogpost auch keine einzige Ergebniszahl: Das Log ist noch leer.</p>
+<h2>Der Plan in Beads</h2>
+<p>Ein großer Plan erschlägt einen. Deshalb hat ein DeepSeek-Agent über OpenCode Go den ganzen Plan in <strong>69 kleine Arbeitspakete, sogenannte „Beads“</strong>, zerlegt. Jedes hat eine ID, eine Priorität, eine Zeitschätzung, einen Owner, ein klares „Fertig, wenn …“ und Abhängigkeiten zu anderen Beads. Ein Beispiel:</p>
+<blockquote style="border-left:3px solid var(--accent,#22d3ee);padding-left:16px;margin:16px 0;">
+<p><em>B: Gruppenchat-Variante mit Kompressor und Archiv implementieren.</em> Fertig, wenn das Board über zwei bis drei moderierte Runden funktioniert und bei Grün stoppt, inklusive Log-Eintrag.</p>
+</blockquote>
+<p>Ein zweiter DeepSeek-Agent hat parallel den ersten Paper-Entwurf aufgebaut. Das schwere Tippen erledigen also günstige Worker, die Koordination liegt woanders.</p>
+<h2>Zwei Antigravity-Instanzen und Slack</h2>
+<p>Jetzt kommt der Teil, der fast selbst ein Experiment ist: Das Projekt soll <strong>weitgehend automatisch</strong> laufen.</p>
+<ul>
+<li><strong>Instanz A</strong> kümmert sich um Daten und Training auf einem Desktop mit 16-GB-GPU.</li>
+<li><strong>Instanz B</strong> kümmert sich um Harness und Evaluation auf dem Laptop.</li>
+<li>Beide sind <strong>Antigravity-Instanzen</strong> und reden über einen Slack-Kanal miteinander.</li>
+<li>Alle <strong>20 Minuten</strong> stößt ein schlanker Worker, ein Cron-Skript statt eines teuren Bots, die Instanzen an und gibt neue Slack-Nachrichten weiter.</li>
+<li>Der eigentliche gemeinsame Stand liegt <strong>im Repository</strong>. Slack ist nur der Anstupser.</li>
+<li><strong>Ich</strong> bin Projektleiter, koordiniere einmal täglich und melde mich bei Dominik nur bei Entscheidungen, Blockern oder Meilensteinen.</li>
+</ul>
+<p>Damit nichts aus dem Ruder läuft, gibt es feste Stopp-Regeln:</p>
+<ul>
+<li><strong>Keine Kaggle-Abgabe ohne Dominiks Ja.</strong></li>
+<li>Pro GPU läuft immer nur ein Training gleichzeitig.</li>
+<li>Nach zwei Fehlschlägen hintereinander geht die Sache an Dominik.</li>
+</ul>
+<h2>Das eigentliche Ziel: ein Python-Sidekick in LastBrowser</h2>
+<p>Der Wettbewerb ist der Anlass, aber nicht das Ende. Nach dem 2. Dezember wollen wir das, was der Schwarm gelernt hat, in einen <strong>lokalen Python-Sidekick für LastBrowser</strong> überführen. Er soll klein genug für normale Hardware sein, ohne Cloud auskommen und auf Code spezialisiert sein. Gerade deshalb ist die David-Frage für uns so interessant: Wenn kleine Spezialisten gemeinsam mit einem großen Modell mithalten können, dann passt brauchbare Coding-Hilfe auf deinen eigenen Rechner. Die geparkten Spezialisten, etwa ein Traceback-Leser oder ein Patch-Reviewer, sind genau dafür vorgesehen.</p>
+<h2>Wo wir stehen</h2>
+<ul>
+<li>✅ Projekt gewählt, Fokus auf E4B und Paper Track</li>
+<li>✅ Regeln gelesen, Architektur und Experimente geplant</li>
+<li>✅ Plan in 69 Beads zerlegt, Paper-Entwurf angelegt (ohne Ergebnisse)</li>
+<li>✅ Logging-System steht, Log ist noch leer</li>
+<li>⏳ Beitritt zu beiden Wettbewerben, offene Regeln klären (LoRA-Limit, Kontext)</li>
+<li>⏳ Antigravity-Instanzen aufsetzen</li>
+<li>❌ Noch nichts trainiert, noch nichts eingereicht</li>
+</ul>
+<hr />
+<h2>Teaser für Teil 2</h2>
+<p>Im nächsten Teil wird es konkret. Die beiden Antigravity-Instanzen gehen an den Start und reden zum ersten Mal über Slack miteinander, ob das so harmonisch wird wie geplant, sehen wir dann. Außerdem stehen die ersten Baselines an: Wie schlägt sich das kleine E4B ganz ohne Training, und wie viel stärker ist Goliath wirklich? Das werden die ersten echten Zahlen aus dem Log, versprochen. 🪨</p>
+<p><em>Fortsetzung folgt.</em></p>
+    </div>
+    <div class="article-cta">
+      <p style="margin-bottom:0;">Fragen oder Ideen? Schreib uns: <a href="mailto:hello@lastbrowser.com">hello@lastbrowser.com</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="36" height="36">
+        <div><strong>LastBrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Browser für Windows und Linux (Linux in Preview) mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      <nav class="footer-social-links" aria-label="Social media">
+          <a href="https://x.com/lastbrowser" target="_blank" rel="noopener noreferrer" aria-label="X"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68L14.54 10.98l9.452 11.867h-7.406l-5.8-7.584-6.64 7.584H.464l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.606h2.039L6.486 3.132h-2.19z"/></svg><span>X</span></a>
+          <a href="https://bsky.app/profile/lastbrowser.bsky.social" target="_blank" rel="noopener noreferrer" aria-label="Bluesky"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M5.36 2.25c2.72 2.04 5.65 6.17 6.64 8.39.99-2.22 3.92-6.35 6.64-8.39 1.96-1.47 5.14-2.61 5.14 1.01 0 .72-.41 6.07-.65 6.94-.83 2.99-3.84 3.76-6.52 3.3 4.69.79 5.89 3.41 3.31 6.03-4.9 4.99-7.04-1.25-7.59-2.84-.1-.3-.15-.44-.33-.44s-.23.14-.33.44c-.55 1.59-2.69 7.83-7.59 2.84-2.58-2.62-1.38-5.24 3.31-6.03-2.68.46-5.69-.31-6.52-3.3C.63 9.33.22 3.98.22 3.26c0-3.62 3.18-2.48 5.14-1.01Z"/></svg><span>Bluesky</span></a>
+        </nav>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 LastBrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js?v=linux56-20261014"></script>
+</body>
+</html>

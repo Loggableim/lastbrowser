@@ -171,6 +171,7 @@ import { configureDrmWidevine, initializeCastlabsWidevine } from './drm.js';
 import { appRendererUrl, installAppProtocolHandler, registerAppScheme } from './app-protocol.js';
 import { registerWindowControlIpc } from './window-controls.js';
 import { startPrimaryInstanceStartup } from './app-startup.js';
+import { applyAppUserModelId } from './app-identity.js';
 import { hardenWebViewAttachment } from './webview-security.js';
 import { capturePageDataUrl, normalizeCapturePageRect } from './capture-page.js';
 import { createOpenUrlLifecycle } from './open-url-lifecycle.js';
@@ -1222,6 +1223,11 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled');
 app.commandLine.appendSwitch('enable-features', 'WidevineCdm');
 
 app.setName('Lastbrowser');
+
+// Windows shows the packaged shortcut/branded icon for the taskbar button only
+// when the runtime declares the same AppUserModelID the installer used.
+// Must run before app.whenReady() and before any BrowserWindow is created.
+applyAppUserModelId(app);
 
 // Enforce single instance lock: prevent port collisions and handle incoming external URLs
 const gotSingleInstanceLock = typeof app?.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;

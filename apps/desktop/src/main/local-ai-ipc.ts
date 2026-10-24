@@ -11,6 +11,10 @@ export function registerLocalAi(manager: LocalAiManager): void {
   handle('status', (workspace = '') => manager.status(String(workspace)));
   handle('scan', () => manager.scan());
   handle('download', (id) => manager.download(String(id)));
+  handle('installRuntime', (backend) => {
+    if (backend !== 'cpu' && backend !== 'vulkan') throw new Error('Invalid backend.');
+    return manager.installRuntime(backend);
+  });
   handle('cancel', () => manager.cancel());
   handle('start', (id, backend) => {
     if (backend !== 'cpu' && backend !== 'vulkan') throw new Error('Invalid backend.');

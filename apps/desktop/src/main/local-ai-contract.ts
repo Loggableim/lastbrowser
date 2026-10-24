@@ -1,3 +1,4 @@
+export type LocalAiBackend = 'cpu' | 'vulkan';
 export type LocalModel = {
   id: string; name: string; repository: string; revision: string; filename: string;
   bytes: number; sha256: string; url: string; license: string; evaluation: 'candidate' | 'verified';
@@ -12,7 +13,8 @@ export type HardwareReport = {
 };
 export type LocalAiState = {
   hardware: HardwareReport | null; catalog: LocalModel[]; installed: string[];
-  runtimeAvailable: boolean; phase: 'idle' | 'downloading' | 'verifying' | 'loading' | 'ready' | 'error';
+  runtimeAvailable: boolean; runtimeBackends: LocalAiBackend[];
+  phase: 'idle' | 'downloading' | 'verifying' | 'loading' | 'ready' | 'error';
   activeChats: number;
   recommendations?: Record<string, { usable: boolean; reason: string }>;
   recommendedModel?: string | null;

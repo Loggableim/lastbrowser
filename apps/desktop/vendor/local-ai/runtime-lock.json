@@ -6,6 +6,8 @@
     {
       "backend": "cpu",
       "archive": "llama-b11377-bin-win-cpu-x64.zip",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11377/llama-b11377-bin-win-cpu-x64.zip",
+      "bytes": 19352210,
       "sha256": "00b6a76bf3188a3c693c3f6bd4bff20b12d02780cc800d6f67397e69ad744d53",
       "files": [
         {
@@ -217,6 +219,8 @@
     {
       "backend": "vulkan",
       "archive": "llama-b11377-bin-win-vulkan-x64.zip",
+      "url": "https://github.com/ggml-org/llama.cpp/releases/download/b11377/llama-b11377-bin-win-vulkan-x64.zip",
+      "bytes": 33272452,
       "sha256": "4aae1ab232f672f706edbce2732e109fb3333cf749c528a65c987e3282ecbdf0",
       "files": [
         {

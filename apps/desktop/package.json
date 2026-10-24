@@ -72,7 +72,7 @@
       {
         "from": "vendor/local-ai",
         "to": "local-ai",
-        "filter": ["cpu/llama-server.exe", "cpu/*.dll", "cpu/LICENSE*", "vulkan/llama-server.exe", "vulkan/*.dll", "vulkan/LICENSE*", "models.json", "runtime-lock.json", "LICENSE*"]
+        "filter": ["models.json", "runtime-lock.json", "LICENSE*"]
       },
       {
         "from": "../../services",
@@ -85,6 +85,9 @@
           "!**/.ruff_cache/**",
           "!**/*.egg-info/**",
           "!sidekick/build/**",
+          "!sidekick/tests/**",
+          "!sidekick/docs/**",
+          "!**/*.map",
           "!**/build/lib/**"
         ]
       },

@@ -5,8 +5,9 @@ import { pipeline } from 'node:stream/promises';
 import { Transform, Readable } from 'node:stream';
 import path from 'node:path';
 import { createServer } from 'node:net';
-import type { HardwareReport, LocalAiState, LocalModel } from './local-ai-contract.js';
+import type { HardwareReport, LocalAiBackend, LocalAiState, LocalModel } from './local-ai-contract.js';
 import { assessModel, scanLocalHardware } from './local-ai-hardware.js';
+import { installRuntime as installLocalAiRuntime, runtimeBackends } from './local-ai-runtime.js';
 
 export async function verifyModelFile(file: string, model: LocalModel): Promise<boolean> {
   const hash = createHash('sha256'); let bytes = 0;
@@ -34,7 +35,9 @@ export class LocalAiManager {
     const keyPath = path.join(storageRoot, 'runtime.key');
     if (!existsSync(keyPath)) writeFileSync(keyPath, randomBytes(32).toString('hex'), { mode: 0o600, flag: 'wx' });
     this.key = readFileSync(keyPath, 'utf8').trim();
-    this.state = { hardware: null, catalog: this.models, installed: [], runtimeAvailable: existsSync(this.executable('cpu')),
+    const installedBackends = runtimeBackends(this.runtimeRoot);
+    this.state = { hardware: null, catalog: this.models, installed: [], runtimeAvailable: installedBackends.length > 0,
+      runtimeBackends: installedBackends,
       phase: 'idle', activeChats: 0, modelId: null, completedBytes: 0, totalBytes: 0, error: '', endpoint: null,
       backend: 'cpu', measuredTokensPerSecond: null, toolTestPassed: false, scope: null };
   }
@@ -66,7 +69,9 @@ export class LocalAiManager {
     const recommendations = Object.fromEntries(this.models.map((model) => [model.id, this.state.hardware ? assessModel(model, this.state.hardware) : { usable: false, reason: 'Hardware zuerst prüfen.' }]));
     const usable = this.models.filter((model) => recommendations[model.id].usable && model.agentEvaluation === 'limited');
     const recommendedModel = this.state.hardware && this.state.hardware.availableRamBytes >= 8 * 1024 ** 3 ? usable.find((model) => model.id === 'qwen-balanced')?.id || usable[0]?.id : usable[0]?.id;
-    return structuredClone({ ...this.state, recommendations, recommendedModel: recommendedModel || null, activeChats: this.activeChats, installed: this.models.filter((model) => existsSync(this.file(model))).map((model) => model.id), scope });
+    const installedBackends = runtimeBackends(this.runtimeRoot);
+    return structuredClone({ ...this.state, runtimeAvailable: installedBackends.length > 0, runtimeBackends: installedBackends,
+      recommendations, recommendedModel: recommendedModel || null, activeChats: this.activeChats, installed: this.models.filter((model) => existsSync(this.file(model))).map((model) => model.id), scope });
   }
   async scan(): Promise<HardwareReport> { this.state.hardware = await scanLocalHardware(this.storageRoot); return this.state.hardware; }
   async download(id: string): Promise<void> {
@@ -128,6 +133,21 @@ export class LocalAiManager {
     finally { this.controller = null; }
   }
   cancel() { this.controller?.abort(); }
+  async installRuntime(backend: LocalAiBackend): Promise<void> {
+    return this.exclusive(async () => {
+      const controller = new AbortController(); this.controller = controller;
+      this.state = { ...this.state, phase: 'downloading', modelId: null, completedBytes: 0, totalBytes: 0, error: '', toolTestPassed: false };
+      try {
+        await installLocalAiRuntime({ runtimeRoot: this.runtimeRoot, backend, fetcher: this.fetcher, signal: controller.signal,
+          onProgress: (completed, total) => { this.state.completedBytes = completed; this.state.totalBytes = total; } });
+        const installed = runtimeBackends(this.runtimeRoot);
+        this.state = { ...this.state, phase: 'idle', runtimeAvailable: installed.length > 0, runtimeBackends: installed };
+      } catch (error) {
+        this.state.phase = controller.signal.aborted ? 'idle' : 'error';
+        this.state.error = controller.signal.aborted ? 'Runtime-Download abgebrochen.' : String(error instanceof Error ? error.message : error);
+      } finally { this.controller = null; }
+    });
+  }
   async stop(force = false): Promise<void> {
     if (!force && this.activeChats) throw new Error('Lokale KI wird von einem Chat verwendet. Chat zuerst beenden.');
     if (this.idleTimer) { clearTimeout(this.idleTimer); this.idleTimer = null; }
@@ -148,6 +168,7 @@ export class LocalAiManager {
   }
   private async startImpl(id: string, backend: 'cpu' | 'vulkan'): Promise<void> {
     const model = this.model(id); await this.stop();
+    if (!runtimeBackends(this.runtimeRoot).includes(backend)) throw new Error(`Lokale Runtime für ${backend} ist nicht installiert. Zuerst herunterladen.`);
     const controller = new AbortController(); this.controller = controller;
     this.state = { ...this.state, phase: 'loading', modelId: id, backend, error: '', toolTestPassed: false, measuredTokensPerSecond: null };
     try {

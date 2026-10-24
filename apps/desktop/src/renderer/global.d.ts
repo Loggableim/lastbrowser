@@ -179,6 +179,7 @@ declare global {
         status: (workspace: string) => Promise<import('../main/local-ai-contract.js').LocalAiState>;
         scan: () => Promise<import('../main/local-ai-contract.js').HardwareReport>;
         download: (id: string) => Promise<void>;
+        installRuntime: (backend: 'cpu' | 'vulkan') => Promise<void>;
         cancel: () => Promise<void>;
         start: (id: string, backend: 'cpu' | 'vulkan') => Promise<void>;
         stop: () => Promise<void>;

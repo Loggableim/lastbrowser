@@ -1,10 +1,10 @@
 # Local AI onboarding
 
-Lastbrowser bundles llama.cpp b11377 for Windows x64 (CPU and Vulkan). First launch and Settings → Providers offer an optional hardware scan, pinned GGUF download or import, runtime/tool test, and independent Space defaults/fallback consent. Existing Ollama and LM Studio connections remain available.
+Lastbrowser ships a pinned catalog for llama.cpp b11377 for Windows x64 (CPU and Vulkan) and downloads the engine archive on demand. First launch and Settings → Providers offer an optional hardware scan, pinned GGUF download or import, runtime/tool test, and independent Space defaults/fallback consent. Existing Ollama and LM Studio connections remain available. See `installer-size-on-demand-runtime.md` for the installer-size prototype (#322).
 
 ## Ownership and contracts
 
-- Electron owns one authenticated loopback server on `127.0.0.1:11435`. Runtime code and DLLs ship inside the application; first launch only downloads model weights.
+- Electron owns one authenticated loopback server on `127.0.0.1:11435`. The installer ships the engine catalog and licenses; the engine archive is downloaded on demand, checked against `runtime-lock.json` (size, archive SHA-256, every extracted file SHA-256) and only pinned files are extracted. Model weights are downloaded separately.
 - `apps/desktop/vendor/local-ai/runtime-lock.json` fixes official archive hashes and every extracted file. `prepare-local-ai.mjs` verifies and extracts offline. No build-time download or external backend checkout is used.
 - Model URLs include immutable Hugging Face revisions. Downloads and imports require exact length and SHA256 before atomic installation. Interrupted downloads retain partial bytes and validate the entire resumed file. No arbitrary URL/model path is accepted from renderer IPC; import uses a native file picker.
 - The local key stays in the application home and is supplied by key file rather than process arguments. Renderer status/configuration never returns it. The dedicated `lastbrowser-local` provider does not overwrite cloud API keys or accept an external base URL.
@@ -53,7 +53,7 @@ The Electron smoke explicitly sets a separate application home, tests two Space 
 
 ## Release boundary
 
-The local Windows unpacked test package contains both engines, their DLLs/licenses, the model catalog, and the complete Python backend. It does not include model weights or development archives. Only the server executable is included for each backend; unrelated conversion/benchmark executables are excluded.
+The Windows unpacked test package contains the engine catalog, licenses and the complete Python backend. Engine binaries are downloaded on demand in this prototype; model weights and development archives are never packaged. Only the server executable is installed for each backend; unrelated conversion/benchmark executables are excluded.
 
 `verify-local-ai-signatures.cjs` is a read-only `afterPack` gate: when `EVS_REQUIRED=1`, every bundled local AI executable and DLL must have a valid Authenticode signature before a release can proceed. The existing installer signature checks alone do not cover these embedded components.
 

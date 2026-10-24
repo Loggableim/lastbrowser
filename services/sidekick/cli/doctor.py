@@ -41,6 +41,7 @@ _PROVIDER_CHECK_URLS = {
     "anthropic": "https://api.anthropic.com/v1/models",
     "openrouter": "https://openrouter.ai/api/v1/models",
     "deepseek": "https://api.deepseek.com/v1/models",
+    "groq": "https://api.groq.com/openai/v1/models",
     "google": "https://generativelanguage.googleapis.com/v1beta/models",
 }
 
@@ -62,6 +63,7 @@ _PROVIDER_ENV_HINTS = (
     "MINIMAX_CN_API_KEY",
     "KILOCODE_API_KEY",
     "DEEPSEEK_API_KEY",
+    "GROQ_API_KEY",
     "DASHSCOPE_API_KEY",
     "HF_TOKEN",
     "AI_GATEWAY_API_KEY",
@@ -507,6 +509,10 @@ def _check_providers_connectivity() -> None:
                     break
             elif key == "deepseek":
                 if os.getenv("DEEPSEEK_API_KEY"):
+                    provider = key
+                    break
+            elif key == "groq":
+                if os.getenv("GROQ_API_KEY"):
                     provider = key
                     break
             elif key == "google":

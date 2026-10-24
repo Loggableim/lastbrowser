@@ -65,6 +65,13 @@ const PRESENTATION: Record<string, ProviderPresentation> = {
     mark: '◈',
     color: '#4d6bfe'
   },
+  groq: {
+    description: 'Groq beta: OpenAI-compatible chat with a live model list. Use your own key.',
+    category: 'cloud',
+    mark: '≋',
+    color: '#f55036',
+    keyHint: 'Beta test. An empty free quota reports 429 and is not a LastBrowser error.'
+  },
   mistralai: {
     description: 'Mistral API key for European-hosted models.',
     category: 'cloud',

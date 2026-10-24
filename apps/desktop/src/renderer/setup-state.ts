@@ -101,7 +101,8 @@ const fallbackCloudProviders = [
   { id: 'openai', label: 'OpenAI' },
   { id: 'anthropic', label: 'Anthropic' },
   { id: 'gemini', label: 'Google Gemini' },
-  { id: 'deepseek', label: 'DeepSeek' }
+  { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'groq', label: 'Groq' }
 ];
 
 const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string }>> = {
@@ -127,6 +128,7 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'deepseek-chat', label: 'DeepSeek V3 (Chat)' },
     { id: 'deepseek-reasoner', label: 'DeepSeek R1 (Reasoner)' }
   ],
+  groq: [],
   'openai-codex': [
     { id: 'gpt-5.5', label: 'GPT-5.5' },
     { id: 'gpt-5.5-mini', label: 'GPT-5.5 Mini' },

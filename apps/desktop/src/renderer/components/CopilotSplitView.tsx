@@ -267,6 +267,10 @@ export function CopilotSplitView({
             category = 'other';
             providerLabel = 'DeepSeek';
             badgeClass = 'deepseek';
+          } else if (pid === 'groq' || pid.includes('groq')) {
+            category = 'other';
+            providerLabel = 'Groq';
+            badgeClass = 'groq';
           }
 
           for (const m of g.models || []) {

@@ -379,6 +379,7 @@ _PROVIDER_ENV_VAR: dict[str, str] = {
     "zai": "GLM_API_KEY",
     "kimi-coding": "KIMI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
+    "groq": "GROQ_API_KEY",
     "minimax": "MINIMAX_API_KEY",
     "minimax-cn": "MINIMAX_CN_API_KEY",
     "mistralai": "MISTRAL_API_KEY",

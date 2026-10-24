@@ -217,6 +217,15 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "models": list(_PROVIDER_MODELS.get("deepseek", [])),
         "category": "specialized",
     },
+    "groq": {
+        "label": "Groq",
+        "env_var": "GROQ_API_KEY",
+        "default_model": "llama-3.3-70b-versatile",
+        "default_base_url": "https://api.groq.com/openai/v1",
+        "requires_base_url": False,
+        "models": list(_PROVIDER_MODELS.get("groq", [])),
+        "category": "specialized",
+    },
     "xiaomi": {
         "label": "Xiaomi MiMo",
         "env_var": "XIAOMI_API_KEY",

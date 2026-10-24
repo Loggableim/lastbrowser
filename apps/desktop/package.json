@@ -80,10 +80,12 @@
         "filter": [
           "**/*",
           "!**/__pycache__/**",
+          "!**/*.pyc",
           "!**/.pytest_cache/**",
           "!**/.test-tmp/**",
           "!**/.ruff_cache/**",
           "!**/*.egg-info/**",
+          "!**/tests/**",
           "!sidekick/build/**",
           "!**/build/lib/**"
         ]

@@ -1,21 +1,22 @@
 # Versioned dependency license inventory
 
-Generated: 2026-10-14T05:11:53.626Z
+Generated: 2026-10-19T08:14:34.708Z
 
 Regenerate with `node scripts/legal-inventory.mjs` from the repository root.
-npm rows are every non-link `node_modules` entry in `package-lock.json`, including nested `node_modules`. The count is lockfile entries, not unique names. Workspace links are listed as skipped and are not third-party packages. Python rows are the pinned Windows runtime in `apps/desktop/scripts/requirements-runtime.txt`, with the license string read from PyPI for that exact version. A missing license is unknown, not compatible.
+npm rows are every package entry in `pnpm-lock.yaml`, with the license read from the matching installed `node_modules/<name>/package.json` (pnpm lockfiles do not store licenses). The count is lockfile entries, not unique names. Optional platform binaries that are not installed on this machine therefore show no license evidence. Workspace projects are listed as skipped and are not third-party packages. Python rows are the pinned Windows runtime in `apps/desktop/scripts/requirements-runtime.txt`, with the license string read from PyPI for that exact version. A missing license is unknown, not compatible.
 
-npm lockfile entries: 486. Nested entries: 79. Unique names: 407. Missing license field: 0. Skipped workspace links: 1.
+npm lockfile entries: 436. Installed entries: 371. Unique names: 407. Missing license field: 65. Skipped workspace projects: 1.
 
 | SPDX or lockfile license | Count |
 | :--- | ---: |
-| MIT | 391 |
-| ISC | 47 |
+| MIT | 285 |
+| UNKNOWN | 65 |
+| ISC | 43 |
 | MPL-2.0 | 12 |
 | Apache-2.0 | 9 |
-| BlueOak-1.0.0 | 8 |
 | BSD-2-Clause | 7 |
-| BSD-3-Clause | 6 |
+| BSD-3-Clause | 5 |
+| BlueOak-1.0.0 | 4 |
 | (MIT OR CC0-1.0) | 1 |
 | (WTFPL OR MIT) | 1 |
 | CC-BY-4.0 | 1 |

@@ -1,0 +1,9 @@
+packages:
+  - "apps/desktop"
+
+onlyBuiltDependencies:
+  - electron
+  - electron-winstaller
+  - electron@https://codeload.github.com/castlabs/electron-releases/tar.gz/e428e34f0a72dcff7aed9da06846b8872ed388db
+  - esbuild
+  - node-pty

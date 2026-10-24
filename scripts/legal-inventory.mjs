@@ -1,31 +1,42 @@
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import yaml from 'js-yaml';
 
 const root = resolve(import.meta.dirname, '..');
 const outDir = resolve(root, 'docs/legal/inventory');
 mkdirSync(outDir, { recursive: true });
 
-const lock = JSON.parse(readFileSync(resolve(root, 'package-lock.json'), 'utf8'));
+const lock = yaml.load(readFileSync(resolve(root, 'pnpm-lock.yaml'), 'utf8'));
 const npm = [];
 const npmSkipped = [];
-for (const [path, meta] of Object.entries(lock.packages ?? {})) {
-  if (!path.startsWith('node_modules/')) continue;
-  if (meta.link === true) {
-    npmSkipped.push({ lockPath: path, reason: 'workspace-link', resolved: meta.resolved ?? null });
-    continue;
+for (const lockPath of Object.keys(lock.packages ?? {})) {
+  const separator = lockPath.lastIndexOf('@');
+  const name = separator > 0 ? lockPath.slice(0, separator) : lockPath;
+  const version = separator > 0 ? lockPath.slice(separator + 1) : null;
+  const packageJsonPath = join(root, 'node_modules', name, 'package.json');
+  let license = null;
+  let installed = false;
+  if (existsSync(packageJsonPath)) {
+    installed = true;
+    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8'));
+    const declared = packageJson.license ?? packageJson.licenses;
+    license = typeof declared === 'string' ? declared : (declared ? JSON.stringify(declared) : null);
   }
-  const name = path.slice(path.lastIndexOf('node_modules/') + 'node_modules/'.length);
   npm.push({
     name,
-    lockPath: path,
-    nested: path.includes('/node_modules/'),
-    version: meta.version ?? null,
-    license: meta.license ?? null,
-    resolved: meta.resolved ?? null,
+    lockPath: `node_modules/${name}`,
+    installed,
+    version,
+    license,
+    resolved: name === 'electron' ? version : version ? `https://registry.npmjs.org/${name}/-/${name.split('/').pop()}-${version}.tgz` : null,
   });
 }
-npm.sort((a, b) => a.lockPath.localeCompare(b.lockPath));
+for (const importer of Object.keys(lock.importers ?? {})) {
+  if (importer === '.') continue;
+  npmSkipped.push({ lockPath: importer, reason: 'workspace-project', resolved: null });
+}
+npm.sort((a, b) => a.name.localeCompare(b.name));
 const npmMissing = npm.filter((row) => !row.license);
 const npmCounts = {};
 for (const row of npm) {
@@ -101,12 +112,12 @@ const generatedAt = new Date().toISOString();
 const payload = {
   generatedAt,
   sources: {
-    npm: 'package-lock.json packages, including nested node_modules, license field',
+    npm: 'pnpm-lock.yaml packages, with the license field read from the installed node_modules package.json',
     python: 'apps/desktop/scripts/requirements-runtime.txt plus PyPI JSON license / license_expression',
   },
   npm: {
     count: npm.length,
-    nestedCount: npm.filter((row) => row.nested).length,
+    installedCount: npm.filter((row) => row.installed).length,
     uniqueNames: new Set(npm.map((row) => row.name)).size,
     missingLicense: npmMissing.length,
     skipped: npmSkipped,
@@ -130,9 +141,9 @@ lines.push('');
 lines.push(`Generated: ${generatedAt}`);
 lines.push('');
 lines.push('Regenerate with `node scripts/legal-inventory.mjs` from the repository root.');
-lines.push('npm rows are every non-link `node_modules` entry in `package-lock.json`, including nested `node_modules`. The count is lockfile entries, not unique names. Workspace links are listed as skipped and are not third-party packages. Python rows are the pinned Windows runtime in `apps/desktop/scripts/requirements-runtime.txt`, with the license string read from PyPI for that exact version. A missing license is unknown, not compatible.');
+lines.push('npm rows are every package entry in `pnpm-lock.yaml`, with the license read from the matching installed `node_modules/<name>/package.json` (pnpm lockfiles do not store licenses). The count is lockfile entries, not unique names. Optional platform binaries that are not installed on this machine therefore show no license evidence. Workspace projects are listed as skipped and are not third-party packages. Python rows are the pinned Windows runtime in `apps/desktop/scripts/requirements-runtime.txt`, with the license string read from PyPI for that exact version. A missing license is unknown, not compatible.');
 lines.push('');
-lines.push(`npm lockfile entries: ${npm.length}. Nested entries: ${npm.filter((row) => row.nested).length}. Unique names: ${new Set(npm.map((row) => row.name)).size}. Missing license field: ${npmMissing.length}. Skipped workspace links: ${npmSkipped.length}.`);
+lines.push(`npm lockfile entries: ${npm.length}. Installed entries: ${npm.filter((row) => row.installed).length}. Unique names: ${new Set(npm.map((row) => row.name)).size}. Missing license field: ${npmMissing.length}. Skipped workspace projects: ${npmSkipped.length}.`);
 lines.push('');
 lines.push('| SPDX or lockfile license | Count |');
 lines.push('| :--- | ---: |');
@@ -158,7 +169,7 @@ lines.push('');
 writeFileSync(resolve(outDir, 'dependency-licenses.md'), `${lines.join('\n')}\n`);
 console.log(JSON.stringify({
   npm: npm.length,
-  npmNested: npm.filter((row) => row.nested).length,
+  npmInstalled: npm.filter((row) => row.installed).length,
   npmUniqueNames: new Set(npm.map((row) => row.name)).size,
   npmSkipped: npmSkipped,
   npmMissing: npmMissing.length,

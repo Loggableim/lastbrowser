@@ -7,21 +7,21 @@
   "author": "Lastbrowser",
   "main": "dist/main/main.js",
   "scripts": {
-    "dev": "npm run build:main && vite --host 127.0.0.1",
+    "dev": "pnpm run build:main && vite --host 127.0.0.1",
     "start": "electron dist/main/main.js",
     "start:dev": "node electron-dev.mjs",
     "prepare:python": "node scripts/prepare-python-runtime.mjs",
-    "build": "npm run build:main && npm run build:renderer",
+    "build": "pnpm run build:main && pnpm run build:renderer",
     "build:main": "node scripts/prepare-local-ai.mjs && tsc -p tsconfig.main.json && node scripts/build-preload.mjs",
-    "build:renderer": "npm run typecheck:renderer && vite build",
+    "build:renderer": "pnpm run typecheck:renderer && vite build",
     "typecheck:renderer": "tsc --noEmit -p tsconfig.renderer.json",
     "test": "vitest",
     "test:run": "vitest run",
     "smoke:browser": "node scripts/smoke-browser.mjs",
     "sync:sidekick": "node -e \"console.log('[sync:sidekick] Sidekick is integrated directly in-tree.')\"",
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
-    "package:win": "npm run prepare:python && npm run build && electron-builder --win nsis portable",
-    "package:win:publish": "npm run prepare:python && npm run build && electron-builder --win nsis portable --publish never"
+    "package:win": "pnpm run prepare:python && pnpm run build && electron-builder --win nsis portable",
+    "package:win:publish": "pnpm run prepare:python && pnpm run build && electron-builder --win nsis portable --publish never"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",

@@ -13,18 +13,20 @@ Lastbrowser is a Windows-first Electron browser shell with Sidekick integrated a
 
 ## Development & Verification
 
+This repository uses pnpm with a shared content-addressable store. Dependencies are hardlinked from the store instead of copied, which keeps `node_modules` small. Install pnpm 10.34.7 (see the `packageManager` field) before installing.
+
 ```powershell
-npm install
-npm test                  # 514+ Vitest unit & integration tests
-npm run verify:store      # Automated Microsoft Store release readiness preflight (27 checks)
-npm run build             # Build main TypeScript and renderer Vite bundles
+pnpm install --frozen-lockfile
+pnpm test                 # 514+ Vitest unit & integration tests
+pnpm run verify:store     # Automated Microsoft Store release readiness preflight (27 checks)
+pnpm run build            # Build main TypeScript and renderer Vite bundles
 ```
 
 For local UI work, run the renderer and Electron separately:
 
 ```powershell
-npm run dev
-npm --workspace apps/desktop run start:dev
+pnpm run dev
+pnpm --filter @lastbrowser/desktop run start:dev
 ```
 
 ## Architecture Notes

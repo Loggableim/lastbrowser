@@ -3,16 +3,17 @@
   "version": "0.1.44",
   "private": true,
   "description": "Lastbrowser desktop browser shell with Sidekick integration.",
+  "packageManager": "pnpm@10.34.7",
   "scripts": {
-    "dev": "npm --workspace apps/desktop run dev",
-    "build": "npm --workspace apps/desktop run build",
-    "test": "npm --workspace apps/desktop run test",
-    "test:run": "npm --workspace apps/desktop run test:run",
-    "package:win": "npm --workspace apps/desktop run package:win",
-    "release:win": "npm --workspace apps/desktop run package:win:publish",
+    "dev": "pnpm --filter @lastbrowser/desktop run dev",
+    "build": "pnpm --filter @lastbrowser/desktop run build",
+    "test": "pnpm --filter @lastbrowser/desktop run test",
+    "test:run": "pnpm --filter @lastbrowser/desktop run test:run",
+    "package:win": "pnpm --filter @lastbrowser/desktop run package:win",
+    "release:win": "pnpm --filter @lastbrowser/desktop run package:win:publish",
     "verify:store": "powershell -ExecutionPolicy Bypass -File scripts/verify-store-readiness.ps1"
   },
-  "workspaces": [
-    "apps/desktop"
-  ]
+  "devDependencies": {
+    "js-yaml": "^4.1.1"
+  }
 }

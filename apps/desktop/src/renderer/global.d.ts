@@ -106,6 +106,7 @@ type LastbrowserUpdateStatus = {
   percent: number | null;
   lastCheckedAt: string | null;
   message: string | null;
+  channel: 'stable' | 'beta';
 };
 
 type WebuiBridgeRequest = {
@@ -466,6 +467,7 @@ declare global {
         check: () => Promise<LastbrowserUpdateStatus>;
         download: () => Promise<LastbrowserUpdateStatus>;
         install: () => Promise<LastbrowserUpdateStatus>;
+        setChannel: (channel: 'stable' | 'beta') => Promise<LastbrowserUpdateStatus & { ok?: boolean; error?: string }>;
         setAutoCheckEnabled: (enabled: boolean) => Promise<{ enabled: boolean }>;
         onStatus: (callback: (status: LastbrowserUpdateStatus) => void) => () => void;
       };

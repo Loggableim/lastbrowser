@@ -3,6 +3,7 @@ import electronUpdater, { type AppUpdater } from 'electron-updater';
 import http from 'node:http';
 import https from 'node:https';
 import { createUpdateController, type LastbrowserUpdateStatus, type UpdateController } from './update-controller.js';
+import { isUpdateChannel, loadUpdatePreferences, saveUpdatePreferences } from './update-preferences.js';
 
 const { autoUpdater } = electronUpdater;
 
@@ -37,12 +38,14 @@ export function registerUpdateIpc(
   if (autoCheckTimer) clearTimeout(autoCheckTimer);
   autoCheckTimer = null;
   patchHttpExecutor(autoUpdater);
+  const preferences = loadUpdatePreferences(app.getPath('userData'));
   controller = createUpdateController({
     updater: autoUpdater as AppUpdater,
     isPackaged: app.isPackaged,
     currentVersion: app.getVersion(),
     forceDevUpdates: process.env.LASTBROWSER_FORCE_DEV_UPDATES === '1',
     allowPrerelease: process.env.LASTBROWSER_ALLOW_PRERELEASE_UPDATES === '1',
+    channel: preferences.channel,
     unsupportedReason: process.windowsStore
       ? 'This installation is updated by Microsoft Store.'
       : process.env.PORTABLE_EXECUTABLE_FILE
@@ -52,6 +55,15 @@ export function registerUpdateIpc(
   });
 
   ipcMain.handle('lastbrowser:updates:status', () => controller?.getStatus());
+  ipcMain.handle('lastbrowser:updates:set-channel', (_event, value: unknown) => {
+    if (!isUpdateChannel(value)) {
+      return { ok: false, error: 'The update channel must be "stable" or "beta".', ...controller?.getStatus() };
+    }
+    const saved = saveUpdatePreferences(app.getPath('userData'), { channel: value });
+    const status = controller?.setChannel(saved.channel);
+    void controller?.checkForUpdates().catch(() => undefined);
+    return { ok: true, ...status };
+  });
   ipcMain.handle('lastbrowser:updates:check', () => controller?.checkForUpdates());
   ipcMain.handle('lastbrowser:updates:download', () => controller?.downloadUpdate());
   ipcMain.handle('lastbrowser:updates:install', async () => {

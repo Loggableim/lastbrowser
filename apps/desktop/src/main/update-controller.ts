@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events';
+import type { UpdateChannel } from './update-preferences.js';
 
 export type UpdateState =
   | 'idle'
@@ -17,6 +18,7 @@ export type LastbrowserUpdateStatus = {
   percent: number | null;
   lastCheckedAt: string | null;
   message: string | null;
+  channel: UpdateChannel;
   startupCheck?: boolean;
   installError?: string | null;
 };
@@ -34,6 +36,7 @@ export type UpdaterLike = EventEmitter & {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
   allowPrerelease: boolean;
+  channel: string | null;
   checkForUpdates: () => Promise<unknown>;
   downloadUpdate: () => Promise<unknown>;
   /**
@@ -48,6 +51,7 @@ export type UpdateController = {
   checkForUpdates: (startupCheck?: boolean) => Promise<LastbrowserUpdateStatus>;
   downloadUpdate: () => Promise<LastbrowserUpdateStatus>;
   quitAndInstall: () => LastbrowserUpdateStatus;
+  setChannel: (channel: UpdateChannel) => LastbrowserUpdateStatus;
 };
 
 export type UpdateControllerOptions = {
@@ -56,6 +60,7 @@ export type UpdateControllerOptions = {
   currentVersion: string;
   forceDevUpdates?: boolean;
   allowPrerelease?: boolean;
+  channel?: UpdateChannel;
   unsupportedReason?: string;
   onStatusChange?: (status: LastbrowserUpdateStatus) => void;
 };
@@ -63,6 +68,9 @@ export type UpdateControllerOptions = {
 export function createUpdateController(options: UpdateControllerOptions): UpdateController {
   const { updater } = options;
   const enabled = !options.unsupportedReason && (options.isPackaged || options.forceDevUpdates === true);
+  // The development override pins the beta channel; the renderer cannot opt out of it.
+  const channelLocked = options.allowPrerelease === true;
+  let channel: UpdateChannel = channelLocked || options.channel === 'beta' ? 'beta' : 'stable';
   let checkInFlight: Promise<unknown> | null = null;
   let downloadStarted = false;
   let installing = false;
@@ -72,12 +80,18 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     availableVersion: null,
     percent: null,
     lastCheckedAt: null,
-    message: enabled ? null : options.unsupportedReason || 'Auto updates are available only in packaged Lastbrowser builds.'
+    message: enabled ? null : options.unsupportedReason || 'Auto updates are available only in packaged Lastbrowser builds.',
+    channel
   };
 
   updater.autoDownload = true;
   updater.autoInstallOnAppQuit = false;
-  updater.allowPrerelease = options.allowPrerelease === true;
+  applyChannel();
+
+  function applyChannel(): void {
+    updater.allowPrerelease = channel === 'beta';
+    updater.channel = channel === 'beta' ? 'beta' : 'latest';
+  }
 
   function publish(next: Partial<LastbrowserUpdateStatus>): LastbrowserUpdateStatus {
     status = { ...status, ...next };
@@ -148,8 +162,38 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     });
   });
 
+  function resetChannelState(): void {
+    if (status.state === 'downloaded') {
+      // Keep the ready package: it is already downloaded and verified by the old channel.
+      publish({ channel, message: `Install the downloaded Lastbrowser ${status.availableVersion || 'update'} or check again after restarting.` });
+      return;
+    }
+    checkInFlight = null;
+    downloadStarted = false;
+    publish({
+      state: enabled ? 'idle' : 'disabled',
+      availableVersion: null,
+      percent: null,
+      installError: null,
+      channel,
+      message: enabled
+        ? channel === 'beta'
+          ? 'Beta channel selected. Checking for unsigned beta builds.'
+          : 'Stable channel selected. Checking for updates.'
+        : status.message
+    });
+  }
+
   return {
     getStatus: () => ({ ...status }),
+    setChannel(nextChannel: UpdateChannel): LastbrowserUpdateStatus {
+      const normalized: UpdateChannel = nextChannel === 'beta' ? 'beta' : 'stable';
+      if (channelLocked || normalized === channel) return { ...status };
+      channel = normalized;
+      applyChannel();
+      resetChannelState();
+      return { ...status };
+    },
     async checkForUpdates(startupCheck = false): Promise<LastbrowserUpdateStatus> {
       if (!enabled || hasPendingUpdate()) return { ...status };
       if (checkInFlight) {

@@ -6,6 +6,7 @@ type FakeUpdater = EventEmitter & {
   autoDownload: boolean;
   autoInstallOnAppQuit: boolean;
   allowPrerelease: boolean;
+  channel: string | null;
   checkCalls: number;
   downloadCalls: number;
   quitCalls: number;
@@ -21,6 +22,7 @@ function fakeUpdater(): FakeUpdater {
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
   updater.allowPrerelease = false;
+  updater.channel = null;
   updater.checkCalls = 0;
   updater.downloadCalls = 0;
   updater.quitCalls = 0;
@@ -163,6 +165,49 @@ describe('update controller', () => {
     controller.quitAndInstall();
     expect(controller.getStatus().state).toBe('disabled');
     expect(updater.checkCalls + updater.quitCalls).toBe(0);
+  });
+
+  it('defaults to the stable channel and keeps the updater on the latest feed', () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0' });
+    expect(controller.getStatus().channel).toBe('stable');
+    expect(updater.allowPrerelease).toBe(false);
+    expect(updater.channel).toBe('latest');
+  });
+
+  it('starts from a persisted beta channel preference', () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0', channel: 'beta' });
+    expect(controller.getStatus().channel).toBe('beta');
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.channel).toBe('beta');
+  });
+
+  it('switches to beta, enables prereleases, and drops the cached stable update', async () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0' });
+    updater.emit('update-available', { version: '1.0.1' });
+    const status = controller.setChannel('beta');
+    expect(status).toMatchObject({ channel: 'beta', state: 'idle', availableVersion: null, percent: null });
+    expect(status.message).toMatch(/unsigned beta/i);
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.channel).toBe('beta');
+  });
+
+  it('keeps an already downloaded package when the channel changes', async () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0' });
+    updater.emit('update-downloaded', { version: '1.0.1' });
+    const status = controller.setChannel('beta');
+    expect(status).toMatchObject({ state: 'downloaded', availableVersion: '1.0.1', channel: 'beta' });
+  });
+
+  it('pins the beta channel when the prerelease environment override is active', () => {
+    const updater = fakeUpdater();
+    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0', allowPrerelease: true });
+    expect(controller.getStatus().channel).toBe('beta');
+    expect(controller.setChannel('stable').channel).toBe('beta');
+    expect(updater.allowPrerelease).toBe(true);
   });
 
   it('surfaces updater errors as status instead of throwing into the app shell', async () => {

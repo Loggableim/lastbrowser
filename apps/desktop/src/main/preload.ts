@@ -258,6 +258,7 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     check: () => ipcRenderer.invoke('lastbrowser:updates:check'),
     download: () => ipcRenderer.invoke('lastbrowser:updates:download'),
     install: () => ipcRenderer.invoke('lastbrowser:updates:install'),
+    setChannel: (channel: 'stable' | 'beta') => ipcRenderer.invoke('lastbrowser:updates:set-channel', channel),
     setAutoCheckEnabled: (enabled: boolean) => ipcRenderer.invoke('lastbrowser:updates:set-auto-check-enabled', enabled),
     onStatus: (callback: (status: unknown) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, status: unknown) => callback(status);

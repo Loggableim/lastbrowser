@@ -1,21 +1,25 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { handlers, updater, confirmRestart } = vi.hoisted(() => {
+const { handlers, updater, confirmRestart, userData } = vi.hoisted(() => {
   const handlers = new Map<string, (...args: unknown[]) => unknown>();
   const updater = {
     on: vi.fn(),
     autoDownload: false,
     autoInstallOnAppQuit: false,
     allowPrerelease: false,
+    channel: null as string | null,
     checkForUpdates: vi.fn(async () => undefined),
     downloadUpdate: vi.fn(async () => undefined),
     quitAndInstall: vi.fn()
   };
-  return { handlers, updater, confirmRestart: vi.fn(async () => ({ response: 0 })) };
+  return { handlers, updater, confirmRestart: vi.fn(async () => ({ response: 0 })), userData: { dir: '' } };
 });
 
 vi.mock('electron', () => ({
-  app: { isPackaged: true, getVersion: () => '0.1.35', getLocale: () => 'de' },
+  app: { isPackaged: true, getVersion: () => '0.1.35', getLocale: () => 'de', getPath: () => userData.dir },
   dialog: { showMessageBox: confirmRestart },
   BrowserWindow: class {},
   ipcMain: { handle: vi.fn((name: string, handler: (...args: unknown[]) => unknown) => handlers.set(name, handler)) }
@@ -24,6 +28,9 @@ vi.mock('electron', () => ({
 vi.mock('electron-updater', () => ({ default: { autoUpdater: updater } }));
 
 import { registerUpdateIpc, startAutoUpdateChecks } from '../src/main/updates.js';
+import { loadUpdatePreferences, saveUpdatePreferences } from '../src/main/update-preferences.js';
+
+const directories: string[] = [];
 
 describe('native update preference IPC', () => {
   beforeEach(() => {
@@ -32,7 +39,16 @@ describe('native update preference IPC', () => {
     updater.checkForUpdates.mockClear();
     updater.quitAndInstall.mockClear();
     updater.on.mockClear();
+    updater.allowPrerelease = false;
+    updater.channel = null;
+    for (const dir of directories.splice(0)) rmSync(dir, { recursive: true, force: true });
+    userData.dir = mkdtempSync(path.join(tmpdir(), 'lastbrowser-updates-ipc-'));
+    directories.push(userData.dir);
     registerUpdateIpc(() => null);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('checks every four hours even if an older renderer requests disabling updates', async () => {
@@ -88,6 +104,38 @@ describe('native update preference IPC', () => {
     expect(updater.checkForUpdates).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(updater.checkForUpdates).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
+  });
+
+  it('starts on the stable channel by default', () => {
+    expect(handlers.get('lastbrowser:updates:status')?.()).toMatchObject({ channel: 'stable' });
+    expect(loadUpdatePreferences(userData.dir)).toEqual({ channel: 'stable' });
+  });
+
+  it('starts from a persisted channel preference on the next launch', () => {
+    saveUpdatePreferences(userData.dir, { channel: 'beta' });
+    registerUpdateIpc(() => null);
+    expect(handlers.get('lastbrowser:updates:status')?.()).toMatchObject({ channel: 'beta' });
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.channel).toBe('beta');
+  });
+
+  it('persists the selected channel and immediately re-checks the new feed', () => {
+    const result = handlers.get('lastbrowser:updates:set-channel')?.({}, 'beta') as { ok?: boolean; channel?: string };
+
+    expect(result).toMatchObject({ ok: true, channel: 'beta' });
+    expect(updater.allowPrerelease).toBe(true);
+    expect(updater.channel).toBe('beta');
+    expect(loadUpdatePreferences(userData.dir)).toEqual({ channel: 'beta' });
+    expect(updater.checkForUpdates).toHaveBeenCalled();
+  });
+
+  it('rejects an unsupported channel without touching the updater', () => {
+    const result = handlers.get('lastbrowser:updates:set-channel')?.({}, 'nightly') as { ok?: boolean; error?: string };
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/stable.*beta/i);
+    expect(updater.allowPrerelease).toBe(false);
+    expect(loadUpdatePreferences(userData.dir)).toEqual({ channel: 'stable' });
+    expect(updater.checkForUpdates).not.toHaveBeenCalled();
   });
 });

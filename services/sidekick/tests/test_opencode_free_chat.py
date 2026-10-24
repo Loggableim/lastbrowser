@@ -18,22 +18,35 @@ from runtime.opencode_free_chat import (
 
 
 def test_free_opencode_id_is_not_rewritten_to_zen():
+    from cli.auth import resolve_provider
     from web.api.config import _resolve_provider_alias
     assert _resolve_provider_alias("opencode") == "opencode"
     assert _resolve_provider_alias("zen") == "opencode-zen"
+    assert resolve_provider("opencode") == "opencode"
+    assert resolve_provider("zen") == "opencode-zen"
 
 
 def test_paid_opencode_routes_are_not_the_free_default():
     assert FREE_MODEL not in {"muse-spark-1.3-contributor-free", "muse-spark-1.3-contributor", "deepseek-v4-pro"}
     assert is_free_official_chat("opencode", FREE_MODEL) is True
     assert is_free_official_chat("opencode-go", "muse-spark-1.3-contributor") is False
-    assert is_free_official_chat("opencode-go", FREE_MODEL) is False
+    # The paid Go group keeps provider_id ``opencode-go``; only free-suffixed
+    # entries take the keyless route.
+    assert is_free_official_chat("opencode-go", FREE_MODEL) is True
+    assert is_free_official_chat("opencode-go", "deepseek-v4-pro") is False
     assert is_free_official_chat("opencode", "muse-spark-1.3-contributor") is False
     assert is_free_official_chat("opencode", "deepseek-v4-pro") is False
     assert is_free_official_chat("opencode", "muse-spark-1.3-contributor-free") is False
     assert is_free_official_chat("opencode-go-free", "space-bunny-free") is True
     assert is_free_official_chat("opencode-go-free", "deepseek-v4-pro") is False
-    assert is_free_official_chat("opencode-go", "space-bunny-free") is False
+    assert is_free_official_chat("opencode-go", "space-bunny-free") is True
+
+
+def test_free_route_rejects_partial_suffix_matches():
+    assert is_free_official_chat("opencode", "-free") is False
+    assert is_free_official_chat("opencode", "free") is False
+    assert is_free_official_chat("opencode", "beam_free") is False
+    assert is_free_official_chat("opencode", "muse-spark-1.3-contributor-free") is False
 
 
 def test_catalog_stays_unchanged_without_the_official_client(monkeypatch, tmp_path):
@@ -134,9 +147,10 @@ def test_connection_free_group_is_not_replaced_by_the_client_list(monkeypatch, t
     binary.chmod(binary.stat().st_mode | stat.S_IEXEC)
     monkeypatch.setenv("LASTBROWSER_OPENCODE_BIN", str(binary))
     catalog = attach_free_opencode_catalog({"groups": [{
-        "provider_id": "opencode-go-free",
+        "id": "opencode-go-free",
+        "provider_id": "opencode-go",
         "provider": "OpenCode Go Free",
         "models": [{"id": "space-bunny-free", "label": "Space Bunny Free"}],
     }]})
-    assert [group["provider_id"] for group in catalog["groups"]] == ["opencode-go-free"]
+    assert [group["provider_id"] for group in catalog["groups"]] == ["opencode-go"]
     assert catalog["groups"][0]["models"][0]["id"] == "space-bunny-free"

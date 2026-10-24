@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
+from shared.free_models import is_free_model_id
 from web.api._home import get_webui_home
 
 if TYPE_CHECKING:
@@ -852,6 +853,7 @@ _PROVIDER_ALIASES = {
     # ``opencode`` is the keyless free provider (official server/CLI). Only the
     # shorthand ``zen`` maps to OpenCode Zen, whose zen/v1 endpoint answers
     # FreeTierError 403 for free ids (#170).
+    "opencode": "opencode",
     "grok": "xai",
     "x-ai": "xai",
     "x.ai": "xai",
@@ -3059,7 +3061,6 @@ def _models_from_live_provider_ids(provider_id: str, live_ids: list[str]) -> lis
 # chat model picker. OpenCode Go is a flat-rate subscription catalog that also
 # carries limited-time free models.
 _OPENCODE_FREE_GROUP_PROVIDERS = frozenset({"opencode-go"})
-_OPENCODE_FREE_MODEL_SUFFIX = "-free"
 
 
 def _is_opencode_free_model(model_id: object) -> bool:
@@ -3067,10 +3068,12 @@ def _is_opencode_free_model(model_id: object) -> bool:
 
     The OpenCode gateway flags limited-time/free models with a ``-free`` suffix
     on the catalog model id (for example ``beam-free`` or
-    ``longcat-2.5-preview-free``). Deriving the tier from the catalog keeps the
-    Go / Go Free split current without a hardcoded model list.
+    ``longcat-2.5-preview-free``). The suffix alone is not sufficient: the
+    shared rule also rejects access-restricted ``-contributor-free`` ids and
+    malformed ids so a paid model with a misleading name stays in the paid
+    group.
     """
-    return str(model_id or "").strip().lower().endswith(_OPENCODE_FREE_MODEL_SUFFIX)
+    return is_free_model_id(model_id)
 
 
 def _split_opencode_free_groups(groups: list[dict]) -> list[dict]:
@@ -3078,9 +3081,10 @@ def _split_opencode_free_groups(groups: list[dict]) -> list[dict]:
 
     The live catalog is the source of truth: paid models stay in the provider's
     normal group, free models move to a sibling group labelled ``<Provider>
-    Free``. Both groups keep the original ``provider_id`` so a selection still
-    routes through the same provider (``@opencode-go:<model>``); the extra
-    ``id`` field only disambiguates the two optgroups in the renderer.
+    Free``. Both groups keep the original ``provider_id`` (``opencode-go``) so a
+    selection still routes as ``@opencode-go:<model>`` and the free route can
+    recognise the model; the ``id`` field (``opencode-go-free``) only
+    disambiguates the two optgroups in the renderer.
 
     Groups for other providers, and OpenCode groups without free entries, are
     returned unchanged.

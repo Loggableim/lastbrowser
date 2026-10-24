@@ -1447,6 +1447,10 @@ def resolve_provider(
         return "openrouter"
     if normalized == "custom":
         return "custom"
+    if normalized == "opencode":
+        # Keyless free provider (#170). It is not an alias for OpenCode Zen;
+        # only the shorthand ``zen`` resolves there.
+        return "opencode"
     if normalized in PROVIDER_REGISTRY:
         return normalized
     if normalized != "auto":

@@ -38,6 +38,7 @@ import type { DesktopChatMessage, DesktopSessionDetail, ChatRunState } from '../
 import { shouldShowNativeTurnUsage, type NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
 import { qualifyModelForProvider } from '../provider-model-selection.js';
+import { modelGroupKey, modelOptionKey } from '../model-catalog.js';
 import { ReasoningEffortPicker } from '../components/ReasoningEffortPicker.js';
 import { toBionicSegments } from '../utils/bionic-reading.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
@@ -558,9 +559,9 @@ export function ChatComposer({
                 </option>
               )}
               {modelOptions.map((group) => (
-                <optgroup key={group.id || group.providerId || group.provider} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
+                <optgroup key={modelGroupKey(group)} label={group.provider} style={{ backgroundColor: '#070c18', color: '#00d9ff', fontWeight: 700 }}>
                   {group.models.map((m) => (
-                    <option key={`${group.id || group.providerId || group.provider}:${m.id}`} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
+                    <option key={modelOptionKey(group, m.id)} value={qualifyModelForProvider(m.id, group.providerId)} style={{ backgroundColor: '#0b1325', color: '#e8f2ff' }}>
                       {m.label}
                     </option>
                   ))}

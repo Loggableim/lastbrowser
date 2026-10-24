@@ -22,6 +22,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from shared.free_models import is_free_model_id
+
 FREE_PROVIDER = "opencode"
 # Measured through the official server with no user key: this model answered,
 # and the Muse free id did not. Paid ids are never defaults.
@@ -76,17 +78,20 @@ def free_default_choice() -> tuple[str, str]:
 def is_free_official_chat(provider: str | None, model: str | None) -> bool:
     provider_id = str(provider or "").strip().lower()
     model_id = str(model or "").strip()
-    if provider_id in {"opencode-go", "opencode-zen"}:
+    if provider_id == "opencode-zen":
         return False
-    if provider_id == "openrouter" and model_id in {"free", "openrouter/free"}:
-        return True
+    if provider_id == "openrouter":
+        return model_id in {"free", "openrouter/free"}
     if model_id.startswith("opencode/"):
         model_id = model_id.split("/", 1)[1]
     if model_id in FORBIDDEN_DEFAULTS:
         return False
-    # opencode-go-free is the connection's zero-cost group. It never uses the Go key.
-    if provider_id in {FREE_PROVIDER, "opencode-go-free"} and (model_id in CANDIDATE_MODELS or model_id.endswith("-free")):
-        return True
+    # The keyless provider is ``opencode``. The Go catalog's zero-cost group
+    # keeps provider_id ``opencode-go`` (only its group id is
+    # ``opencode-go-free``), so free models selected from either group must
+    # take this keyless route. Paid Go/Zen models never match.
+    if provider_id in {FREE_PROVIDER, "opencode-go", "opencode-go-free"}:
+        return model_id in CANDIDATE_MODELS or is_free_model_id(model_id)
     return False
 
 
@@ -98,8 +103,17 @@ def attach_free_opencode_catalog(catalog: dict) -> dict:
     if not isinstance(groups, list):
         return catalog
     # The connection already published the free group. Do not replace it
-    # with the small hardcoded client list.
-    if any(isinstance(group, dict) and group.get("provider_id") == "opencode-go-free" for group in groups):
+    # with the small hardcoded client list. The catalog splitter keeps
+    # provider_id ``opencode-go`` and marks the free group with id
+    # ``opencode-go-free``; older catalogs used that value as provider_id.
+    if any(
+        isinstance(group, dict)
+        and (
+            group.get("id") == "opencode-go-free"
+            or group.get("provider_id") == "opencode-go-free"
+        )
+        for group in groups
+    ):
         return catalog
     limits = {
         "deepseek-v4.1-flash-free": 200000,
@@ -502,7 +516,7 @@ def _models_for_turn(model: str | None) -> tuple[str, ...]:
         selected = selected.split("/", 1)[1]
     ordered: list[str] = []
     if selected and selected not in FORBIDDEN_DEFAULTS and (
-        selected in CANDIDATE_MODELS or selected.endswith("-free")
+        selected in CANDIDATE_MODELS or is_free_model_id(selected)
     ):
         ordered.append(selected)
     for candidate in CANDIDATE_MODELS:

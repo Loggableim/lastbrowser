@@ -218,7 +218,7 @@ describe('provider-aware model selection', () => {
     expect(composer).toContain('<label className="composer-model"');
     expect(composer).not.toContain('{modelOptions.length > 0 && (');
     expect(composer).toContain('value={qualifyModelForProvider(m.id, group.providerId)}');
-    expect(composer).toContain('key={`${group.id || group.providerId || group.provider}:${m.id}`}');
+    expect(composer).toContain('key={modelOptionKey(group, m.id)}');
     expect(chat).toContain('const parsed = resolveCatalogModelSelection(selection, modelCatalog);');
     expect(chat).toContain('modelProvider={modelProvider}');
     expect(app).toContain('const chatModelSelection = resolvePreferredChatModelSelection({');

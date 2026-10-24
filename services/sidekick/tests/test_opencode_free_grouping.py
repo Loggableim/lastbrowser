@@ -9,12 +9,23 @@ hardcoded in Lastbrowser.
 from __future__ import annotations
 
 from web.api import config as web_config
+from runtime.opencode_free_chat import is_free_official_chat
 
 
 def test_is_opencode_free_model_matches_catalog_suffix():
     assert web_config._is_opencode_free_model("beam-free") is True
     assert web_config._is_opencode_free_model("longcat-2.5-preview-free") is True
     assert web_config._is_opencode_free_model("  Beam-Free  ") is True
+
+
+def test_is_opencode_free_model_rejects_false_matches():
+    # A bare ``-free`` has no model stem, access-restricted contributor ids are
+    # not generally free, and paid ids must stay in the paid group.
+    assert web_config._is_opencode_free_model("-free") is False
+    assert web_config._is_opencode_free_model("free") is False
+    assert web_config._is_opencode_free_model("muse-spark-1.3-contributor-free") is False
+    assert web_config._is_opencode_free_model("opencode/beam-free") is False
+    assert web_config._is_opencode_free_model("beam_free") is False
     assert web_config._is_opencode_free_model("deepseek-v4-pro") is False
     assert web_config._is_opencode_free_model("") is False
     assert web_config._is_opencode_free_model(None) is False
@@ -71,6 +82,27 @@ def test_split_opencode_free_groups_without_free_models_returns_single_group():
 
     assert len(split) == 1
     assert "id" not in split[0]
+
+
+def test_split_free_group_keeps_the_provider_id_the_free_route_reads():
+    groups = [
+        {
+            "provider": "OpenCode Go",
+            "provider_id": "opencode-go",
+            "models": [
+                {"id": "deepseek-v4-pro", "label": "DeepSeek V4 Pro"},
+                {"id": "beam-free", "label": "Beam Free"},
+            ],
+        }
+    ]
+
+    paid, free = web_config._split_opencode_free_groups(groups)
+
+    # The group id is a renderer key; provider_id stays the routing identity.
+    assert paid["provider_id"] == free["provider_id"] == "opencode-go"
+    assert free["id"] == "opencode-go-free"
+    assert is_free_official_chat(paid["provider_id"], "deepseek-v4-pro") is False
+    assert is_free_official_chat(free["provider_id"], free["models"][0]["id"]) is True
 
 
 def test_get_available_models_exposes_opencode_go_and_free_groups(monkeypatch):

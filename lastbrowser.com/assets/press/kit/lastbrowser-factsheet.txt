@@ -1,0 +1,27 @@
+LastBrowser - Fact Sheet (October 2026)
+
+LastBrowser is a free browser for Windows and Linux (Linux preview) with a built-in AI assistant, Sidekick.
+
+Founder: Dominik Rainer
+Based in: Austria
+Team: one-person project
+Price: free
+Platforms: Windows 10/11 (x64), Linux (preview); macOS in development
+Website: https://lastbrowser.com
+Downloads: https://github.com/Loggableim/lastbrowser/releases
+Press contact: hello@lastbrowser.com
+
+Key features
+- Sidekick: AI assistant in a split view next to the page
+- Bring your own API keys, or run local models via Ollama
+- Spaces: every Space has its own isolated profile (cookies, storage, cache)
+- Zen Mode: hides the tab sidebar to focus on the page
+- Accessibility mode with magnifier (Ctrl+Shift+L, 1.5-4x zoom)
+- Built-in ad and tracker blocker (EasyList, EasyPrivacy)
+- Netflix and other streaming services work (Widevine DRM)
+- Built-in terminal (PowerShell, cmd or WSL; off by default)
+- MCP Hub with ready-to-use skills
+- No telemetry, no account required
+
+About LastBrowser
+LastBrowser is a free desktop browser for Windows and Linux (Linux preview) built by Austrian developer Dominik Rainer as a one-person project. It combines isolated Spaces, a distraction-free Zen Mode and the built-in AI assistant Sidekick, which works with your own API keys or with local models via Ollama. LastBrowser has no telemetry and needs no account.

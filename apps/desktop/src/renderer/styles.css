@@ -269,6 +269,28 @@ html.theme-oled .browser-start-card {
 .access-lock-card button:disabled { opacity: .55; cursor: wait; }
 .access-lock-error { color: #ff8181; font-size: 13px; }
 
+.access-lock-password { position: relative; display: flex; align-items: center; }
+.access-lock-password input { padding-right: 44px; }
+.access-lock-card .access-lock-reveal {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  display: grid;
+  width: 34px;
+  min-height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--lb-muted);
+  place-items: center;
+  transform: translateY(-50%);
+}
+.access-lock-card .access-lock-reveal:hover { color: var(--lb-text); }
+.access-lock-status,
+.access-lock-hint { margin: 0; font-size: 13px; }
+.access-lock-hint { margin-top: 14px; }
+
 .browser-titlebar {
   display: flex;
   align-items: center;

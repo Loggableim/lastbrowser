@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import { hideWebviewScrollbars } from './browser-view.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
+import { accessLockErrorKey } from './access-lock-errors.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
 import { ChatUiOwnership } from './chat-ui-ownership.js';
@@ -898,6 +899,7 @@ function AppContent(): JSX.Element {
   const [accessAuthChecked, setAccessAuthChecked] = useState(false);
   const [accessAuthRequired, setAccessAuthRequired] = useState(false);
   const [accessPassword, setAccessPassword] = useState('');
+  const [accessPasswordVisible, setAccessPasswordVisible] = useState(false);
   const [accessAuthError, setAccessAuthError] = useState('');
   const [accessAuthBusy, setAccessAuthBusy] = useState(false);
   const [setupState, setSetupState] = useState<SetupState>(defaultSetupState);
@@ -1141,6 +1143,7 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     const lockBrowser = () => {
       setAccessPassword('');
+      setAccessPasswordVisible(false);
       setAccessAuthError('');
       setAccessAuthRequired(true);
       setAccessAuthChecked(true);
@@ -1160,6 +1163,7 @@ function AppContent(): JSX.Element {
       setAccessAuthRequired(false);
       setAccessAuthChecked(true);
       setAccessPassword('');
+      setAccessPasswordVisible(false);
     } catch (error) {
       setAccessAuthError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -3774,14 +3778,36 @@ function AppContent(): JSX.Element {
           <h1 id="access-lock-title">{accessAuthRequired ? t('access.lock.title') : t('access.lock.checking')}</h1>
           <p>{accessAuthRequired
             ? t('access.lock.description')
-            : (accessAuthError || t('access.lock.checking'))}</p>
+            : accessAuthError ? t(accessLockErrorKey(accessAuthError)) : t('access.lock.checking')}</p>
           {accessAuthRequired ? (
-            <form onSubmit={(event) => void unlockBrowser(event)}>
-              <label htmlFor="access-lock-password">{t('access.lock.password')}</label>
-              <input id="access-lock-password" autoFocus type="password" autoComplete="current-password" value={accessPassword} onChange={(event) => setAccessPassword(event.target.value)} />
-              {accessAuthError && <div className="access-lock-error" role="alert">{accessAuthError}</div>}
-              <button type="submit" disabled={!accessPassword || accessAuthBusy}>{accessAuthBusy ? t('access.lock.unlocking') : t('access.lock.unlock')}</button>
-            </form>
+            <>
+              <form onSubmit={(event) => void unlockBrowser(event)} aria-busy={accessAuthBusy}>
+                <label htmlFor="access-lock-password">{t('access.lock.password')}</label>
+                <div className="access-lock-password">
+                  <input
+                    id="access-lock-password"
+                    autoFocus
+                    type={accessPasswordVisible ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    value={accessPassword}
+                    onChange={(event) => setAccessPassword(event.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="access-lock-reveal"
+                    aria-pressed={accessPasswordVisible}
+                    aria-label={t(accessPasswordVisible ? 'access.lock.hidePassword' : 'access.lock.showPassword')}
+                    onClick={() => setAccessPasswordVisible((visible) => !visible)}
+                  >
+                    {accessPasswordVisible ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
+                  </button>
+                </div>
+                {!accessAuthChecked && !accessAuthBusy && !accessAuthError && <p className="access-lock-status" role="status">{t('access.lock.checking')}</p>}
+                {accessAuthError && <div className="access-lock-error" role="alert">{t(accessLockErrorKey(accessAuthError))}</div>}
+                <button type="submit" disabled={!accessPassword || accessAuthBusy} aria-busy={accessAuthBusy}>{accessAuthBusy ? t('access.lock.unlocking') : t('access.lock.unlock')}</button>
+              </form>
+              <p className="access-lock-hint">{t('access.lock.hint')}</p>
+            </>
           ) : (
             <button type="button" onClick={() => {
               void window.lastbrowser.sidekick.getAccessAuthStatus().then((auth) => {

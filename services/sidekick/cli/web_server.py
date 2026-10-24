@@ -3594,6 +3594,10 @@ class ModelRefreshRequest(BaseModel):
     provider: Optional[str] = None
 
 
+class ModelVisibilityRequest(BaseModel):
+    disabled_models: list[str] = []
+
+
 @app.get("/api/models")
 def get_models_catalog():
     """Return the legacy WebUI model catalog shape.
@@ -3609,6 +3613,35 @@ def get_models_catalog():
     except Exception as exc:
         _log.exception("GET /api/models failed")
         raise HTTPException(status_code=500, detail="Failed to load model catalog") from exc
+
+
+@app.get("/api/models/visibility")
+def get_model_visibility():
+    """Return the disabled-model switches mirrored from the Lastbrowser UI.
+
+    Orchestration reads the same state file directly, so this endpoint exists
+    for hydration and diagnostics rather than as the routing source of truth.
+    """
+    try:
+        from runtime.model_visibility import load_disabled_models
+
+        return {"disabled_models": sorted(load_disabled_models(reload=True))}
+    except Exception as exc:
+        _log.exception("GET /api/models/visibility failed")
+        raise HTTPException(status_code=500, detail="Failed to load model visibility") from exc
+
+
+@app.put("/api/models/visibility")
+def update_model_visibility(body: ModelVisibilityRequest):
+    """Persist the renderer's per-model switches for backend orchestration."""
+    try:
+        from runtime.model_visibility import save_disabled_models
+
+        saved = save_disabled_models(body.disabled_models)
+        return {"ok": True, "disabled_models": sorted(saved)}
+    except Exception as exc:
+        _log.exception("PUT /api/models/visibility failed")
+        raise HTTPException(status_code=500, detail="Failed to save model visibility") from exc
 
 
 @app.get("/api/models/live")

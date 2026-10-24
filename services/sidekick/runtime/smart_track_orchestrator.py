@@ -183,8 +183,11 @@ def classify_smart_model(model_id: str, provider: str = "") -> Tuple[str, List[s
 def build_model_wall() -> Dict[str, Any]:
     """Scan connected models and build the 3-tier Model Wall with capability index."""
     from web.api.config import get_available_models
+    from runtime.model_visibility import is_model_disabled, load_disabled_models
+
     catalog = get_available_models()
     groups = list(catalog.get("groups", []))
+    disabled_models = load_disabled_models()
     seen = set()
 
     def verified_ollama_cloud_models() -> List[str]:
@@ -264,6 +267,10 @@ def build_model_wall() -> Dict[str, Any]:
             qualified_prefix = f"@{provider_id}:"
             call_model = raw_id[len(qualified_prefix):] if raw_id.startswith(qualified_prefix) else raw_id
             if call_model.lower() in ("teamwork", "smart-track", "smart-track-low", "smart-track-medium", "smart-track-high") or raw_id in seen:
+                continue
+            # Models switched off in Settings are invisible to automatic
+            # routing, even when the provider still lists them in its catalog.
+            if is_model_disabled(disabled_models, provider_id, raw_id) or is_model_disabled(disabled_models, provider_id, call_model):
                 continue
             seen.add(raw_id)
 
@@ -382,7 +389,11 @@ def resolve_smart_track_model(
 
     wall = build_model_wall()
     if not any(tier.get("models") for tier in wall.values()):
-        raise RuntimeError("Smart Track hat keine aktuell verfügbaren Modelle. Verbinde zuerst mindestens einen Modellanbieter.")
+        raise RuntimeError(
+            "Smart Track hat keine aktuell verfügbaren Modelle. "
+            "Verbinde zuerst mindestens einen Modellanbieter oder schalte in den "
+            "Einstellungen mindestens ein Modell ein."
+        )
     tier_data = wall.get(effort_norm, wall.get("medium", {}))
     models_in_tier = tier_data.get("models", [])
     intent = detect_prompt_intent(prompt)

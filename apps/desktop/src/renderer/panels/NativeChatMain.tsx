@@ -39,6 +39,7 @@ import { qualifyModelForProvider, resolveCatalogModelSelection, resolvePreferred
 import type { NativeChatTurnUsage } from '../chat-usage.js';
 import { useDesktopI18n } from '../i18n.js';
 import { loadChatReasoningEffort, normalizeReasoningEfforts, saveChatReasoningEffort } from '../chat-reasoning-effort.js';
+import { filterVisibleModelGroups, firstEnabledCatalogModel, isModelDisabled, useDisabledModels } from '../model-visibility.js';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 export type ComposerMode = 'action' | 'plan';
@@ -132,6 +133,13 @@ export function NativeChatMain({
   const [modelCatalogLoaded, setModelCatalogLoaded] = useState(false);
   const [modelCatalogError, setModelCatalogError] = useState(false);
   const [modelCatalogRetry, setModelCatalogRetry] = useState(0);
+  // Models switched off in Settings disappear from the composer. The set is
+  // shared through localStorage + a window event so both chat surfaces react.
+  const disabledModels = useDisabledModels();
+  const visibleModelCatalog = useMemo(
+    () => filterVisibleModelGroups(modelCatalog, disabledModels),
+    [modelCatalog, disabledModels]
+  );
   const modelProvider = spaceModelSelection?.provider
     || selectedModelProvider
     || resolveCatalogModelSelection(activeSession?.model || model, modelCatalog).provider
@@ -192,6 +200,27 @@ export function NativeChatMain({
     void load();
     return () => { alive = false; };
   }, [ready, activeSpacePath, activeSession?.model, setupModel, modelCatalogRetry]);
+
+  // A disabled active model must not stay selected: switch to the first enabled
+  // catalog model and say so briefly in the composer status line.
+  useEffect(() => {
+    if (!modelCatalogLoaded || modelCatalog.length === 0) return;
+    if (!isModelDisabled(disabledModels, modelProvider, model)) return;
+    const fallback = firstEnabledCatalogModel(modelCatalog, disabledModels);
+    if (!fallback) {
+      setStatusMessage('All models are hidden. Enable a model in Settings to continue.');
+      return;
+    }
+    if (activeSpacePath) {
+      saveSpaceModel(activeSpacePath, fallback.id, window.localStorage, fallback.providerId);
+    }
+    setSelectedModel(fallback.id);
+    setSelectedModelProvider(fallback.providerId);
+    void window.lastbrowser.sidekick.setDefaultModel({
+      model: qualifyModelForProvider(fallback.id, fallback.providerId)
+    }).catch(() => undefined);
+    setStatusMessage(`${model} is hidden — switched to ${fallback.label}`);
+  }, [modelCatalogLoaded, modelCatalog, disabledModels, model, modelProvider, activeSpacePath, setSelectedModel, setSelectedModelProvider]);
 
   /** Switch the model for this conversation (persists as the new default). */
   const handleComposerModelChange = useCallback((selection: string) => {
@@ -368,7 +397,7 @@ export function NativeChatMain({
         mode={composerMode}
         model={model}
         modelProvider={modelProvider}
-        modelOptions={modelCatalog}
+        modelOptions={visibleModelCatalog}
         reasoningEffort={effectiveReasoningEffort}
         reasoningEfforts={modelReasoningEfforts}
         profile={profile}

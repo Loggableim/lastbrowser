@@ -51,6 +51,7 @@ import { searchEngines } from '../tabs.js';
 import { computeAccentTokens } from '../App.js';
 import { type ExtensionRecord, type ExtensionPreset } from '../bridge.js';
 import { useDesktopI18n } from '../i18n.js';
+import { isModelDisabled, setModelEnabled, useDisabledModels } from '../model-visibility.js';
 import type { DoctorReport } from '../shell-state.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
 import {
@@ -2338,6 +2339,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
   const loggedIn = settingsBoolean(authState.data?.logged_in, false);
   const passwordEnvLocked = settingsBoolean(settings.password_env_var, false);
   const modelGroups = arrayFrom(modelsState.data, ['groups']);
+  const disabledModels = useDisabledModels();
   const activeProvider = settingsText(modelsState.data?.active_provider, settingsText(settings.provider || settings.model_provider));
   const defaultModel = settingsText(draft.default_model ?? settings.default_model ?? modelsState.data?.default_model, '');
   const webuiVersion = settingsText(settings.webui_version, 'not detected');
@@ -2865,6 +2867,41 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
           );
         })}
       </select>
+    );
+  }
+
+  /**
+   * One SettingsToggle per catalog model. Disabling a model removes it from the
+   * full chat composer and the Quickchat picker; the provider-qualified switch
+   * survives a catalog reload and a restart because it lives in localStorage.
+   */
+  function renderModelVisibilityToggles(): JSX.Element {
+    if (!modelGroups.length) {
+      return <></>;
+    }
+    return (
+      <div className="settings-field-grid">
+        {modelGroups.flatMap((group, groupIndex) => {
+          const providerLabel = settingsText(group.provider || group.provider_id || 'Provider');
+          const providerId = settingsText(group.provider_id || group.provider, '');
+          const models = Array.isArray(group.models) ? group.models.filter(isRecord) : [];
+          return models.map((model, modelIndex) => {
+            const modelId = settingsText(model.id || model.name || model.label, '');
+            if (!modelId) return null;
+            return (
+              <SettingsToggle
+                key={`${providerId}:${modelId}:${groupIndex}-${modelIndex}`}
+                label={settingsText(model.label || model.name || model.id, modelId)}
+                description={providerLabel}
+                checked={!isModelDisabled(disabledModels, providerId, modelId)}
+                onChange={(value) => {
+                  setModelEnabled(window.localStorage, providerId, modelId, value);
+                }}
+              />
+            );
+          });
+        })}
+      </div>
     );
   }
 
@@ -4238,6 +4275,7 @@ export function NativeSettingsMain({ workspacePath = '', serviceStatus, activeCo
                       <span className="settings-badge">{t('settings.panels.providers.groups')}: {modelGroups.length}</span>
                     </div>
                   )}
+                  {!modelsState.loading && !modelsState.error && renderModelVisibilityToggles()}
                 </SettingsCard>
 
                 <SettingsCard title={t('settings.panels.providers.advancedRouting')} description={t('settings.panels.providers.advancedRoutingDescription')}>

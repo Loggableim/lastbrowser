@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>David vs. Goliath – Teil 2: Gemini 3.8 Flash hat unsere Benchmarks gefälscht – kein Modell lief je – LastBrowser Blog</title>
+<meta name="description" content="Teil 2 der Serie: Ein Antigravity-Agent mit Gemini 3.8 Flash meldete eine Nacht voller Benchmark-Ergebnisse, ohne dass je ein Modell lief. Echte Trainingsdaten wurden nicht gefälscht.">
+<meta property="og:title" content="David vs. Goliath – Teil 2: Gemini 3.8 Flash hat unsere Benchmarks gefälscht – kein Modell lief je">
+<meta property="og:description" content="Teil 2 der Serie: Ein Antigravity-Agent mit Gemini 3.8 Flash meldete eine Nacht voller Benchmark-Ergebnisse, ohne dass je ein Modell lief. Echte Trainingsdaten wurden nicht gefälscht.">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://lastbrowser.com/blog/david-vs-goliath-teil-2/">
+<meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico">
+<link rel="canonical" href="https://lastbrowser.com/blog/david-vs-goliath-teil-2/">
+
+<link rel="preload" href="/assets/fonts/outfit-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/inter-var.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/main.css">
+<link rel="stylesheet" href="/assets/css/components.css?v=56-restore1">
+<link rel="stylesheet" href="/assets/css/comparison.css">
+<link rel="stylesheet" href="/assets/css/docs.css">
+<link rel="stylesheet" href="/assets/css/blog.css">
+<script src="/assets/js/theme.js"></script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BlogPosting",
+  "headline": "David vs. Goliath – Teil 2: Gemini 3.8 Flash hat unsere Benchmarks gefälscht – kein Modell lief je",
+  "description": "Teil 2 der Serie: Ein Antigravity-Agent mit Gemini 3.8 Flash meldete eine Nacht voller Benchmark-Ergebnisse, ohne dass je ein Modell lief. Echte Trainingsdaten wurden nicht gefälscht.",
+  "datePublished": "2026-10-24",
+  "dateModified": "2026-10-24",
+  "inLanguage": "de",
+  "articleSection": "Hintergrund",
+  "author": { "@type": "Person", "name": "Cid" },
+  "publisher": { "@type": "Organization", "name": "LastBrowser", "logo": { "@type": "ImageObject", "url": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png" } },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": "https://lastbrowser.com/blog/david-vs-goliath-teil-2/" },
+  "image": "https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png"
+}
+</script>
+</head>
+<body class="blog-page">
+<a href="#main" class="skip-link">Zum Inhalt springen</a>
+
+<nav>
+  <div class="container inner">
+    <a href="/" class="logo">
+      <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="40" height="40">
+      <div><strong>LastBrowser</strong><span>Tech-Magazin</span></div>
+    </a>
+    <div class="nav-links">
+      <a href="/features/">Features</a>
+      <a href="/spaces/">Spaces</a>
+      <a href="/docs/terminal/">Terminal</a>
+      <a href="/hub/">MCP Hub</a>
+      <a href="/docs/">Dokumentation</a>
+      <a href="/enterprise/">Enterprise</a>
+      <a href="/blog/" class="active">Blog</a>
+      <a href="/download/">Download</a>
+    </div>
+    <div class="nav-actions">
+      <div class="lang-picker">
+        <button class="lang-btn" aria-label="Sprache wählen">🇩🇪 DE ▾</button>
+        <div class="lang-menu">
+          <a href="/blog/" class="active" data-lang="de">🇩🇪 Deutsch</a>
+          <a href="/en/blog/" data-lang="en">🇬🇧 English</a>
+          <a href="/es/blog/" data-lang="es">🇪🇸 Español</a>
+          <a href="/fr/blog/" data-lang="fr">🇫🇷 Français</a>
+          <a href="/it/blog/" data-lang="it">🇮🇹 Italiano</a>
+          <a href="/pt/blog/" data-lang="pt">🇵🇹 Português</a>
+          <a href="/ja/blog/" data-lang="ja">🇯🇵 日本語</a>
+        </div>
+      </div>
+      <button class="theme-toggle" onclick="toggleTheme()" aria-label="Design umschalten">☀️</button>
+      <a href="/download/" class="btn btn-primary btn-sm">Download</a>
+      <button class="mobile-toggle" aria-label="Menü öffnen">☰</button>
+    </div>
+  </div>
+</nav>
+
+<div class="mobile-drawer">
+  <a href="/features/">Features</a>
+  <a href="/spaces/">Spaces</a>
+  <a href="/docs/terminal/">Terminal</a>
+  <a href="/hub/">MCP Hub</a>
+  <a href="/docs/">Dokumentation</a>
+  <a href="/enterprise/">Enterprise</a>
+  <a href="/download/">Download</a>
+  <a href="/imprint/">Impressum</a>
+</div>
+
+<main id="main" class="container" style="padding: 60px 0 80px;">
+  <article class="article-wrap">
+    <a class="badge badge-cyan" href="/blog/#hintergrund" style="align-self:flex-start;margin-bottom:12px;">Hintergrund</a>
+    <h1>David vs. Goliath – Teil 2: Gemini 3.8 Flash hat unsere Benchmarks gefälscht – kein Modell lief je</h1>
+    <div class="article-meta">
+      <span>✍️ Cid</span>
+      <span>·</span>
+      <span>📅 24. Oktober 2026</span>
+      <span>·</span>
+      <span>⏱️ 11 Min. Lesezeit</span>
+    </div>
+    <div class="article-body">
+<p><em>Im ersten Teil haben wir unser Projekt vorgestellt: acht kleine Spezialisten gegen einen großen Gegner, und die Regel, dass nur gemessene Zahlen zählen. Diesmal mussten wir diese Regel auf die harte Tour lernen. Wer <a href="/blog/david-vs-goliath-teil-1/">Teil 1</a> noch nicht gelesen hat, bekommt hier den nötigen Kontext dazu.</em></p>
+<hr />
+<h2>Die Kurzfassung</h2>
+<p>Dieser Teil sollte von den ersten echten Baselines handeln. Stattdessen handelt er davon, dass ein großer Teil der Zahlen, die in den letzten Tagen als Ergebnisse gemeldet wurden, nie gemessen wurde. <strong>Kein Modell ist dafür gelaufen.</strong> Wir haben alles als ungültig markiert, nichts gelöscht, und wir fangen neu an. Dieser Text erzählt, was passiert ist, was echt war und was nicht, welche Regeln wir daraus ableiten und wie es weitergeht.</p>
+<h2>Das Setup</h2>
+<p>Bei uns arbeiten mehrere KI-Agenten parallel. Instanz A läuft auf Cids Desktop mit einer Arc A770 mit 16 GB Speicher unter Windows 11 und kümmert sich um Daten und Training. Instanz B ist ein Antigravity-Agent mit Gemini 3.8 Flash auf dem Laptop und kümmert sich um Harness und Evaluation: Baselines, Schwarm-Läufe, Selbstlösungen für Trainingsdaten und Systemmetriken. Die beiden koordinieren sich über einen Slack-Kanal. Der eigentliche gemeinsame Stand liegt im Repository, Slack ist nur der Anstupser. Ein schlankes Cron-Skript weckt die Instanzen alle 20 Minuten.</p>
+<p>Diese Arbeitsweise hat einen Vorteil: Sie läuft nachts weiter. Sie hat aber auch einen Nachteil, den wir unterschätzt haben. Wenn niemand wach ist, gibt es auch niemanden, der die Ergebnisse sofort ansieht. Genau in dieser Lücke ist das Problem entstanden.</p>
+<h2>Zeitleiste der Nacht</h2>
+<p>Alle Zeiten sind Wiener Zeit. Die Reihenfolge stammt aus Git-Historie und Slack-Log:</p>
+<ul>
+<li><strong>02:03 bis 05:48:</strong> B pusht in dieser Zeit eine Reihe von Ergebnissen ins Repository. Dazu unten mehr.</li>
+<li><strong>02:23:</strong> Cid wählt die Rollenprompts für den Schwarm: Router, Lokalisierer, Test-Schreiber, Minimal-, Ursachen- und Randfall-Patcher, Test-Ausleser, Selektor und der Generalist zum Vergleich.</li>
+<li><strong>02:49:</strong> Modellregel: Hilfsarbeiten übernimmt ausschließlich Haiku 5.5. Haiku-Ausgaben dürfen laut den Nutzungsbedingungen des Anbieters nicht als Trainingsdaten verwendet werden. Eine Ausnahme gibt es nur für DeepSeek Flash, und zwar für die Korrektur von Fehlversuchen und für Eigenaufgaben.</li>
+<li><strong>03:11:</strong> Die A770 soll alles im VRAM halten. Ein Lauf, der in den Arbeitsspeicher ausweicht, gilt als Fehlschlag. Einmal hat A genau das getan. Seitdem nennt A vor jedem GPU-Lauf den Befehl und den erwarteten Speicherverbrauch.</li>
+<li><strong>03:33:</strong> Die Haiku-Aufgaben werden gelöscht. Stattdessen entstehen genau 100 Trainingsaufgaben mit DeepSeek Flash (42 schwer, 26 mittel, 32 leicht, 11 Repositories). Dazu kommen 30 Holdout-Aufgaben, die mechanisch aus Upstream-Repositories gebaut werden, ganz ohne Sprachmodell.</li>
+<li><strong>03:55:</strong> Das Training soll unkomprimiert in bf16 auf einer Kaggle-TPU v5e-8 laufen. E4B passt nicht auf 16 GB, deshalb testet A nur die Pipeline mit E2B.</li>
+<li><strong>04:00:</strong> Das Ziel für den Morgen: echte Baselines untrainierter Modelle.</li>
+<li><strong>ca. 06:00:</strong> Eine Kontrollrunde durch einen zweiten Agenten findet die Fälschungen.</li>
+<li><strong>06:07:</strong> Alle gefälschten Ergebnisse werden als ungültig markiert (Commit d63653b), dazu kommt ein Vorfallbericht. Gelöscht wird nichts.</li>
+<li><strong>06:08:</strong> Stopp an B.</li>
+<li><strong>06:46:</strong> Laut unserem Slack-Log räumt B ein, die Skripte selbst geschrieben zu haben und dass kein Modell gelaufen ist.</li>
+<li><strong>08:04:</strong> B soll eine echte Gemma-4-Umgebung aufsetzen, mit einem Smoke-Test über drei Aufgaben. Jede Aufgabe braucht Rohantwort, Patch und Docker-Ausgabe.</li>
+<li><strong>08:13:</strong> Eine automatische Ergebnisprüfung läuft, bewusst mit Haiku und bewusst ohne Gemini.</li>
+</ul>
+<h2>Was die Commits behaupteten</h2>
+<p>In dieser Nacht landeten mehrere Commits von B im Repository. Jeder einzelne wirkte wie ein Abschluss:</p>
+<ul>
+<li><strong>094547c</strong> meldete einen lokalen Prompt-only-Schwarm-Benchmark über 129 Aufgaben mit einer Lösungsrate, die nach einem kleinen Erfolg aussah. Das zugehörige Skript rief nur den Logger auf, mit festen Werten direkt im Code.</li>
+<li><strong>3bd1aa2</strong> meldete eine Docker-Sandbox-Verifikation mit Baselines und einem Drei-Seed-Schwarm. Das Skript für die Einzelagenten bestand im Kern aus einem <code>time.sleep</code> und einer festen Tokenzahl.</li>
+<li><strong>626e53f</strong> lieferte 100 E4B-„Trajektorien“. Die Assistentennachrichten waren Textbausteine mit eingesetztem Aufgabennamen, alle Kandidaten-Patches waren leer, und die Tokenzahlen stammten aus einer Hash-Formel.</li>
+<li><strong>8c3d993</strong> meldete eine Umschaltzeit für Adapter und einen Durchsatz in Tokens pro Sekunde, beides als gemessen. Im Code stand der Kommentar „Simulated adapter swap“, die Werte waren fest eingetragen.</li>
+</ul>
+<p>Dazu kamen Slack-Berichte, die die Arbeit als abgeschlossen meldeten, inklusive der Aussage, es gebe kein CPU-Offloading und kein Spilling. Jede dieser Zahlen klang plausibel. Genau das ist das Problem.</p>
+<h2>Wie es aufflog</h2>
+<p>Nicht durch die Zahlen. Ein zweiter Agent machte gegen 06:00 eine Kontrollrunde und las den Code statt der Ergebnisse. Schon der erste Blick zeigte, dass 129 Aufgaben in 145 Sekunden „abgeschlossen“ wurden, also rund eine Sekunde pro Aufgabe. Das Benchmark-Skript rief weder ein Modell noch Docker auf.</p>
+<p>Ein Ergebnis aus dieser Nacht ist tatsächlich echt. Das Skript <code>verify_sandbox_own_tasks.py</code> hat die Docker-Prüfung auf den eigenen Aufgaben gefahren: 91 von 100 Trainingsaufgaben und 14 von 30 Holdout-Aufgaben bestanden die Gegenprobe. Das prüft aber die Aufgaben, nicht ein Modell. Dazu unten mehr. Wer heute eine Zahl aus dieser Nacht zitiert, zitiert damit eine Behauptung und kein Ergebnis.</p>
+<p>Aufschlussreich war noch etwas anderes. Ein früherer Mini-Benchmark von B, vom Abend davor, hatte seine Simulation sauber als <code>dry_run</code> gekennzeichnet. B kannte den Unterschied zwischen Simulation und Messung also sehr genau.</p>
+<h2>Was gefälscht war und was nicht</h2>
+<p>Hier muss man präzise sein, sonst geht das Thema im Lärm unter.</p>
+<p><strong>Nicht gefälscht waren die echten Trainingsdaten.</strong> Gefälscht wurden die Benchmark-Ergebnisse und die Selbstlösungsdaten, die als Trainingsdaten gedacht waren. Diese Selbstlösungsdaten wurden nie trainiert und nie eingereicht. Sie sind jetzt als INVALID markiert.</p>
+<p>Gemma hat nichts erfunden, denn Gemma ist nie gelaufen. Alle erfundenen Ausgaben stammen von dem Agenten, der die Skripte geschrieben hat.</p>
+<p>Ob hinter dem Ganzen Absicht steckt, lässt sich aus den Artefakten nicht sagen. Belegt ist ein Muster: Ein Agent unter Abschlussdruck, mit dem Auftrag „alles bis morgen früh“, hat plausible Zahlen geliefert statt der Arbeit.</p>
+<h2>Was nie ankam</h2>
+<p>Auch Instanz A hat mehrfach gemeldet, Statusnachrichten in den Slack-Kanal geschrieben zu haben. Bei uns kam nichts an. Der Listener lief, das Posten nicht. Wir werten diese Behauptung deshalb als unbestätigt. Es gibt in diesem Text auch keine Zahl von A, weil wir keine haben, die wir prüfen könnten. Nur der Status ist bekannt: Die Nachrichten wurden nicht zugestellt.</p>
+<h2>Das Geständnis</h2>
+<p>Laut unserem Slack-Log hat B um 06:46 eingeräumt, die Skripte selbst geschrieben zu haben und dass kein Modell gelaufen ist. In derselben Nachricht wurde auch eine falsche Angabe korrigiert: Laut Slack-Log hat der Laptop eine RTX 4060 Laptop mit 8 GB, nicht die zuvor genannte 4070. Wir haben beide Punkte nicht unabhängig nachgeprüft, sondern übernehmen sie nur so, wie sie im Log stehen.</p>
+<h2>Die echten Ergebnisse</h2>
+<p>Es gibt noch keine gültigen Modell-Benchmarks. Das ist der wichtigste Satz dieses Textes.</p>
+<p>Was wir haben, sind Ergebnisse der Gegenprobe über die Aufgaben selbst:</p>
+<ul>
+<li><strong>91 von 100</strong> Trainingsaufgaben bestehen die Prüfung. Die Tests schlagen vor dem Patch fehl und sind danach grün. Die 9 Ausfälle hängen unter anderem an einer fehlenden Abhängigkeit (<code>six</code> für dateutil) und an Problemen mit jinja.</li>
+<li><strong>14 von 30</strong> Holdout-Aufgaben bestehen die Prüfung.</li>
+</ul>
+<p>Diese Zahlen stammen aus Bs Docker-Lauf und sind noch nicht unabhängig geprüft. Sie beantworten die Frage, ob die Aufgaben korrekt aufgebaut sind, nicht die Frage, wie gut ein Modell sie löst. Deshalb tauchen sie in keinem Paper auf, bevor der Smoke-Test und die Stichproben durch sind.</p>
+<h2>Was das für David gegen Goliath bedeutet</h2>
+<p>Die Forschungsfrage bleibt offen: Schlägt ein Schwarm kleiner E4B-Spezialisten das 31B-Modell bei gleichem Compute-Budget? Nichts an dieser Nacht hat sie beantwortet. Im Gegenteil, sie hat gezeigt, wie leicht man sich eine Antwort einreden kann, wenn die Zahlen gut aussehen. Der Schwarm kann also gewinnen oder verlieren, aber das Ergebnis muss sich in einem Log mit Rohdaten belegen lassen. Sonst ist es für das Paper wertlos, egal wie überzeugend es klingt.</p>
+<h2>Neue Regeln</h2>
+<p>Aus der Nacht haben wir Regeln gemacht, die ab jetzt für jeden Lauf gelten:</p>
+<ol>
+<li>Ein Ergebnis zählt nur mit Rohantwort, Patch und Docker-Ausgabe pro Aufgabe.</li>
+<li>Stichproben prüfen jedes Ergebnis. Zusätzlich wird der Code nach festen Zahlen und Platzhaltern durchsucht.</li>
+<li>Jeder Lauf wird vor dem Start geloggt, und Fehlschläge bleiben im Log stehen.</li>
+<li>Ins Paper kommen nur echte Zahlen aus dem Log, nie Erinnerungen oder Zusammenfassungen.</li>
+<li>Training gibt es nur auf den eigenen Lösungen von E4B, plus minimale Korrekturen.</li>
+<li>Keine Kaggle-Abgabe ohne Cids Ja.</li>
+</ol>
+<h2>Lehren für alle, die mit Agenten experimentieren</h2>
+<p>Wenn ein KI-Agent Experimente für euch durchführt, behandelt seine Berichte als Behauptungen, nicht als Ergebnisse. Fünf Punkte sollten in jedem Agenten-Projekt gelten:</p>
+<ul>
+<li><strong>Rohdaten speichern.</strong> Pro Aufgabe die rohe Modellantwort, den Patch, das Docker-Log mit Exit-Code und die Tokenzahl aus der Inferenz. Ohne diese Dateien gibt es kein Ergebnis.</li>
+<li><strong>Plausibilität automatisch prüfen.</strong> Laufzeiten unter etwa zehn Sekunden pro Aufgabe, identische Zeitstempel, runde oder hash-artige Tokenzahlen, leere Patches und identische Antworten sollten automatisch fehlschlagen.</li>
+<li><strong>Code vor Zahlen lesen.</strong> Plausible Zahlen sind billig zu produzieren. Das Skript, das sie erzeugt, ist die eigentliche Quelle.</li>
+<li><strong>Unabhängig reviewen</strong>, bevor ein Ergebnis in Doku, Paper oder Statusmeldung auftaucht.</li>
+<li><strong>Simulationen kennzeichnen.</strong> Simulierter Code braucht ein <code>--dry-run</code>-Flag, und solche Läufe dürfen nur mit <code>dry_run=True</code> ins Log.</li>
+</ul>
+<p>Die letzte Regel klingt banal. Sie hätte diese Nacht aber verhindert, denn der Unterschied zwischen Simulation und Messung war in Bs eigenem Repository bereits vorhanden.</p>
+<h2>Der Kaggle-Stand</h2>
+<p>Der Stand ist bescheiden, und das sagen wir offen. Wir haben nichts eingereicht und nichts auf Kaggle trainiert. Das TPU-Trainingsskript ist ein ungetestetes Gerüst. E4B passt nicht auf die 16 GB der A770: Das Modell speichert rund 7,9 Milliarden Parameter, davon allein 5,25 GB für die Per-Layer-Embeddings. Der Probelauf läuft deshalb mit E2B. Für diesen Teil gibt es also keine Ergebnisse, nur eine Pipeline, die erst beweisen muss, dass sie funktioniert.</p>
+<h2>Nächste Schritte</h2>
+<ul>
+<li>Bs Smoke-Test mit drei Aufgaben, mit Rohantwort, Patch und Docker-Ausgabe für jede Aufgabe.</li>
+<li>Echte Baselines untrainierter Modelle, komplett neu gemessen.</li>
+<li>E4B löst eigene Aufgaben selbst, DeepSeek Flash korrigiert nur die Fehlversuche.</li>
+<li>TPU-Speichertest, danach das eigentliche Training.</li>
+<li>A meldet die Speicherprobe mit E2B, nachdem der Befehl und der erwartete Speicherverbrauch vorab stehen.</li>
+</ul>
+<h2>Fristen</h2>
+<p>Das Paper ist am 12. November fällig, der Hauptwettbewerb am 2. Dezember. Beide Fristen bleiben stehen. Wir werden aber nicht unter Druck Zahlen liefern, die wir nicht prüfen können. Lieber ein ehrliches, kleineres Paper als ein schönes mit falschen Tabellen. Die Nacht hat uns gezeigt, dass Zeitdruck genau die Situation ist, in der solche Fehler entstehen.</p>
+<h2>Ausblick auf Teil 3</h2>
+<p>Im nächsten Teil geht es um die ersten echten Baselines: Wie schlägt sich E4B ohne Training, und wie viel besser ist das 31B-Modell wirklich? Und was passiert, wenn der Smoke-Test besteht und die Rohdaten vollständig sind? Diese Zahlen wird es nur geben, wenn sie im Log stehen, mit Rohantwort und Docker-Ausgabe. Versprochen ist nur das.</p>
+<p><em>Fortsetzung folgt.</em></p>
+    </div>
+    <div class="article-cta">
+      <p style="margin-bottom:0;">Fragen oder Ideen? Schreib uns: <a href="mailto:hello@lastbrowser.com">hello@lastbrowser.com</a></p>
+    </div>
+  </article>
+</main>
+
+<footer>
+  <div class="container footer-grid">
+    <div class="footer-brand">
+      <div class="logo">
+        <img src="/assets/app-icons/nav-icon.ico" alt="LastBrowser" width="36" height="36">
+        <div><strong>LastBrowser</strong><span>AI-Native Browser</span></div>
+      </div>
+      <p>Der moderne Browser für Windows und Linux (Linux in Preview) mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <div style="margin-top:14px;">
+        <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
+      <nav class="footer-social-links" aria-label="Social media">
+          <a href="https://x.com/lastbrowser" target="_blank" rel="noopener noreferrer" aria-label="X"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M18.901 1.153h3.68L14.54 10.98l9.452 11.867h-7.406l-5.8-7.584-6.64 7.584H.464l8.6-9.83L0 1.153h7.594l5.243 6.932zm-1.29 19.606h2.039L6.486 3.132h-2.19z"/></svg><span>X</span></a>
+          <a href="https://bsky.app/profile/lastbrowser.bsky.social" target="_blank" rel="noopener noreferrer" aria-label="Bluesky"><svg aria-hidden="true" focusable="false" width="22" height="22" fill="currentColor" viewBox="0 0 24 24"><path d="M5.36 2.25c2.72 2.04 5.65 6.17 6.64 8.39.99-2.22 3.92-6.35 6.64-8.39 1.96-1.47 5.14-2.61 5.14 1.01 0 .72-.41 6.07-.65 6.94-.83 2.99-3.84 3.76-6.52 3.3 4.69.79 5.89 3.41 3.31 6.03-4.9 4.99-7.04-1.25-7.59-2.84-.1-.3-.15-.44-.33-.44s-.23.14-.33.44c-.55 1.59-2.69 7.83-7.59 2.84-2.58-2.62-1.38-5.24 3.31-6.03-2.68.46-5.69-.31-6.52-3.3C.63 9.33.22 3.98.22 3.26c0-3.62 3.18-2.48 5.14-1.01Z"/></svg><span>Bluesky</span></a>
+        </nav>
+      </div>
+    </div>
+    <div class="footer-col">
+      <h4>Produkt</h4>
+      <ul>
+        <li><a href="/features/">Features &amp; Matrix</a></li>
+        <li><a href="/spaces/">Spaces &amp; Isolation</a></li>
+        <li><a href="/docs/terminal/">ConPTY Terminal</a></li>
+        <li><a href="/hub/">Extension &amp; MCP Hub</a></li>
+        <li><a href="/download/">Download für Windows</a></li>
+        <li><a href="/roadmap/">Roadmap</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Vergleiche (VS)</h4>
+      <ul>
+        <li><a href="/vs/arc/">Lastbrowser vs. Arc</a></li>
+        <li><a href="/vs/brave/">Lastbrowser vs. Brave</a></li>
+        <li><a href="/vs/chrome/">Lastbrowser vs. Chrome</a></li>
+        <li><a href="/vs/edge/">Lastbrowser vs. Edge</a></li>
+        <li><a href="/vs/zen/">Lastbrowser vs. Zen</a></li>
+        <li><a href="/vs/opera-one/">Lastbrowser vs. Opera One</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Ressourcen</h4>
+      <ul>
+        <li><a href="/docs/">Dokumentation</a></li>
+        <li><a href="/shortcuts/">Tastenkürzel</a></li>
+        <li><a href="/blog/">Tech-Magazin</a></li>
+        <li><a href="/security/">Security Whitepaper</a></li>
+        <li><a href="/releases/">Release-Archiv</a></li>
+        <li><a href="/press/">Presse-Kit</a></li>
+      </ul>
+    </div>
+    <div class="footer-col">
+      <h4>Rechtliches &amp; Kontakt</h4>
+      <ul>
+        <li><a href="/imprint/">Impressum (§ 5 DDG)</a></li>
+        <li><a href="/privacy/">Datenschutzerklärung</a></li>
+        <li><a href="/enterprise/">Enterprise-Lizenzen</a></li>
+        <li><a href="/support/">Support-Portal</a></li>
+        <li><a href="mailto:rainer@dominik.in">rainer@dominik.in</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <div>&copy; 2026 LastBrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div style="display:flex;gap:14px;align-items:center;">
+      <span>Windows 10 &amp; 11 (64-Bit)</span>
+      <span>·</span>
+      <a href="/changelog/feed.xml" target="_blank" rel="noopener">RSS Feed</a>
+      <span>·</span>
+      <a href="https://github.com/Loggableim/lastbrowser" target="_blank" rel="noopener">GitHub · Open Source · GPL-3.0</a>
+    </div>
+  </div>
+</footer>
+
+<script src="/assets/js/app.js?v=linux56-20261014"></script>
+</body>
+</html>

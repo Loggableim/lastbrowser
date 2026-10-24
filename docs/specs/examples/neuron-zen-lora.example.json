@@ -1,0 +1,98 @@
+{
+  "manifestVersion": "1.0",
+  "id": "neuron.zen-lora",
+  "name": "Zen Refactoring Persona (LoRA)",
+  "summary": "LoRA-Persona auf Neuron Synapse fuer kontrolliertes Refactoring ohne Neutraining des Basismodells.",
+  "version": "1.0.0",
+  "publisher": "LastBrowser",
+  "homepage": "https://www.ibm.com/granite",
+  "task": {
+    "id": "zen",
+    "title": "Refactoring",
+    "kind": "lora-adapter",
+    "category": "refactor",
+    "inputs": ["text/x-code", "text/plain"],
+    "outputs": ["text/x-code", "text/plain"],
+    "tools": ["read_file", "search_files"],
+    "notes": "Adapter gehoert genau zu einem Basismodell. Ohne passenden Basis-Hash darf er nicht geladen werden."
+  },
+  "base": {
+    "modelId": "neuron-synapse",
+    "family": "Neuron",
+    "repository": "lastbrowser/neuron-synapse-gguf",
+    "revision": "2f9c1ad4c0b7e6f5a4d3c2b1a09876543210fedc",
+    "filename": "neuron-synapse-Q4_K_M.gguf",
+    "format": "gguf",
+    "quantization": "Q4_K_M",
+    "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "license": "Apache-2.0"
+  },
+  "artifact": {
+    "type": "lora-adapter",
+    "url": "https://huggingface.co/lastbrowser/neuron-zen-lora/resolve/1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d/neuron-zen-lora-f16.safetensors",
+    "filename": "neuron-zen-lora-f16.safetensors",
+    "sha256": "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    "bytes": 62914560,
+    "format": "safetensors",
+    "signature": {
+      "scheme": "minisign",
+      "value": "RWQ-example-signature-value-not-a-real-key",
+      "issuer": "LastBrowser Release"
+    }
+  },
+  "size": {
+    "bytes": 62914560,
+    "parameters": 20971520,
+    "quantization": "F16",
+    "minDiskBytes": 75497472
+  },
+  "benchmark": {
+    "suite": "lastbrowser-refactor-bench",
+    "suiteVersion": "1.0.0",
+    "dataset": "lastbrowser/refactor-eval-de-v1",
+    "harness": "apps/desktop/scripts/evaluate-local-ai.mjs",
+    "measuredAt": "2026-10-17T18:30:00Z",
+    "referenceHardware": {
+      "tier": "gpu_medium",
+      "cpu": "AMD Ryzen 9 5950X",
+      "ramBytes": 68719476736,
+      "gpu": "Intel Arc A770",
+      "vramBytes": 17179869184
+    },
+    "metrics": [
+      {
+        "name": "exact_match",
+        "value": 92.5,
+        "unit": "percent",
+        "threshold": 90,
+        "passed": true
+      },
+      {
+        "name": "tokens_per_second",
+        "value": 196,
+        "unit": "tokens/s",
+        "threshold": 40,
+        "passed": true
+      }
+    ],
+    "thresholdsMet": true,
+    "notes": "Kurze Messung auf einer Einzelhardware; kein allgemeines Leistungsversprechen."
+  },
+  "hardware": {
+    "minTier": "cpu_high",
+    "tiers": ["cpu_high", "gpu_medium", "gpu_high"],
+    "requirements": {
+      "ramBytes": 17179869184,
+      "vramBytes": 0,
+      "cpuFeatures": ["avx2"],
+      "os": ["windows", "linux"]
+    }
+  },
+  "license": "Apache-2.0",
+  "telemetry": "opt-in",
+  "signature": {
+    "scheme": "minisign",
+    "value": "RWQ-example-manifest-signature-not-a-real-key",
+    "issuer": "LastBrowser Release"
+  }
+}

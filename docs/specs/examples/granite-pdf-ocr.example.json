@@ -1,0 +1,85 @@
+{
+  "manifestVersion": "1.0",
+  "id": "granite.pdf-ocr",
+  "name": "Granite PDF Scan",
+  "summary": "Kleiner Granite-Spezialist fuer Texterkennung aus gescannten PDFs und Bildern.",
+  "version": "0.1.0",
+  "publisher": "LastBrowser",
+  "task": {
+    "id": "pdf-scan",
+    "title": "PDF-Texterkennung",
+    "kind": "standalone-model",
+    "category": "document",
+    "inputs": ["application/pdf", "image/png", "image/jpeg"],
+    "outputs": ["text/plain", "application/json"],
+    "notes": "Nur lokale Verarbeitung. Keine Cloud-Uebertragung der Dokumente."
+  },
+  "base": {
+    "modelId": "granite-vision",
+    "family": "IBM Granite",
+    "repository": "ibm-granite/granite-vision-3.2-2b",
+    "revision": "a1b2c3d4e5f60718293a4b5c6d7e8f901a2b3c4d",
+    "filename": "granite-vision-3.2-2b-Q4_K_M.gguf",
+    "format": "gguf",
+    "quantization": "Q4_K_M",
+    "sha256": "1111111122222222333333334444444455555555666666667777777788888888",
+    "license": "Apache-2.0"
+  },
+  "artifact": {
+    "type": "gguf",
+    "url": "https://huggingface.co/lastbrowser/granite-pdf-scan/resolve/2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e/granite-pdf-scan-Q4_K_M.gguf",
+    "filename": "granite-pdf-scan-Q4_K_M.gguf",
+    "sha256": "99999999aaaabbbbccccddddeeeeffff00001111222233334444555566667777",
+    "bytes": 1590000000,
+    "format": "gguf"
+  },
+  "size": {
+    "bytes": 1590000000,
+    "parameters": 2000000000,
+    "quantization": "Q4_K_M",
+    "minDiskBytes": 2147483648
+  },
+  "benchmark": {
+    "suite": "lastbrowser-pdf-scan-bench",
+    "suiteVersion": "1.0.0",
+    "dataset": "lastbrowser/pdf-scan-eval-v1",
+    "harness": "apps/desktop/scripts/smoke-local-ai.mjs",
+    "measuredAt": "2026-10-17T19:05:00Z",
+    "referenceHardware": {
+      "tier": "cpu_medium",
+      "cpu": "AMD Ryzen 9 5950X",
+      "ramBytes": 68719476736,
+      "vramBytes": 0
+    },
+    "metrics": [
+      {
+        "name": "character_accuracy",
+        "value": 98.4,
+        "unit": "percent",
+        "threshold": 95,
+        "passed": true
+      },
+      {
+        "name": "character_error_rate",
+        "value": 1.6,
+        "unit": "percent",
+        "threshold": 5,
+        "passed": true
+      }
+    ],
+    "thresholdsMet": true,
+    "notes": "Messung auf Deutsch und Englisch; handschriftliche Dokumente sind nicht abgedeckt."
+  },
+  "hardware": {
+    "minTier": "cpu_medium",
+    "tiers": ["cpu_medium", "cpu_high", "gpu_low", "gpu_medium", "gpu_high"],
+    "requirements": {
+      "ramBytes": 8589934592,
+      "vramBytes": 0,
+      "os": ["windows", "linux"]
+    }
+  },
+  "license": "Apache-2.0",
+  "telemetry": "opt-in",
+  "dependencies": ["granite.shared-tokenizer"]
+}

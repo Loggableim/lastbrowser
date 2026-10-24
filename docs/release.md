@@ -33,6 +33,8 @@ The release gate requires exactly one version-matched setup executable and one p
 - The build/signing job runs with `contents: read`; only the separate publisher job receives `contents: write` and `${{ secrets.GITHUB_TOKEN }}`, after the signed artifacts have been verified and transferred as a workflow artifact.
 - GitHub Actions must have all five Azure Trusted Signing secrets configured: `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, and `AZURE_CERTIFICATE_PROFILE`, plus the Castlabs EVS credentials `EVS_ACCOUNT_NAME` and `EVS_PASSWD`. The workflow stops before building if any are missing, requires exactly the expected setup and portable executables, and publishes only after Authenticode verification succeeds for both and the packaged VMP signature verifies.
 - The workflow runs the Sidekick Python syntax check and full Python tests, desktop tests, and Store preflight before packaging. A local installer build does not establish that either Authenticode or VMP signing succeeded.
+- Before NSIS runs, the `afterPack` hook rejects packaged payloads that contain `.gguf`, `.safetensors`, `.onnx`, or `.partial` files, and payloads at or above the 4 GiB NSIS 32-bit limit. Model weights are downloaded at runtime and must never be bundled.
+- After signing, `scripts/refresh-signed-release-metadata.mjs` validates the `StartHeaderCRC` and the declared `NextHeaderOffset` of the embedded `app-64.7z` payload in the setup and portable executables before it accepts the artifacts or writes `latest.yml`. A truncated payload fails with the 4 GiB offset-overflow diagnostic instead of being published.
 - The `publish` config in `apps/desktop/package.json` points to `Loggableim/lastbrowser`.
 
 ## Manual Build

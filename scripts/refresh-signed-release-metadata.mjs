@@ -4,6 +4,7 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import yaml from 'js-yaml';
+import { verifyInstallerPayload } from './verify-installer-payload.mjs';
 
 const releaseDir = path.resolve(process.argv[2] || 'apps/desktop/release');
 const appBuilder = path.resolve(process.argv[3] || 'node_modules/app-builder-bin/win/x64/app-builder.exe');
@@ -35,6 +36,17 @@ const portablePath = path.join(releaseDir, portableName);
 const blockmapPath = `${setupPath}.blockmap`;
 const setupEntry = metadata.files.find((file) => file.url === setupName);
 const portableEntry = metadata.files.find((file) => file.url === portableName) || { url: portableName };
+
+// Validate the signed installer bytes before metadata or blockmaps are accepted.
+// A payload archive truncated at the NSIS 32-bit limit must never be published.
+for (const [label, filePath] of [['setup', setupPath], ['portable', portablePath]]) {
+  const result = verifyInstallerPayload(filePath);
+  const payload = result.archives[0];
+  console.log(
+    `[refresh-signed-release-metadata] ${label} payload OK `
+    + `(${payload.archiveSize} bytes at ${payload.offset}, file ${result.fileSize} bytes)`
+  );
+}
 
 const blockmapResult = spawnSync(appBuilder, ['blockmap', '--input', setupPath, '--output', blockmapPath], {
   stdio: 'inherit',

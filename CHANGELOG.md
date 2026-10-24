@@ -5,6 +5,15 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.44] - 2026-10-19
+
+### Highlights
+- Show a "What's new" dialog after a version change with the changelog entries since the previously used release.
+
+### Fixes
+- Unlock keyless free models without the `zen/v1` 403 error.
+- Group OpenCode Go and Go Free in the model picker.
+
 ## [0.1.43] - 2026-10-01
 
 ### Fixes

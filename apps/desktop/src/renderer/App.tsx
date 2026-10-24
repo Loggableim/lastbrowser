@@ -235,6 +235,14 @@ import { useQuickChat } from './useQuickChat.js';
 import { InPageActionBar } from './components/InPageActionBar.js';
 import { PinnedAppModal } from './components/PinnedAppModal.js';
 import { SpaceSetupModal, type SpaceSetupData } from './components/SpaceSetupModal.js';
+import { ReleaseNotesDialog } from './components/ReleaseNotesDialog.js';
+import { releaseNotes } from './release-notes-data.js';
+import {
+  readLastSeenReleaseVersion,
+  resolveReleaseNotesUpdate,
+  writeLastSeenReleaseVersion,
+  type ReleaseNoteEntry
+} from './release-notes.js';
 import { UnifiedExtensionHub } from './components/UnifiedExtensionHub.js';
 import { CursorLoupeHUD } from './components/CursorLoupeHUD.js';
 import { SplitScreenMagnifier } from './components/SplitScreenMagnifier.js';
@@ -283,6 +291,11 @@ import './styles.css';
 
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 type UpdateStatus = Awaited<ReturnType<typeof window.lastbrowser.updates.status>>;
+type ReleaseNotesDialogState = {
+  fromVersion: string | null;
+  toVersion: string;
+  entries: ReleaseNoteEntry[];
+};
 type CronJobSummary = Awaited<ReturnType<typeof window.lastbrowser.sidekick.listCrons>>['jobs'][number];
 type KanbanBoardResponse = Awaited<ReturnType<typeof window.lastbrowser.sidekick.getKanbanBoard>>;
 type KanbanColumnSummary = NonNullable<KanbanBoardResponse['columns']>[number];
@@ -1014,6 +1027,8 @@ function AppContent(): JSX.Element {
   const [workspaceShowHidden, setWorkspaceShowHidden] = useState(false);
   const [workspaceRefreshNonce, setWorkspaceRefreshNonce] = useState(0);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const [releaseNotesDialog, setReleaseNotesDialog] = useState<ReleaseNotesDialogState | null>(null);
+  const releaseNotesChecked = useRef(false);
   const [hasActiveDownloads, setHasActiveDownloads] = useState(false);
   const [sidekickBusy, setSidekickBusy] = useState(false);
   const chatUiOwnershipRef = useRef(new ChatUiOwnership());
@@ -1598,6 +1613,22 @@ function AppContent(): JSX.Element {
       dispose();
     };
   }, []);
+
+  useEffect(() => {
+    const currentVersion = updateStatus?.currentVersion;
+    if (!currentVersion || releaseNotesChecked.current) return;
+    releaseNotesChecked.current = true;
+    const storedVersion = readLastSeenReleaseVersion(window.localStorage);
+    const update = resolveReleaseNotesUpdate({ entries: releaseNotes, storedVersion, currentVersion });
+    if (update.show) {
+      setReleaseNotesDialog({
+        fromVersion: update.fromVersion,
+        toVersion: update.toVersion,
+        entries: update.entries
+      });
+    }
+    writeLastSeenReleaseVersion(window.localStorage, currentVersion);
+  }, [updateStatus?.currentVersion]);
 
   const refreshOnboardingStatus = useCallback(async (): Promise<void> => {
     const onboarding = await window.lastbrowser.sidekick.onboardingStatus().catch(() => null);
@@ -4630,6 +4661,15 @@ function AppContent(): JSX.Element {
           onCreateSpace={handleCreateSpaceFromModal}
           existingSpaceNames={spaces.map(spaceDisplayName)}
         />
+        {!setupRequired && releaseNotesDialog && (
+          <ReleaseNotesDialog
+            open
+            fromVersion={releaseNotesDialog.fromVersion}
+            toVersion={releaseNotesDialog.toVersion}
+            entries={releaseNotesDialog.entries}
+            onClose={() => setReleaseNotesDialog(null)}
+          />
+        )}
         <DownloadsPanel open={downloadsOpen} onClose={() => setDownloadsOpen(false)} />
         <PermissionsPanel open={usePanelStore.getState().permissionsOpen} onClose={() => usePanelStore.getState().setPermissionsOpen(false)} />
         <HistoryPanel open={usePanelStore.getState().historyOpen} visits={visitedSites}

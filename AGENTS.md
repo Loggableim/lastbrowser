@@ -85,3 +85,17 @@ When two or more autonomous agents work simultaneously:
 - **Stream A (Desktop UI & Renderer):** Owns `apps/desktop/src/renderer/`.
 - **Stream B (Engine, Backend, Web, Release):** Owns `services/sidekick/`, `apps/desktop/src/main/`, `lastbrowser.com/`, `assets/store/`, `docs/`, `scripts/`.
 - Agents must never cross boundary lines into another active agent's workspace without coordination.
+
+---
+
+## 6. Cursor Cloud specific instructions
+
+Cloud agents run on Linux. The desktop shell still typechecks and builds here, and the in-tree Sidekick dashboard runs locally.
+
+- Run Vitest with `npm run test:run`. `npm test` stays in watch mode.
+- Seven Vitest cases expect Windows path separators or `app-builder.exe`. Those fail on Linux. The rest of the suite is the Linux signal.
+- `npm run verify:store` is PowerShell and is a Windows release check.
+- `apps/desktop/scripts/prepare-local-ai.mjs` extracts the committed llama.cpp zips only on Windows. On Linux, unzip `apps/desktop/vendor/local-ai/*.zip` into `cpu/` and `vulkan/` before `npm run build`.
+- The desktop shell talks to Sidekick on `127.0.0.1:8787`. Start it with `sidekick dashboard --port 8787 --host 127.0.0.1 --no-open --skip-build`. The virtualenv is `~/.venvs/lastbrowser`, linked from `services/sidekick/.venv`.
+- `npm run dev` serves the renderer at `http://127.0.0.1:5173`. That page needs the Electron preload; `window.lastbrowser` is missing in a normal browser. After `npm run build`, launch Electron from `apps/desktop` with `LASTBROWSER_RENDERER_URL=http://127.0.0.1:5173` and `--no-sandbox`.
+- `package-lock.json` pins Electron as `git+ssh://git@github.com/castlabs/electron-releases`. Rewrite that SSH prefix to HTTPS before `npm ci` when no GitHub SSH key is available.

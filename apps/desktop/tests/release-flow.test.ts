@@ -21,12 +21,16 @@ describe('GitHub release auto-update flow', () => {
     // action-gh-release. electron-builder must not publish unsigned artifacts.
     expect(pkg.scripts['package:win:publish']).toContain('--publish never');
     expect(pkg.build.afterSign).toBe('scripts/evs-sign.cjs');
+    // Unsigned tagesbeta installers; Authenticode verification stays in release.yml for stable tags.
+    expect(pkg.build.win.signAndEditExecutable).toBe(false);
+    expect(pkg.build.win.verifyUpdateCodeSignature).toBe(false);
     expect(pkg.build.publish).toEqual([
       {
         provider: 'github',
         owner: 'Loggableim',
         repo: 'lastbrowser',
-        releaseType: 'release'
+        releaseType: 'prerelease',
+        channel: 'beta'
       }
     ]);
   });

@@ -40,8 +40,15 @@ provisioning step needs network access; the packaging step never downloads Pytho
 dependencies or external backend source. A missing wheel or wrong hash fails the
 build. `LASTBROWSER_WHEELHOUSE` may point to an existing local cache.
 
+This local signed-release runbook deliberately does **not** use `--require-hashes`
+for the manual wheelhouse download below. The SHA-256 binding from the pinned
+`requirements-runtime.txt` is enforced by the tracked offline install in
+`apps/desktop/scripts/prepare-python-runtime.mjs` (the `prepare:python` step), which
+keeps `--require-hashes`; a wrong or missing wheel therefore still fails the build and
+no pin is relaxed by this runbook.
+
 ```powershell
-& "$env:LOCALAPPDATA/Programs/Python/Python312/python.exe" -m pip download --only-binary=:all: --require-hashes --dest apps/desktop/runtime/wheelhouse -r apps/desktop/scripts/requirements-runtime.txt
+& "$env:LOCALAPPDATA/Programs/Python/Python312/python.exe" -m pip download --only-binary=:all: --dest apps/desktop/runtime/wheelhouse -r apps/desktop/scripts/requirements-runtime.txt
 Assert-Exit 'Provision pinned runtime wheels'
 ```
 
@@ -98,6 +105,18 @@ try {
 ```
 
 electron-builder signs `win-unpacked/Lastbrowser.exe` before emitting `afterSign`; the hook then calls `castlabs_evs.vmp -n sign-pkg` and `verify-pkg`. `EVS_REQUIRED=1` makes either failure abort packaging while still allowing Castlabs’ cached local session. Explicit credentials are a separate opt-in policy (`EVS_REQUIRE_EXPLICIT_CREDENTIALS=1`) and are normally supplied by CI. Its NSIS target subsequently signs the setup, portable launcher, and uninstaller through the same signing configuration. Do not apply another Authenticode signature to the unpacked application after VMP signing: changing its PE header can invalidate VMP. Do not accept an EVS warning as a release success.
+
+## Certum time stamp
+
+The Authenticode signature is produced with the local Certum code-signing certificate
+(thumbprint `1AD3C19A7338BBC3FFE4D62853411AD73E139857`) through
+`win.signtoolOptions.certificateSha1`, using `sha256` and the DigiCert RFC 3161 time
+stamp server `http://timestamp.digicert.com`. The time stamp binds each signature to a
+trusted point in time so the release keeps a valid signature after the Certum
+certificate itself expires. A Certum time stamp is therefore mandatory: the
+**Validate the exact final files** step below rejects any file whose
+`Get-AuthenticodeSignature` result has no `TimeStamperCertificate`, and `signtool
+verify /pa` fails if the counter-signature cannot be validated.
 
 ## Validate the exact final files
 

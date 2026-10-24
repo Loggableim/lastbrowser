@@ -1,0 +1,20 @@
+# Ollama Cloud mapping — Cid (PR #321). Removed: deepseek-v4.1-flash, gpt-oss:120b.
+# think: false = off; "low"|"high"|"max" = effort (https://docs.ollama.com/capabilities/thinking)
+backend: ollama_cloud
+tiers:
+  leicht:
+    model: "${MODEL_LIGHT:-nemotron-3-nano}"
+    reasoning: "${REASONING_LIGHT:-off}"
+    think: false
+  mittel:
+    model: "${MODEL_MID:-gpt-oss:20b}"
+    reasoning: "${REASONING_MID:-off}"
+    think: false
+  schwer:
+    model: "${MODEL_HEAVY:-glm-5.3-flash}"
+    reasoning: "${REASONING_HEAVY:-low}"
+    think: "low"
+    opt_in_only: true
+budget:
+  daily_eur_env: DAILY_BUDGET_EUR
+  note: "Amount is a placeholder; Cid sets the real daily limit via env."

@@ -12,6 +12,21 @@ from types import SimpleNamespace
 import pytest
 
 
+def _workspace_session(tmp_path, **extra):
+    """Workspace session with assistants opted in (required by _run_in_terminal)."""
+    from runtime.memory_policy import update_policy
+
+    update_policy({"assistants_enabled": True}, tmp_path)
+    return {
+        "id": "s",
+        "events": [],
+        "event_queue": queue.Queue(),
+        "workdir": str(tmp_path),
+        "policy_home": str(tmp_path),
+        **extra,
+    }
+
+
 # ── Webhook bind rules ─────────────────────────────────────────────────
 
 def _adapter(**extra):
@@ -121,7 +136,7 @@ def test_run_in_terminal_passes_argv_without_shell(monkeypatch, tmp_path):
         return _Proc()
 
     monkeypatch.setattr(agent_workspace.subprocess, "Popen", _fake_popen)
-    session = {"id": "s", "events": [], "event_queue": queue.Queue(), "workdir": str(tmp_path)}
+    session = _workspace_session(tmp_path)
 
     result = agent_workspace._run_in_terminal(session, 'echo "a && b"', timeout=5)
 
@@ -155,7 +170,7 @@ def test_unquoted_shell_operators_are_rejected(monkeypatch, tmp_path, command):
     popen_calls = []
     monkeypatch.setattr(agent_workspace.subprocess, "Popen",
                         lambda *a, **k: popen_calls.append((a, k)))
-    session = {"id": "s", "events": [], "event_queue": queue.Queue(), "workdir": str(tmp_path)}
+    session = _workspace_session(tmp_path)
 
     result = agent_workspace._run_in_terminal(session, command, timeout=5)
 
@@ -178,7 +193,7 @@ def test_shell_operator_rejection_does_not_run_side_effects(tmp_path):
     from web.api.agent_workspace import _run_in_terminal
 
     marker = tmp_path / "marker.txt"
-    session = {"id": "s", "events": [], "event_queue": queue.Queue(), "workdir": str(tmp_path)}
+    session = _workspace_session(tmp_path)
     command = f'"{sys.executable}" -c "print(1)" && "{sys.executable}" -c "open(r\'{marker}\', \'w\')"'
 
     result = _run_in_terminal(session, command, timeout=10)
@@ -194,7 +209,7 @@ def test_run_in_terminal_records_exit_127_when_program_missing(monkeypatch, tmp_
         raise FileNotFoundError(2, "No such file or directory")
 
     monkeypatch.setattr(agent_workspace.subprocess, "Popen", _missing)
-    session = {"id": "s", "events": [], "event_queue": queue.Queue(), "workdir": str(tmp_path)}
+    session = _workspace_session(tmp_path)
 
     result = agent_workspace._run_in_terminal(session, "nosuchprog --flag", timeout=5)
 
@@ -303,7 +318,7 @@ def test_windows_command_run_routes_dir_through_cmd(windows, monkeypatch, tmp_pa
         return _Proc()
 
     monkeypatch.setattr(agent_workspace.subprocess, "Popen", _fake_popen)
-    session = {"id": "s", "events": [], "event_queue": queue.Queue(), "workdir": str(tmp_path)}
+    session = _workspace_session(tmp_path)
 
     agent_workspace._run_in_terminal(session, "dir", timeout=5)
 
@@ -317,7 +332,7 @@ def test_windows_command_with_cmd_metachar_is_rejected_before_popen(windows, mon
     popen_calls = []
     monkeypatch.setattr(agent_workspace.subprocess, "Popen",
                         lambda *a, **k: popen_calls.append((a, k)))
-    session = {"id": "s", "events": [], "event_queue": queue.Queue(), "workdir": str(tmp_path)}
+    session = _workspace_session(tmp_path)
 
     result = agent_workspace._run_in_terminal(session, 'echo "a^b"', timeout=5)
 
@@ -425,10 +440,12 @@ def test_affected_routes_require_session_token(client, monkeypatch, method, path
     assert called == []
 
 
-def test_command_route_reaches_handler_with_valid_session_token(client, monkeypatch):
+def test_command_route_reaches_handler_with_valid_session_token(client, monkeypatch, tmp_path):
     from cli import web_server
     from web.api import agent_workspace
+    from runtime.memory_policy import update_policy
 
+    update_policy({"assistants_enabled": True}, tmp_path / "home")
     called = []
     monkeypatch.setattr(agent_workspace, "send_command_to_agent",
                         lambda sid, command: called.append((sid, command)) or {"status": "executing"})
@@ -460,7 +477,7 @@ def test_command_route_reaches_handler_with_valid_session_token(client, monkeypa
 def test_run_in_terminal_reports_invalid_command_without_raising(tmp_path):
     from web.api.agent_workspace import _run_in_terminal
 
-    session = {"id": "s", "events": [], "event_queue": queue.Queue(), "workdir": str(tmp_path)}
+    session = _workspace_session(tmp_path)
 
     result = _run_in_terminal(session, 'echo "unterminated', timeout=5)
 

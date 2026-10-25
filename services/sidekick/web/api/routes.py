@@ -6382,13 +6382,23 @@ def _handle_apply_code(handler, body) -> bool:
 
 
 # â”€â”€ System shutdown/reboot helper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+_ALLOWED_BAT_FILES: frozenset = frozenset({"shutdown.bat", "reboot.bat"})
+
+
 def _run_bat(name: str) -> None:
-    """Run a .bat file from the SidekickPortable root directory."""
+    """Run one of the allowlisted .bat files from the SidekickPortable root."""
+    if name not in _ALLOWED_BAT_FILES:
+        logger.warning("Refusing to run non-allowlisted batch file: %r", name)
+        return
     try:
         root = Path(__file__).resolve().parent.parent.parent
         bat_path = root / name
         if bat_path.exists():
-            subprocess.Popen([str(bat_path)], cwd=str(root), shell=True)
+            if os.name == "nt":
+                command = ["cmd.exe", "/c", str(bat_path)]
+            else:
+                command = ["sh", str(bat_path)]
+            subprocess.Popen(command, cwd=str(root), shell=False)
             logger.info("Ran %s (%s)", name, bat_path)
         else:
             logger.warning("Batch file not found: %s", bat_path)

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import ipaddress
 import json
 import logging
 import time
@@ -23,13 +24,26 @@ def check_webhook_requirements() -> bool:
         return False
 
 
+def _is_loopback_host(host: str) -> bool:
+    """True for 127.0.0.0/8, ::1, and the literal ``localhost``."""
+    h = str(host or "").strip().lower()
+    if h.startswith("[") and h.endswith("]"):
+        h = h[1:-1]
+    if h == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
+
+
 class WebhookAdapter(BasePlatformAdapter):
     """HTTP webhook adapter for dynamic and configured routes."""
 
     def __init__(self, config: Any = None):
         super().__init__(config)
         extra = getattr(config, "extra", {}) or {}
-        self._host = str(extra.get("host") or "0.0.0.0")
+        self._host = str(extra.get("host") or "127.0.0.1")
         self._port = int(extra.get("port") or 8644)
         self._global_secret = str(extra.get("secret") or "")
         self._config_routes = extra.get("routes") if isinstance(extra.get("routes"), dict) else {}
@@ -59,6 +73,16 @@ class WebhookAdapter(BasePlatformAdapter):
         await self.stop()
 
     async def start(self) -> bool:
+        if not _is_loopback_host(self._host) and not self._global_secret.strip():
+            msg = (
+                f"Webhook refuses to listen on non-loopback host {self._host!r} "
+                "without a secret. Set platforms.webhook.extra.secret (or "
+                "WEBHOOK_SECRET), or bind to 127.0.0.1."
+            )
+            self._fatal_error_code = "InsecureBinding"
+            self._fatal_error_message = msg
+            logger.error(msg)
+            return False
         try:
             from aiohttp import web
 

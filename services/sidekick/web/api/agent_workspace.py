@@ -11,6 +11,8 @@ import os
 import queue
 import select
 import re
+import shlex
+import shutil
 import subprocess
 import threading
 import time
@@ -164,13 +166,22 @@ Analysiere die User-Anfrage und erstelle einen strukturierten Plan mit Shell-Kom
 - Jedes Kommando sollte eigenständig ausführbar sein
 - Verwende absolute Pfade oder relative Pfade zum Workspace
 
+## Format jedes Kommandos (WICHTIG)
+- Jedes "cmd" ist GENAU EIN Programm mit einfachen Argumenten, z.B. "git status" oder "ls -la src".
+- Es wird KEINE Shell verwendet. Diese Konstrukte sind daher NICHT erlaubt und führen zu einem Fehler:
+  Verkettung (&&, ||, ;), Pipes (|), Umleitungen (>, <, 2>&1), Shell-Variablen ($VAR), Backticks, Klammern für Subshells.
+- Mehrere Schritte = mehrere Einträge in "commands" (eine Reihenfolge, nacheinander ausgeführt).
+- Argumente mit Leerzeichen in doppelte Anführungszeichen setzen, z.B. "cat \"my notes.txt\"".
+- Wenn eine Ausgabe gefiltert werden müsste, führe das Programm ohne Filter aus und werte das Ergebnis im "explanation"-Feld aus.
+
 ## Antwort-Format (JSON)
 {
   "intent": "explore|git|install|create|search|run|analyze|other",
   "explanation": "Kurze Erklärung auf Deutsch, was gemacht wird",
   "commands": [
     {"cmd": "ls -la", "description": "Zeige Dateien", "timeout": 15},
-    {"cmd": "git status 2>&1 || echo 'kein git'", "description": "Prüfe Git-Status", "timeout": 15}
+    {"cmd": "git status", "description": "Prüfe Git-Status", "timeout": 15},
+    {"cmd": "git log -n 5", "description": "Letzte 5 Commits", "timeout": 15}
   ],
   "needs_confirmation": false
 }
@@ -316,6 +327,98 @@ def destroy_workspace_session(session_id: str):
 
 # ── Terminal Execution ──────────────────────────────────────────────────
 
+# Unquoted characters that a shell would interpret. Since no shell is used,
+# they would otherwise be passed as literal arguments (or silently misbehave),
+# so commands containing them are rejected with a clear error.
+_SHELL_OPERATOR_CHARS = frozenset("&|;<>$`()\r\n")
+
+# cmd.exe builtins: not executables, so they only work via ``cmd.exe /c``.
+_CMD_BUILTINS = frozenset({
+    "assoc", "break", "call", "cd", "chdir", "cls", "color", "copy", "date",
+    "del", "dir", "echo", "endlocal", "erase", "exit", "ftype", "md", "mkdir",
+    "mklink", "move", "path", "pause", "popd", "prompt", "pushd", "rd", "rem",
+    "ren", "rename", "rmdir", "set", "setlocal", "start", "time", "title",
+    "type", "ver", "verify", "vol",
+})
+
+# Characters with special meaning to cmd.exe; rejected in arguments when the
+# command is routed through cmd.exe, because cmd would interpret them.
+_CMD_METACHARS = frozenset("&|<>^%\r\n")
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def _command_to_argv(command: str) -> list[str]:
+    """Split a command string into an argv list (no shell is involved).
+
+    POSIX: ``shlex.split``. Windows: non-POSIX split so backslashes in paths
+    survive; surrounding quotes are stripped because ``subprocess`` re-quotes
+    each argument itself.
+
+    Raises ``ValueError`` for empty or unbalanced input, and for unquoted shell
+    operators (``&&``, ``|``, ``>``, ``$VAR``, ...), which are not supported:
+    each command must be exactly one program with plain arguments.
+    """
+    quote = None
+    for ch in command:
+        if quote:
+            if ch == quote:
+                quote = None
+            continue
+        if ch in "\"'":
+            quote = ch
+        elif ch in _SHELL_OPERATOR_CHARS:
+            shown = {"\r": "\\r", "\n": "\\n"}.get(ch, ch)
+            raise ValueError(
+                f"unquoted shell operator {shown!r} is not supported; "
+                "use one program with plain arguments per command "
+                "(quote literal characters, put steps in separate commands)"
+            )
+
+    if _is_windows():
+        argv = shlex.split(command, posix=False)
+        argv = [a[1:-1] if len(a) >= 2 and a[0] == a[-1] and a[0] in "\"'" else a
+                for a in argv]
+    else:
+        argv = shlex.split(command)
+    if not argv:
+        raise ValueError("empty command")
+    return argv
+
+
+def _exec_argv(argv: list[str]) -> list[str]:
+    """Return the argv to pass to ``Popen`` (shell stays off).
+
+    On Windows, ``CreateProcess`` cannot run cmd builtins (``dir``, ``echo``,
+    ...) or ``.cmd``/``.bat`` shims (``npm``, ``npx``). Those are routed through
+    ``cmd.exe /d /c`` after rejecting cmd metacharacters in every argument.
+    Other programs are resolved with ``shutil.which`` (honours PATHEXT).
+    Raises ``ValueError`` if an argument contains a cmd metacharacter.
+    """
+    if not _is_windows():
+        return list(argv)
+
+    program = argv[0]
+    resolved = shutil.which(program)
+    needs_cmd = program.lower() in _CMD_BUILTINS or (
+        resolved is not None and resolved.lower().endswith((".cmd", ".bat"))
+    )
+    if needs_cmd:
+        for arg in argv:
+            bad = _CMD_METACHARS.intersection(arg)
+            if bad:
+                raise ValueError(
+                    f"cmd metacharacter {sorted(bad)[0]!r} is not allowed in "
+                    f"arguments of '{program}'"
+                )
+        return ["cmd.exe", "/d", "/c", resolved or program, *argv[1:]]
+    if resolved:
+        return [resolved, *argv[1:]]
+    return list(argv)
+
+
 def _run_in_terminal(session: dict, command: str, timeout: int = 120) -> dict:
     """Führe einen Befehl im Terminal aus und streame die Ausgabe per SSE."""
     from runtime.memory_policy import require_assistants
@@ -326,8 +429,19 @@ def _run_in_terminal(session: dict, command: str, timeout: int = 120) -> dict:
     })
 
     try:
+        argv = _exec_argv(_command_to_argv(command))
+    except ValueError as exc:
+        msg = f"Invalid command: {exc}\n"
+        session["events"][-1]["output"] = msg
+        session["events"][-1]["exit_code"] = 2
+        session["event_queue"].put({
+            "type": "error", "data": msg, "session_id": session["id"],
+        })
+        return {"output": msg, "exit_code": 2}
+
+    try:
         process = subprocess.Popen(
-            command, shell=True,
+            argv, shell=False,
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             cwd=session["workdir"],
             text=True,
@@ -435,12 +549,23 @@ def _run_in_terminal(session: dict, command: str, timeout: int = 120) -> dict:
 
         return {"output": full_output, "exit_code": exit_code}
 
+    except FileNotFoundError as e:
+        msg = f"Command not found: {argv[0]} ({e.strerror or e})\n"
+        session["events"][-1]["output"] = msg
+        session["events"][-1]["exit_code"] = 127
+        session["event_queue"].put({
+            "type": "error", "data": msg, "session_id": session["id"],
+        })
+        return {"output": msg, "exit_code": 127}
+
     except Exception as e:
         try:
             session["state"] = STATE_ERROR
         except Exception:
             pass
         msg = f"❌ Fehler: {str(e)}"
+        session["events"][-1]["output"] = msg
+        session["events"][-1]["exit_code"] = -1
         session["event_queue"].put({
             "type": "error", "data": msg, "session_id": session["id"],
         })

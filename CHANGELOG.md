@@ -5,6 +5,13 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.60] - 2026-10-25
+
+### Features and fixes
+- Security hardening: the Sidekick webhook gateway now listens only on the local machine by default and refuses to start on a network address without a secret. Dashboard commands now run without a system shell, and system scripts are restricted to a fixed allowlist.
+
+---
+
 ## [0.1.59] - 2026-10-22
 
 ### Features and fixes

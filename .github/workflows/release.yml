@@ -116,12 +116,17 @@ jobs:
       - name: Build desktop application
         run: npm --workspace apps/desktop run build
 
+      - name: Verify staged Local AI engines
+        run: npm --workspace apps/desktop run verify:local-ai
+
       - name: Select bundled local AI signing targets
         id: local-ai-signing
         shell: pwsh
         run: |
-          $files = foreach ($backend in @('cpu', 'vulkan')) {
-            $dir = Join-Path 'apps/desktop/vendor/local-ai' $backend
+          # Engines are staged at apps/desktop/runtime/local-ai/<id> (see store-runtime-registry.json
+          # and package.json extraResources). The obsolete vendor/local-ai/{cpu,vulkan} layout is gone.
+          $files = foreach ($backend in @('b11429-cpu', 'b11429-vulkan')) {
+            $dir = Join-Path 'apps/desktop/runtime/local-ai' $backend
             (Get-Item -LiteralPath (Join-Path $dir 'llama-server.exe') -ErrorAction Stop).FullName
             Get-ChildItem -LiteralPath $dir -File -Filter '*.dll' | ForEach-Object { $_.FullName }
           }
@@ -146,8 +151,8 @@ jobs:
       - name: Verify bundled local AI signatures
         shell: pwsh
         run: |
-          foreach ($backend in @('cpu', 'vulkan')) {
-            $dir = Join-Path 'apps/desktop/vendor/local-ai' $backend
+          foreach ($backend in @('b11429-cpu', 'b11429-vulkan')) {
+            $dir = Join-Path 'apps/desktop/runtime/local-ai' $backend
             $files = @(Get-Item -LiteralPath (Join-Path $dir 'llama-server.exe')) + @(Get-ChildItem -LiteralPath $dir -File -Filter '*.dll')
             foreach ($file in $files) {
               & signtool.exe verify /pa /v $file.FullName

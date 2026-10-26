@@ -3,7 +3,7 @@ export const STARTUP_AUDIO_CLOCK_EVENT = 'lastbrowser:startup-audio-clock';
 export const soundOpeningThemes = {
   'asset:welcome-in': 'welcome-aurora',
   'asset:three-ascending-tones': 'tones-rise',
-  'asset:untitled': 'first-light',
+  'asset:first-light': 'first-light',
   'asset:spring-vibes': 'spring-orbit',
   'asset:unlock-gesture': 'unlock-ripple'
 } as const;

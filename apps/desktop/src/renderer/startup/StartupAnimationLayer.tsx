@@ -3,7 +3,7 @@ import { createStartupAnimation, I18N_TEXTS, TIMING_DATA } from '../../../../../
 import './StartupScreen.css';
 import welcomeTiming from '../../../../../docs/design/startup-animation/timing/welcome-in.json';
 import tonesTiming from '../../../../../docs/design/startup-animation/timing/three-ascending-tones.json';
-import untitledTiming from '../../../../../docs/design/startup-animation/timing/untitled.json';
+import firstLightTiming from '../../../../../docs/design/startup-animation/timing/first-light.json';
 import springTiming from '../../../../../docs/design/startup-animation/timing/spring-vibes.json';
 import unlockTiming from '../../../../../docs/design/startup-animation/timing/unlock-gesture.json';
 import type { StartupPhaseId } from './startup-screen-state.js';
@@ -14,7 +14,7 @@ export const startupAnimationLocales = Object.keys(I18N_TEXTS);
 const clipUrls = {
   'welcome-in': new URL('../../../../../docs/design/startup-animation/audio/welcome-in.mp3', import.meta.url).href,
   'three-ascending-tones': new URL('../../../../../docs/design/startup-animation/audio/three-ascending-tones.mp3', import.meta.url).href,
-  untitled: new URL('../../../../../docs/design/startup-animation/audio/untitled.mp3', import.meta.url).href,
+  'first-light': new URL('../../../../../docs/design/startup-animation/audio/first-light.mp3', import.meta.url).href,
   'spring-vibes': new URL('../../../../../docs/design/startup-animation/audio/spring-vibes.mp3', import.meta.url).href,
   'unlock-gesture': new URL('../../../../../docs/design/startup-animation/audio/unlock-gesture.mp3', import.meta.url).href
 } as const;
@@ -22,7 +22,7 @@ const clipUrls = {
 const measuredTiming = {
   'welcome-in': welcomeTiming,
   'three-ascending-tones': tonesTiming,
-  untitled: untitledTiming,
+  'first-light': firstLightTiming,
   'spring-vibes': springTiming,
   'unlock-gesture': unlockTiming
 } as const;

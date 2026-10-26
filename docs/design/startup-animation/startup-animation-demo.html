@@ -291,7 +291,7 @@
         <select id="ctrl-clip" aria-label="Audio Clip">
           <option value="welcome-in">welcome-in (6014 ms)</option>
           <option value="three-ascending-tones">three-ascending-tones (6494 ms)</option>
-          <option value="untitled">untitled / First Light (6414 ms)</option>
+          <option value="first-light">first-light / First Light (6414 ms)</option>
           <option value="spring-vibes">spring-vibes (5614 ms)</option>
           <option value="unlock-gesture">unlock-gesture (5614 ms)</option>
         </select>
@@ -469,8 +469,8 @@
           -58,-59,-59,-60,-60,-60
         ]
       },
-      'untitled': {
-        id: 'untitled',
+      'first-light': {
+        id: 'first-light',
         theme: 'first-light',
         durationMs: 6414,
         mainPeakMs: 3260,
@@ -777,7 +777,7 @@
       const baseFreqs = {
         'welcome-in': [261.63, 329.63, 392.00, 523.25],
         'three-ascending-tones': [293.66, 369.99, 440.00, 587.33],
-        'untitled': [220.00, 277.18, 329.63, 440.00],
+        'first-light': [220.00, 277.18, 329.63, 440.00],
         'spring-vibes': [329.63, 415.30, 493.88, 659.25],
         'unlock-gesture': [392.00, 493.88, 587.33, 783.99]
       }[timingObj.id] || [261.63, 329.63, 392.00, 523.25];
@@ -1216,7 +1216,7 @@
 
       function renderQuoteStream(timeMs) {
         const quotes = getLocalePack().quotes;
-        const elapsed = Math.max(0, timeMs - (currentTiming.id === 'untitled' ? 400 : 280));
+        const elapsed = Math.max(0, timeMs - (currentTiming.id === 'first-light' ? 400 : 280));
         const cycleMs = 4000;
         const activeQuote = quotes[Math.floor(elapsed / cycleMs) % quotes.length];
         const withinCycleMs = elapsed % cycleMs;
@@ -1367,14 +1367,14 @@
             avatarCtx.restore();
           });
         } else {
-          const matScale = currentTiming.id === 'untitled' ? clamp(0.84 + (timeMs / 3260) * 0.16, 0.84, 1) : clamp((timeMs - 60) / 280, 0, 1);
+          const matScale = currentTiming.id === 'first-light' ? clamp(0.84 + (timeMs / 3260) * 0.16, 0.84, 1) : clamp((timeMs - 60) / 280, 0, 1);
           drawSidekickAvatar(avatarCtx, currentPersona, avatarState, timeMs, energy * 0.65 + peakFlash * 0.6 + keypressPulse, 0.72 + (1 - Math.pow(1 - matScale, 3)) * 0.28, clamp(timeMs / 180, 0, 1) * (1 - dissolveProgress * 0.85));
         }
 
         avatarWrap.style.transform = `translate3d(${(flyX + errorShakeX).toFixed(2)}px, ${flyY.toFixed(2)}px, 0) scale(${flyScale.toFixed(3)})`;
         unlockPill.style.transform = `translate3d(${errorShakeX.toFixed(2)}px, 0, 0) scale(${(1 + keypressPulse * 0.035).toFixed(3)})`;
 
-        const wmP = clamp((timeMs - (currentTiming.id === 'untitled' ? 900 : 360)) / 420, 0, 1);
+        const wmP = clamp((timeMs - (currentTiming.id === 'first-light' ? 900 : 360)) / 420, 0, 1);
         wordmark.style.opacity = String(wmP * (1 - dissolveProgress));
         wordmark.style.letterSpacing = `${lerp(0.52, 0.34, wmP).toFixed(3)}em`;
 

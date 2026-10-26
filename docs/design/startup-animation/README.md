@@ -13,7 +13,7 @@ import React, { useEffect, useRef } from 'react';
 import { createStartupAnimation, TIMING_DATA } from './startup-animation';
 
 export interface StartupScreenProps {
-  clipId?: 'welcome-in' | 'three-ascending-tones' | 'untitled' | 'spring-vibes' | 'unlock-gesture';
+  clipId?: 'welcome-in' | 'three-ascending-tones' | 'first-light' | 'spring-vibes' | 'unlock-gesture';
   soundEnabled?: boolean;
   volume?: number; // Standard: 0.35
   persona?: 'nova' | 'orion' | 'patch' | 'spark' | 'zen' | 'custom';

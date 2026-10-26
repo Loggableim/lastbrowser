@@ -109,7 +109,7 @@ function clock(overrides: Record<string, unknown> = {}) {
 describe('sound-clock opening lifecycle', () => {
   it.each([
     ['asset:welcome-in', 'welcome-aurora'], ['asset:three-ascending-tones', 'tones-rise'],
-    ['asset:untitled', 'first-light'], ['asset:spring-vibes', 'spring-orbit'], ['asset:unlock-gesture', 'unlock-ripple']
+    ['asset:first-light', 'first-light'], ['asset:spring-vibes', 'spring-orbit'], ['asset:unlock-gesture', 'unlock-ripple']
   ])('retains the sound-specific %s opening theme', (sound, theme) => {
     expect(getSoundOpeningTheme(sound)).toBe(theme);
   });

@@ -68,8 +68,8 @@ export const TIMING_DATA = {
       -58,-59,-59,-60,-60,-60
     ]
   },
-  'untitled': {
-    id: 'untitled',
+  'first-light': {
+    id: 'first-light',
     theme: 'first-light',
     durationMs: 6414,
     mainPeakMs: 3260,
@@ -1317,7 +1317,7 @@ export function createStartupAnimation(el, options = {}) {
     const quotes = pack.quotes;
     if (!quotes || !quotes.length) return;
 
-    const streamStartMs = currentTiming.id === 'untitled' ? 400 : 280;
+    const streamStartMs = currentTiming.id === 'first-light' ? 400 : 280;
     const elapsed = Math.max(0, timeMs - streamStartMs);
     const cycleMs = 4000;
     const currentIdx = Math.floor(elapsed / cycleMs) % quotes.length;
@@ -1526,7 +1526,7 @@ export function createStartupAnimation(el, options = {}) {
         avatarCtx.restore();
       });
     } else {
-      const materialScale = currentTiming.id === 'untitled'
+      const materialScale = currentTiming.id === 'first-light'
         ? clamp(0.84 + (timeMs / 3260) * 0.16, 0.84, 1)
         : clamp((timeMs - 60) / 280, 0, 1);
       const matEase = 1 - Math.pow(1 - materialScale, 3);
@@ -1545,7 +1545,7 @@ export function createStartupAnimation(el, options = {}) {
     avatarWrap.style.transform = `translate3d(${(flyX + errorShakeX).toFixed(2)}px, ${flyY.toFixed(2)}px, 0) scale(${flyScale.toFixed(3)})`;
     unlockPill.style.transform = `translate3d(${errorShakeX.toFixed(2)}px, 0, 0) scale(${(1 + keypressPulse * 0.035).toFixed(3)})`;
 
-    const wmStart = currentTiming.id === 'untitled' ? 900 : 360;
+    const wmStart = currentTiming.id === 'first-light' ? 900 : 360;
     const wmP = clamp((timeMs - wmStart) / 420, 0, 1);
     wordmark.style.opacity = String(wmP * (1 - dissolveProgress));
     wordmark.style.transform = `translate3d(0, ${((1 - wmP) * 8).toFixed(2)}px, 0)`;

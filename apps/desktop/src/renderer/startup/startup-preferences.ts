@@ -17,7 +17,7 @@ function validated(value: unknown): StartupPreferences {
   const v = value && typeof value === 'object' ? value as Partial<StartupPreferences> : {};
   return { animation: startupAnimations.some(a => a.id === v.animation) ? v.animation! : 'awakening',
     soundEnabled: v.soundEnabled === true, volume: typeof v.volume === 'number' && Number.isFinite(v.volume) ? Math.min(1, Math.max(0, v.volume)) : 0.35,
-    soundId: typeof v.soundId === 'string' && /^(asset|local):[a-zA-Z0-9_-]{1,100}$/.test(v.soundId) ? v.soundId : 'asset:welcome-in',
+    soundId: typeof v.soundId === 'string' && /^(asset|local):[a-zA-Z0-9_-]{1,100}$/.test(v.soundId) ? (v.soundId === 'asset:untitled' ? 'asset:first-light' : v.soundId) : 'asset:welcome-in',
     randomSound: v.randomSound === true, rainbow: v.rainbow !== false,
     rainbowStyle: startupRainbowStyles.some(style => style === v.rainbowStyle) ? v.rainbowStyle! : 'classic',
     eventFeed: v.eventFeed !== false };
@@ -50,7 +50,7 @@ export type StartupSound = { id: string; label: string; durationMs: number; url?
 export const startupSoundAssets: readonly StartupSound[] = [
   { id: 'asset:welcome-in', label: 'Welcome In', durationMs: 6048, url: new URL('./assets/sounds/welcome-in.mp3', import.meta.url).href },
   { id: 'asset:three-ascending-tones', label: 'Three Ascending Tones', durationMs: 6528, url: new URL('./assets/sounds/three-ascending-tones.mp3', import.meta.url).href },
-  { id: 'asset:untitled', label: 'First Light', durationMs: 6456, url: new URL('./assets/sounds/untitled.mp3', import.meta.url).href },
+  { id: 'asset:first-light', label: 'First Light', durationMs: 6456, url: new URL('./assets/sounds/first-light.mp3', import.meta.url).href },
   { id: 'asset:spring-vibes', label: 'Spring vibes', durationMs: 5640, url: new URL('./assets/sounds/spring-vibes.mp3', import.meta.url).href },
   { id: 'asset:unlock-gesture', label: 'Unlock Gesture', durationMs: 5640, url: new URL('./assets/sounds/unlock-gesture.mp3', import.meta.url).href }
 ];

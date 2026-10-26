@@ -25,9 +25,10 @@
     "smoke:linux:fresh-profile": "node scripts/smoke-linux-fresh-profile.mjs",
     "sync:sidekick": "node -e \"console.log('[sync:sidekick] Sidekick is integrated directly in-tree.')\"",
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
-    "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
-    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
-    "package:linux": "npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/write-linux-checksums.mjs"
+    "package:win": "npm run prepare:python && node scripts/verify-local-ai-staged.mjs && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
+    "package:win:publish": "npm run prepare:python && node scripts/verify-local-ai-staged.mjs && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
+    "package:linux": "npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/write-linux-checksums.mjs",
+    "verify:local-ai": "node scripts/verify-local-ai-staged.mjs"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -89,7 +90,13 @@
       {
         "from": "runtime/local-ai",
         "to": "apps/desktop/runtime/local-ai",
-        "filter": ["**/*", "!**/*.partial", "!**/*.gguf", "!**/*.safetensors", "!**/models/**"]
+        "filter": [
+          "**/*",
+          "!**/*.partial",
+          "!**/*.gguf",
+          "!**/*.safetensors",
+          "!**/models/**"
+        ]
       },
       {
         "from": "../../services",

@@ -140,6 +140,7 @@ import {
   saveProfileTabs,
   saveSessionSnapshot,
   saveSpaceTabs,
+  getSpaceTabCount,
   loadSpaceSnapGroup,
   saveSpaceSnapGroup,
   type PersistedSnapGroup
@@ -7780,6 +7781,13 @@ function BrowserMain({
         onSearchFocusConsumed={onSearchFocusConsumed}
         onSelectSpace={(path) => { activatePane(); onSelectSpace(path); }}
         onAddSpace={(path, name) => { activatePane(); onAddSpace(path, name); }}
+        spaceTabCount={(path) => {
+          const isActiveSpace = path === activeSpacePath || (!activeSpacePath && (!path || path === 'home'));
+          return isActiveSpace
+            ? (tabs ?? []).filter((tab) => !tab.incognito).length
+            : getSpaceTabCount(activeProfileId, path, window.localStorage, knownSpacePaths);
+        }}
+        openTabs={tabs}
         onAskAi={(prompt) => {
           activatePane();
           usePanelStore.getState().setCopilotOpen(true);

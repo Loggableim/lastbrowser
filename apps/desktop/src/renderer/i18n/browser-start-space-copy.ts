@@ -22,6 +22,17 @@ export const browserStartSpaceCopy: Record<DesktopLocaleId, SpaceCopy> = {
   ru:{home:'Пространство по умолчанию',noTabs:'Нет вкладок',session:'Отдельная сессия',tabCount:count=>`${count} ${{one:'вкладка',few:'вкладки',many:'вкладок',other:'вкладки',zero:'вкладок',two:'вкладки'}[new Intl.PluralRules('ru').select(count)]}`,agentsUnavailable:'Активные агенты недоступны',activeAgents:count=>`${count} активных агентов`},
   ja:{home:'既定のスペース',noTabs:'タブなし',session:'個別のセッション',tabCount:count=>`${count} 個のタブ`,agentsUnavailable:'稼働中のエージェント数は取得できません',activeAgents:count=>`稼働中のエージェント ${count} 件`},
 };
+/** Single Home action button: "Sidekick" is the product name and is intentionally not localized. */
+export const browserStartActionCopy: Record<DesktopLocaleId, { openUrl: string }> = {
+  en: { openUrl: 'Open URL' },
+  de: { openUrl: 'URL öffnen' },
+  es: { openUrl: 'Abrir URL' },
+  fr: { openUrl: "Ouvrir l'URL" },
+  it: { openUrl: 'Apri URL' },
+  'pt-BR': { openUrl: 'Abrir URL' },
+  ru: { openUrl: 'Открыть URL' },
+  ja: { openUrl: 'URLを開く' }
+};
 export const browserStartHistoryCopy: Record<DesktopLocaleId, { favorites:string; mostVisited:string; recentSites:string; empty:string; visits:(count:number)=>string }> = {
   en:{favorites:'Favorites',mostVisited:'Most visited',recentSites:'Recent sites',empty:'Most visited sites appear here after you browse a few pages.',visits:count=>`${count} ${count===1?'visit':'visits'}`},
   de:{favorites:'Favoriten',mostVisited:'Meistbesucht',recentSites:'Zuletzt besuchte Seiten',empty:'Nach dem Surfen erscheinen hier die meistbesuchten Seiten.',visits:count=>`${count} ${count===1?'Besuch':'Besuche'}`},

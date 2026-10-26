@@ -8,21 +8,28 @@ export type SidekickReadinessStatus = {
 export type SidekickReadinessOptions = {
   timeoutMs?: number;
   intervalMs?: number;
+  maxIntervalMs?: number;
   retryDelayMs?: number;
   sleep?: (milliseconds: number) => Promise<void>;
 };
 
 const defaultSleep = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
 
-/** Wait until the Sidekick HTTP server has passed its health probe, not just spawned. */
+/**
+ * Wait until the Sidekick HTTP server has passed its health probe, not just spawned.
+ * Polls with exponential backoff (intervalMs, growing by 1.5x up to maxIntervalMs)
+ * so a slow cold start does not spin, while a fast one is noticed within ~150 ms.
+ */
 export async function waitForSidekickWebui(
   getStatus: () => SidekickReadinessStatus | null | undefined,
   options: SidekickReadinessOptions = {}
 ): Promise<string> {
   const timeoutMs = Math.max(0, options.timeoutMs ?? 45_000);
   const intervalMs = Math.max(1, options.intervalMs ?? 150);
+  const maxIntervalMs = Math.max(intervalMs, options.maxIntervalMs ?? 1_500);
   const sleep = options.sleep ?? defaultSleep;
   const deadline = Date.now() + timeoutMs;
+  let delayMs = intervalMs;
   let status = getStatus();
 
   while (true) {
@@ -37,10 +44,14 @@ export async function waitForSidekickWebui(
 
     const remainingMs = deadline - Date.now();
     if (remainingMs <= 0) {
-      throw new Error('Sidekick is still starting and did not become available in time. Try again; if this continues, restart the Sidekick service in Settings.');
+      const lastError = status?.lastError?.trim();
+      throw new Error(lastError
+        ? `Sidekick is still starting and did not become available in time (${lastError}). Try again; if this continues, restart the Sidekick service in Settings.`
+        : 'Sidekick is still starting and did not become available in time. Try again; if this continues, restart the Sidekick service in Settings.');
     }
 
-    await sleep(Math.min(intervalMs, remainingMs));
+    await sleep(Math.min(delayMs, remainingMs));
+    delayMs = Math.min(maxIntervalMs, Math.round(delayMs * 1.5));
     status = getStatus();
   }
 }
@@ -82,4 +93,37 @@ export function isTransientSidekickConnectionError(error: unknown): boolean {
     break;
   }
   return false;
+}
+
+function portFromWebuiUrl(webuiUrl: string): string {
+  try {
+    const url = new URL(webuiUrl);
+    return url.port || (url.protocol === 'https:' ? '443' : '80');
+  } catch {
+    return 'unknown';
+  }
+}
+
+/**
+ * Turn a failed access-auth status request into an actionable startup error.
+ * A backend that fails its /health probe is reported as not responding on its
+ * port (the common hung-process case); a backend that answers /health but not
+ * the auth probe is reported as such.
+ */
+export function describeSidekickAuthStatusFailure(input: {
+  webuiUrl: string;
+  health: { ok: boolean; error?: string };
+  requestError: unknown;
+}): Error {
+  const port = portFromWebuiUrl(input.webuiUrl);
+  const detail = input.requestError instanceof Error ? input.requestError.message : String(input.requestError);
+  if (!input.health.ok) {
+    return new Error(
+      `Sidekick backend is not responding on port ${port} (health probe: ${input.health.error || 'no response'}). `
+      + 'A previous Sidekick process may be hung; it is being restarted automatically. Click Retry in a few seconds.'
+    );
+  }
+  return new Error(
+    `Sidekick backend on port ${port} answers its health probe but did not answer the access-auth check: ${detail}`
+  );
 }

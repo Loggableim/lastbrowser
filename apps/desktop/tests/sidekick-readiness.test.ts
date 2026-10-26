@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isTransientSidekickConnectionError, waitForSidekickWebui, withSidekickWebuiReady } from '../src/main/sidekick-readiness.js';
+import {
+  describeSidekickAuthStatusFailure,
+  isTransientSidekickConnectionError,
+  waitForSidekickWebui,
+  withSidekickWebuiReady
+} from '../src/main/sidekick-readiness.js';
 
 describe('Sidekick WebUI readiness', () => {
   it('waits for HTTP health after the child process has spawned', async () => {
@@ -29,6 +34,49 @@ describe('Sidekick WebUI readiness', () => {
       webuiHealth: 'checking',
       webuiUrl: 'http://127.0.0.1:8787'
     }), { timeoutMs: 0 })).rejects.toThrow('did not become available in time');
+  });
+
+  it('backs off between readiness polls instead of polling at a fixed rate', async () => {
+    const statuses = [
+      { sidekick: 'ready', webuiHealth: 'checking', webuiUrl: 'http://127.0.0.1:8787' },
+      { sidekick: 'ready', webuiHealth: 'checking', webuiUrl: 'http://127.0.0.1:8787' },
+      { sidekick: 'ready', webuiHealth: 'checking', webuiUrl: 'http://127.0.0.1:8787' },
+      { sidekick: 'ready', webuiHealth: 'ready', webuiUrl: 'http://127.0.0.1:8787' }
+    ];
+    const getStatus = vi.fn(() => statuses.shift());
+    const sleep = vi.fn(async () => undefined);
+
+    await waitForSidekickWebui(getStatus, { sleep, intervalMs: 100, maxIntervalMs: 300 });
+    expect(sleep.mock.calls.map((call) => call[0])).toEqual([100, 150, 225]);
+  });
+
+  it('includes the last health error when readiness times out', async () => {
+    await expect(waitForSidekickWebui(() => ({
+      sidekick: 'ready',
+      webuiHealth: 'checking',
+      webuiUrl: 'http://127.0.0.1:8787',
+      lastError: 'Local service request timed out.'
+    }), { timeoutMs: 0 })).rejects.toThrow('Local service request timed out.');
+  });
+
+  it('names the port when the backend does not answer its health probe', () => {
+    const error = describeSidekickAuthStatusFailure({
+      webuiUrl: 'http://127.0.0.1:8788',
+      health: { ok: false, error: 'Local service request timed out.' },
+      requestError: new Error('Sidekick API request timed out after 30000 ms.')
+    });
+    expect(error.message).toContain('Sidekick backend is not responding on port 8788');
+    expect(error.message).toContain('Local service request timed out.');
+  });
+
+  it('keeps the request error when the backend answers health', () => {
+    const error = describeSidekickAuthStatusFailure({
+      webuiUrl: 'http://127.0.0.1:8787',
+      health: { ok: true },
+      requestError: new Error('Sidekick API request timed out after 30000 ms.')
+    });
+    expect(error.message).toContain('answers its health probe');
+    expect(error.message).toContain('Sidekick API request timed out after 30000 ms.');
   });
 
   it('recognizes nested transient connection errors without retrying API responses', () => {

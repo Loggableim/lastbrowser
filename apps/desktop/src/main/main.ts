@@ -17,7 +17,7 @@ import { isCdpEnabled, resolveCdpPort, setPersistedCdpEnabled } from './cdp.js';
 import { loadCdpPreference, saveCdpPreference } from './cdp-settings.js';
 import { moduleDirname } from './module-path.js';
 import { isAccessAuthPreflightCurrent, readAccessAuthStartupPolicy, type AccessAuthPreflightContext } from './access-auth-preflight.js';
-import { SidecarServices, appResourcesDir, getSidecarStateDirectory, resolveServiceLayout } from './services.js';
+import { SidecarServices, appResourcesDir, checkWebuiHealth, getSidecarStateDirectory, resolveServiceLayout } from './services.js';
 import { getStartupLaunchIcon } from './startup-launch-state.js';
 import { loadSetupState, saveSetupState } from './setup-store.js';
 import {
@@ -212,7 +212,7 @@ import { isReservedAgentPartition } from './agent-execution-partition.js';
 import { capturePageDataUrl, normalizeCapturePageRect } from './capture-page.js';
 import { createOpenUrlLifecycle } from './open-url-lifecycle.js';
 import { registerDefaultSidekickMigrationIpc } from './sidekick-migration.js';
-import { withSidekickWebuiReady } from './sidekick-readiness.js';
+import { describeSidekickAuthStatusFailure, withSidekickWebuiReady } from './sidekick-readiness.js';
 import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTerminalIds, closeAllTerminals } from './terminal-process.js';
 import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
@@ -1087,7 +1087,7 @@ function registerIpc(): void {
       scopeId: accessAuthPreflightScopeId
     };
   });
-  ipcMain.handle('lastbrowser:sidekick:getAccessAuthStatus', () => getAccessAuthStatus(requireWebuiUrl()));
+  ipcMain.handle('lastbrowser:sidekick:getAccessAuthStatus', () => getStartupAccessAuthStatus());
   ipcMain.handle('lastbrowser:sidekick:loginAccessPassword', (_event, request) => loginAccessPassword(requireWebuiUrl(), String(request?.password || '')));
   ipcMain.handle('lastbrowser:sidekick:lockAccessWindows', () => {
     broadcastAccessAuthLocked();
@@ -1589,6 +1589,26 @@ function requireWebuiUrl(): string {
   const status = services?.getStatus();
   if (!status?.webuiUrl) throw new Error('Sidekick service is not ready yet.');
   return status.webuiUrl;
+}
+
+/**
+ * Access-auth status for the startup gate. When the request fails, probe
+ * /health so the error names the real cause: a backend that does not answer
+ * health is reported as "not responding on port N" and restarted in the
+ * background (cooldown-guarded); a backend that answers health keeps its
+ * request error.
+ */
+async function getStartupAccessAuthStatus(): Promise<{ auth_enabled: boolean; logged_in: boolean }> {
+  const webuiUrl = requireWebuiUrl();
+  try {
+    return await getAccessAuthStatus(webuiUrl);
+  } catch (requestError) {
+    const health = await checkWebuiHealth(webuiUrl, fetch, 2_000);
+    if (!health.ok) {
+      void services?.restartIfUnresponsive().catch(() => false);
+    }
+    throw describeSidekickAuthStatusFailure({ webuiUrl, health, requestError });
+  }
 }
 
 /**

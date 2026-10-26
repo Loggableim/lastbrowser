@@ -9,7 +9,10 @@ import {
   DEFAULT_SPEED_DIAL_ITEMS,
   startPageSpaceWorkspacePath,
   currentActiveAgentCount,
-  liveSpaceAgentCount
+  liveSpaceAgentCount,
+  isDemoOrTestSpaceName,
+  startPageActionMode,
+  startPageLooksLikeUrl
 } from '../src/renderer/panels/NativeBrowserStartPage.js';
 import { browserStartSpaceCopy,browserStartHistoryCopy } from '../src/renderer/i18n/browser-start-space-copy.js';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
@@ -145,5 +148,42 @@ describe('startpage atmospheric dashboard helpers', () => {
     expect(cardTextRule).toContain('display: flex');
     expect(cardTextRule).toContain('flex-direction: column');
     expect(cardTextRule).toContain('gap: 3px');
+  });
+
+  it('uses one action button that opens addresses and sends plain text to Sidekick only when reachable', () => {
+    expect(startPageLooksLikeUrl('https://example.com/a')).toBe(true);
+    expect(startPageLooksLikeUrl('example.org')).toBe(true);
+    expect(startPageLooksLikeUrl('best laptops 2026')).toBe(false);
+    expect(startPageActionMode('example.org', true)).toBe('open');
+    expect(startPageActionMode('summarize my tabs', true)).toBe('ask');
+    expect(startPageActionMode('summarize my tabs', false)).toBe('open');
+    expect(startPageActionMode('', true)).toBe('open');
+  });
+
+  it('hides test and garbage Space names from Home without touching real names', () => {
+    expect(isDemoOrTestSpaceName('webui-mvp-test')).toBe(true);
+    expect(isDemoOrTestSpaceName('Test')).toBe(true);
+    expect(isDemoOrTestSpaceName('tmp_scratch')).toBe(true);
+    expect(isDemoOrTestSpaceName('---')).toBe(true);
+    expect(isDemoOrTestSpaceName('Forschung')).toBe(false);
+    expect(isDemoOrTestSpaceName('調査')).toBe(false);
+    expect(isDemoOrTestSpaceName('Home')).toBe(false);
+  });
+
+  it('keeps Home type sizes and card surfaces within the agreed dashboard contract', () => {
+    const css = fs.readFileSync(path.resolve(__dirname, '../src/renderer/panels/workplace.css'), 'utf8');
+    const smallFonts = [...css.matchAll(/font-size:\s*(\d+)px/g)].map(match => Number(match[1])).filter(size => size < 12);
+    expect(smallFonts).toEqual([]);
+    expect(css).toContain('font-size: 14px');
+    expect(css).toContain('.workplace-page .workplace-tile h2, .workplace-page .speed-dial-head-title h2 { display: flex; align-items: center; gap: 7px; font-size: 16px;');
+    expect(css).toContain('justify-content: safe center');
+    expect(css).toContain('backdrop-filter: blur(16px)');
+    expect(css).toContain('--wp-muted: #c4cee0');
+    expect(css).not.toContain('Nova');
+    const startupCss = fs.readFileSync(path.resolve(__dirname, '../src/renderer/startup/StartupScreen.css'), 'utf8');
+    const pillRule = startupCss.match(/\.startup-background-status\s*\{([^}]*)\}/)?.[1] || '';
+    expect(pillRule).toContain('bottom: 12px');
+    expect(pillRule).toContain('right: 12px');
+    expect(pillRule).not.toContain('top: 12px');
   });
 });

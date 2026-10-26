@@ -23,10 +23,11 @@ import { brandAssets } from '../brand.js';
 import type { BrowserBookmark } from '../bookmarks.js';
 import type { BrowserVisit } from '../history.js';
 import { normalizeNavigationInput } from '../tabs.js';
+import type { BrowserTab } from '../tabs.js';
 import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
-import { browserStartSpaceCopy, browserStartHistoryCopy, browserStartWallpaperCopy } from '../i18n/browser-start-space-copy.js';
+import { browserStartSpaceCopy, browserStartHistoryCopy, browserStartWallpaperCopy, browserStartActionCopy } from '../i18n/browser-start-space-copy.js';
 import { DEFAULT_WALLPAPER_PREFERENCE, START_PAGE_WALLPAPERS, parseStartPageWallpaperPreference,
   startPageWallpaperStorageKey, type StartPageWallpaperPreference } from './startpage-wallpaper.js';
 import type { IndependentScope, GlobalActivitySpace } from '../independent-contracts.js';
@@ -129,6 +130,10 @@ export interface NativeBrowserStartPageProps {
   activityController?: IndependentAssistantController;
   onSelectSpace?: (spacePath: string) => void;
   onAddSpace?: (path: string, name: string) => void;
+  /** Tab count for a Space tile; undefined hides the count. */
+  spaceTabCount?: (spacePath: string) => number | undefined;
+  /** Open tabs used to reuse a site's own favicon for bookmarks (local data only). */
+  openTabs?: Pick<BrowserTab, 'url' | 'favicon'>[];
   focusSearchOnMount?: boolean;
   onSearchFocusConsumed?: () => void;
 }
@@ -147,6 +152,37 @@ export function liveSpaceAgentCount(space: GlobalActivitySpace, now = Date.now()
   const runSessions = new Set(runs.map(run => run.targetSessionId).filter(Boolean));
   return runs.length + activity.activeChats.filter(chat => !runSessions.has(chat.sessionId)).length;
 }
+const demoOrTestSpaceTokens = new Set(['test', 'tests', 'tmp', 'temp', 'dummy', 'sample', 'lorem', 'asdf', 'xxx', 'foo', 'bar', 'qa', 'e2e', 'scratch', 'untitled', 'undefined', 'null']);
+/** Test, placeholder and garbage Space names must not appear on Home (screenshots, demos). */
+export function isDemoOrTestSpaceName(name: string): boolean {
+  const tokens = name.toLowerCase().split(/[^\p{Letter}\p{Number}]+/u).filter(Boolean);
+  return tokens.length === 0 || tokens.some(token => demoOrTestSpaceTokens.has(token));
+}
+/** Same URL shapes that normalizeNavigationInput treats as addresses rather than search text. */
+export function startPageLooksLikeUrl(raw: string): boolean {
+  const value = raw.trim();
+  return /^[a-z][a-z0-9+.-]*:\/\//i.test(value) || value.startsWith('about:') || /^[\w.-]+\.[a-z]{2,}([/:?#].*)?$/i.test(value);
+}
+/** One action button: plain text goes to Sidekick when it is reachable, addresses always open. */
+export function startPageActionMode(query: string, canAskAi: boolean): 'open' | 'ask' {
+  const value = query.trim();
+  return canAskAi && value && !startPageLooksLikeUrl(value) ? 'ask' : 'open';
+}
+function faviconHostKey(url: string): string {
+  try { return new URL(url).host.replace(/^www\./, ''); } catch { return ''; }
+}
+/** Site icon from an already open tab; a letter badge keeps rows aligned when none is known. */
+function StartPageFavicon({ url, src }: { url: string; src?: string }): JSX.Element {
+  const [failed, setFailed] = useState(false);
+  const letter = (faviconHostKey(url)[0] || '?').toUpperCase();
+  return (
+    <span className="browser-start-favicon" aria-hidden="true">
+      <span className="browser-start-favicon-fallback">{letter}</span>
+      {src && !failed && <img src={src} alt="" width={16} height={16} loading="lazy" onError={() => setFailed(true)} />}
+    </span>
+  );
+}
+
 /** Keep Unicode names distinct while excluding path separators and controls. */
 export function startPageSpaceWorkspacePath(name:string):string {
   const slug=name.normalize('NFKC').trim().toLowerCase().replace(/[^\p{Letter}\p{Number}_-]+/gu,'-').replace(/-+/g,'-').replace(/^-+|-+$/g,'');
@@ -161,7 +197,6 @@ export function NativeBrowserStartPage({
   aiConnected = false,
   onOpenModelSettings,
   onOpenCommandPalette,
-  botName = 'Nova',
   spaces = [],
   activeSpacePath = '',
   activeProfileId = 'default',
@@ -169,6 +204,8 @@ export function NativeBrowserStartPage({
   activityController,
   onSelectSpace,
   onAddSpace,
+  spaceTabCount,
+  openTabs = [],
   focusSearchOnMount = false,
   onSearchFocusConsumed
 }: NativeBrowserStartPageProps): JSX.Element {
@@ -331,7 +368,6 @@ export function NativeBrowserStartPage({
     return () => window.cancelAnimationFrame(frame);
   }, [focusSearchOnMount, onSearchFocusConsumed]);
 
-  const effectiveBotName = botName.trim() || 'Nova';
   const greeting = useMemo(() => getDashboardGreeting(currentTime), [currentTime]);
   const timeString = useMemo(() => formatDashboardTime(currentTime), [currentTime]);
   const dateLocale = locale === 'en' ? 'en-US' : locale === 'pt-BR' ? 'pt-BR' : `${locale}-${({ de: 'DE', es: 'ES', fr: 'FR', it: 'IT', ru: 'RU', ja: 'JP' } as const)[locale]}`;
@@ -340,20 +376,37 @@ export function NativeBrowserStartPage({
   const favorites = useMemo(() => bookmarks.slice(0, 8), [bookmarks]);
   const mostVisited = useMemo(() => visits.slice(0, 8), [visits]);
 
+  const canAskAi = aiConnected && Boolean(onAskAi);
+  const actionMode = startPageActionMode(query, canAskAi);
+
   function submit(event: FormEvent): void {
     event.preventDefault();
     const value = query.trim();
     if (!value) return;
+    if (actionMode === 'ask' && onAskAi) {
+      onAskAi(value);
+      return;
+    }
     onNavigate(normalizeNavigationInput(value));
   }
 
-  function handleAskAi(): void {
-    const value = query.trim();
-    if (!value) return;
-    if (aiConnected && onAskAi) {
-      onAskAi(value);
+  const activeHeadingSpace = displayedSpaces.find(isSpaceActive) || displayedSpaces[0];
+  const headingSpaceName = activeHeadingSpace && !isDemoOrTestSpaceName(spaceDisplayName(activeHeadingSpace))
+    ? spaceDisplayName(activeHeadingSpace) : spaceCopy.home;
+  const visibleSpaces = useMemo(
+    () => displayedSpaces.filter(space => isSpaceActive(space) || !isDemoOrTestSpaceName(spaceDisplayName(space))),
+    [displayedSpaces, activeSpacePath]
+  );
+  const hasLiveAgentCounts = displayedSpaces.some(space => currentActiveAgentCount(activeAgentCounts?.[space.path]) !== null);
+  const openTabFavicons = useMemo(() => {
+    const byHost = new Map<string, string>();
+    for (const tab of openTabs) {
+      const host = faviconHostKey(tab.url);
+      if (host && tab.favicon && !byHost.has(host)) byHost.set(host, tab.favicon);
     }
-  }
+    return byHost;
+  }, [openTabs]);
+  const faviconFor = (url: string): string | undefined => openTabFavicons.get(faviconHostKey(url));
 
   function handleQuickAction(action: DashboardQuickAction): void {
     if (action.id === 'palette') {
@@ -382,7 +435,7 @@ export function NativeBrowserStartPage({
       '--launchpad-light-dim': Math.min(.95, .4 + wallpaperPreference.dim / 100 * .6)
     } as React.CSSProperties}>
       <header className="workplace-header">
-        <div className="workplace-heading"><img src={brandAssets.logo} alt="" /><div><h1>{spaceDisplayName(displayedSpaces.find(isSpaceActive) || displayedSpaces[0])}</h1><p>{t(greeting.greetingKey)} · {german ? 'Dein Arbeitsplatz' : 'Your workspace'}</p></div></div>
+        <div className="workplace-heading"><img src={brandAssets.logo} alt="" /><div><h1>{headingSpaceName}</h1><p>{t(greeting.greetingKey)} · {german ? 'Dein Arbeitsplatz' : 'Your workspace'}</p></div></div>
         <div className="workplace-header-actions"><time title={dateString}>{timeString}<small>{dateString}</small></time>
           <div className="startpage-wallpaper-toolbar" role="group" aria-label={wallpaperCopy.settings}>
             <button type="button" onClick={() => stepWallpaper(-1)} aria-label={wallpaperCopy.previous} title={wallpaperCopy.previous}><ChevronLeft size={15} /></button>
@@ -417,6 +470,7 @@ export function NativeBrowserStartPage({
               <ShieldCheck size={13} />
               <span>{t('browser.startPage.separateLogins')}</span>
             </span>
+            {!hasLiveAgentCounts && <span className="startpage-agents-hint" data-testid="space-agents-hint">{spaceCopy.agentsUnavailable}</span>}
             <button
               type="button"
               className="startpage-add-space-btn"
@@ -430,10 +484,10 @@ export function NativeBrowserStartPage({
         </div>
 
         <div className="startpage-spaces-grid">
-          {displayedSpaces.map((space) => {
+          {visibleSpaces.map((space) => {
             const isActive = isSpaceActive(space);
             const name = spaceDisplayName(space);
-            const agentCount = currentActiveAgentCount(activeAgentCounts?.[space.path]);
+            const tabCount = spaceTabCount?.(space.path);
 
             return (
               <div
@@ -452,9 +506,7 @@ export function NativeBrowserStartPage({
               >
                 <div className="startpage-space-card-body">
                   <h3 className="startpage-space-name">{name}</h3>
-                  <span className="startpage-space-agents" data-testid="space-agent-count">
-                    {agentCount === null ? spaceCopy.agentsUnavailable : spaceCopy.activeAgents(agentCount)}
-                  </span>
+                  {tabCount !== undefined && <span className="startpage-space-tabs" data-testid="space-tab-count">{spaceCopy.tabCount(tabCount)}</span>}
                 </div>
               </div>
             );
@@ -532,25 +584,21 @@ export function NativeBrowserStartPage({
         <input
           ref={searchInputRef}
           value={query}
-          placeholder={aiConnected ? t('browser.startPage.searchPlaceholder', { botName: effectiveBotName }) : t('browser.chrome.searchPlaceholder')}
+          placeholder={aiConnected ? t('browser.startPage.searchPlaceholder', { botName: 'Sidekick' }) : t('browser.chrome.searchPlaceholder')}
           onChange={(event) => setQuery(event.target.value)}
           aria-label={t('browser.chrome.searchPlaceholder')}
           data-testid="dashboard-search-input"
         />
         <div className="startpage-search-actions">
           <button
-            type="button"
-            className="secondary-action compact startpage-ask-ai-btn"
-            disabled={!query.trim() || !aiConnected}
-            onClick={handleAskAi}
-            title={t('browser.startPage.askNovaTitle')}
+            type="submit"
+            className={`primary-action compact startpage-action-btn is-${actionMode}`}
+            data-action={actionMode}
+            disabled={!query.trim()}
+            title={actionMode === 'ask' ? 'Sidekick' : browserStartActionCopy[locale].openUrl}
           >
-            <Bot size={15} />
-            <span>{t('browser.startPage.askNova', { botName: effectiveBotName })}</span>
-          </button>
-          <button type="submit" className="primary-action compact" disabled={!query.trim()}>
-            <Globe2 size={15} />
-            <span>{t('browser.startPage.open')}</span>
+            {actionMode === 'ask' ? <Bot size={15} /> : <Globe2 size={15} />}
+            <span>{actionMode === 'ask' ? 'Sidekick' : browserStartActionCopy[locale].openUrl}</span>
           </button>
         </div>
       </form>
@@ -625,12 +673,12 @@ export function NativeBrowserStartPage({
               <button
                 key={bookmark.id}
                 type="button"
-                className="browser-start-item"
+                className="browser-start-item browser-start-bookmark"
                 onClick={() => onNavigate(bookmark.url)}
                 title={bookmark.url}
               >
+                <StartPageFavicon url={bookmark.url} src={faviconFor(bookmark.url)} />
                 <strong>{bookmark.title}</strong>
-                <span>{bookmark.url}</span>
                 <ExternalLink size={14} />
               </button>
             )) : (

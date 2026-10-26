@@ -35,7 +35,7 @@
 .luminous-launchpad .speed-dial-tile {
   border: 1px solid rgba(255, 255, 255, .14);
   border-radius: 8px;
-  background: rgba(22, 27, 43, .64);
+  background: rgba(22, 27, 43, .86);
   box-shadow: 0 12px 36px rgba(0, 0, 0, .18);
   backdrop-filter: blur(18px);
 }
@@ -139,7 +139,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 8px;
-  color: var(--lb-muted);
+  color: #c4cee0;
   font-size: 12px;
 }
 .luminous-launchpad .startpage-ai-unavailable button {
@@ -150,6 +150,8 @@
   cursor: pointer;
   text-decoration: underline;
 }
+.luminous-launchpad .startpage-quick-chips .quick-chips-label { color: #c4cee0; }
+.luminous-launchpad .startpage-chip-btn { color: #e6ecf7; }
 .luminous-launchpad .startpage-chip-btn,
 .luminous-launchpad .startpage-palette-trigger,
 .luminous-launchpad .startpage-add-space-btn { border-radius: 8px; }
@@ -161,7 +163,8 @@
 .luminous-launchpad .startpage-space-card.is-active { border-color: var(--lb-accent); }
 .luminous-launchpad .startpage-space-card-body { gap: 10px; }
 .luminous-launchpad .startpage-space-name { font-size: 16px; }
-.luminous-launchpad .startpage-space-agents { color: var(--lb-muted); font-size: 12px; }
+.luminous-launchpad .startpage-space-tabs { color: #c4cee0; font-size: 12px; }
+.luminous-launchpad .startpage-agents-hint { color: #c4cee0; font-size: 12px; }
 .luminous-launchpad .speed-dial-grid { grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); }
 .luminous-launchpad .speed-dial-tile { min-height: 106px; }
 .luminous-launchpad .speed-dial-tile-icon {
@@ -184,9 +187,11 @@ html.theme-light .luminous-launchpad .browser-start-card,
 html.theme-light .luminous-launchpad .startpage-space-card,
 html.theme-light .luminous-launchpad .speed-dial-tile {
   color: #172034;
-  background: rgba(255, 255, 255, .77);
+  background: rgba(255, 255, 255, .88);
   border-color: rgba(30, 48, 83, .16);
 }
+html.theme-light .luminous-launchpad .startpage-space-tabs,
+html.theme-light .luminous-launchpad .startpage-agents-hint { color: #3d4a63; }
 html.theme-light .luminous-launchpad .startpage-clock { color: #172034; }
 
 @media (max-width: 760px) {

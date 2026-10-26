@@ -9,6 +9,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Features and fixes
 - Security hardening: the Sidekick webhook gateway now listens only on the local machine by default and refuses to start on a network address without a secret. Dashboard commands now run without a system shell, and system scripts are restricted to a fixed allowlist.
+- Fix a startup hang where the desktop could get stuck on "Startup could not be completed / Sidekick API request timed out after 30000 ms": the Electron startup gate's auth-status probe (`GET /api/auth/status`) is now answered by a dedicated native route that bypasses the legacy in-process request bridge, so a single stalled first request (provider/OAuth resolution, model-wall scan, free-chat prewarm, a hung worker, …) can no longer starve the bounded bridge pool and time out the startup check.
 
 ---
 

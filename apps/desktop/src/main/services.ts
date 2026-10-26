@@ -7,6 +7,7 @@ import path from 'node:path';
 import { app } from 'electron';
 import { formatCdpUrl, isCdpEnabled, resolveCdpPort } from './cdp.js';
 import { withAbortTimeout } from './bounded-request.js';
+import { recoverHungSidekickPort, systemPortRecoveryDeps, type PortRecoveryOutcome } from './sidekick-port-recovery.js';
 
 export type ServiceLayout = {
   resourcesDir: string;
@@ -35,6 +36,10 @@ export type ServiceStatus = {
 
 export type PortResolver = (preferredPort: number) => Promise<number>;
 export type WebuiHealthChecker = (webuiUrl: string) => Promise<{ ok: boolean; error?: string }>;
+export type HungPortRecoverer = (preferredPort: number) => Promise<PortRecoveryOutcome>;
+
+/** Minimum gap between forced restarts of an unresponsive backend. */
+const FORCED_RESTART_COOLDOWN_MS = 30_000;
 
 /** The state directory injected into the Sidekick process for auth/settings. */
 export function getSidecarStateDirectory(layout: ServiceLayout): string {
@@ -242,7 +247,10 @@ export async function checkWebuiHealth(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const result = await withAbortTimeout(async (signal) => {
-      const response = await fetchImpl(new URL('/api/onboarding/status', webuiUrl), { signal });
+      // /health is public and does no provider, credential, or catalog work, so
+      // it answers while the onboarding status route may still be waiting on
+      // an OAuth refresh or model catalog lock.
+      const response = await fetchImpl(new URL('/health', webuiUrl), { signal });
       // 401/403 still prove the server is up and routing — the newer FastAPI
       // WebUI protects this endpoint with auth, so treating those as failure
       // would leave the sidecar permanently "unreachable".
@@ -449,6 +457,7 @@ export class SidecarServices {
   private isStopping = false;
   private announcedRuntimeGeneration: string | null = null;
   private runtimeReadyListener: ((generation: string) => void) | null = null;
+  private lastForcedRestartAt = 0;
 
   onRuntimeReady(listener: (generation: string) => void): void {
     this.runtimeReadyListener = listener;
@@ -459,7 +468,12 @@ export class SidecarServices {
     private readonly preferredWebuiPort = 8787,
     private readonly spawnImpl = spawn,
     private readonly portResolver: PortResolver = findAvailablePort,
-    private readonly healthChecker: WebuiHealthChecker = checkWebuiHealth
+    private readonly healthChecker: WebuiHealthChecker = checkWebuiHealth,
+    private readonly recoverPort: HungPortRecoverer = (port) => recoverHungSidekickPort(port, systemPortRecoveryDeps(process.platform, {
+      isPortAvailable,
+      checkHealth: (url) => checkWebuiHealth(url),
+      log: (message) => console.warn(message)
+    }))
   ) {
     this.status = {
       sidekick: 'stopped',
@@ -677,6 +691,16 @@ export class SidecarServices {
       return this.getStatus();
     }
 
+    // A backend from an earlier session may still hold the preferred port while
+    // no longer answering HTTP. Kill that Sidekick process (only when its command
+    // line proves it is ours) so this start reuses the port instead of drifting
+    // to the next free one and leaving the hung process behind.
+    try {
+      await this.recoverPort(this.preferredWebuiPort);
+    } catch {
+      // Recovery is best-effort; port selection below still works.
+    }
+
     let webuiPort: number;
     try {
       webuiPort = await this.portResolver(this.preferredWebuiPort);
@@ -728,11 +752,17 @@ export class SidecarServices {
       return this.getStatus();
     }
 
-    this.webuiProcess.once('spawn', () => {
+    // Events from a child that was already replaced (for example by a forced
+    // restart) must not clear the state of the current child.
+    const child = this.webuiProcess;
+    const isCurrentChild = () => this.webuiProcess === child;
+    child.once('spawn', () => {
+      if (!isCurrentChild()) return;
       this.status = { ...this.status, sidekick: 'ready', webuiHealth: 'checking', lastError: null };
       this.startHealthLoop();
     });
-    this.webuiProcess.once('error', (error) => {
+    child.once('error', (error) => {
+      if (!isCurrentChild()) return;
       this.stopHealthLoop();
       this.status = {
         ...this.status,
@@ -743,7 +773,8 @@ export class SidecarServices {
       };
       this.webuiProcess = null;
     });
-    this.webuiProcess.once('exit', (code, signal) => {
+    child.once('exit', (code, signal) => {
+      if (!isCurrentChild()) return;
       this.stopHealthLoop();
       this.webuiProcess = null;
       const wasRunning = this.status.sidekick === 'ready' && !this.isStopping;
@@ -809,6 +840,23 @@ export class SidecarServices {
       webuiHealth: this.status.webuiHealth === 'ready' ? 'ready' : 'checking',
       lastError: result.error || 'Waiting for Sidekick WebUI.'
     };
+  }
+
+  /**
+   * Restart the backend when it owns our port but no longer answers /health.
+   * Guarded by a cooldown so a failing probe cannot restart-loop.
+   */
+  async restartIfUnresponsive(): Promise<boolean> {
+    const webuiUrl = this.status.webuiUrl;
+    if (!webuiUrl || this.isStopping || this.startPromise) return false;
+    if (Date.now() - this.lastForcedRestartAt < FORCED_RESTART_COOLDOWN_MS) return false;
+    const health = await this.healthChecker(webuiUrl);
+    if (health.ok) return false;
+    this.lastForcedRestartAt = Date.now();
+    console.warn(`[lastbrowser] Sidekick backend at ${webuiUrl} is not responding (${health.error || 'no response'}); restarting it.`);
+    this.stop();
+    await this.start();
+    return true;
   }
 
   stop(): void {

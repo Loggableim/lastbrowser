@@ -10,6 +10,8 @@ Usage:
 """
 
 import asyncio
+import concurrent.futures
+import contextvars
 import hashlib
 import hmac
 import importlib.util
@@ -1298,6 +1300,143 @@ async def health():
         # callers treat a missing counter as "unknown" and fall back.
         pass
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Bounded readiness probes.
+#
+# The desktop startup gate and the onboarding status route both need an answer
+# within a fixed budget, even when the work behind them is stuck. Their work
+# (auth-store file locks held across OAuth refresh, provider/model catalog
+# discovery, bedrock/IMDS lookups) can block for minutes. Such work runs in a
+# small dedicated pool, never on the ASGI loop and never on the shared default
+# executor. Each probe kind has its own lane so a stuck onboarding status cannot
+# starve the auth status probe, and each lane caps its in-flight calls so repeated
+# polls cannot pile up unbounded threads. A call that exceeds its deadline returns
+# a fast, explicit 503 while the stuck worker keeps running until it finishes.
+# ---------------------------------------------------------------------------
+class ProbeBusyError(RuntimeError):
+    """Raised when every worker of a probe lane is still busy with earlier stuck calls."""
+
+
+class _ProbeLane:
+    def __init__(self, name: str, max_inflight: int) -> None:
+        self.name = name
+        self.max_inflight = max_inflight
+        self._lock = threading.Lock()
+        self._inflight = 0
+        self._executor: "concurrent.futures.ThreadPoolExecutor | None" = None
+
+    def _get_executor(self) -> "concurrent.futures.ThreadPoolExecutor":
+        with self._lock:
+            if self._executor is None:
+                self._executor = concurrent.futures.ThreadPoolExecutor(
+                    max_workers=self.max_inflight,
+                    thread_name_prefix=f"probe-{self.name}",
+                )
+            return self._executor
+
+    async def run(self, fn: Callable[[], Any], *, timeout: float) -> Any:
+        with self._lock:
+            if self._inflight >= self.max_inflight:
+                raise ProbeBusyError(f"{self.name} probe workers are busy")
+            self._inflight += 1
+        ctx = contextvars.copy_context()
+
+        def _run() -> Any:
+            try:
+                return ctx.run(fn)
+            finally:
+                with self._lock:
+                    self._inflight -= 1
+
+        loop = asyncio.get_running_loop()
+        try:
+            future = loop.run_in_executor(self._get_executor(), _run)
+        except BaseException:
+            with self._lock:
+                self._inflight -= 1
+            raise
+        return await asyncio.wait_for(future, timeout=timeout)
+
+
+_AUTH_PROBE_LANE = _ProbeLane("auth-status", max_inflight=2)
+_ONBOARDING_PROBE_LANE = _ProbeLane("onboarding-status", max_inflight=2)
+
+
+def _probe_timeout_seconds(env_name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(env_name, "") or default)
+    except ValueError:
+        value = default
+    return min(max(value, 1.0), 120.0)
+
+
+def _probe_unavailable_response(route: str, retry_after: str = "2") -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": f"{route}_unavailable",
+            "message": (
+                "Sidekick is still initializing this status check (a provider "
+                "credential or model catalog refresh is in progress). Retry shortly."
+            ),
+        },
+        headers={"Retry-After": retry_after},
+    )
+
+
+def _auth_status_payload(cookie_value: str | None) -> dict:
+    """Blocking part of the auth probe; runs in the probe pool, not on the loop."""
+    from web.api.auth import is_auth_enabled, verify_session
+
+    try:
+        auth_enabled = bool(is_auth_enabled())
+    except Exception:
+        # Fail closed: when auth state cannot be read, present the login gate
+        # rather than silently granting access.
+        _log.debug("auth_status_fastpath: is_auth_enabled failed", exc_info=True)
+        auth_enabled = True
+
+    logged_in = False
+    if auth_enabled:
+        try:
+            logged_in = bool(cookie_value and verify_session(cookie_value))
+        except Exception:
+            _log.debug("auth_status_fastpath: verify_session failed", exc_info=True)
+            logged_in = False
+
+    return {"auth_enabled": auth_enabled, "logged_in": logged_in}
+
+
+@app.get("/api/auth/status", include_in_schema=False)
+async def auth_status_fastpath(request: Request):
+    """Bridge-free auth probe for the desktop startup gate.
+
+    The Electron shell blocks startup on ``getAccessAuthStatus`` ->
+    ``GET /api/auth/status``. Routed through the legacy in-process bridge, this
+    probe shares the bounded bridge pool with every other request, so a single
+    first request that stalls (provider/OAuth resolution, model-wall scan, free
+    chat prewarm, a slow or hung worker, ...) can starve the pool and make the
+    probe time out after 30s. On the desktop that surfaces as
+    "Sidekick API request timed out after 30000 ms" on a blank startup screen.
+
+    Answering natively keeps the startup gate responsive regardless of bridge
+    backlog. The reads (settings, session store) run in the dedicated probe pool
+    under a strict deadline (``SIDEKICK_AUTH_STATUS_TIMEOUT_SECONDS``, default 5):
+    if the state store is stuck the route returns a specific 503 instead of
+    hanging the desktop for 30s. The success shape matches the legacy bridge
+    handler in ``web.api.routes`` exactly.
+    """
+    from web.api.auth import COOKIE_NAME
+
+    cookie_value = request.cookies.get(COOKIE_NAME)
+    timeout = _probe_timeout_seconds("SIDEKICK_AUTH_STATUS_TIMEOUT_SECONDS", 5.0)
+    try:
+        return await _AUTH_PROBE_LANE.run(lambda: _auth_status_payload(cookie_value), timeout=timeout)
+    except (asyncio.TimeoutError, ProbeBusyError):
+        _log.warning("auth status probe did not complete within %.1fs", timeout)
+        return _probe_unavailable_response("auth_status")
 
 
 def _has_valid_session_token(request: Request) -> bool:
@@ -8024,9 +8163,16 @@ async def onboarding_status():
     # Status assembly performs synchronous filesystem, credential, and model
     # catalog discovery. Keep that work off the ASGI event loop so health and
     # other native endpoints remain responsive during a cold catalog build.
-    # asyncio.to_thread copies the request ContextVars, including the selected
-    # profile set by profile_context_middleware.
-    return await asyncio.to_thread(get_onboarding_status)
+    # The bounded probe copies the request ContextVars, including the selected
+    # profile set by profile_context_middleware, and gives up after a deadline
+    # (SIDEKICK_ONBOARDING_STATUS_TIMEOUT_SECONDS, default 20) so a credential
+    # lock held across an OAuth refresh cannot wedge the startup flow forever.
+    timeout = _probe_timeout_seconds("SIDEKICK_ONBOARDING_STATUS_TIMEOUT_SECONDS", 20.0)
+    try:
+        return await _ONBOARDING_PROBE_LANE.run(get_onboarding_status, timeout=timeout)
+    except (asyncio.TimeoutError, ProbeBusyError):
+        _log.warning("onboarding status did not complete within %.1fs", timeout)
+        return _probe_unavailable_response("onboarding_status")
 
 
 @app.get("/api/onboarding/oauth/poll")

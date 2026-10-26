@@ -1300,6 +1300,46 @@ async def health():
     return payload
 
 
+@app.get("/api/auth/status", include_in_schema=False)
+async def auth_status_fastpath(request: Request):
+    """Bridge-free auth probe for the desktop startup gate.
+
+    The Electron shell blocks startup on ``getAccessAuthStatus`` ->
+    ``GET /api/auth/status``. Routed through the legacy in-process bridge, this
+    probe shares the bounded bridge pool with every other request, so a single
+    first request that stalls (provider/OAuth resolution, model-wall scan, free
+    chat prewarm, a slow or hung worker, ...) can starve the pool and make the
+    probe time out after 30s. On the desktop that surfaces as
+    "Sidekick API request timed out after 30000 ms" on a blank startup screen.
+
+    Answering natively keeps the startup gate responsive regardless of bridge
+    backlog. The handler only reads local config and verifies the session
+    cookie; it performs no provider, network, or filesystem-creating work, so
+    it cannot block on the same resources as the stalled request. The response
+    shape matches the legacy bridge handler in ``web.api.routes`` exactly.
+    """
+    from web.api.auth import COOKIE_NAME, is_auth_enabled, verify_session
+
+    try:
+        auth_enabled = bool(is_auth_enabled())
+    except Exception:
+        # Fail closed: when auth state cannot be read, present the login gate
+        # rather than silently granting access.
+        _log.debug("auth_status_fastpath: is_auth_enabled failed", exc_info=True)
+        auth_enabled = True
+
+    logged_in = False
+    if auth_enabled:
+        cookie_value = request.cookies.get(COOKIE_NAME)
+        try:
+            logged_in = bool(cookie_value and verify_session(cookie_value))
+        except Exception:
+            _log.debug("auth_status_fastpath: verify_session failed", exc_info=True)
+            logged_in = False
+
+    return {"auth_enabled": auth_enabled, "logged_in": logged_in}
+
+
 def _has_valid_session_token(request: Request) -> bool:
     """True if the request carries a valid dashboard session token.
 

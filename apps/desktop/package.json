@@ -27,7 +27,7 @@
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
     "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
     "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
-    "package:linux": "npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/write-linux-checksums.mjs"
+    "package:linux": "npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/write-linux-checksums.mjs && node scripts/linux-release-checksums.mjs release"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -209,7 +209,9 @@
       "files": [
         "!node_modules/node-pty/prebuilds/win32-*/**/*"
       ],
-      "category": "Network",
+      "category": "Network;WebBrowser",
+      "vendor": "Lastbrowser",
+      "synopsis": "Lastbrowser desktop browser with Sidekick AI agent",
       "icon": "../../brand/assets/app-icon-256.png",
       "artifactName": "Lastbrowser-${version}-${arch}.${ext}"
     },

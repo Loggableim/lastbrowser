@@ -6,6 +6,18 @@ export type PasswordMetadata = { id: string; origin: string; username: string; c
 type PasswordEntry = PasswordMetadata & { password: string };
 export type PasswordImportResult = { imported: number; duplicates: number; conflicts: number; invalid: number; cancelled?: boolean };
 const maxFile = 10 * 1024 * 1024;
+
+/**
+ * Linux only has real secret storage when Electron uses a keyring backend
+ * (gnome_libsecret / kwallet). `basic_text` stores the key unprotected and
+ * `unknown` means no backend was selected, so both are refused.
+ */
+export function osEncryptionBackendAllowed(platform: NodeJS.Platform = process.platform): boolean {
+  if (platform === 'win32' || platform === 'darwin') return true;
+  if (platform !== 'linux') return false;
+  const backend = safeStorage.getSelectedStorageBackend();
+  return backend !== 'basic_text' && backend !== 'unknown';
+}
 function profileId(value: unknown): string {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(value)) throw new Error('Invalid browser profile.');
   return value;
@@ -55,8 +67,8 @@ async function readPasswordExport(file: string): Promise<string> {
 export class PasswordVault {
   private queues = new Map<string, Promise<unknown>>();
   constructor(private readonly userData: () => string) {}
-  available(): boolean { return process.platform === 'win32' && safeStorage.isEncryptionAvailable(); }
-  private requireEncryption(): void { if (!this.available()) throw new Error('Windows password encryption is unavailable. Nothing was imported.'); }
+  available(): boolean { return osEncryptionBackendAllowed() && safeStorage.isEncryptionAvailable(); }
+  private requireEncryption(): void { if (!this.available()) throw new Error('Operating system password encryption is unavailable. Nothing was imported.'); }
   private file(profile: string): string { return path.join(this.userData(), 'password-vault', `${createHash('sha256').update(profileId(profile)).digest('hex')}.json`); }
   private async read(profile: string): Promise<PasswordEntry[]> {
     this.requireEncryption();

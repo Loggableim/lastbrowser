@@ -704,7 +704,7 @@ function registerIpc(): void {
     const destination = await passwordDestination(event, request?.profileId, true); checkAuth();
     if (!destination) return { cancelled: true, imported: 0, duplicates: 0, conflicts: 0, invalid: 0 };
     destination.check();
-    if (!passwordVault.available()) throw new Error('Windows password encryption is unavailable. Nothing was imported.');
+    if (!passwordVault.available()) throw new Error('Operating system password encryption is unavailable. Nothing was imported.');
     const parent = BrowserWindow.fromWebContents(owner);
     if (!parent) throw new Error('Password import needs a browser window.');
     const result = await dialog.showOpenDialog(parent, { title: currentLocale.startsWith('de') ? 'Passwörter aus Browser-CSV importieren' : 'Import passwords from browser CSV', properties: ['openFile'], filters: [{ name: 'Browser password CSV', extensions: ['csv'] }] });

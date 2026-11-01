@@ -44,17 +44,18 @@ npm run package:linux
 For v0.1.56, the expected x64 outputs are
 `Lastbrowser-0.1.56-x64.tar.gz` and `Lastbrowser-0.1.56-x64.AppImage` in
 `apps/desktop/release/`. The packaging step writes `SHA256SUMS` for both
-artifacts and `SHA256SUMS.gpg-command`, which contains the suggested detached
-signature command. Verify artifact hashes with:
+artifacts and signs it as `SHA256SUMS.asc` with the key in
+`LASTBROWSER_GPG_KEY_ID` (checked before electron-builder runs; the signature
+fingerprint is verified against that key). Use `--allow-unsigned` only for local
+test builds. Verify artifact hashes with:
 
 ```sh
 cd apps/desktop/release
 sha256sum -c SHA256SUMS
 ```
 
-The command file is preparation only. A real detached signature such as
-`SHA256SUMS.asc` must be created by the release owner with the authorized GPG
-key; do not publish a placeholder signature.
+Signing happens locally with the release owner's authorized GPG key; do not
+publish an unsigned or placeholder signature.
 
 ## Fresh-profile acceptance smoke
 

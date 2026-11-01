@@ -38,7 +38,7 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.build.electronVersion).toBe('45.0.0-alpha.14+wvcus');
     expect(packageJson.build.electronDownload.mirror).toBe('https://github.com/castlabs/electron-releases/releases/download/v');
     expect(packageJson.build.linux.target).toContain('AppImage');
-    expect(packageJson.scripts['package:linux']).toContain('node scripts/write-linux-checksums.mjs');
+    expect(packageJson.scripts['package:linux']).toMatch(/^node scripts\/linux-release-checksums\.mjs --check-key && .*electron-builder .*node scripts\/linux-release-checksums\.mjs release$/);
     expect(packageJson.scripts['smoke:linux:fresh-profile']).toBe('node scripts/smoke-linux-fresh-profile.mjs');
     expect(packageJson.build.linux.target).toEqual(['tar.gz', 'AppImage']);
     expect(packageJson.build.linux.icon).toBe('../../brand/assets/app-icon-256.png');

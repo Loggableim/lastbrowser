@@ -11,7 +11,9 @@ const safeStorage = vi.hoisted(() => ({
   decryptString: vi.fn((value: Buffer) => value.toString('utf8')),
 }));
 
-vi.mock('electron', () => ({ safeStorage }));
+const app = vi.hoisted(() => ({ isReady: vi.fn(() => true) }));
+
+vi.mock('electron', () => ({ app, safeStorage }));
 
 import { PasswordVault, osEncryptionBackendAllowed } from '../src/main/password-vault';
 
@@ -39,6 +41,25 @@ describe('osEncryptionBackendAllowed', () => {
   it.each(['basic_text', 'unknown'])('refuses Linux backend %s', backend => {
     safeStorage.getSelectedStorageBackend.mockReturnValue(backend);
     expect(osEncryptionBackendAllowed('linux')).toBe(false);
+  });
+
+  it('returns false when getSelectedStorageBackend throws', () => {
+    safeStorage.getSelectedStorageBackend.mockImplementationOnce(() => { throw new Error('dbus: keyring locked'); });
+    expect(osEncryptionBackendAllowed('linux')).toBe(false);
+  });
+
+  it('returns false when getSelectedStorageBackend is missing', () => {
+    const original = safeStorage.getSelectedStorageBackend;
+    (safeStorage as any).getSelectedStorageBackend = undefined;
+    try { expect(osEncryptionBackendAllowed('linux')).toBe(false); }
+    finally { safeStorage.getSelectedStorageBackend = original; }
+  });
+
+  it('does not query the Linux backend API on win32/darwin', () => {
+    safeStorage.getSelectedStorageBackend.mockClear();
+    osEncryptionBackendAllowed('win32');
+    osEncryptionBackendAllowed('darwin');
+    expect(safeStorage.getSelectedStorageBackend).not.toHaveBeenCalled();
   });
 
   it('refuses other platforms', () => {
@@ -70,6 +91,34 @@ describe('PasswordVault.available on Linux', () => {
 
   it('is unavailable when Electron reports no encryption', () => {
     safeStorage.isEncryptionAvailable.mockReturnValue(false);
+    expect(new PasswordVault(() => '/tmp/unused').available()).toBe(false);
+  });
+});
+
+describe('PasswordVault.available on win32/darwin', () => {
+  afterEach(() => {
+    if (originalPlatform) Object.defineProperty(process, 'platform', originalPlatform);
+    app.isReady.mockReturnValue(true);
+  });
+
+  it.each(['win32', 'darwin'] as const)('is available on %s without consulting the Linux backend API', platform => {
+    setPlatform(platform);
+    safeStorage.isEncryptionAvailable.mockReturnValue(true);
+    safeStorage.getSelectedStorageBackend.mockClear();
+    expect(new PasswordVault(() => '/tmp/unused').available()).toBe(true);
+    expect(safeStorage.getSelectedStorageBackend).not.toHaveBeenCalled();
+  });
+
+  it.each(['win32', 'darwin'] as const)('is unavailable on %s when Electron reports no encryption', platform => {
+    setPlatform(platform);
+    safeStorage.isEncryptionAvailable.mockReturnValue(false);
+    expect(new PasswordVault(() => '/tmp/unused').available()).toBe(false);
+  });
+
+  it('is unavailable before app ready', () => {
+    setPlatform('linux');
+    safeStorage.isEncryptionAvailable.mockReturnValue(true);
+    app.isReady.mockReturnValue(false);
     expect(new PasswordVault(() => '/tmp/unused').available()).toBe(false);
   });
 });

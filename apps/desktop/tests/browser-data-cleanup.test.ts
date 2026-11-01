@@ -23,7 +23,7 @@ describe('browser data cleanup IPC', () => {
     for (const session of sessions) {
       expect(session.clearCache).toHaveBeenCalledOnce();
       expect(session.clearStorageData).toHaveBeenCalledWith({
-        storages: ['cookies', 'localstorage', 'cachestorage', 'indexdb', 'websql', 'serviceworkers']
+        storages: ['cookies', 'localstorage', 'cachestorage', 'indexdb', 'serviceworkers']
       });
     }
   });

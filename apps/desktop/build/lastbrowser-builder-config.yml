@@ -1,7 +1,7 @@
 appId: com.lastbrowser.desktop
 productName: Lastbrowser
 npmRebuild: false
-electronVersion: 37.10.3+wvcus
+electronVersion: 44.9.3+wvcus
 electronDownload:
   mirror: https://github.com/castlabs/electron-releases/releases/download/v
 directories:

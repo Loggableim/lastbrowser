@@ -127,7 +127,7 @@ export function serializeNavigationHistory(history: NavigationHistoryReader): Na
 
 /** A webview guest may only be inspected by the shell renderer that owns it. */
 export function isGuestOwnedByRenderer(
-  guest: { hostWebContents?: { id?: number } } | null | undefined,
+  guest: { hostWebContents?: { id?: number } | null } | null | undefined,
   rendererWebContentsId: number
 ): boolean {
   return Number.isInteger(rendererWebContentsId)

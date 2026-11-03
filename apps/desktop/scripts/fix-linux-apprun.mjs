@@ -5,7 +5,7 @@
  * squashfs behind the existing runtime header. No release and no signing.
  */
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
@@ -51,8 +51,21 @@ export function repackAppImage(appImage) {
   }
 }
 
+function defaultAppImage() {
+  const releaseDir = path.resolve('release');
+  const matches = readdirSync(releaseDir)
+    .filter((name) => name.startsWith('Lastbrowser-') && name.endsWith('-x86_64.AppImage'))
+    .sort();
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected one release/Lastbrowser-*-x86_64.AppImage, found ${matches.length}: ${matches.join(', ')}`
+    );
+  }
+  return path.join(releaseDir, matches[0]);
+}
+
 const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
 if (isDirectRun) {
-  const appImage = path.resolve(process.argv[2] || 'release/Lastbrowser-0.1.57-demo.4-x86_64.AppImage');
+  const appImage = path.resolve(process.argv[2] || defaultAppImage());
   repackAppImage(appImage);
 }

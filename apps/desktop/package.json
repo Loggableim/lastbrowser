@@ -27,7 +27,7 @@
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
     "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
     "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
-    "package:linux": "node scripts/linux-release-checksums.mjs --check-key && npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/linux-release-checksums.mjs release"
+    "package:linux": "node scripts/linux-release-checksums.mjs --check-key && npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=44.9.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/linux-release-checksums.mjs release"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -50,7 +50,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "electron": "github:castlabs/electron-releases#059d79860d288044df48e8839d9c621dee4a17e1",
+    "electron": "github:castlabs/electron-releases#2263925eabe847eed890701134e6168d71c3d0a1",
     "electron-builder": "^26.0.0",
     "esbuild": "^0.27.7",
     "typescript": "^5.7.0",
@@ -61,7 +61,7 @@
     "productName": "LastBrowser",
     "executableName": "Lastbrowser",
     "npmRebuild": false,
-    "electronVersion": "45.0.0-alpha.14+wvcus",
+    "electronVersion": "44.9.3+wvcus",
     "electronDownload": {
       "mirror": "https://github.com/castlabs/electron-releases/releases/download/v"
     },

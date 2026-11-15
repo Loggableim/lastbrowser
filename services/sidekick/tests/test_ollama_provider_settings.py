@@ -7,6 +7,31 @@ import os
 import pytest
 
 
+def test_first_run_local_ollama_key_does_not_overwrite_cloud_credentials(monkeypatch, tmp_path):
+    from web.api import onboarding, profiles
+
+    config_path = tmp_path / "config.yaml"
+    env_file = tmp_path / ".env"
+    env_file.write_text("OLLAMA_API_KEY=cloud-test-only\n", encoding="utf-8")
+    monkeypatch.setenv("OLLAMA_API_KEY", "cloud-test-only")
+    monkeypatch.setattr(onboarding, "_get_config_path", lambda: config_path)
+    monkeypatch.setattr(onboarding, "_get_active_profile_home", lambda: tmp_path)
+    monkeypatch.setattr(onboarding, "get_onboarding_status", lambda: {"ok": True})
+    monkeypatch.setattr(onboarding, "reload_config", lambda: None)
+    monkeypatch.setattr(profiles, "_reload_dotenv", lambda _home: None)
+
+    assert onboarding.apply_onboarding_setup({
+        "provider": "ollama",
+        "model": "smollm2:135m",
+        "api_key": "local-test-only",
+    }) == {"ok": True}
+
+    saved = onboarding._load_yaml_config(config_path)
+    assert env_file.read_text(encoding="utf-8") == "OLLAMA_API_KEY=cloud-test-only\n"
+    assert os.environ["OLLAMA_API_KEY"] == "cloud-test-only"
+    assert saved["providers"]["ollama"]["api_key"] == "local-test-only"
+
+
 def test_local_ollama_key_is_saved_provider_scoped_without_changing_cloud_env(monkeypatch, tmp_path):
     from web.api import config, providers
 

@@ -5569,6 +5569,36 @@ def test_model_probe_uses_fixed_openrouter_endpoint_and_returns_models(monkeypat
     assert seen == {"url": "https://openrouter.ai/api/v1/models", "authorization": "Bearer test-only-key", "timeout": 12}
 
 
+def test_model_probe_reads_local_ollama_tags_without_a_key(monkeypatch):
+    from web.api import providers, routes
+
+    class Response:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *_args): return False
+        def read(self, limit):
+            assert limit > 0
+            return json.dumps({"models": [
+                {"name": "smollm2:135m"}, {"model": "qwen2.5:0.5b"},
+                {"name": "smollm2:135m"}, {}, None
+            ]}).encode()
+
+    class Opener:
+        def open(self, request, timeout):
+            assert request.full_url == "http://127.0.0.1:52087/api/tags"
+            assert request.get_header("Authorization") is None
+            assert timeout > 0
+            return Response()
+
+    monkeypatch.setattr(providers.urllib.request, "build_opener", lambda *_: Opener())
+    monkeypatch.setattr(routes, "j", lambda _handler, body, status=200: (status, body))
+    result = routes._handle_model_probe(None, {"provider": "ollama", "base_url": "http://127.0.0.1:52087/v1"})
+    assert result == (200, {"ok": True, "provider": "ollama", "model_count": 2, "models": [
+        {"id": "smollm2:135m", "label": "smollm2:135m"},
+        {"id": "qwen2.5:0.5b", "label": "qwen2.5:0.5b"},
+    ]})
+
+
 def test_model_probe_rejects_arbitrary_provider_without_network(monkeypatch):
     import io
     from urllib.parse import urlparse

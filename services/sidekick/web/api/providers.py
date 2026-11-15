@@ -1754,6 +1754,28 @@ def get_providers() -> dict[str, Any]:
     }
 
 
+def update_local_ollama_key(config: dict, api_key: str | None) -> None:
+    """Update only the local Ollama credential before the caller saves config."""
+    providers_cfg = config.get("providers")
+    if not isinstance(providers_cfg, dict):
+        providers_cfg = {}
+    provider_cfg = providers_cfg.get("ollama")
+    if not isinstance(provider_cfg, dict):
+        provider_cfg = {}
+    if api_key:
+        provider_cfg["api_key"] = api_key
+    else:
+        provider_cfg.pop("api_key", None)
+    if provider_cfg:
+        providers_cfg["ollama"] = provider_cfg
+    else:
+        providers_cfg.pop("ollama", None)
+    if providers_cfg:
+        config["providers"] = providers_cfg
+    else:
+        config.pop("providers", None)
+
+
 def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None = None,
                      *, preserve_api_key: bool = False) -> dict[str, Any]:
     """Set or update the API key for a provider.
@@ -1847,24 +1869,7 @@ def set_provider_key(provider_id: str, api_key: str | None, base_url: str | None
             config_path = _config._get_config_path()
             with _config._cfg_lock:
                 cfg = _config._load_yaml_config_file(config_path)
-                providers_cfg = cfg.get("providers")
-                if not isinstance(providers_cfg, dict):
-                    providers_cfg = {}
-                provider_cfg = providers_cfg.get("ollama")
-                if not isinstance(provider_cfg, dict):
-                    provider_cfg = {}
-                if api_key:
-                    provider_cfg["api_key"] = api_key
-                else:
-                    provider_cfg.pop("api_key", None)
-                if provider_cfg:
-                    providers_cfg["ollama"] = provider_cfg
-                else:
-                    providers_cfg.pop("ollama", None)
-                if providers_cfg:
-                    cfg["providers"] = providers_cfg
-                else:
-                    cfg.pop("providers", None)
+                update_local_ollama_key(cfg, api_key)
                 _config._save_yaml_config_file(config_path, cfg)
             _config.reload_config()
             invalidate_models_cache()
@@ -2038,7 +2043,9 @@ class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def probe_ollama_connection(provider_id: str, base_url: str, api_key: str = "") -> dict[str, Any]:
+def probe_ollama_connection(
+    provider_id: str, base_url: str, api_key: str = "", *, include_models: bool = False
+) -> dict[str, Any]:
     """Probe an Ollama endpoint from Sidekick, avoiding renderer CORS failures.
 
     Only the official HTTPS Cloud endpoints and loopback local endpoints are
@@ -2080,14 +2087,29 @@ def probe_ollama_connection(provider_id: str, base_url: str, api_key: str = "") 
             if response.status < 200 or response.status >= 300:
                 return {"ok": False, "error": "provider_http_error", "status": response.status}
             try:
-                payload = json.loads(response.read().decode("utf-8"))
+                max_catalog_bytes = 4 * 1024 * 1024
+                raw = response.read(max_catalog_bytes + 1) if include_models else response.read()
+                if include_models and len(raw) > max_catalog_bytes:
+                    return {"ok": False, "error": "invalid_provider_response"}
+                payload = json.loads(raw.decode("utf-8"))
             except (UnicodeDecodeError, json.JSONDecodeError):
                 return {"ok": False, "error": "invalid_provider_response"}
             # Local /api/tags uses `models`; the Cloud /v1/models endpoint
             # speaks the OpenAI-compatible `data` shape.
             model_field = "data" if provider == "ollama-cloud" else "models"
             model_list = payload.get(model_field, []) if isinstance(payload, dict) else []
-            return {"ok": True, "provider": provider, "model_count": len(model_list) if isinstance(model_list, list) else 0}
+            if not isinstance(model_list, list):
+                model_list = []
+            if include_models and provider == "ollama":
+                names = {}
+                for item in model_list:
+                    if isinstance(item, dict):
+                        name = item.get("name") or item.get("model")
+                        if isinstance(name, str) and name.strip():
+                            name = name.strip()
+                            names[name] = {"id": name, "label": name}
+                return {"ok": True, "provider": provider, "model_count": len(names), "models": list(names.values())}
+            return {"ok": True, "provider": provider, "model_count": len(model_list)}
     except urllib.error.HTTPError as exc:
         return {"ok": False, "error": "provider_http_error", "status": exc.code}
     except (urllib.error.URLError, TimeoutError, OSError):

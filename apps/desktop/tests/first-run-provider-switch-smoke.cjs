@@ -12,17 +12,31 @@ import { FirstRunSetupPane } from './src/renderer/components/FirstRunSetupPane';
 import { DesktopI18nProvider } from './src/renderer/i18n';
 
 localStorage.setItem('lastbrowser.locale', 'en');
-const scope = { browserProfileId: 'fixture', backendProfileId: 'fixture', spaceId: 'fixture' };
+window.ollamaCatalogRequests = [];
+window.providerScopeSelections = [];
+const scope = {
+  browserProfileId: 'fixture',
+  backendProfileId: '11111111-1111-4111-8111-111111111111',
+  spaceId: '22222222-2222-4222-8222-222222222222',
+};
 window.lastbrowser = {
   i18n: { setLocale: async () => {} },
   independent: { request: async ({ operation }) => ({
     ok: true, value: operation === 'resolveScope'
-      ? { scope }
+      ? { schemaVersion: 1, scope, backendProfileName: 'default', workspacePath: null,
+          spaceName: 'Home', bindingRevision: 1, setupStatus: 'in_progress' }
       : { scope, groups: [] },
   }) },
   sidekick: {
     detectExistingInstall: async () => ({ found: false }),
-    requestWebui: async () => ({ providers: [] }),
+    requestWebui: async (request) => {
+      if (request.path === '/api/models/probe' && request.body.provider === 'ollama') {
+        window.ollamaCatalogRequests.push(request.body.base_url);
+        return { models: [{ id: 'smollm2:135m', label: 'smollm2:135m' }] };
+      }
+      if (request.path === '/api/providers') window.providerScopeSelections.push(request.scopeSelection);
+      return { providers: [] };
+    },
   },
   system: {
     isDefaultBrowser: async () => false,
@@ -35,7 +49,7 @@ const onboardingStatus = { setup: { providers: [
 ] } };
 createRoot(document.getElementById('root')).render(<DesktopI18nProvider>
   <FirstRunSetupPane aiChoice="enabled" status={{ sidekick: 'ready', webuiHealth: 'ready' }}
-    browserProfileId="fixture" backendProfileName="default" onboardingStatus={onboardingStatus}
+    browserProfileId="fixture" onboardingStatus={onboardingStatus}
     error="" saving={false} setupLoading={false} />
 </DesktopI18nProvider>);
 `;
@@ -63,6 +77,7 @@ async function runRenderer(directory) {
       await run(`document.querySelector('${next}').click()`);
     }
     await until("document.querySelector('#first-run-page-title')?.textContent === 'Connect your AI'", 'English provider step');
+    await until("window.providerScopeSelections.some(scope => scope.browserProfileId === 'fixture' && scope.backendProfileName === 'default' && scope.workspacePath === null)", 'resolved backend profile for first-run catalog');
     const chip = (label) => `[...document.querySelectorAll('.provider-chip')].find(button => button.querySelector('strong').textContent === '${label}')`;
     const toggle = "document.querySelector('[data-testid=provider-beta-catalog-toggle] input')";
     assert.equal(await run(`${chip('OpenCode Free')}?.classList.contains('active')`), true, 'The default provider is visible and selected');
@@ -85,6 +100,17 @@ async function runRenderer(directory) {
     assert.equal(await run(`${endpoint}.parentElement.querySelector('.input-label').textContent`), 'Server address (optional)');
     await until("Boolean(document.querySelector('.model-selection-area button:not(:disabled)'))", 'model reload button');
     assert.equal(await run("document.querySelector('.model-selection-area button').textContent"), 'Reload models');
+    const localUrl = 'http://127.0.0.1:52087/v1';
+    await run(`{
+      const input = ${endpoint};
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '${localUrl}');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }`);
+    await until("Boolean(document.querySelector('.model-selection-area button:not(:disabled)'))", 'model reload available after editing endpoint');
+    assert.deepEqual(await run('window.ollamaCatalogRequests'), [], 'Editing an address does not probe it');
+    await run("document.querySelector('.model-selection-area button').click()");
+    await until("document.querySelector('.model-pill strong')?.textContent.includes('smollm2:135m')", 'installed local model');
+    assert.deepEqual(await run('window.ollamaCatalogRequests'), [localUrl]);
     await run(`${toggle}.click()`);
     await until(`${chip('OpenCode Free')}?.classList.contains('active')`, 'visible fallback after hiding the beta catalog');
     assert.equal(await run(`Boolean(${endpoint})`), false, 'The hidden beta provider no longer owns the settings form');

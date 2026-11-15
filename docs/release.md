@@ -31,7 +31,7 @@ The Windows Portable launcher extracts application files into Windows Temp and u
 
 LastBrowser opens the browser window while Castlabs checks for Widevine. On a fresh profile Chromium can contact Google's component update service at `update.googleapis.com`. To suppress Chromium component updates, fully quit LastBrowser, then launch the executable with `--disable-component-update`. This also disables Widevine downloads and can prevent protected-media playback. App updates and ad blocker filter downloads have separate controls.
 
-For local Ollama, start Ollama and install a local model before configuring the provider in LastBrowser. Enable the provider beta catalog if the Ollama card is hidden. The beta catalog resets when you reload the app. In the Ollama configuration dialog, **Test connection** checks the specified localhost server's model list. The general settings refresh can reuse a cached model catalog. Select the local Ollama model explicitly for chat, since automatic model selection can choose an enabled cloud provider.
+For local Ollama, start Ollama and install a local model before configuring the provider in LastBrowser. Enable the provider beta catalog if the Ollama card is hidden. The beta catalog resets when you reload the app. In first-run setup, **Reload models** queries the local server entered in the form. In Settings, **Test connection** also queries the specified local server. The general settings refresh can reuse a cached model catalog. Select the local Ollama model explicitly for chat, since automatic model selection can choose an enabled cloud provider.
 
 ## Requirements
 

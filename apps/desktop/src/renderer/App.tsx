@@ -3455,10 +3455,15 @@ function AppContent(): JSX.Element {
     }
     const captured = { browserProfileId: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current || null,
       backendProfileName: activeBackendProfileNameRef.current };
-    const originalWorkspacePath = captured.workspacePath;
-    const isCurrent = () => activeProfileIdRef.current === captured.browserProfileId
-      && (activeSpacePathRef.current || null) === originalWorkspacePath
-      && activeBackendProfileNameRef.current === captured.backendProfileName;
+    let backendProfileName = captured.backendProfileName;
+    const isCurrent = () => {
+      const currentBackendProfile = activeBackendProfileNameRef.current;
+      return activeProfileIdRef.current === captured.browserProfileId
+        && (activeSpacePathRef.current || null) === captured.workspacePath
+        && (captured.backendProfileName
+          ? currentBackendProfile === captured.backendProfileName
+          : !currentBackendProfile || !backendProfileName || currentBackendProfile === backendProfileName);
+    };
     const ensureCurrent = () => { if (!isCurrent()) throw new Error('The active browser profile changed. Reopen setup for the selected profile.'); };
     const requireSuccess = (result: Record<string, unknown>) => {
       if (result.error || result.ok === false) throw new Error(String(result.message || result.error || 'Setup could not be saved.'));
@@ -3467,14 +3472,16 @@ function AppContent(): JSX.Element {
     setSetupSaving(true);
     firstSetupSavingRef.current = true;
     try {
-      if (!captured.backendProfileName) throw new Error('The browser profile is still preparing. Please retry.');
-      captured.workspacePath = await prepareFirstSetupSpace(form.firstSpaceName);
+      const workspacePath = await prepareFirstSetupSpace(form.firstSpaceName);
       ensureCurrent();
-      const scopeSelection = { ...captured, backendProfileName: captured.backendProfileName };
-      const resolved = await assistantController.resolveScope({ browserProfileId: captured.browserProfileId, workspacePath: captured.workspacePath }, captured.backendProfileName);
-      ensureCurrent();
+      const requestedBackendProfileName = captured.backendProfileName || activeBackendProfileNameRef.current;
+      const resolved = await assistantController.resolveScope({ browserProfileId: captured.browserProfileId, workspacePath }, requestedBackendProfileName);
       if (!resolved.ok) throw new Error(resolved.error.message);
       if (resolved.value.scope.browserProfileId !== captured.browserProfileId) throw new Error('Setup profile binding changed.');
+      backendProfileName = resolved.value.backendProfileName || requestedBackendProfileName;
+      if (!backendProfileName) throw new Error('The selected Space has no backend profile binding.');
+      ensureCurrent();
+      const scopeSelection = { browserProfileId: captured.browserProfileId, workspacePath, backendProfileName };
       if (form.provider === 'openai-codex') {
         const request = { model: form.model.startsWith('@openai-codex:') ? form.model : `@openai-codex:${form.model}`, scopeSelection };
         requireSuccess(await window.lastbrowser.sidekick.setDefaultModel(request));
@@ -3498,8 +3505,8 @@ function AppContent(): JSX.Element {
       setSetupState(nextState);
       if (!setupState.cloudSetupComplete && !setupState.browserSetupComplete) setFirstLaunchOpening(true);
       setExplicitBackendProfileBySpace(current => ({ ...current,
-        [`${captured.browserProfileId}::${captured.workspacePath}`]: captured.backendProfileName! }));
-      handleSpaceSelect(captured.workspacePath!);
+        [`${captured.browserProfileId}::${workspacePath}`]: scopeSelection.backendProfileName }));
+      handleSpaceSelect(workspacePath);
       setSetupReopenRequested(false);
       setOnboardingStatus(nextStatus as OnboardingStatus);
       void refreshSessions();

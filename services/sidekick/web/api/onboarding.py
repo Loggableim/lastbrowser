@@ -140,7 +140,7 @@ _SUPPORTED_PROVIDER_SETUPS = {
     # ── Open / self-hosted ─────────────────────────────────────────────
     "ollama": {
         "label": "Ollama",
-        "env_var": "OLLAMA_API_KEY",
+        "env_var": "",
         "default_model": "qwen3:32b",
         "default_base_url": "http://localhost:11434/v1",
         "requires_base_url": False,
@@ -1146,10 +1146,14 @@ def apply_onboarding_setup(body: dict) -> dict:
         model_cfg.pop("base_url", None)
 
     cfg["model"] = model_cfg
+    if api_key and provider == "ollama":
+        from web.api.providers import update_local_ollama_key
+        update_local_ollama_key(cfg, api_key)
     _save_yaml_config(config_path, cfg)
 
-    if api_key:
-        _write_env_file(env_path, {provider_meta["env_var"]: api_key})
+    env_key = provider_meta["env_var"]
+    if api_key and env_key:
+        _write_env_file(env_path, {env_key: api_key})
 
     # Reload the sidekick_cli provider/config cache so the next streaming call
     # picks up the new key without requiring a server restart.
@@ -1162,8 +1166,8 @@ def apply_onboarding_setup(body: dict) -> dict:
     # Belt-and-braces: set directly on os.environ AFTER _reload_dotenv so the
     # value survives even if _reload_dotenv cleared it (e.g. when _write_env_file
     # wrote to disk but the profile isolation tracking hasn't seen it yet).
-    if api_key:
-        os.environ[provider_meta["env_var"]] = api_key
+    if api_key and env_key:
+        os.environ[env_key] = api_key
 
     try:
         # sidekick_cli may cache config at import time; ask it to reload if possible.

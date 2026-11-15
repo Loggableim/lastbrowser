@@ -148,6 +148,7 @@ export type FirstRunSetupPaneProps = {
 };
 
 const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
+const defaultLocalOllamaUrl = 'http://127.0.0.1:11434/v1';
 
 function providerSetupTab(providerId: string): 'featured' | 'custom' {
   return !providerId || RECOMMENDED_PROVIDER_IDS.some(id => id === providerId) ? 'featured' : 'custom';
@@ -249,6 +250,7 @@ export function FirstRunSetupPane({
   const readiness = firstRunStatus(status, onboardingStatus);
   const canSubmit = canSubmitCloudSetup(readiness);
   const activeProviderOption = providers.find((item) => item.id === provider);
+  const defaultProviderEndpoint = activeProviderOption?.defaultBaseUrl || (provider === 'ollama' ? defaultLocalOllamaUrl : '');
   const visibleProviders = showUntestedBetas ? providers : qualifiedProviders;
 
   const oauthProviderId = activeProviderOption?.oauthProvider || '';
@@ -355,7 +357,7 @@ export function FirstRunSetupPane({
     }
   }, [defaultProviderId, provider, selectProvider, visibleProviders]);
 
-  const loadLiveModels = useCallback(async (): Promise<Array<{ id: string; label: string }>> => {
+  const loadLiveModels = useCallback(async (reloadLocalOllama = false): Promise<Array<{ id: string; label: string }>> => {
     const capturedKey = modelRequestKey;
     const serial = ++modelRequestSerial.current;
     const current = () => activeModelRequestKey.current === capturedKey && modelRequestSerial.current === serial;
@@ -365,20 +367,24 @@ export function FirstRunSetupPane({
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
       const readCatalog = async () => {
-        if (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider)) {
+        const probeLocalOllama = reloadLocalOllama && provider === 'ollama';
+        if (probeLocalOllama || (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider))) {
+          const endpoint = baseUrl.trim() || (probeLocalOllama ? defaultProviderEndpoint : '');
           const response = await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/models/probe',
-            body: { provider, api_key: apiKey.trim(), ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) }
+            body: { provider, api_key: apiKey.trim(), ...(endpoint ? { base_url: endpoint } : {}) }
           }) as { models?: Array<{ id?: string; name?: string; label?: string }>; error?: string };
           if (response.error) throw new Error(response.error);
           return { models: response.models || [], configured: false };
         }
-        if (!browserProfileId || !backendProfileName) throw new Error(shellText(locale, "Das aktive Browserprofil wird noch vorbereitet. Bitte erneut laden.", "The active browser profile is still being prepared. Please reload."));
-        const scopeSelection = { browserProfileId, workspacePath: workspacePath || null, backendProfileName };
+        if (!browserProfileId) throw new Error(shellText(locale, "Das aktive Browserprofil wird noch vorbereitet. Bitte erneut laden.", "The active browser profile is still being prepared. Please reload."));
         const client = new IndependentAssistantClient(window.lastbrowser.independent);
         const resolved = await client.request({ schemaVersion: 1, operation: 'resolveScope',
-          payload: { browserProfileId, workspacePath: workspacePath || null }, backendProfileName });
+          payload: { browserProfileId, workspacePath: workspacePath || null }, backendProfileName: backendProfileName || undefined });
         if (!resolved.ok) throw new Error(resolved.error.message);
         if (resolved.value.scope.browserProfileId !== browserProfileId) throw new Error(shellText(locale, "Modellkatalog gehört zu einem anderen Profil.", "The model catalog belongs to another profile."));
+        const resolvedProfileName = resolved.value.backendProfileName || backendProfileName;
+        if (!resolvedProfileName) throw new Error(shellText(locale, "Modellkatalog-Profil konnte nicht geladen werden.", "Could not resolve the model catalog profile."));
+        const scopeSelection = { browserProfileId, workspacePath: resolved.value.workspacePath, backendProfileName: resolvedProfileName };
         const [catalog, auth] = await Promise.all([
           client.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get', includeCatalog: true } }),
           window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection }) as Promise<{ providers?: Array<{ id: string; has_key?: boolean; oauth_connected?: boolean; provider_available?: boolean }> }>
@@ -405,7 +411,13 @@ export function FirstRunSetupPane({
       setModelCatalogKey(capturedKey);
       setLiveProviderModels(previous => ({ ...previous, [provider]: available }));
       setModel(previous => available.some(item => item.id === previous) ? previous : available[0]?.id || '');
-      if (!available.length) setModelProbeError(oauthProviderId ? shellText(locale, "Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.", "No models came back from the connected account. Check the sign-in and reload.") : shellText(locale, "Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.", "No models came back. Check saved credentials or enter a key and reload."));
+      if (!available.length) {
+        setModelProbeError(provider === 'ollama'
+          ? shellText(locale, 'Keine lokalen Modelle gefunden. Prüfe die Serveradresse, installiere ein Modell in Ollama und lade die Liste neu.', 'No local models found. Check the server address, install a model in Ollama, and reload the list.')
+          : oauthProviderId
+            ? shellText(locale, 'Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.', 'No models came back from the connected account. Check the sign-in and reload.')
+            : shellText(locale, 'Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.', 'No models came back. Check saved credentials or enter a key and reload.'));
+      }
       return available;
     } catch (cause) {
       if (current()) {
@@ -418,7 +430,7 @@ export function FirstRunSetupPane({
       if (deadline) clearTimeout(deadline);
       if (current()) setModelProbeLoading(false);
     }
-  }, [aiChoice, apiKey, baseUrl, provider, browserProfileId, workspacePath, backendProfileName, modelRequestKey, canSubmit, oauthProviderId, activeProviderOption?.keyOptional, locale]);
+  }, [aiChoice, apiKey, baseUrl, provider, browserProfileId, workspacePath, backendProfileName, modelRequestKey, canSubmit, oauthProviderId, activeProviderOption?.keyOptional, defaultProviderEndpoint, locale]);
 
   useEffect(() => {
     void loadLiveModels();
@@ -1502,13 +1514,15 @@ export function FirstRunSetupPane({
                       onChange={(e) => setBaseUrl(e.target.value)}
                       placeholder={provider === 'alibaba'
                         ? t('settings.panels.providers.alibabaBaseUrlPlaceholder')
-                        : activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}
+                        : defaultProviderEndpoint}
                       className="key-input"
                     />
                     <small className="field-hint">
                       {provider === 'alibaba'
                         ? t('settings.panels.providers.alibabaBaseUrlHint')
-                        : shellText(locale, `Für Standard (${activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.`, `Leave empty for the default (${activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}). Enter a URL here for Ollama Cloud or a remote server.`)}
+                        : provider === 'ollama'
+                          ? shellText(locale, 'Nutze die Adresse deines lokalen Ollama-Servers. „Modelle neu laden“ fragt diese Adresse direkt ab.', 'Use the address of your local Ollama server. Reload models queries this address directly.')
+                          : defaultProviderEndpoint && shellText(locale, `Für den Standard (${defaultProviderEndpoint}) leer lassen.`, `Leave empty for the default (${defaultProviderEndpoint}).`)}
                     </small>
                   </label>
                 )}
@@ -1522,7 +1536,6 @@ export function FirstRunSetupPane({
               {models.length === 0 ? (
                 <div className="field-hint">
                   <p>{modelProbeLoading ? shellText(locale, 'Modelle werden geladen …', 'Loading models …') : modelProbeError || (oauthProviderId ? shellText(locale, "Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.", "Connect your account and load the model list. No API key is required.") : shellText(locale, "Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.", "Load models with saved credentials, or enter an API key."))}</p>
-                  <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>{shellText(locale, 'Modelle neu laden', 'Reload models')}</button>
                 </div>
               ) : <div className="models-pills-row">
                 {models.map((m) => {
@@ -1542,6 +1555,9 @@ export function FirstRunSetupPane({
                   );
                 })}
               </div>}
+              {(models.length === 0 || provider === 'ollama') && (
+                <button type="button" className="import-file-btn" disabled={modelProbeLoading || !canSubmit} onClick={() => void loadLiveModels(true)}>{shellText(locale, 'Modelle neu laden', 'Reload models')}</button>
+              )}
             </div>
           </div>}
 

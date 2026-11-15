@@ -175,10 +175,10 @@ async function main() {
       await until('document.documentElement.lang===' + JSON.stringify(locale) + ' && Boolean(' + browserReady + ')', 'Browser locale ' + locale);
       await evaluate('document.querySelector(".copilot-toggle-btn.active")?.click(); true');
       await capture(locale, 'browser');
-      await click('.extensions-trigger');
-      await until("Boolean(document.querySelector('.unified-hub-backdrop .eh-dialog'))", 'Extensions hub');
-      await capture(locale, 'extensions');
-      await click('.eh-header .eh-icon-button');
+      await click('.downloads-trigger');
+      await until("Boolean(document.querySelector('#native-downloads-panel'))", 'Downloads panel');
+      await capture(locale, 'downloads');
+      await click('[data-download-action=close]');
       await click('.expanded-bottom-footer button:has(.lucide-settings),.shell-rail .rail-bottom .rail-button,.nova-dock-btn:has(.lucide-settings)');
       await until("Boolean(document.querySelector('.app-shell.panel-settings .settings-section-button'))", 'Settings panel');
       await click('.settings-section-button:has(.lucide-sparkles)');

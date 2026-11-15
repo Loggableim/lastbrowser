@@ -34,7 +34,7 @@ Vor der Zertifizierung den Test aus dem fertigen gemeinsamen Stand erneut ausfü
 
 ## Aufnahmen dem Windows-Paket zuordnen
 
-Starten Sie den Aufnahmelauf unter Windows mit Node.js 22. Geben Sie das entpackte Windows-Programm und ein neues Ausgabeverzeichnis an. Der Treiber öffnet ein neues Testprofil und leitet externe Anfragen an einen blockierenden lokalen Proxy. Die vier Ansichten `browser`, `extensions`, `appearance` und `preferences` werden in acht UI-Sprachen aufgenommen.
+Starten Sie den Aufnahmelauf unter Windows mit Node.js 22. Geben Sie das entpackte Windows-Programm und ein neues Ausgabeverzeichnis an. Der Treiber öffnet ein neues Testprofil und leitet externe Anfragen an einen blockierenden lokalen Proxy. Die vier Ansichten `browser`, `downloads`, `appearance` und `preferences` werden in acht UI-Sprachen aufgenommen. Die Systemdiagnose und der Erweiterungs-Hub können lokale Dateipfade anzeigen.
 
 ```powershell
 node scripts/capture-store-package.cjs '<release-folder>/win-unpacked/Lastbrowser.exe' '<new-capture-folder>'

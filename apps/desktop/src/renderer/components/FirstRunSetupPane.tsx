@@ -178,6 +178,9 @@ export function FirstRunSetupPane({
   const [firstSpaceName, setFirstSpaceName] = useState(initialSpaceName.slice(0, 80));
   const [choicePending, setChoicePending] = useState(false);
   const [detectionReady, setDetectionReady] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const finishInFlight = useRef(false);
+  const wizardRef = useRef<HTMLDivElement>(null);
   const pageContentRef = useRef<HTMLDivElement>(null);
   const pageHeadingRef = useRef<HTMLHeadingElement>(null);
   const providers = cloudProviderOptions(onboardingStatus);
@@ -189,11 +192,15 @@ export function FirstRunSetupPane({
   const evidenceStorage = typeof window === 'undefined' ? undefined : window.localStorage;
   const qualifiedProviders = providers.filter(item => isStableProvider(item.id) || Boolean(browserProfileId && evidenceStorage
     && getProviderChatEvidence(item.id, browserProfileId, backendProfileName || 'default', evidenceStorage)));
-  const defaultProviderId = qualifiedProviders.some((p) => p.id === 'opencode')
+  const connectedProviderId = onboardingStatus?.system?.chat_ready === true
+    ? String(onboardingStatus.system.current_provider || '').trim().toLowerCase()
+    : '';
+  const defaultProviderId = qualifiedProviders.find(item => connectedProviderId && (item.id === connectedProviderId || item.oauthProvider === connectedProviderId))?.id
+    || (qualifiedProviders.some((p) => p.id === 'opencode')
     ? 'opencode'
     : qualifiedProviders.some((p) => p.id === 'openai-codex')
     ? 'openai-codex'
-    : (qualifiedProviders[0]?.id || '');
+    : (qualifiedProviders[0]?.id || ''));
 
   const [provider, setProvider] = useState<string>(defaultProviderId);
   const [apiKey, setApiKey] = useState('');
@@ -269,6 +276,15 @@ export function FirstRunSetupPane({
     } catch (cause) { setFlowError(cause instanceof Error ? cause.message : String(cause)); }
   };
 
+  const finishSetup = async (complete: () => Promise<void>) => {
+    if (finishInFlight.current) return;
+    finishInFlight.current = true;
+    setFinishing(true);
+    try { await complete(); }
+    catch (cause) { setFlowError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { finishInFlight.current = false; setFinishing(false); }
+  };
+
   useEffect(() => {
     if (!providers.some((item) => item.id === provider) && providers[0]) {
       setProvider(providers[0].id);
@@ -288,11 +304,15 @@ export function FirstRunSetupPane({
   // Detect an existing standalone Sidekick installation once on mount.
   useEffect(() => {
     let cancelled = false;
-    const timeout = window.setTimeout(() => { if (!cancelled) setDetectionReady(true); }, 5000);
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      settled = true;
+      if (!cancelled) setDetectionReady(true);
+    }, 5000);
     const detect = async () => {
       try {
         const report = await window.lastbrowser?.sidekick?.detectExistingInstall?.();
-        if (!cancelled && report?.found) setStandaloneReport(report);
+        if (!cancelled && !settled && report?.found) setStandaloneReport(report);
       } catch {
         // Only a positively detected installation adds the optional import page.
       } finally {
@@ -748,6 +768,10 @@ export function FirstRunSetupPane({
 
   function submit(event: FormEvent): void {
     event.preventDefault();
+    if (page === 'space' && aiChoice === 'disabled' && !saving && firstSpaceName.trim()) {
+      void finishSetup(completeBrowserSetup);
+      return;
+    }
     if (page !== 'space' || aiChoice !== 'enabled' || saving || !firstSpaceName.trim() || !canSubmitForm) return;
     if (!oauthLoginReady) {
       setOAuthState((current) => ({
@@ -757,7 +781,7 @@ export function FirstRunSetupPane({
       }));
       return;
     }
-    void onSubmit({
+    void finishSetup(() => onSubmit({
       provider,
       model,
       apiKey,
@@ -767,7 +791,7 @@ export function FirstRunSetupPane({
       defaultBrowser: isDefaultBrowser === true,
       importedBookmarksCount: importedBookmarksCount || 0,
       firstSpaceName: firstSpaceName.trim()
-    });
+    }));
   }
 
   // Identify top featured recommendation cards
@@ -786,7 +810,7 @@ export function FirstRunSetupPane({
     provider: de ? 'KI verbinden' : 'Connect your AI',
     space: de ? 'Dein erster Space' : 'Your first Space'
   };
-  const busy = saving || choicePending || importRunning || migrationState === 'running';
+  const busy = saving || finishing || choicePending || importRunning || migrationState === 'running';
   const mayAdvance = !busy && (page !== 'search' || detectionReady)
     && (page !== 'ai' || aiChoice !== null)
     && (page !== 'provider' || canSubmitForm);
@@ -797,9 +821,25 @@ export function FirstRunSetupPane({
   }, [page]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const wizard = wizardRef.current;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!wizard || (target?.closest('[role="dialog"]') && target.closest('[role="dialog"]') !== wizard)) return;
+      if (event.key === 'Tab') {
+        const controls = Array.from(wizard.querySelectorAll<HTMLElement>(
+          'button, input, select, textarea, a[href], summary, [tabindex]'
+        )).filter(element => element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length);
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (!first) return;
+        const active = document.activeElement;
+        if (!wizard.contains(active) || (event.shiftKey ? active === first || active === pageHeadingRef.current : active === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first)?.focus();
+        }
+        return;
+      }
       if (event.key !== 'Escape' || busy || currentIndex <= 0) return;
       // Escape navigates back; it never finishes onboarding or changes the AI choice.
-      if ((event.target as HTMLElement)?.closest('[role="dialog"]')?.classList.contains('first-run-fullscreen-wrap') === false) return;
       event.preventDefault();
       movePage(pages[currentIndex - 1]);
     };
@@ -813,12 +853,11 @@ export function FirstRunSetupPane({
   };
 
   return (
-    <div className="first-run-fullscreen-wrap first-run-wizard" role="dialog" aria-modal="true" aria-labelledby="first-run-page-title">
+    <div ref={wizardRef} className="first-run-fullscreen-wrap first-run-wizard" role="dialog" aria-modal="true" aria-labelledby="first-run-page-title">
       <aside className="first-run-fullscreen">
         <header className="first-run-topbar">
           <div className="first-run-topbar-brand">
             <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
-            <span className="first-run-badge">{t('firstRun.welcomeBadge')}</span>
           </div>
           <span className="first-run-page-counter" aria-live="polite">{de ? 'Schritt' : 'Step'} {currentIndex + 1} / {pages.length}</span>
         </header>
@@ -826,23 +865,16 @@ export function FirstRunSetupPane({
           {pages.map((id, index) => <button key={id} type="button" aria-current={page === id ? 'step' : undefined}
             className={index < currentIndex ? 'is-complete' : page === id ? 'is-current' : ''}
             disabled={busy || index >= currentIndex} onClick={() => movePage(id)}>
-            <span>{index < currentIndex ? <Check size={12} /> : index + 1}</span><small>{titles[id]}</small>
+            <span aria-hidden="true">{index < currentIndex ? <Check size={12} /> : index + 1}</span><small>{titles[id]}</small>
           </button>)}
         </nav>
         <form className="setup-fullscreen-form" onSubmit={submit}>
           <div className="first-run-page-content" ref={pageContentRef}>
             <div className="first-run-page-heading">
               <h1 id="first-run-page-title" ref={pageHeadingRef} tabIndex={-1}>{titles[page]}</h1>
-              <p>{de ? 'Richte LastBrowser Schritt für Schritt ein. Deine Auswahl bleibt beim Zurückgehen erhalten.' : 'Set up LastBrowser one step at a time. Going back keeps your choices.'}</p>
             </div>
-            {page === 'search' && <>        <section className="setup-section-block search-engine-setup" aria-labelledby="search-engine-setup-title">
-          <div className="setup-section-header">
-            <span className="setup-step-number"><Globe size={14} /></span>
-            <div>
-              <h2 id="search-engine-setup-title">{t('searchEngineSetup.title')}</h2>
-              <p>{t('searchEngineSetup.description')}</p>
-            </div>
-          </div>
+            {page === 'search' && <>        <section className="setup-section-block search-engine-setup" aria-labelledby="first-run-page-title">
+          <p className="first-run-intro">{t('searchEngineSetup.description')}</p>
           <div className="search-engine-choices" role="group" aria-label={t('searchEngineSetup.recommended')}>
             {recommendedSearchEngines.map((engine) => (
               <button key={engine.id} type="button" className={`search-engine-choice ${searchEngineId === engine.id ? 'is-selected' : ''}`} aria-pressed={searchEngineId === engine.id} onClick={() => saveSearchEngineChoice(engine.id)}>
@@ -858,7 +890,6 @@ export function FirstRunSetupPane({
               </button>
             ))}
           </div>}
-          {flowError && <p role="alert" className="setup-error-banner">{flowError}</p>}
         </section>
 
 </>}
@@ -1061,7 +1092,7 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">{browserOnly ? '3' : '5'}</span>
               <div>
-                <h2>LastBrowser als Windows Standard-Browser</h2>
+                <h2>{shellText(locale, 'Standardbrowser', 'Default browser')}</h2>
                 <p>{shellText(locale, "Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit LastBrowser.", "Open web pages, HTML files, and links from external apps such as Outlook, Teams, or Discord in LastBrowser by default.")}</p>
               </div>
             </div>
@@ -1136,18 +1167,16 @@ export function FirstRunSetupPane({
               })}
             </div>
             <div className="setup-pinned-summary">
-              <small>{selectedAppIds.length} Apps im Slim Dock aktiv</small>
+              <small>{shellText(locale, `Ausgewählte Apps: ${selectedAppIds.length}`, `Selected apps: ${selectedAppIds.length}`)}</small>
             </div>
           </div>
 
 </>}
             {page === 'ai' && <section className="first-run-ai-page">
-              <img src={personalityAvatar('nova')} className="first-run-choice-avatar" alt="" />
-              <h2>{t('firstRun.aiChoiceTitle')}</h2>
-              <p>{t('firstRun.aiChoiceDescription')}</p>
+              <p className="first-run-intro">{t('firstRun.aiChoiceDescription')}</p>
               <div className="first-run-ai-choice-actions">
-                <button type="button" className={aiChoice === 'enabled' ? 'primary-btn' : 'secondary-btn'} aria-pressed={aiChoice === 'enabled'} disabled={busy} onClick={() => void chooseAi('enabled')}><Sparkles size={18} />{t('firstRun.aiChoiceYes')}</button>
-                <button type="button" className={aiChoice === 'disabled' ? 'primary-btn' : 'secondary-btn'} aria-pressed={aiChoice === 'disabled'} disabled={busy} onClick={() => void chooseAi('disabled')}><Globe size={18} />{t('firstRun.aiChoiceNo')}</button>
+                <button type="button" aria-pressed={aiChoice === 'enabled'} disabled={busy} onClick={() => void chooseAi('enabled')}><Sparkles size={22} /><span>{t('firstRun.aiChoiceYes')}</span></button>
+                <button type="button" aria-pressed={aiChoice === 'disabled'} disabled={busy} onClick={() => void chooseAi('disabled')}><Globe size={22} /><span>{t('firstRun.aiChoiceNo')}</span></button>
               </div>
               {aiChoice === 'disabled' && <p role="status">{t('firstRun.noAiDescription')}</p>}
             </section>}
@@ -1286,7 +1315,7 @@ export function FirstRunSetupPane({
                   {providerPresentation(provider).mark}
                 </span>
                 <div>
-                  <h4>Konfiguration: {activeProviderOption?.label || provider}</h4>
+                  <h4>{shellText(locale, 'Konfiguration', 'Configuration')}: {activeProviderOption?.label || provider}</h4>
                   <p>{localizedProviderDescription(provider, locale)}</p>
                 </div>
               </div>
@@ -1490,7 +1519,7 @@ export function FirstRunSetupPane({
               {modelProbeError && models.length > 0 && <p role="alert">{modelProbeError}</p>}
               {models.length === 0 ? (
                 <div className="field-hint">
-                  <p>{modelProbeLoading ? 'Modelle werden geladen …' : modelProbeError || (oauthProviderId ? shellText(locale, "Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.", "Connect your account and load the model list. No API key is required.") : shellText(locale, "Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.", "Load models with saved credentials, or enter an API key."))}</p>
+                  <p>{modelProbeLoading ? shellText(locale, 'Modelle werden geladen …', 'Loading models …') : modelProbeError || (oauthProviderId ? shellText(locale, "Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.", "Connect your account and load the model list. No API key is required.") : shellText(locale, "Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.", "Load models with saved credentials, or enter an API key."))}</p>
                   <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>Modelle neu laden</button>
                 </div>
               ) : <div className="models-pills-row">
@@ -1606,7 +1635,7 @@ export function FirstRunSetupPane({
                     <div className="persona-header">
                       <img className="persona-icon" src={personalityAvatar(profile.id)} alt="" style={{ width: 56, height: 56, objectFit: 'contain', flexShrink: 0 }} />
                       <div>
-                        <h3 className="persona-name">{profile.id === 'nova' ? `${effectiveBotName} (Standard)` : profile.name}</h3>
+                        <h3 className="persona-name">{profile.id === 'nova' ? `${effectiveBotName} (${shellText(locale, 'Standard', 'Default')})` : profile.name}</h3>
                         <span className="persona-tagline">{profile.tagline}</span>
                       </div>
                     </div>
@@ -1634,8 +1663,8 @@ export function FirstRunSetupPane({
           <footer className="setup-action-footer">
             <button type="button" className="secondary-btn" disabled={busy || currentIndex === 0} onClick={() => movePage(pages[currentIndex - 1])}><ArrowLeft size={16} />{de ? 'Zurück' : 'Back'}</button>
             {page !== 'space' ? <button type="button" className="primary-btn" disabled={!mayAdvance} onClick={() => movePage(pages[currentIndex + 1])}>{!detectionReady && page === 'search' ? <Loader2 size={16} className="spin" /> : null}{de ? 'Weiter' : 'Next'}<ArrowRight size={16} /></button>
-              : <button type={aiChoice === 'enabled' ? 'submit' : 'button'} className="primary-btn launch-btn" disabled={busy || !firstSpaceName.trim() || aiChoice === null || (aiChoice === 'enabled' && !canSubmitForm)} onClick={aiChoice === 'disabled' ? () => void completeBrowserSetup() : undefined}>
-                  {saving ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}{saving ? t('firstRun.configuring') : (de ? 'Einrichtung abschließen' : 'Finish setup')}
+              : <button type="submit" className="primary-btn launch-btn" disabled={busy || !firstSpaceName.trim() || aiChoice === null || (aiChoice === 'enabled' && !canSubmitForm)}>
+                  {saving || finishing ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}{saving || finishing ? t('firstRun.configuring') : (de ? 'Einrichtung abschließen' : 'Finish setup')}
                 </button>}
           </footer>
         </form>

@@ -4,6 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { modelPolicySettingsCopy } from '../src/renderer/i18n/model-policy-settings-copy.js';
 import { normalizeSettingsSectionId, SETTINGS_SECTIONS, visibleSettingsSections } from '../src/renderer/panels/SystemPanels.js';
 
+it('recognizes Codex CLI from settings navigation and direct links', () => {
+  expect(normalizeSettingsSectionId('Codex CLI')).toBe('codex-cli');
+  expect(normalizeSettingsSectionId('codex-cli')).toBe('codex-cli');
+  expect(visibleSettingsSections().map(([id]) => id)).toContain('codex-cli');
+});
+
 const source = (file: string) => readFileSync(path.resolve(process.cwd(), 'src/renderer', file), 'utf8');
 
 describe('model policy settings placement', () => {

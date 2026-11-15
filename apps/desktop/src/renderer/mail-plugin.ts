@@ -10,6 +10,7 @@ export async function mailRequest(workspace: string, path: string, body?: Record
     method: body ? 'POST' : 'GET', path: `/api/mail/${path}`,
     query: body ? undefined : { ...query, workspace }, body: body ? { ...body, workspace } : undefined
   });
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid mail response.');
   if (payload.error) throw new Error(typeof payload.error === 'string' ? payload.error : (payload.error as { message?: string }).message || 'Mail-Anfrage fehlgeschlagen.');
   return payload;
 }

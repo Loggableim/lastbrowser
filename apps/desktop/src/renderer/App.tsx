@@ -297,7 +297,7 @@ import { readNativeModelResolutionEvent } from './native-model-resolution.js';
 import { openPluginBrowserCapability, type PluginBrowserContext } from './plugin-browser-navigation.js';
 import { WorkspacePanel } from './panels/WorkspacePanel.js';
 import { ShellRail } from './components/ShellRail.js';
-import { ContextSidebar, panelContextItems, type SidekickMessage } from './components/ContextSidebar.js';
+import { ContextSidebar, type SidekickMessage } from './components/ContextSidebar.js';
 import { AddressBar } from './components/AddressBar.js';
 import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
 import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepaliveEntry } from './space-audio-keepalive.js';
@@ -2217,10 +2217,6 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     saveInstalledSidebarApps(undefined, installedSidebarApps);
   }, [installedSidebarApps]);
-
-  useEffect(() => {
-    setActiveContextItem(panelContextItems[activePanel]?.[0] || '');
-  }, [activePanel]);
 
   useEffect(() => {
     saveBooleanPreference(undefined, leftSidebarCollapsedStorageKey, leftSidebarCollapsed);
@@ -6416,7 +6412,7 @@ function AppContent(): JSX.Element {
                 browserProfileId={activeProfileId}
                 workspacePath={activeSpacePath || null}
                 backendProfileName={activeBackendProfileName}
-                onOpenSettings={() => { setActiveContextItem('providers'); setActivePanel('settings'); }}
+                onOpenSettings={() => setActivePanel('settings', 'providers')}
               />}
             </div>
           </div>
@@ -7801,8 +7797,7 @@ function BrowserMain({
         aiConnected={serviceStatus?.sidekick === 'ready' && onboardingStatus?.system?.chat_ready === true}
         onOpenModelSettings={() => {
           activatePane();
-          usePanelStore.getState().setActiveContextItem('providers');
-          usePanelStore.getState().setActivePanel('settings');
+          usePanelStore.getState().setActivePanel('settings', 'providers');
         }}
         onOpenCommandPalette={() => { activatePane(); usePanelStore.getState().setCommandPaletteOpen(true); }}
       />
@@ -7897,7 +7892,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} activeSpacePath={activeSpacePath} activeBackendProfileName={activeBackendProfileName || activeSession?.profile || null} activeSessionId={activeSessionId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} onClose={() => usePanelStore.getState().setActivePanel('browser')} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} activeSpacePath={activeSpacePath} activeBackendProfileName={activeBackendProfileName || activeSession?.profile || null} activeSessionId={activeSessionId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} onSectionChange={usePanelStore.getState().setActiveContextItem} onClose={() => usePanelStore.getState().setActivePanel('browser')} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:

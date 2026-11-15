@@ -4,6 +4,18 @@ import { mailRequest, type MailAccount, type MailConfig } from '../mail-plugin.j
 import { useDesktopI18n } from '../i18n.js';
 import { shellText } from '../i18n/shell-text.js';
 const empty = (): MailAccount => ({ id: crypto.randomUUID().replaceAll('-', ''), email: '', username: '', provider: 'gmail', imap_host: '', imap_port: 993, imap_security: 'ssl', smtp_host: '', smtp_port: 587, smtp_security: 'starttls' });
+
+function readMailConfig(result: unknown): MailConfig {
+  const config = result as Partial<MailConfig> | null;
+  if (typeof config?.enabled !== 'boolean' || !config.accounts || typeof config.accounts !== 'object'
+    || Array.isArray(config.accounts) || Object.values(config.accounts).some(account =>
+      !account || typeof account.id !== 'string' || typeof account.email !== 'string'
+      || (account.provider !== 'gmail' && account.provider !== 'imap'))) {
+    throw new Error('Invalid mail configuration.');
+  }
+  return { enabled: config.enabled, accounts: config.accounts };
+}
+
 export function MailPluginSettings({ workspace, ready }: { workspace: string; ready: boolean }): JSX.Element {
   const { locale } = useDesktopI18n();
   const [cfg, setCfg] = useState<MailConfig>({ enabled: false, accounts: {} });
@@ -16,7 +28,12 @@ export function MailPluginSettings({ workspace, ready }: { workspace: string; re
   useEffect(() => {
     let current = true;
     setCfg({ enabled: false, accounts: {} }); setAccount(empty()); setPassword(''); setError(''); setNotice(''); setBusy(false);
-    if (ready) mailRequest(workspace, 'config').then((result) => { if (current) { const config = result as MailConfig; setCfg(config); setAccount(Object.values(config.accounts)[0] || empty()); } }).catch((failure) => { if (current) setError(String(failure)); });
+    if (ready) mailRequest(workspace, 'config').then((result) => {
+      if (!current) return;
+      const config = readMailConfig(result);
+      setCfg(config);
+      setAccount(Object.values(config.accounts)[0] ?? empty());
+    }).catch(failure => { if (current) setError(String(failure)); });
     return () => { current = false; };
   }, [workspace, ready]);
   async function run(action: () => Promise<void>) {
@@ -29,13 +46,15 @@ export function MailPluginSettings({ workspace, ready }: { workspace: string; re
     <p>{shellText(locale, "Gmail oder einen anderen Anbieter über IMAP/SMTP verbinden. Konten und Zugangsdaten bleiben auf diesen Space beschränkt.", "Connect Gmail or another provider over IMAP/SMTP. Accounts and credentials stay limited to this Space.")}</p>
     <label><input type="checkbox" checked={cfg.enabled} disabled={!ready || busy} onChange={(event) => {
       const enabled = event.target.checked;
-      void run(async () => { const result = await mailRequest(workspace, 'config', { enabled }) as MailConfig; if (scope.current !== workspace) return; setCfg(result); setNotice(enabled ? shellText(locale, "Mail aktiviert.", "Mail enabled.") : shellText(locale, "Mail deaktiviert.", "Mail disabled.")); });
+      void run(async () => { const result = readMailConfig(await mailRequest(workspace, 'config', { enabled })); if (scope.current !== workspace) return; setCfg(result); setNotice(enabled ? shellText(locale, "Mail aktiviert.", "Mail enabled.") : shellText(locale, "Mail deaktiviert.", "Mail disabled.")); });
     }}/>{shellText(locale, "Mail in diesem Space aktivieren", "Enable mail in this Space")}</label>
     <div className="native-card-actions">{Object.values(cfg.accounts).map((item) => <button key={item.id} type="button" onClick={() => { setAccount(item); setPassword(''); setNotice(''); }}><Mail size={14}/>{item.email}</button>)}<button type="button" onClick={() => { setAccount(empty()); setPassword(''); setNotice(''); }}><Plus size={14}/>{shellText(locale, "Konto hinzufügen", "Add account")}</button></div>
     <form onSubmit={(event) => { event.preventDefault(); void run(async () => {
-      const result = await mailRequest(workspace, 'config', { enabled: true, account: { ...account, password } }) as MailConfig;
+      const result = readMailConfig(await mailRequest(workspace, 'config', { enabled: true, account: { ...account, password } }));
       if (scope.current !== workspace) return;
-      setCfg(result); setAccount(result.accounts[account.id]);
+      const savedAccount = result.accounts[account.id];
+      if (!savedAccount) throw new Error('The saved mail account was missing from the response.');
+      setCfg(result); setAccount(savedAccount);
       setPassword('');
       await mailRequest(workspace, 'test', { account: account.id });
       if (scope.current !== workspace) return;
@@ -55,7 +74,7 @@ export function MailPluginSettings({ workspace, ready }: { workspace: string; re
         </fieldset>)}
       </div>}
       <div className="native-card-actions"><button type="submit" disabled={!ready || busy}><RefreshCw size={14}/>{busy ? shellText(locale, "Verbindung wird geprüft…", "Checking connection…") : shellText(locale, "Speichern und Verbindung testen", "Save and test connection")}</button>
-        {cfg.accounts[account.id] && <button type="button" disabled={busy} onClick={() => { if (window.confirm(shellText(locale, "Dieses Mailkonto aus diesem Space entfernen?", "Remove this mail account from this Space?"))) void run(async () => { const result = await mailRequest(workspace, 'config', { remove: account.id }) as MailConfig; if (scope.current !== workspace) return; setCfg(result); setAccount(empty()); setPassword(''); }); }}><Trash2 size={14}/>{shellText(locale, "Konto entfernen", "Remove account")}</button>}
+        {cfg.accounts[account.id] && <button type="button" disabled={busy} onClick={() => { if (window.confirm(shellText(locale, "Dieses Mailkonto aus diesem Space entfernen?", "Remove this mail account from this Space?"))) void run(async () => { const result = readMailConfig(await mailRequest(workspace, 'config', { remove: account.id })); if (scope.current !== workspace) return; setCfg(result); setAccount(empty()); setPassword(''); }); }}><Trash2 size={14}/>{shellText(locale, "Konto entfernen", "Remove account")}</button>}
       </div>
     </form>
     {error && <div role="alert" className="workspace-error">{error}</div>}{notice && <p role="status">{notice}</p>}

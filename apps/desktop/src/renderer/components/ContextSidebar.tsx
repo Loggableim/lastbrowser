@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import {
   Bot,
   Copy,
@@ -21,6 +21,7 @@ import {
   type ProjectSummary,
   lastbrowserPanels,
   panelLabelTranslationKey,
+  panelContextItems,
   sessionTitle
 } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
@@ -42,25 +43,7 @@ export type SidekickMessage = {
   isPartial?: boolean;
 };
 
-export const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
-  skills: ['Library', 'Editor', 'Linked files', 'Create skill'],
-  agents: ['Dashboard', 'Agents', 'Chat sessions', 'Workspace terminal', 'Create agent'],
-  memory: [],
-  workspaces: ['Spaces', 'Active workspace', 'Files', 'New chat'],
-  profiles: ['Profiles', 'Active profile', 'Gateway', 'Model defaults'],
-  'task-center': [],
-  tasks: [],
-  kanban: [],
-  todos: [],
-  insights: ['Usage', 'Models', 'Cost', 'LLM wiki'],
-  logs: ['Agent', 'WebUI', 'Errors', 'Gateway'],
-  gmail: ['Inbox', 'Search', 'Compose', 'Mail settings'],
-  discord: ['Guild', 'Channels', 'Members', 'Moderation'],
-  appstore: ['Home', 'Categories', 'My apps', 'SDK', 'Submit'],
-  settings: ['Conversation', 'Appearance', 'Preferences', 'Providers', 'Plugins', 'System'],
-  browser: ['AI Search', 'Brief', 'Sources', 'Automation tools'],
-  terminal: ['Terminal', 'New session', 'Close']
-};
+export { panelContextItems } from '../shell-state.js';
 
 export function panelForContextItem(item: string): LastbrowserPanelId | null {
   const label = item.toLowerCase();
@@ -73,7 +56,7 @@ export function panelForContextItem(item: string): LastbrowserPanelId | null {
   if (['accounts', 'inbox', 'ai actions', 'compose', 'mail settings'].includes(label)) return 'gmail';
   if (['guild', 'channels', 'members', 'moderation'].includes(label)) return 'discord';
   if (['home', 'categories', 'my apps', 'sdk', 'submit'].includes(label)) return 'appstore';
-  if (['conversation', 'appearance', 'preferences', 'providers', 'plugins', 'system'].includes(label)) return 'settings';
+  if (['conversation', 'appearance', 'preferences', 'providers', 'codex cli', 'plugins', 'system'].includes(label)) return 'settings';
   if (['ai search', 'brief', 'sources', 'automation tools'].includes(label)) return 'browser';
   return null;
 }
@@ -94,7 +77,7 @@ export type ContextSidebarProps = {
   activeTagFilter: string | null;
   onAction: (action: SidekickActionId) => Promise<void>;
   onNewSession: () => void;
-  onPanel: (panel: LastbrowserPanelId) => void;
+  onPanel: (panel: LastbrowserPanelId, contextItem?: string) => void;
   onDeleteSession: (session: DesktopSessionSummary) => void;
   onDuplicateSession: (session: DesktopSessionSummary) => void;
   onRenameSession: (session: DesktopSessionSummary) => void;
@@ -217,19 +200,16 @@ export function ContextSidebar({
   const recentMessages = messages.slice(-3);
   const showSessionTools = activePanel === 'chat' || activePanel === 'browser';
   const contextItems = panelContextItems[activePanel] || [];
-  const activeContextItemDefault = contextItems[0] || '';
-
-  useEffect(() => {
-    onContextItemChange(activeContextItemDefault);
-  }, [activeContextItemDefault, onContextItemChange]);
-
+  const normalizeContext = (item: string) => item.trim().toLowerCase().replace(/[-\s]+/g, ' ');
+  const selectedContext = normalizeContext(activeContextItem);
   function handleContextItem(item: string): void {
-    onContextItemChange(item);
     if (activePanel === 'browser' && item === 'AI Search') {
+      onContextItemChange(item);
       onBrowserModeChange('search');
       return;
     }
     if (item === 'New chat' || item === 'Chat sessions') {
+      onContextItemChange(item);
       onNewSession();
       return;
     }
@@ -238,7 +218,9 @@ export function ContextSidebar({
       if (targetPanel === 'browser') {
         onBrowserModeChange(item === 'AI Search' ? 'search' : 'web');
       }
-      onPanel(targetPanel);
+      onPanel(targetPanel, item);
+    } else {
+      onContextItemChange(item);
     }
   }
 
@@ -409,8 +391,8 @@ export function ContextSidebar({
               <button
                 key={item}
                 type="button"
-                className={item === activeContextItem ? 'active' : ''}
-                aria-pressed={item === activeContextItem}
+                className={normalizeContext(item) === selectedContext ? 'active' : ''}
+                aria-pressed={normalizeContext(item) === selectedContext}
                 onClick={() => handleContextItem(item)}
               >
                 <img src={sidebarIconForPanel(activePanel)} alt="" />

@@ -140,7 +140,7 @@ export function NativeHeader({
   kicker: string;
   detail: string;
   loading?: boolean;
-  ready: boolean;
+  ready?: boolean;
   onRefresh?: () => Promise<void>;
   onClose?: () => void;
   closeLabel?: string;
@@ -156,10 +156,10 @@ export function NativeHeader({
         </div>
       </div>
       <div className="native-rest-header-actions">
-        <span className={`native-rest-pill ${ready ? 'ready' : 'starting'}`}>
+        {ready !== undefined && <span className={`native-rest-pill ${ready ? 'ready' : 'starting'}`}>
           <span className={ready ? 'status-dot ready' : 'status-dot'} />
           {ready ? 'Online' : 'Starting'}
-        </span>
+        </span>}
         {onRefresh && (
           <button type="button" className="secondary-action compact" onClick={() => void onRefresh()} disabled={!ready || loading}>
             {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}

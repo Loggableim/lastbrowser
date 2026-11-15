@@ -1,3 +1,4 @@
+import { NativeTerminalMain } from './NativeTerminalMain.js';
 import { MailPluginSettings } from './MailPluginSettings.js';
 import { PasswordVaultPanel } from '../components/PasswordVaultPanel.js';
 import { StartupPreferencesPanel } from '../startup/StartupPreferencesPanel.js';
@@ -211,7 +212,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): NormalizedAppstoreRecor
   };
 }
 
-export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'local-ai' | 'advanced' | 'teamwork' | 'plugins' | 'system';
+export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'codex-cli' | 'local-ai' | 'advanced' | 'teamwork' | 'plugins' | 'system';
 
 export type SettingsSectionMeta ={
   title: string;
@@ -265,6 +266,11 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     description: 'AI providers, per-Space local models and model routing settings.',
     icon: <Brain size={16} />
   },
+  'codex-cli': {
+    title: 'Codex CLI',
+    description: 'Launch the installed Codex CLI in this Space.',
+    icon: <Terminal size={16} />
+  },
   advanced: {
     title: 'Advanced',
     description: 'Automatic model selection and policy for the active chat and Space.',
@@ -287,7 +293,7 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
   }
 };
 
-const SETTINGS_SECTION_COPY: Record<SettingsSectionId, { title: DesktopTranslationKey; description: DesktopTranslationKey }> ={
+const SETTINGS_SECTION_COPY: Record<Exclude<SettingsSectionId, 'codex-cli'>, { title: DesktopTranslationKey; description: DesktopTranslationKey }> ={
   'local-ai': {title:'settings.sections.localAi',description:'settings.sectionDescriptions.localAi'},
   conversation: { title: 'settings.sections.conversation', description: 'settings.sectionDescriptions.conversation' },
   appearance: { title: 'settings.sections.appearance', description: 'settings.sectionDescriptions.appearance' },
@@ -2228,6 +2234,7 @@ function VisionImpairedSettingsCard(): JSX.Element {
 
 export function normalizeSettingsSectionId(value: string): SettingsSectionId | null {
   const normalized = value.trim().toLowerCase();
+  if (normalized === 'codex cli') return 'codex-cli';
   if (normalized === 'extensions') return 'plugins';
   if (normalized === 'advanced' || normalized === 'conversation') return 'preferences';
   if (normalized === 'local-ai') return 'providers';
@@ -2439,7 +2446,7 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
   </SettingsCard>;
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void }): JSX.Element {
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose, onSectionChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void; onSectionChange?: (section: SettingsSectionId) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
@@ -2509,7 +2516,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     });
     return () => { active = false; };
   }, []);
-  const [section, setSection] = useState<SettingsSectionId>('preferences');
+  const [localSection, setLocalSection] = useState<SettingsSectionId>(() => normalizeSettingsSectionId(activeContextItem) ?? 'preferences');
+  const section = onSectionChange ? normalizeSettingsSectionId(activeContextItem) ?? 'preferences' : localSection;
+  const setSection = onSectionChange ?? setLocalSection;
+  useEffect(() => {
+    const target = normalizeSettingsSectionId(activeContextItem);
+    if (!onSectionChange && target) setLocalSection(target);
+  }, [activeContextItem, onSectionChange]);
   const [providerPage, setProviderPage] = useState<'working' | 'beta' | 'local'>('working');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});
@@ -2888,11 +2901,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       fallbackState.refresh()
     ]);
   }, [settingsState.refresh, modelsState.refresh, authState.refresh, pluginsState.refresh, fallbackState.refresh]);
-
-  useEffect(() => {
-    const match = normalizeSettingsSectionId(activeContextItem);
-    if (match) setSection(match);
-  }, [activeContextItem]);
 
   useEffect(() => {
     if (settingsState.loading) return;
@@ -3604,6 +3612,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }
 
   const sectionList = visibleSettingsSections();
+  const sectionCopy = (key: SettingsSectionId) => key === 'codex-cli'
+    ? { title: 'Codex CLI', description: shellText(locale, 'Starte die installierte Codex CLI im aktuellen Space.', SETTINGS_SECTIONS[key].description) }
+    : { title: t(SETTINGS_SECTION_COPY[key].title), description: t(SETTINGS_SECTION_COPY[key].description) };
   const updateAvailable = updateState === 'available';
 
   return (
@@ -3614,21 +3625,21 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         kicker={t('settings.system')}
         detail={t('settings.detail')}
         loading={settingsState.loading}
-        ready={ready}
-        onRefresh={refreshSettingsData}
+        ready={section === 'codex-cli' ? undefined : ready}
+        onRefresh={section === 'codex-cli' ? undefined : refreshSettingsData}
         onClose={onClose}
         closeLabel={t('browser.chrome.close')}
       />
-      <ErrorLine error={settingsState.error || authState.error || pluginsState.error} />
+      {section !== 'codex-cli' && <ErrorLine error={settingsState.error || authState.error || pluginsState.error} />}
 
       <div className="settings-native-grid">
         <nav className="settings-section-nav native-work-card">
           {sectionList.map(([key, meta]) => (
-            <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
+            <button key={key} type="button" aria-current={key === section ? 'page' : undefined} className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
               <span className="settings-section-button-icon">{meta.icon}</span>
               <span className="settings-section-button-text">
-                  <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
-                  <small>{t(SETTINGS_SECTION_COPY[key].description)}</small>
+                  <strong>{sectionCopy(key).title}</strong>
+                  <small>{sectionCopy(key).description}</small>
               </span>
             </button>
           ))}
@@ -3637,10 +3648,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         <main className={`native-work-card settings-editor${section === 'providers' ? ' settings-provider-editor' : ' settings-panel-scroll'}`}>
           <header className="settings-editor-head">
             <div>
-              <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>
-              <span>{t(SETTINGS_SECTION_COPY[section].description)}</span>
+              <strong>{sectionCopy(section).title}</strong>
+              <span>{sectionCopy(section).description}</span>
             </div>
-            <div className="settings-editor-actions">
+            {section !== 'codex-cli' && <div className="settings-editor-actions">
               <span className={`native-rest-pill ${dirty ? '' : 'ready'}`}>
                 <span className={`status-dot ${dirty ? '' : 'ready'}`} />
                 {dirty ? t('settings.status.unsaved') : t('settings.status.saved')}
@@ -3653,10 +3664,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 {saving ? <Loader2 size={15} className="spin" /> : <Save size={15} />}
                 <span>{t('settings.save')}</span>
               </button>
-            </div>
+            </div>}
           </header>
 
           <div className="settings-panel-stack">
+            {section === 'codex-cli' && <NativeTerminalMain codexOnly serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} />}
             {section === 'advanced' && <AdvancedModelPolicySettings sessionId={activeSessionId} workspacePath={activeSpacePath}
               browserProfileId={activeProfileId} backendProfileName={activeBackendProfileName ?? null} ready={ready} locale={locale} />}
             {section === 'preferences' && (

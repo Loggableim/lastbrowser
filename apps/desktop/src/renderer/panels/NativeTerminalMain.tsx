@@ -10,7 +10,7 @@ import { useDesktopI18n } from '../i18n.js';
 import { shellText } from '../i18n/shell-text.js';
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
 
-type NativeTerminalProps = { serviceStatus: ServiceStatus | null; activeSessionId: string | null; workspacePath: string };
+type NativeTerminalProps = { serviceStatus: ServiceStatus | null; activeSessionId: string | null; workspacePath: string; codexOnly?: boolean };
 
 export function NativeTerminalMain(props: NativeTerminalProps): JSX.Element {
   const enabled = useTerminalEnabled();
@@ -25,23 +25,21 @@ export function NativeTerminalMain(props: NativeTerminalProps): JSX.Element {
     ru: ['Терминал отключён', 'Включите терминал в Extension & Skill Hub.', 'Открыть Extension & Skill Hub'],
     ja: ['ターミナルは無効です', 'Extension & Skill Hubでターミナルを有効にしてください。', 'Extension & Skill Hubを開く']
   }[locale];
-  if (!enabled) return <section className="browser-main native-rest-main"><h1>{copy[0]}</h1><p>{copy[1]}</p>
+  if (!enabled && !props.codexOnly) return <section className="browser-main native-rest-main"><h1>{copy[0]}</h1><p>{copy[1]}</p>
     <button type="button" className="primary-action" onClick={() => {
       usePanelStore.getState().setExtensionHubTab('skills'); usePanelStore.getState().setExtensionHubOpen(true);
     }}>{copy[2]}</button></section>;
   return <NativeTerminalRuntime {...props} />;
 }
 
-function NativeTerminalRuntime({ serviceStatus, activeSessionId, workspacePath }: {
-  serviceStatus: ServiceStatus | null; activeSessionId: string | null; workspacePath: string;
-}): JSX.Element {
+function NativeTerminalRuntime({ serviceStatus, activeSessionId, workspacePath, codexOnly = false }: NativeTerminalProps): JSX.Element {
   const { locale } = useDesktopI18n();
   const isWindows = /Windows/i.test(navigator.userAgent);
   const shellLabel = isWindows ? 'PowerShell' : 'Shell';
   const shellDetail = shellText(locale,
     'Starte die Shell, Sidekick TUI oder die installierte Codex CLI für diesen Space.',
     'Launch the shell, Sidekick TUI, or the installed Codex CLI for this Space.');
-  const [mode, setMode] = useState<TerminalMode>('shell');
+  const [mode, setMode] = useState<TerminalMode>(codexOnly ? 'codex' : 'shell');
   const modeLabel = { shell: shellLabel, tui: 'Sidekick TUI', codex: 'Codex CLI' }[mode];
   const [termId, setTermId] = useState('');
   const [cwd, setCwd] = useState(workspacePath);
@@ -89,16 +87,16 @@ function NativeTerminalRuntime({ serviceStatus, activeSessionId, workspacePath }
       }
     }
   }
-  return <section className="browser-main native-rest-main">
-    <header className="native-rest-header"><div className="native-rest-title"><TerminalIcon size={21}/><div><span className="eyebrow">Terminal & CLI</span><h1>Terminal & Sidekick</h1><p>{shellDetail}</p></div></div></header>
+  return <section className={codexOnly ? 'settings-card' : 'browser-main native-rest-main'}>
+    {!codexOnly && <header className="native-rest-header"><div className="native-rest-title"><TerminalIcon size={21}/><div><span className="eyebrow">Terminal & CLI</span><h1>Terminal & Sidekick</h1><p>{shellDetail}</p></div></div></header>}
     {!termId && <form className="terminal-start-form" onSubmit={(event) => { event.preventDefault(); void start(); }}>
-      <div className="native-card-actions">
+      {!codexOnly && <div className="native-card-actions">
         <button type="button" disabled={starting} aria-pressed={mode === 'shell'} onClick={() => setMode('shell')}><TerminalIcon size={14}/>{shellLabel}</button>
         <button type="button" disabled={starting} aria-pressed={mode === 'tui'} onClick={() => setMode('tui')}><Sparkles size={14}/>Sidekick TUI</button>
         <button type="button" disabled={starting} aria-pressed={mode === 'codex'} onClick={() => setMode('codex')}><TerminalIcon size={14}/>Codex CLI</button>
-      </div>
+      </div>}
       <label>{shellText(locale, 'Arbeitsverzeichnis', 'Working directory')}<input value={cwd} onChange={(event) => setCwd(event.target.value)}/></label>
-      <button type="submit" className="primary-action compact" disabled={starting || !cwd.trim() || (mode === 'tui' && serviceStatus?.webuiHealth !== 'ready')}>{starting && <Loader2 className="spin" size={14}/>} {starting ? shellText(locale, 'Startet…', 'Starting…') : shellText(locale, "Terminal öffnen", "Open terminal")}</button>
+      <button type="submit" className="primary-action compact" disabled={starting || !cwd.trim() || (mode === 'tui' && serviceStatus?.webuiHealth !== 'ready')}>{starting && <Loader2 className="spin" size={14}/>} {starting ? shellText(locale, 'Startet…', 'Starting…') : codexOnly ? shellText(locale, 'Codex starten', 'Start Codex') : shellText(locale, 'Terminal öffnen', 'Open terminal')}</button>
     </form>}
     {error && <div className="workspace-error" role="status">{error}</div>}
     <div className="terminal-container" style={{ minHeight: 260, flex: 1 }}>

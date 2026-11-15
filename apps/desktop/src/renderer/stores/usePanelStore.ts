@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import {
   type LastbrowserPanelId,
   lastbrowserPanels,
+  panelContextItems,
   loadInitialPanel,
   saveActivePanel,
   loadBooleanPreference,
@@ -152,7 +153,7 @@ export interface PanelState {
   /** Vision-Impaired Mode 2.0 (docs/visionimpaired.md) — one object, one storage key. */
   visionImpaired: VisionImpairedConfig;
 
-  setActivePanel(panel: LastbrowserPanelId): void;
+  setActivePanel(panel: LastbrowserPanelId, contextItem?: string): void;
   setLeftSidebarCollapsed(collapsed: boolean | ((current: boolean) => boolean)): void;
   setSidebarMode(mode: SidebarMode | ((current: SidebarMode) => SidebarMode)): void;
   setZenExitDefaultMode(mode: ZenExitDefaultMode): void;
@@ -487,8 +488,10 @@ syncA11yToDom(
   initialA11yFocusRings
 );
 
+const initialPanel = loadInitialPanel();
+
 export const usePanelStore = create<PanelState>((set) => ({
-  activePanel: loadInitialPanel(),
+  activePanel: initialPanel,
   leftSidebarCollapsed: loadBooleanPreference(undefined, leftSidebarCollapsedStorageKey, false),
   sidebarMode: loadSidebarMode(),
   zenExitDefaultMode: loadZenExitDefaultMode(),
@@ -525,7 +528,7 @@ export const usePanelStore = create<PanelState>((set) => ({
     MIN_WORKSPACE_PANEL_WIDTH,
     MAX_WORKSPACE_PANEL_WIDTH
   ),
-  activeContextItem: '',
+  activeContextItem: panelContextItems[initialPanel]?.[0] ?? '',
   installedSidebarApps: loadInstalledSidebarApps(),
   findOpen: false,
   findQuery: '',
@@ -536,9 +539,14 @@ export const usePanelStore = create<PanelState>((set) => ({
   extensionHubOpen: false,
   extensionHubTab: 'webextensions',
 
-  setActivePanel: (activePanel) => {
+  setActivePanel: (activePanel, contextItem) => {
     saveActivePanel(undefined, activePanel);
-    set({ activePanel });
+    set(state => ({
+      activePanel,
+      activeContextItem: contextItem ?? (activePanel === state.activePanel
+        ? state.activeContextItem
+        : panelContextItems[activePanel]?.[0] ?? '')
+    }));
   },
 
   setLeftSidebarCollapsed: (input) => {

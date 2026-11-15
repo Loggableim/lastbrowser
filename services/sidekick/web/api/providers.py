@@ -2082,7 +2082,10 @@ def probe_ollama_connection(
         headers["Authorization"] = f"Bearer {key}"
     request = urllib.request.Request(endpoint, headers=headers)
     try:
-        opener = urllib.request.build_opener(_NoRedirectHandler)
+        handlers = [_NoRedirectHandler]
+        if provider == "ollama":
+            handlers.append(urllib.request.ProxyHandler({}))
+        opener = urllib.request.build_opener(*handlers)
         with opener.open(request, timeout=8) as response:
             if response.status < 200 or response.status >= 300:
                 return {"ok": False, "error": "provider_http_error", "status": response.status}

@@ -49,7 +49,7 @@ import { isMultiAgentModelSelection, isProviderModelSelected, parseProviderModel
 import { isModelActive, useActiveModelRevision } from '../active-model-selection.js';
 import { QUICKCHAT_FAVORITE_CHANGED_EVENT, readQuickchatFavoriteState, setQuickchatFavorite } from '../quickchat-preferences.js';
 import { isProviderModelQualified } from '../provider-chat-evidence.js';
-import { isDirectQuickchatProvider } from '../quickchat-automatic.js';
+import { isDirectQuickchatProvider, quickchatEligibleGroups } from '../quickchat-automatic.js';
 import { AI_ORCHESTRATION_ENABLED } from '../orchestration-feature.js';
 import { useShowUntestedProviderBetas } from '../provider-beta-preferences.js';
 import { isModelCatalogCacheCurrent, isModelCatalogResponseCurrent } from '../model-picker-options.js';
@@ -138,6 +138,7 @@ export interface CopilotSplitViewProps {
   onSelectModel?: (modelId: string, providerId?: string) => void;
   preparedModelSelection?: ScopedModelSelection;
   preparedModelSelectionScopeKey?: string;
+  onRetryModelCatalog?: () => void;
   onNewChat?: () => void;
   sessions?: DesktopSessionSummary[];
   activeSessionId?: string | null;
@@ -169,6 +170,7 @@ export function CopilotSplitView({
   onSelectModel,
   preparedModelSelection,
   preparedModelSelectionScopeKey,
+  onRetryModelCatalog,
   onNewChat,
   sessions = [],
   activeSessionId = null,
@@ -285,7 +287,7 @@ export function CopilotSplitView({
     let alive = true;
     const generation = orchestrationScopeGenerationRef.current;
     const hasCachedCatalogForScope = isModelCatalogCacheCurrent(modelCatalogCacheScopeKeyRef.current, orchestrationScopeKey);
-    const persistedCatalog = readQuickchatCatalog<AvailableModelItem>(orchestrationScopeKey);
+    const persistedCatalog = preparedModelSelectionScopeKey ? [] : readQuickchatCatalog<AvailableModelItem>(orchestrationScopeKey);
     if (persistedCatalog.length) {
       setModelList(persistedCatalog);
       setModelCapabilitiesLoaded(true);
@@ -318,6 +320,7 @@ export function CopilotSplitView({
       try {
         const preparedCurrent = preparedModelSelection && preparedModelSelectionScopeKey === JSON.stringify([browserProfileId, workspacePath || null, backendProfileName || null])
           && preparedModelSelection.scope.browserProfileId === browserProfileId && Array.isArray(preparedModelSelection.groups);
+        if (preparedModelSelectionScopeKey && !preparedCurrent) return;
         if (!preparedCurrent && !window?.lastbrowser?.sidekick?.requestWebui) {
           if (!hasCachedCatalogForScope) setModelList(AVAILABLE_MODELS);
           modelCatalogFailureScopeKeyRef.current = orchestrationScopeKey;
@@ -350,6 +353,9 @@ export function CopilotSplitView({
         const dynamicModels: AvailableModelItem[] = [];
         const catalogStatus = (res as { catalog_status?: Record<string, string> })?.catalog_status || {};
         const isAntigravityUnavailable = String(catalogStatus.antigravity || '').toLowerCase() === 'unavailable';
+        const eligible = preparedCurrent && preparedModelSelection
+          ? new Set(quickchatEligibleGroups(preparedModelSelection).flatMap(group => group.models.map(model => JSON.stringify([group.providerId, model.id]))))
+          : null;
 
         for (const g of res.groups) {
           if (g.configured === false) continue;
@@ -389,6 +395,7 @@ export function CopilotSplitView({
 
           for (const m of [...(g.models || []), ...(g.extra_models || [])]) {
             const rawId = String(m.id || '');
+            if (eligible && !eligible.has(JSON.stringify([pid, rawId]))) continue;
             const identity = parseProviderModelId(rawId, pid);
             const cleanId = identity.model;
             const pct = typeof m.remaining_percent === 'number' ? m.remaining_percent : undefined;
@@ -1286,7 +1293,7 @@ export function CopilotSplitView({
         </div>}
         {slowCatalogVisible && <div className="copilot-model-gate-notice" role="status">
           {t('chat.modelCatalogSlow')}
-          <button type="button" onClick={() => setModelCatalogRetry((value) => value + 1)}>{t('chat.retryModels')}</button>
+          <button type="button" onClick={() => onRetryModelCatalog ? onRetryModelCatalog() : setModelCatalogRetry((value) => value + 1)}>{t('chat.retryModels')}</button>
         </div>}
         {modelGateReason && !favoriteInvalid && !slowCatalogVisible && <div className="copilot-model-gate-notice" role={modelGateReason === 'loading' ? 'status' : 'alert'}>
           {quickChatModelGateCopy[locale][modelGateReason]}

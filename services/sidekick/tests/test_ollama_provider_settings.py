@@ -214,7 +214,10 @@ def test_local_ollama_probe_counts_api_tags_models(monkeypatch):
             assert request.full_url == "http://127.0.0.1:11434/api/tags"
             return Response()
 
-    monkeypatch.setattr(providers.urllib.request, "build_opener", lambda _handler: Opener())
+    def local_opener(_redirect, proxy):
+        assert proxy.proxies == {}
+        return Opener()
+    monkeypatch.setattr(providers.urllib.request, "build_opener", local_opener)
 
     assert providers.probe_ollama_connection(
         "ollama", "http://127.0.0.1:11434"

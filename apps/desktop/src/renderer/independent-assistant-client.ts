@@ -289,7 +289,7 @@ export function isLocalStoreRuntimeCapability(v:unknown):boolean {
     &&v.parallelRequests===1;
 }
 const isModelEntry: Guard<ScopedModelEntry> = (v): v is ScopedModelEntry => isIndependentRecord(v) && ref(v.id) && ref(v.label)
-  && boolean(v.supportsIndependent) && optional(v.reasoning_efforts, values => list(values, ref))
+  && boolean(v.supportsIndependent) && optional(v.quickchatAvailable, boolean) && optional(v.reasoning_efforts, values => list(values, ref))
   && optional(v.deploymentKind,value=>oneOf(value,['local','cloud','remote','unknown']))
   && optional(v.contextLength,value=>nullable(value,revision))
   && optional(v.contextLengthSource,value=>oneOf(value,['live_catalog','local_catalog','official_model_docs','catalog','provided_catalog','models_dev','explicit_config','unknown']))

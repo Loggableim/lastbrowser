@@ -197,6 +197,7 @@ export type LocalStoreRuntimeCapability = Readonly<{state:'unavailable';reasonCo
   runtimeBuild:string;runtimeDigest:string;evidenceRef:string;toolCallingQualified:boolean;
   contextTokens:number;maxOutputTokens:number;parallelRequests:1}>;
 export type ScopedModelEntry = Readonly<{ id: string; label: string; supportsIndependent: boolean; reasoning_efforts?: readonly string[];
+  quickchatAvailable?: boolean;
   modelSource?: 'explicit_config'|'local_catalog'; deploymentKind?:'local'|'cloud'|'remote'|'unknown';
   contextLength?:number|null;contextLengthSource?:'live_catalog'|'local_catalog'|'official_model_docs'|'catalog'|'provided_catalog'|'models_dev'|'explicit_config'|'unknown';localRuntime?:LocalStoreRuntimeCapability;
   nativeAvailability?: NativeModelAvailability }>;

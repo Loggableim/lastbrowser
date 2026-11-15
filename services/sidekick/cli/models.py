@@ -1661,6 +1661,15 @@ def provider_model_ids(provider: Optional[str], *, force_refresh: bool = False,
         except Exception:
             pass
     if normalized == "custom":
+        from cli.config import load_config
+        from runtime.quickchat_ollama import configured_local_ollama_endpoint, local_ollama_key
+        config = load_config()
+        ollama_endpoint = configured_local_ollama_endpoint(config, normalized)
+        if ollama_endpoint:
+            from web.api.providers import probe_ollama_connection
+            discovered = probe_ollama_connection("ollama", ollama_endpoint, local_ollama_key(config), include_models=True)
+            return result([row["id"] for row in discovered.get("models", [])],
+                          "provider_api" if discovered.get("ok") is True else "unavailable")
         base_url = _get_custom_base_url()
         if base_url:
             # Try common API key env vars for custom endpoints

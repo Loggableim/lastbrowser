@@ -6398,7 +6398,8 @@ function AppContent(): JSX.Element {
                 modelName={copilotModelSelection.model || setupState.model || 'AI'}
                 modelProvider={copilotModelSelection.provider}
                 preparedModelSelection={currentQuickChatPrepared?.selection}
-                preparedModelSelectionScopeKey={currentQuickChatPrepared?.key}
+                preparedModelSelectionScopeKey={quickChatPreparedScopeKey}
+                onRetryModelCatalog={() => { void prepareQuickChatModelSelection(true).catch(() => {}); }}
                 messages={selectScopedQuickChatValue(quickChatMessages, quickChatTranscriptScopeKeyRef.current,
                   createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), [])}
                 busy={selectScopedQuickChatValue(quickChatBusy, quickChatBusyScopeKeyRef.current ?? quickChatBindingScopeKeyRef.current ?? quickChatStartPromiseRef.current?.scopeKey ?? null,

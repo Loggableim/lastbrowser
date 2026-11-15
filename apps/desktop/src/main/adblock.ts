@@ -199,7 +199,7 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
 
   async function refreshIfStale(): Promise<void> {
     if (refreshPromise) return refreshPromise;
-    if (!blocker || options.loadBlocker || Date.now() - lastFilterRefreshAt < FILTER_ENGINE_CACHE_MAX_AGE_MS) return;
+    if (!enabled || !blocker || options.loadBlocker || Date.now() - lastFilterRefreshAt < FILTER_ENGINE_CACHE_MAX_AGE_MS) return;
     refreshPromise = (async () => {
       try {
         // Build and persist the replacement before touching active sessions.
@@ -316,6 +316,7 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
       return;
     }
     attached.add(session);
+    if (!enabled) return;
 
     // session-created fires synchronously before a new Space/webview navigates.
     // Do not yield to a microtask when the startup engine is already available:
@@ -330,7 +331,7 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
     if (!instance) return;
 
     try {
-      if (enabled) enableBlocking(instance, session);
+      if (enabled && !instance.isBlockingEnabled(session)) enableBlocking(instance, session);
     } catch (error) {
       state = 'error';
       lastError = error instanceof Error ? error.message : String(error);
@@ -363,15 +364,19 @@ export function createAdblockController(options: AdblockOptions = {}): AdblockCo
     if (next === enabled) return;
     enabled = next;
     if (next) void refreshIfStale();
-    if (!blocker) return;
-    for (const session of attached) {
-      try {
-        if (next) enableBlocking(blocker, session);
-        else blocker.disableBlockingInSession(session);
-      } catch {
-        // A session may already be destroyed — ignore.
+    const apply = (instance: ElectronBlocker | null) => {
+      if (!instance || enabled !== next) return;
+      for (const session of attached) {
+        try {
+          if (next && !instance.isBlockingEnabled(session)) enableBlocking(instance, session);
+          if (!next) instance.disableBlockingInSession(session);
+        } catch {
+          // A session may already be destroyed.
+        }
       }
-    }
+    };
+    if (blocker) apply(blocker);
+    else if (next && attached.size) void loadBlocker().then(apply);
   }
 
   return {

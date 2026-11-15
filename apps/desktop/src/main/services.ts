@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from 'node:child_process';
+import { ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
@@ -37,6 +37,18 @@ export type ServiceStatus = {
 export type PortResolver = (preferredPort: number) => Promise<number>;
 export type WebuiHealthChecker = (webuiUrl: string) => Promise<{ ok: boolean; error?: string }>;
 export type HungPortRecoverer = (preferredPort: number) => Promise<PortRecoveryOutcome>;
+
+function stopWebuiProcess(child: ChildProcess): void {
+  const windowsDir = process.env.SystemRoot || process.env.WINDIR;
+  if (process.platform === 'win32' && windowsDir && child.pid && child.exitCode === null && child.signalCode === null) {
+    // TerminateProcess only stops the Python supervisor. Stop its tree before
+    // the portable launcher tries to remove the extracted runtime.
+    const result = spawnSync(path.join(windowsDir, 'System32', 'taskkill.exe'),
+      ['/F', '/T', '/PID', String(child.pid)], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
+    if (result.status === 0) return;
+  }
+  child.kill();
+}
 
 /** Minimum gap between forced restarts of an unresponsive backend. */
 const FORCED_RESTART_COOLDOWN_MS = 30_000;
@@ -880,7 +892,7 @@ export class SidecarServices {
       return;
     }
     try {
-      this.webuiProcess.kill();
+      stopWebuiProcess(this.webuiProcess);
     } catch {}
     this.webuiProcess = null;
     this.status = { ...this.status, sidekick: 'stopped', runtimeGeneration: null };

@@ -3637,7 +3637,10 @@ function AppContent(): JSX.Element {
     quickChatPreparedRef.current = null;
     setQuickChatPrepared(null);
     if (!sidekickApiReady || !copilotOpen || !activeBackendProfileName) return;
-    const prepare = () => { void prepareQuickChatModelSelection(true).catch(() => { /* Send retains the actionable error and draft. */ }); };
+    const prepare = () => {
+      if (document.visibilityState === 'hidden') return;
+      void prepareQuickChatModelSelection(true).catch(() => { /* Send retains the actionable error and draft. */ });
+    };
     const invalidate = () => {
       quickChatPreparationEpochRef.current++;
       quickChatPreparedRef.current = null;
@@ -3649,11 +3652,13 @@ function AppContent(): JSX.Element {
     window.addEventListener('lastbrowser:settings-changed', invalidate);
     window.addEventListener('lastbrowser:provider-config-changed', invalidate);
     window.addEventListener('focus', prepare);
+    document.addEventListener('visibilitychange', prepare);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener('lastbrowser:settings-changed', invalidate);
       window.removeEventListener('lastbrowser:provider-config-changed', invalidate);
       window.removeEventListener('focus', prepare);
+      document.removeEventListener('visibilitychange', prepare);
     };
   }, [sidekickApiReady, copilotOpen, quickChatMode, activeProfileId, activeSpacePath, activeBackendProfileName, status?.runtimeGeneration, status?.webuiUrl]);
 

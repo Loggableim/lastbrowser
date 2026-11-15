@@ -13,6 +13,7 @@ export type TrayOptions = {
   getMainWindow: () => BrowserWindow | null;
   getWindows?: () => BrowserWindow[];
   getServices: () => SidecarServices | null;
+  getLocale?: () => string;
   resourcesDir?: string;
   onQuit?: () => void;
 };
@@ -80,10 +81,11 @@ export function buildTrayContextMenu(
 
   const sidekickOnline = serviceStatus?.sidekick === 'ready';
   const gatewayRunning = gatewayStatus?.running ?? false;
+  const german = options.getLocale?.().toLowerCase().startsWith('de') ?? false;
 
   const template: MenuItemConstructorOptions[] = [
     {
-      label: 'Lastbrowser öffnen',
+      label: german ? 'Lastbrowser öffnen' : 'Open Lastbrowser',
       click: () => actions.showWindow()
     },
     { type: 'separator' },
@@ -93,19 +95,21 @@ export function buildTrayContextMenu(
     },
     {
       label: gatewayRunning
-        ? `Messaging Gateway: Aktiv (PID ${gatewayStatus?.pid ?? '?'})`
-        : 'Messaging Gateway: Inaktiv',
-      sublabel: gatewayRunning ? 'Klicken zum Stoppen' : 'Klicken zum Starten',
+        ? `Messaging Gateway: ${german ? 'Aktiv' : 'Active'} (PID ${gatewayStatus?.pid ?? '?'})`
+        : `Messaging Gateway: ${german ? 'Inaktiv' : 'Inactive'}`,
+      sublabel: gatewayRunning
+        ? (german ? 'Klicken zum Stoppen' : 'Click to stop')
+        : (german ? 'Klicken zum Starten' : 'Click to start'),
       click: () => actions.toggleGateway()
     },
     {
-      label: 'Gateway neu starten',
+      label: german ? 'Gateway neu starten' : 'Restart gateway',
       enabled: gatewayRunning,
       click: () => actions.restartGateway()
     },
     { type: 'separator' },
     {
-      label: 'Lastbrowser beenden',
+      label: german ? 'Lastbrowser beenden' : 'Quit Lastbrowser',
       click: () => actions.quit()
     }
   ];

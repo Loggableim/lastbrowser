@@ -4,6 +4,7 @@ import { isChatCompletionConfirmed } from './chat-completion.js';
 import { isNativeChatProgressEvent, isNativeChatStreamWaitExpired } from './chat-stream-timeout.js';
 import { describeOrchestrationProgress } from './orchestration-progress.js';
 import { applyChatLatencyPlaceholderReveal, buildChatLatencyPlaceholderAssistant, resolveChatLatencyPersonality, startChatLatencyPlaceholder, type ChatLatencyPersonality, type ChatLatencyPlaceholderRun } from './chat-perceived-latency-stream.js';
+import { createDesktopI18n, loadDesktopLocalePreference, resolveDesktopLocale } from './i18n.js';
 
 function readQuickChatLatencyPersonality(): ChatLatencyPersonality {
   try {
@@ -13,7 +14,6 @@ function readQuickChatLatencyPersonality(): ChatLatencyPersonality {
     return 'nova';
   }
 }
-import { createDesktopI18n, resolveDesktopLocale } from './i18n.js';
 
 type QuickChatClient = Pick<Window['lastbrowser']['sidekick'], 'startChat' | 'getSession' | 'onChatStreamEvent' | 'subscribeChatStream' | 'unsubscribeChatStream' | 'getStreamStatus' | 'cancelStream'>;
 export type QuickChatScope = { profile: string; workspace: string };
@@ -81,8 +81,8 @@ export class QuickChat {
     this.stopRequested = false;
     const current = () => this.generation === owner;
     const { t } = createDesktopI18n(resolveDesktopLocale({
-      settingsLanguage: window.localStorage.getItem('language') || '',
-      browserLanguage: navigator.language,
+      settingsLanguage: globalThis.document?.documentElement.lang,
+      savedLocale: loadDesktopLocalePreference(),
     }));
     this.latencyRun?.cancel();
     this.latencyRun = startChatLatencyPlaceholder({

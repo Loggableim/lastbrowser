@@ -5110,6 +5110,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   <div className="settings-modal-overlay" onClick={() => setOllamaModalProviderId(null)}>
                     <div className="settings-modal-box" onClick={(e) => e.stopPropagation()}>
                       <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{t('settings.panels.providers.configure')} {ollamaModalLabel}</h3>
+                      {ollamaModalProviderId === 'ollama' && <p>
+                        {shellText(locale, 'Starte Ollama auf diesem Rechner und installiere ein lokales Modell. „Verbindung testen“ fragt den Server direkt nach seinen Modellen.',
+                          'Start Ollama on this computer and install a local model. Test connection asks the server directly for its model list.')}
+                      </p>}
                       <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.baseUrl')}</label>
                       <input
                         type="url"
@@ -5153,7 +5157,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                               });
                               if (!isProviderSettingsScopeCurrent(scopeSelection, activeProviderScope, 0, 0)) return;
                               if (result.ok) {
-                                setOllamaTestResult(`✓ ${t('settings.panels.providers.connectionSuccess')} — ${isCloud ? 'Ollama Cloud' : 'Ollama'}`);
+                                const count = Number(result.model_count);
+                                const models = !isCloud && count === 0
+                                  ? shellText(locale, 'Keine lokalen Modelle gefunden. Installiere ein Modell in Ollama und teste erneut.',
+                                    'No local models found. Install a model in Ollama and test again.')
+                                  : '';
+                                setOllamaTestResult(`✓ ${t('settings.panels.providers.connectionSuccess')} — ${isCloud ? 'Ollama Cloud' : 'Ollama'}${models ? ` · ${models}` : ''}`);
                               } else {
                                 setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')}: ${String(result.error || t('common.error'))}`);
                               }

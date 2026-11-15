@@ -110,3 +110,30 @@ def test_background_title_worker_does_not_own_chat_stream_termination(monkeypatc
 
     assert any(event == "title_status" for event, _data in events)
     assert not any(event == "stream_end" for event, _data in events)
+
+
+def test_local_ollama_title_retries_do_not_use_auxiliary_provider(monkeypatch):
+    from web.api import streaming
+
+    agent = SimpleNamespace(provider="ollama", model="qwen3:4b", base_url="http://127.0.0.1:11434/v1")
+    session = _session(DEFAULT_SESSION_TITLE, [{"role": "user", "content": "Plan a garden layout"}])
+    session.save = lambda **kwargs: None
+    calls = []
+
+    def try_aux(*args, **kwargs):
+        calls.append("aux")
+        return "Remote title", "llm_aux", ""
+
+    monkeypatch.setattr(streaming, "get_session", lambda _: session)
+    monkeypatch.setattr(streaming, "_aux_title_configured", lambda: True)
+    monkeypatch.setattr(streaming, "_generate_llm_session_title_for_agent", lambda *args: (None, "llm_error", ""))
+    monkeypatch.setattr(streaming, "_generate_llm_session_title_via_aux", try_aux)
+    emit = lambda *args: None
+
+    streaming._run_background_title_update("session-1", "Plan a garden layout", "Start with a sketch", DEFAULT_SESSION_TITLE, emit, agent)
+    current = session.title
+    assert current != DEFAULT_SESSION_TITLE
+    streaming._run_background_title_refresh("session-1", "Choose plants", "Try herbs", current, emit, agent)
+
+    assert calls == []
+    assert session.title == current

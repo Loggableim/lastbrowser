@@ -1,21 +1,12 @@
 # Security Policy
 
-## Supported Versions
-
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
-
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+Check the [latest stable release](https://github.com/Loggableim/lastbrowser/releases/latest)
+for security fixes. Include the exact LastBrowser version and release channel
+when reporting a problem with a stable, beta, or portable build.
 
 ## Reporting a Vulnerability
 
-Use this section to tell people how to report a vulnerability.
-
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Report suspected vulnerabilities privately to [LastBrowser support](mailto:support@lastbrowser.com).
+Include the operating system, package type, steps to reproduce, and expected and
+observed behavior. Remove credentials, private URLs, and personal data from
+any logs or screenshots. Keep vulnerability details out of public issues.

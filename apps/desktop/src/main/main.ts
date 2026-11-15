@@ -346,7 +346,10 @@ async function boundPurposeChatRequest(event: Electron.IpcMainInvokeEvent, raw: 
 function quitIfLastShellClosed(): void {
   if (!isQuitting && process.platform !== 'darwin' && !mainWindow && secondaryWindows.size === 0) app.quit();
 }
-const adblock = createAdblockController();
+const adblockPreferencePath = path.join(app.getPath('userData'), 'adblock-preference');
+let adblockEnabled = true;
+try { adblockEnabled = readFileSync(adblockPreferencePath, 'utf8') !== 'disabled'; } catch {}
+const adblock = createAdblockController({ enabled: adblockEnabled });
 const sidekickUpdater = createSidekickUpdater();
 const agentWorkspaceStreams = new Map<string, AbortController>();
 const chatStreams = new ChatStreamRegistry();
@@ -756,6 +759,7 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:i18n:setLocale', (_event, locale: unknown) => {
     if (typeof locale === 'string' && locale.trim()) {
       currentLocale = locale.trim();
+      appTray?.updateMenu();
     }
     return true;
   });
@@ -1391,8 +1395,11 @@ function registerIpc(): void {
   });
   registerUpdateIpc(() => mainWindow);
   ipcMain.handle('lastbrowser:adblock:status', () => adblock.getStatus());
-  ipcMain.handle('lastbrowser:adblock:setEnabled', (_event, enabled: unknown) => {
-    adblock.setEnabled(enabled !== false);
+  ipcMain.handle('lastbrowser:adblock:setEnabled', (event, enabled: unknown) => {
+    captureTrustedShellSender(event, isTrustedShell);
+    if (typeof enabled !== 'boolean') throw new Error('Invalid ad blocker preference');
+    writeFileSync(adblockPreferencePath, enabled ? 'enabled' : 'disabled', { mode: 0o600 });
+    adblock.setEnabled(enabled);
     return adblock.getStatus();
   });
   // Download tracking: the renderer polls the list and gets pushed updates.
@@ -1748,6 +1755,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     getMainWindow: () => mainWindow,
     getWindows: () => BrowserWindow.getAllWindows(),
     getServices: () => services,
+    getLocale: () => currentLocale,
     resourcesDir: appResourcesDir(),
     onQuit: () => {
       isQuitting = true;

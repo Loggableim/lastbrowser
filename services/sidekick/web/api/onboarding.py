@@ -139,7 +139,7 @@ _SUPPORTED_PROVIDER_SETUPS = {
     },
     # ── Open / self-hosted ─────────────────────────────────────────────
     "ollama": {
-        "label": "Ollama (Lokal)",
+        "label": "Ollama",
         "env_var": "OLLAMA_API_KEY",
         "default_model": "qwen3:32b",
         "default_base_url": "http://localhost:11434/v1",

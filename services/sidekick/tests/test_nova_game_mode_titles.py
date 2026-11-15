@@ -1,6 +1,30 @@
 from types import SimpleNamespace
 
 
+def test_local_ollama_title_does_not_use_auxiliary_provider_on_failure(monkeypatch, tmp_path):
+    from web.api import config as cfg
+    from web.api import models
+
+    monkeypatch.setattr(cfg, "SETTINGS_FILE", tmp_path / "settings.json")
+    cfg.save_settings({"game_mode_enabled": False})
+    auxiliary_calls = []
+
+    def unavailable(_request, *, timeout):
+        raise TimeoutError("Ollama did not respond")
+
+    def generate_remote_title(*args, **kwargs):
+        auxiliary_calls.append((args, kwargs))
+        return "Remote title", "llm_aux"
+
+    monkeypatch.setattr("urllib.request.urlopen", unavailable)
+    monkeypatch.setattr("web.api.streaming.generate_title_raw_via_aux", generate_remote_title)
+
+    title = models._generate_title_via_ollama([{"role": "user", "content": "Example conversation"}])
+
+    assert auxiliary_calls == []
+    assert title is None
+
+
 def test_async_ollama_title_uses_remote_deepseek_in_game_mode(monkeypatch):
     from web.api import models
     from web.api import routes

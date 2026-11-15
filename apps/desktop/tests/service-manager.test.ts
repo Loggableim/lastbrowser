@@ -1,9 +1,14 @@
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:child_process')>(),
+  spawnSync: vi.fn(() => ({ status: 0 }))
+}));
 import {
   SidecarServices,
   buildSidecarEnvironment,
@@ -218,6 +223,29 @@ describe('sidecar service layout', () => {
       service.stop();
       expect(service.getStatus().runtimeGeneration).toBeNull();
       rmSync(resourcesRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('stops the owned Windows Python supervisor and its children together', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    const child = Object.assign(new EventEmitter(), { pid: 43210, exitCode: null, signalCode: null, kill: vi.fn() });
+    const service = new SidecarServices(resolveServiceLayout(root), 8787, (() => child) as never, async () => 8787);
+
+    try {
+      await service.start();
+      service.stop();
+      expect(spawnSync).toHaveBeenCalledWith(
+        expect.stringMatching(/System32[\\/]taskkill\.exe$/i),
+        ['/F', '/T', '/PID', '43210'],
+        expect.objectContaining({ windowsHide: true })
+      );
+      expect(child.kill).not.toHaveBeenCalled();
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

@@ -1183,7 +1183,7 @@ function AppContent(): JSX.Element {
   const quickChatAwaitingStartRef = useRef(false);
   const quickChatStoppedStreamIdRef = useRef<string | null>(null);
   const quickChatStopPendingRef = useRef(false);
-  const quickChatStopEpochRef = useRef(0);
+  const cancelQuickChatPreparationRef = useRef<(() => void) | null>(null);
   const quickChatGenerationRef = useRef(0);
   const quickChatBufferedEventsRef = useRef<import('../main/quick-chat-controller.js').QuickChatStreamEvent[]>([]);
   const quickChatScopeKeyRef = useRef<string | null>(null);
@@ -4996,6 +4996,7 @@ function AppContent(): JSX.Element {
     return runQuickChatResetOnce(quickChatResetPromiseRef, async () => {
       const resetGeneration = quickChatGenerationRef.current;
       const resetChatId = quickChatIdRef.current;
+      cancelQuickChatPreparationRef.current?.();
       const stopWasPending = quickChatStopPendingRef.current;
       let resetScopeKey = quickChatBindingScopeKeyRef.current
         ?? quickChatStartPromiseRef.current?.scopeKey
@@ -5120,7 +5121,6 @@ function AppContent(): JSX.Element {
       || quickChatTranscriptScopeKeyRef.current !== null && quickChatTranscriptScopeKeyRef.current !== activeScopeKey
       || !prompt.trim()) return false;
     const generation = quickChatGenerationRef.current;
-    const stopEpoch = quickChatStopEpochRef.current;
     quickChatStopPendingRef.current = true;
     setQuickChatBusy(true);
     const chatId = quickChatIdRef.current;
@@ -5143,30 +5143,42 @@ function AppContent(): JSX.Element {
       }
       return false;
     };
-    let scopedSelection: Awaited<ReturnType<typeof readCapturedSpaceModelSelection>>;
-    try {
-      scopedSelection = await prepareQuickChatModelSelection();
-    } catch (error) {
+    let cancelled = false;
+    let resolveCancellation!: () => void;
+    const cancellation = new Promise<null>(resolve => { resolveCancellation = () => resolve(null); });
+    // Model discovery may still populate the scoped cache, but it no longer owns a send after Stop.
+    const cancelPreparation = () => {
+      cancelled = true;
+      cancelQuickChatPreparationRef.current = null;
       quickChatStopPendingRef.current = false;
-      setQuickChatErrorForScope(capturedScopeKey, error instanceof Error ? error.message : String(error));
-      return rejectPreflight();
-    }
-    if (stopEpoch !== quickChatStopEpochRef.current) {
-      quickChatStopPendingRef.current = false;
-      // Stop during preflight never reached inference. Keep the cleared draft
-      // cleared rather than undoing the user's explicit cancellation.
       rejectPreflight();
+      resolveCancellation();
+    };
+    cancelQuickChatPreparationRef.current = cancelPreparation;
+    let scopedSelection: ScopedModelSelection | null = null;
+    try {
+      scopedSelection = await Promise.race([prepareQuickChatModelSelection(), cancellation]);
+    } catch (error) {
+      if (!cancelled) {
+        setQuickChatErrorForScope(capturedScopeKey, error instanceof Error ? error.message : String(error));
+        return rejectPreflight();
+      }
+    } finally {
+      if (cancelQuickChatPreparationRef.current === cancelPreparation) {
+        cancelQuickChatPreparationRef.current = null;
+        quickChatStopPendingRef.current = false;
+      }
+    }
+    if (cancelled) {
       if (preserveUnknownOutcome) throw new Error('Quickchat stopped before start');
       return false;
     }
-    if (capturedScopeKey !== `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`) {
-      quickChatStopPendingRef.current = false;
+    if (!scopedSelection || capturedScopeKey !== `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`) {
       return rejectPreflight();
     }
     const preferenceScope = { browserProfileId, workspacePath: workspacePath || '', backendProfileName: backendProfileName || 'default' };
     const favoriteState = readQuickchatFavoriteState(preferenceScope);
     if (favoriteState.invalid) {
-      quickChatStopPendingRef.current = false;
       setQuickChatErrorForScope(capturedScopeKey, locale === 'de'
         ? 'Der gespeicherte Quickchat-Favorit ist ungültig. Bitte ein Modell oder Automatisch wählen.'
         : 'The saved Quickchat favorite is invalid. Choose a model or Automatic.');
@@ -5175,16 +5187,12 @@ function AppContent(): JSX.Element {
     const favorite = favoriteState.favorite;
     const selection = chooseQuickchatModel(scopedSelection, preferenceScope, favorite, window.localStorage, readShowUntestedProviderBetas());
     if (!selection) {
-      quickChatStopPendingRef.current = false;
       setQuickChatErrorForScope(capturedScopeKey, favorite
         ? (locale === 'de' ? 'Dein Quickchat-Favorit ist derzeit nicht verfügbar. Wähle ein anderes Modell oder Automatisch.' : 'Your Quickchat favorite is unavailable. Choose another model or Automatic.')
         : t('settings.panels.providers.noActiveModels'));
       return rejectPreflight();
     }
     quickChatBusyRef.current = true;
-    // The synchronous busy reservation now owns the turn. Leaving the
-    // preflight/stop gate set here prevents every later follow-up send.
-    quickChatStopPendingRef.current = false;
     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
     quickChatErrorScopeKeyRef.current = capturedScopeKey;
     setQuickChatBusy(true);
@@ -5271,14 +5279,11 @@ function AppContent(): JSX.Element {
   async function stopQuickChat(): Promise<void> {
     quickLatencyRunRef.current?.cancel();
     if (quickChatResetPendingRef.current) return;
-    const generation = quickChatGenerationRef.current;
-    quickChatStopEpochRef.current += 1;
-    if (quickChatStopPendingRef.current && !quickChatBusyRef.current && !quickChatAwaitingStartRef.current) {
-      // The optimistic echo is still waiting for model discovery. Its send
-      // path observes stopEpoch and removes only that unsent turn.
-      setQuickChatBusy(false);
+    if (cancelQuickChatPreparationRef.current) {
+      cancelQuickChatPreparationRef.current();
       return;
     }
+    const generation = quickChatGenerationRef.current;
     const pendingStart = quickChatStartPromiseRef.current;
     // A follow-up still carries the preceding turn's binding until its start
     // acknowledgement arrives. Stop that new turn, never reset the chat.

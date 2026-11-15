@@ -450,7 +450,11 @@ declare global {
         onAccessAuthLocked: (callback: () => void) => () => void;
         getFallbackModel: () => Promise<Record<string, unknown>>;
         setFallbackModel: (request: { model: string; provider?: string; baseUrl?: string }) => Promise<Record<string, unknown>>;
-        saveSettings: (request: { settings: Record<string, unknown> }) => Promise<Record<string, unknown>>;
+        saveSettings: (request: { settings: Record<string, unknown>; scopeSelection?: {
+          browserProfileId: string;
+          workspacePath: string | null;
+          backendProfileName?: string;
+        } }) => Promise<Record<string, unknown>>;
         notifyChatCompleted: (enabled: boolean) => Promise<boolean>;
         listGmailAccounts: () => Promise<Record<string, unknown>>;
         listGmailMessages: (request?: { folder?: string; limit?: number; max?: number; account?: string }) => Promise<Record<string, unknown>>;

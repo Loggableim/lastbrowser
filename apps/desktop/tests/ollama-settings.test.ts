@@ -24,6 +24,14 @@ describe('Ollama settings configuration flow', () => {
     expect(source).not.toContain('api_key: ollamaKey.trim(),\n                                  ...cleanSettingsPayload');
   });
 
+  it('activates Ollama only in the Space used for its credentials', () => {
+    const modalStart = source.indexOf('{/* Ollama Config Modal */}');
+    const modalEnd = source.indexOf("{section === 'teamwork'", modalStart);
+    const modal = source.slice(modalStart, modalEnd);
+    expect(modal).toMatch(/saveSettings\(\{\s*scopeSelection,\s*settings:/);
+    expect(modal).not.toContain('cleanSettingsPayload(settings)');
+  });
+
   it('saves chat picker choices through the bound Space scope and applies them only to the captured view', () => {
     const chatSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
     expect(chatSource).toContain("operation: 'modelSelection'");

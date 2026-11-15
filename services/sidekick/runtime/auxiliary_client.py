@@ -2012,26 +2012,19 @@ def _evict_cached_clients(provider: str) -> None:
             key for key in _client_cache
             if _normalize_aux_provider(str(key[0])) == normalized
         ]
-        for key in stale_keys:
-            client = _client_cache.get(key, (None, None, None))[0]
-            if client is not None:
-                # Cache keys are (provider, async_mode, ...). AsyncOpenAI's
-                # close() returns an awaitable and must not be called from this
-                # synchronous helper: awaiting it could block or require the
-                # caller's event loop, while dropping the coroutine leaks a
-                # RuntimeWarning. Only async transports use the force-close
-                # path; sync clients must run their normal transport close.
-                async_mode = len(key) > 1 and bool(key[1])
-                if async_mode:
-                    _force_close_async_httpx(client)
-                else:
-                    try:
-                        close_fn = getattr(client, "close", None)
-                        if callable(close_fn):
-                            close_fn()
-                    except Exception:
-                        pass
-            _client_cache.pop(key, None)
+        retired = [(key, _client_cache.pop(key)) for key in stale_keys]
+    for key, (client, _, owner_loop) in retired:
+        if client is None:
+            continue
+        if key[1]:
+            _close_evicted_async_client(client, owner_loop)
+        else:
+            try:
+                close = getattr(client, "close", None)
+                if callable(close):
+                    close()
+            except Exception:
+                pass
 
 
 def _evict_cached_client_instance(target: Any) -> bool:
@@ -3454,12 +3447,34 @@ def _force_close_async_httpx(client: Any) -> None:
     connections will be dropped by the OS when the process exits.
     """
     try:
-        from httpx._client import ClientState
         inner = getattr(client, "_client", None)
         if inner is not None and not getattr(inner, "is_closed", True):
-            inner._state = ClientState.CLOSED
+            # An SDK may use a different httpx implementation. Use the enum
+            # actually owned by the transport so its is_closed check agrees.
+            closed_state = getattr(type(getattr(inner, "_state", None)), "CLOSED", None)
+            if closed_state is not None:
+                inner._state = closed_state
     except Exception:
         pass
+
+
+def _close_evicted_async_client(client: Any, owner_loop: Any) -> None:
+    close = getattr(client, "close", None)
+    if owner_loop is None or not owner_loop.is_running() or not inspect.iscoroutinefunction(close):
+        _force_close_async_httpx(client)
+        return
+
+    async def close_on_owner() -> None:
+        try:
+            await close()
+        except Exception:
+            _force_close_async_httpx(client)
+
+    try:
+        owner_loop.call_soon_threadsafe(lambda: owner_loop.create_task(close_on_owner()))
+    except RuntimeError:
+        # The owner may have stopped between the readiness check and scheduling.
+        _force_close_async_httpx(client)
 
 
 def shutdown_cached_clients() -> None:

@@ -19,8 +19,6 @@ type BrokerOptions = {
   drive: string;
   executable: string;
   browserArgs: readonly string[];
-  powershell: string;
-  platformKeyHelper: string;
   nvKeyHelper: string;
   lockPrimary: () => Promise<void>;
   onMounted?: () => void;
@@ -31,7 +29,7 @@ type BrokerOptions = {
  * The broker must outlive the browser and own the drive for the full session.
  */
 export function createWindowsProtectedSpaceBroker(options: BrokerOptions) {
-  const { primary, decoy, helper, drive, executable, browserArgs, powershell, platformKeyHelper, nvKeyHelper, lockPrimary } = options;
+  const { primary, decoy, helper, drive, executable, browserArgs, nvKeyHelper, lockPrimary } = options;
   if (process.platform !== 'win32') throw new Error('The protected browser broker requires Windows');
   const primaryVault = realpathSync(primary.vaultDirectory);
   const decoyVault = realpathSync(decoy.vaultDirectory);
@@ -42,7 +40,7 @@ export function createWindowsProtectedSpaceBroker(options: BrokerOptions) {
     throw new Error('The primary and decoy vaults must have separate backing directories');
   }
   const primaryProvider = createWindowsTpmNvSecretProvider(nvKeyHelper, primary.nvSlot);
-  const decoyProvider = createWindowsSpaceKeyProvider(powershell, platformKeyHelper,
+  const decoyProvider = createWindowsSpaceKeyProvider(nvKeyHelper,
     new Map([[decoy.id, decoy.wrappedPlatformSecret]]));
   return createSpaceUnlock({
     primary,

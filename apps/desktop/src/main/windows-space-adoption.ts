@@ -20,8 +20,6 @@ const vaultIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 export async function adoptWindowsSpacePair(options: Pick<Parameters<typeof stageWindowsSpacePair>[0],
   'legacyUserData' | 'bindings' | 'primarySpaceId' | 'decoySpaceId' | 'helper' | 'drive' | 'rendererSeeds'> & {
     preparedDirectory: string;
-    powershell: string;
-    platformKeyHelper: string;
     nvKeyHelper: string;
     primaryPassword: Uint8Array;
     emergencyPassword: Uint8Array;
@@ -50,7 +48,7 @@ export async function adoptWindowsSpacePair(options: Pick<Parameters<typeof stag
   const primary: PreparedVault & { nvSlot: TpmNvSlot } = prepared.primary;
   const decoy: PreparedVault & { wrappedPlatformSecret: string } = prepared.decoy;
   const primaryProvider = createWindowsTpmNvSecretProvider(options.nvKeyHelper, primary.nvSlot);
-  const provider = createWindowsSpaceKeyProvider(options.powershell, options.platformKeyHelper, new Map([
+  const provider = createWindowsSpaceKeyProvider(options.nvKeyHelper, new Map([
     [decoy.id, decoy.wrappedPlatformSecret]
   ]));
   async function openKey(vault: PreparedVault, password: Uint8Array) {

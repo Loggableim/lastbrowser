@@ -3,12 +3,6 @@ import { randomBytes, randomInt } from 'node:crypto';
 import path from 'node:path';
 import { deriveTpmNvReadAuthorization } from './space-key-envelope.js';
 
-type PlatformKeyRequest = {
-  id: string;
-  operation: 'create' | 'read' | 'revoke';
-  wrapped?: string;
-};
-
 export type TpmNvSlot = { index: string; salt: string };
 
 export function isTpmNvSlot(value: unknown): value is TpmNvSlot {
@@ -91,33 +85,35 @@ export function createWindowsTpmNvSecretProvider(helper: string, slot: TpmNvSlot
   };
 }
 
-/** The launcher supplies trusted paths to PowerShell and the packaged CNG helper. */
-export function createWindowsSpaceKeyProvider(host: string, script: string, wrappedSecrets: ReadonlyMap<string, string>) {
-  if (process.platform !== 'win32' || !path.isAbsolute(host) || !path.isAbsolute(script)) {
+/** The packaged native helper invokes the Windows platform key provider. */
+export function createWindowsSpaceKeyProvider(helper: string, wrappedSecrets: ReadonlyMap<string, string>) {
+  if (process.platform !== 'win32' || !path.isAbsolute(helper)) {
     throw new Error('The Windows platform key helper is unavailable');
   }
 
-  async function request(value: PlatformKeyRequest, expected: number): Promise<Buffer | null> {
-    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value.id)) {
+  async function request(operation: 'create' | 'read' | 'revoke', id: string, expected: number, input: string | Buffer = '') {
+    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id)) {
       throw new Error('Invalid protected vault identity');
     }
-    return runKeyHelper(host, ['-NoProfile', '-NonInteractive', '-File', script],
-      JSON.stringify(value), expected, value.operation !== 'create' ? 3 : undefined);
+    try {
+      return await runKeyHelper(helper, [`platform-${operation}`, id], input, expected, operation !== 'create' ? 3 : undefined);
+    } finally { if (Buffer.isBuffer(input)) input.fill(0); }
   }
 
   return {
     async create(id: string): Promise<string> {
-      const wrapped = await request({ id, operation: 'create' }, 256);
+      const wrapped = await request('create', id, 256);
       if (!wrapped) throw new Error('The platform key was not provisioned');
-      return wrapped.toString('base64');
+      try { return wrapped.toString('base64'); }
+      finally { wrapped.fill(0); }
     },
     readSecret(id: string): Promise<Buffer | null> {
       const wrapped = wrappedSecrets.get(id);
-      if (!wrapped) throw new Error('The wrapped platform secret is missing');
-      return request({ id, operation: 'read', wrapped }, 32);
+      if (!wrapped || !/^[A-Za-z0-9+/]{342}==$/.test(wrapped)) throw new Error('The wrapped platform secret is invalid');
+      return request('read', id, 32, Buffer.from(wrapped, 'base64'));
     },
     async revoke(id: string): Promise<void> {
-      await request({ id, operation: 'revoke' }, 0);
+      await request('revoke', id, 0);
     }
   };
 }

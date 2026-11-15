@@ -6,12 +6,10 @@ export function resolveWindowsSpaceRuntime(resources: string) {
   const base = path.join(resources, 'protected-spaces');
   const helper = path.join(base, 'cryptomator-cli', 'cryptomator-cli.exe');
   const nvKeyHelper = path.join(base, 'space-tpm-nv.exe');
-  const platformKeyHelper = path.join(base, 'space-platform-key.ps1');
-  const powershell = path.join(process.env.SystemRoot ?? '', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  requireRuntimeFiles([helper, nvKeyHelper, platformKeyHelper, powershell]);
+  requireRuntimeFiles([helper, nvKeyHelper]);
   const drive = [...'ZYXWVUTSRQPONMLKJIHGFED'].map(letter => `${letter}:\\`).find(root => !existsSync(root));
   if (!drive) throw new Error('The protected Space needs an unused drive');
-  return { helper, nvKeyHelper, platformKeyHelper, powershell, drive };
+  return { helper, nvKeyHelper, drive };
 }
 
 export function resolveWindowsSpaceMigrationRuntime(resources: string) {

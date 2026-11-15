@@ -77,12 +77,10 @@ async function stage() {
     await rename(path.join(stageRoot, 'jdk-25.0.5.0.2+1'), path.join(staged, 'jdk'));
     const dll = path.join(staged, 'TSS.Net.dll');
     await copyFile(path.join(stageRoot, 'lib', 'net46', 'TSS.Net.dll'), dll);
-    for (const file of ['InitializeSpaceVault.java', 'space-platform-key.ps1']) {
-      await copyFile(path.join(scripts, file), path.join(staged, file));
-    }
+    await copyFile(path.join(scripts, 'InitializeSpaceVault.java'), path.join(staged, 'InitializeSpaceVault.java'));
     run(path.join(system, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'), [
       '/nologo', '/target:exe', `/reference:${dll}`, `/out:${path.join(staged, 'space-tpm-nv.exe')}`,
-      path.join(scripts, 'SpaceTpmNvSecret.cs')
+      path.join(scripts, 'SpaceTpmNvSecret.cs'), path.join(scripts, 'SpacePlatformKey.cs')
     ]);
     if (path.relative(runtime, path.dirname(output)) || path.basename(output) !== 'protected-spaces') {
       throw new Error('Invalid runtime staging destination');

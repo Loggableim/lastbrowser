@@ -5,11 +5,11 @@ const { open, unlink } = require('node:fs/promises');
 const path = require('node:path');
 
 async function main() {
-  if (process.platform !== 'win32' || process.argv.length !== 8 || process.stdin.isTTY) {
-    throw new Error('Supply the active pair, Electron, Cryptomator CLI, PowerShell, the NV helper and an unused drive root');
+  if (process.platform !== 'win32' || process.argv.length !== 7 || process.stdin.isTTY) {
+    throw new Error('Supply the active pair, Electron, Cryptomator CLI, the TPM helper and an unused drive root');
   }
-  const [pair, executable, helper, powershell, nvKeyHelper, drive] = process.argv.slice(2);
-  if (![pair, executable, helper, powershell, nvKeyHelper].every(path.isAbsolute)
+  const [pair, executable, helper, nvKeyHelper, drive] = process.argv.slice(2);
+  if (![pair, executable, helper, nvKeyHelper].every(path.isAbsolute)
     || !/^[D-Z]:\\$/i.test(drive) || existsSync(drive)) throw new Error('Invalid protected launch parameters');
   const { loadActiveSpaceConfiguration } = await import('../dist/main/active-space-config.js');
   const { createWindowsProtectedSpaceBroker } = await import('../dist/main/windows-protected-space-broker.js');
@@ -22,8 +22,7 @@ async function main() {
       ...configuration,
       executable,
       browserArgs: [path.join(__dirname, '..')],
-      helper, drive, powershell, nvKeyHelper,
-      platformKeyHelper: path.join(__dirname, 'space-platform-key.ps1'),
+      helper, drive, nvKeyHelper,
       async lockPrimary() {
         if (existsSync(drive)) throw new Error('A protected drive is still mounted');
       }

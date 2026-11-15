@@ -12,8 +12,6 @@ type SetupOptions = Pick<Parameters<typeof stageWindowsSpacePair>[0],
   & Pick<Parameters<typeof initializeWindowsSpaceVault>[0], 'java' | 'libraryDirectory' | 'initializerSource'>
   & {
     protectedRoot: string;
-    powershell: string;
-    platformKeyHelper: string;
     nvKeyHelper: string;
     primaryPassword: Uint8Array;
     emergencyPassword: Uint8Array;
@@ -21,7 +19,7 @@ type SetupOptions = Pick<Parameters<typeof stageWindowsSpacePair>[0],
 
 /** Prepare both vaults while the trusted caller holds the offline migration lock. */
 export async function prepareWindowsSpacePair(options: SetupOptions): Promise<string> {
-  const { protectedRoot, powershell, platformKeyHelper, primaryPassword, emergencyPassword } = options;
+  const { protectedRoot, nvKeyHelper, primaryPassword, emergencyPassword } = options;
   if (process.platform !== 'win32' || !path.isAbsolute(protectedRoot)) throw new Error('The Windows protected store is unavailable');
   if (![primaryPassword, emergencyPassword].every(password => password.length > 0 && password.length <= 4096)
     || (primaryPassword.length === emergencyPassword.length && timingSafeEqual(primaryPassword, emergencyPassword))) {
@@ -29,7 +27,7 @@ export async function prepareWindowsSpacePair(options: SetupOptions): Promise<st
   }
   resolveSpaceMigrationLayout(options.legacyUserData, options.bindings, options.primarySpaceId, options.decoySpaceId);
   const wrapped = new Map<string, string>();
-  const provider = createWindowsSpaceKeyProvider(powershell, platformKeyHelper, wrapped);
+  const provider = createWindowsSpaceKeyProvider(nvKeyHelper, wrapped);
   const directory = await mkdtemp(path.join(await realpath(protectedRoot), 'space-pair-'));
   const keys = [randomBytes(32), randomBytes(32)];
   let primaryProvider: ReturnType<typeof createWindowsTpmNvSecretProvider> | undefined;

@@ -188,6 +188,11 @@ internal static class SpaceTpmNvSecret
     private static int Main(string[] args)
     {
         if (args.Length == 1 && args[0] == "probe-setup") return ProbeSetup();
+        if (args.Length == 2 && args[0].StartsWith("platform-", StringComparison.Ordinal))
+        {
+            return SpacePlatformKey.Run(args[0], args[1], new CngProvider("Microsoft Platform Crypto Provider"),
+                Console.OpenStandardInput(), Console.OpenStandardOutput());
+        }
         return RunCommand(args, () => new TbsDevice(), device => ((TbsDevice)device).GetOwnerAuth());
     }
 

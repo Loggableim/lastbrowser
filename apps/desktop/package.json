@@ -89,7 +89,7 @@
       {
         "from": "runtime/local-ai",
         "to": "apps/desktop/runtime/local-ai",
-        "filter": ["**/*", "!**/*.partial", "!**/*.gguf", "!**/*.safetensors", "!**/models/**"]
+        "filter": ["**/*", "!b11377-cpu/**", "!**/*.partial", "!**/*.gguf", "!**/*.safetensors", "!**/models/**"]
       },
       {
         "from": "../../services",

@@ -2670,13 +2670,14 @@ function AppContent(): JSX.Element {
       spacePath: activeSpacePathRef.current
     };
     if (!isActiveTurnContextCurrent(turnContext, current)) return;
+    const placeholder = t('chat.latencyPlaceholder.01');
     const localOwnerId = chatUiOwnershipRef.current.ownerForStream(restored.streamId);
     if (localOwnerId !== null) {
       if (sidekickBusy && chatUiOwnershipRef.current.activeSessionId !== restored.sessionId) return;
       if (chatUiOwnershipRef.current.reactivate(localOwnerId, restored.sessionId)) {
         setActivePanel('chat');
-        setChatMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
-        setMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
+        setChatMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage, placeholder));
+        setMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage, placeholder));
         updateActiveStreamId(restored.streamId);
         setSidekickBusy(true);
         setChatRunState('streaming');
@@ -2688,11 +2689,11 @@ function AppContent(): JSX.Element {
 
     setActivePanel('chat');
     setChatMessages((messages) => {
-      const bound = bindLiveChatAssistantStream(restorePendingChatTurn(messages, restored.pendingUserMessage), restored.sessionId, restored.streamId, restored.pendingUserMessage);
+      const bound = bindLiveChatAssistantStream(restorePendingChatTurn(messages, restored.pendingUserMessage, placeholder), restored.sessionId, restored.streamId, restored.pendingUserMessage);
       return activeSession?.model === 'teamwork' ? beginLiveTeamworkTurn(bound, restored.streamId) : bound;
     });
     setMessages((messages) => {
-      const bound = bindLiveChatAssistantStream(restorePendingChatTurn(messages, restored.pendingUserMessage), restored.sessionId, restored.streamId, restored.pendingUserMessage);
+      const bound = bindLiveChatAssistantStream(restorePendingChatTurn(messages, restored.pendingUserMessage, placeholder), restored.sessionId, restored.streamId, restored.pendingUserMessage);
       return activeSession?.model === 'teamwork' ? beginLiveTeamworkTurn(bound, restored.streamId) : bound;
     });
     updateActiveStreamId(restored.streamId);

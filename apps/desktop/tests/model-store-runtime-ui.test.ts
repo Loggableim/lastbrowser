@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { StoreModel } from '../src/renderer/model-store-contracts.js';
@@ -14,6 +14,9 @@ const execution = { state:'download_qualified' as const, kind:'text' as const, d
   benchmarkAllowed:false,activateAllowed:false,executeAllowed:false,reasonCodes:[] };
 
 describe('real store runtime actions', () => {
+  beforeEach(() => vi.stubGlobal('navigator', { language: 'en-US' }));
+  afterEach(() => vi.unstubAllGlobals());
+
   it('never grants actions from editorial recommendations or eligibility without execution proof', () => {
     expect(storeModelActions(base,false)).toMatchObject({download:false,benchmark:false,activate:false,execute:false,state:'browse_only'});
   });

@@ -458,7 +458,7 @@ export class SidecarServices {
   private gatewayProcess: ChildProcess | null = null;
   private startPromise: Promise<ServiceStatus> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
-  private healthCheckInFlight = false;
+  private healthCheckGeneration: string | null = null;
   private status: ServiceStatus;
   private gatewayStatus: GatewayStatus = {
     running: false,
@@ -827,22 +827,25 @@ export class SidecarServices {
   }
 
   private async refreshHealth(): Promise<void> {
-    const webuiUrl = this.status.webuiUrl;
-    if (!webuiUrl || this.status.sidekick !== 'ready' || this.healthCheckInFlight) return;
+    const { webuiUrl, runtimeGeneration } = this.status;
+    if (!webuiUrl || !runtimeGeneration || this.status.sidekick !== 'ready'
+      || this.healthCheckGeneration === runtimeGeneration) return;
 
-    this.healthCheckInFlight = true;
+    this.healthCheckGeneration = runtimeGeneration;
     let result: { ok: boolean; error?: string };
     try {
       result = await this.healthChecker(webuiUrl);
+    } catch (error) {
+      result = { ok: false, error: error instanceof Error ? error.message : String(error) };
     } finally {
-      this.healthCheckInFlight = false;
+      if (this.healthCheckGeneration === runtimeGeneration) this.healthCheckGeneration = null;
     }
+    if (this.status.runtimeGeneration !== runtimeGeneration || this.status.sidekick !== 'ready') return;
     if (result.ok) {
-      const generation = this.status.runtimeGeneration;
       this.status = { ...this.status, webuiHealth: 'ready', lastError: null };
-      if (generation && generation !== this.announcedRuntimeGeneration) {
-        this.announcedRuntimeGeneration = generation;
-        this.runtimeReadyListener?.(generation);
+      if (runtimeGeneration !== this.announcedRuntimeGeneration) {
+        this.announcedRuntimeGeneration = runtimeGeneration;
+        this.runtimeReadyListener?.(runtimeGeneration);
       }
       return;
     }
@@ -859,11 +862,11 @@ export class SidecarServices {
    * Guarded by a cooldown so a failing probe cannot restart-loop.
    */
   async restartIfUnresponsive(): Promise<boolean> {
-    const webuiUrl = this.status.webuiUrl;
-    if (!webuiUrl || this.isStopping || this.startPromise) return false;
+    const { webuiUrl, runtimeGeneration } = this.status;
+    if (!webuiUrl || !runtimeGeneration || this.isStopping || this.startPromise) return false;
     if (Date.now() - this.lastForcedRestartAt < FORCED_RESTART_COOLDOWN_MS) return false;
     const health = await this.healthChecker(webuiUrl);
-    if (health.ok) return false;
+    if (health.ok || this.isStopping || this.status.runtimeGeneration !== runtimeGeneration) return false;
     this.lastForcedRestartAt = Date.now();
     console.warn(`[lastbrowser] Sidekick backend at ${webuiUrl} is not responding (${health.error || 'no response'}); restarting it.`);
     this.stop();

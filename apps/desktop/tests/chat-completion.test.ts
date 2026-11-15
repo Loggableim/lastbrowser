@@ -241,12 +241,13 @@ describe('native chat completion signals', () => {
 
   it('rebuilds the persisted in-flight user turn and stream target without duplicating it', () => {
     const prior = [{ role: 'assistant' as const, content: 'Previous turn completed.' }];
-    const messages = restorePendingChatTurn(prior, 'Continue the project goal');
+    const placeholder = 'Einen Moment, ich bereite alles vor.';
+    const messages = restorePendingChatTurn(prior, 'Continue the project goal', placeholder);
 
     expect(messages).toEqual([
       ...prior,
       { role: 'user', content: 'Continue the project goal' },
-      { role: 'assistant', content: 'Working on it...', pending: true },
+      { role: 'assistant', content: placeholder, pending: true, latencyPlaceholder: true },
     ]);
     expect(restorePendingChatTurn(messages, 'Continue the project goal')).toEqual(messages);
   });
@@ -267,8 +268,8 @@ describe('native chat completion signals', () => {
     expect(finishLiveChatMessage(withReasoning)[0]).toMatchObject({ pending: false, streaming: false });
   });
 
-  it('renders the Teamwork final synthesis delta sent as data.content immediately', () => {
-    const initial = [{ id: 'assistant-1', role: 'assistant' as const, content: 'Teamwork: Synthese abgeschlossen', pending: true }];
+  it.each(['Teamwork: Synthese abgeschlossen', 'Teamwork: Synthese abgeschlossen.'])('replaces the legacy pending status %s with the final Teamwork delta', (status) => {
+    const initial = [{ id: 'assistant-1', role: 'assistant' as const, content: status, pending: true }];
     const delta = readLiveChatDelta('delta', { content: 'Synthesized answer' });
     expect(delta).toEqual({ kind: 'token', text: 'Synthesized answer' });
 
@@ -280,6 +281,7 @@ describe('native chat completion signals', () => {
       pending: false,
       streaming: true,
     });
+    expect(finishLiveChatMessage(initial)).toEqual([]);
   });
 
   it('keeps Teamwork stage status separate from the final assistant answer', () => {
@@ -297,21 +299,12 @@ describe('native chat completion signals', () => {
       progress: undefined,
       pending: false,
     });
-    expect(finishLiveChatMessage(withProgress)[0]).toMatchObject({
-      content: 'Working on it...',
-      progress: undefined,
-      pending: false,
-    });
+    expect(finishLiveChatMessage(withProgress)).toEqual([]);
   });
 
   it('clears a pending placeholder when a stream terminates before any visible output', () => {
     const initial = [{ id: 'assistant-1', role: 'assistant' as const, content: 'Working on it...', pending: true }];
-    expect(finishLiveChatMessage(initial)[0]).toMatchObject({
-      content: 'Working on it...',
-      pending: false,
-      streaming: false,
-      progress: undefined,
-    });
+    expect(finishLiveChatMessage(initial)).toEqual([]);
   });
 
   it('preserves text-token and separate reasoning delta formats', () => {

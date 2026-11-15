@@ -75,10 +75,11 @@ $releaseConfig = $desktopManifest.build
 $releaseConfig.directories.output = $releaseOutput
 $releaseConfig | Add-Member -NotePropertyName forceCodeSigning -NotePropertyValue $true -Force
 $releaseConfig.win.PSObject.Properties.Remove('azureSignOptions')
-# Keep package.json's custom `sign` hook (preserve-valid-windows-signatures.cjs)
-# and merge the certificate/hash/timestamp settings into its existing options.
-if (-not $releaseConfig.win.signtoolOptions) {
-    $releaseConfig.win | Add-Member -NotePropertyName signtoolOptions -NotePropertyValue ([pscustomobject]@{})
+# The Tagesbeta manifest disables main executable signing and update verification.
+# Apply the opt-in signed configuration before selecting the certificate.
+$signedOptions = Get-Content apps/desktop/build/windows-signed-overrides.json -Raw | ConvertFrom-Json
+foreach ($option in $signedOptions.PSObject.Properties) {
+    $releaseConfig.win | Add-Member -NotePropertyName $option.Name -NotePropertyValue $option.Value -Force
 }
 $releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName certificateSha1 -NotePropertyValue $signingThumbprint -Force
 $releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName signingHashAlgorithms -NotePropertyValue @('sha256') -Force

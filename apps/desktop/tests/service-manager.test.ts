@@ -249,6 +249,55 @@ describe('sidecar service layout', () => {
     }
   });
 
+  it('ignores an old health probe after Sidekick restarts on the same port', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    const probes: Array<(result: { ok: boolean }) => void> = [];
+    const service = new SidecarServices(
+      resolveServiceLayout(root),
+      8787,
+      (() => {
+        const child = Object.assign(new EventEmitter(), { kill: vi.fn() });
+        queueMicrotask(() => child.emit('spawn'));
+        return child;
+      }) as never,
+      async () => 8787,
+      () => new Promise(resolve => probes.push(resolve))
+    );
+    const ready = vi.fn();
+    service.onRuntimeReady(ready);
+
+    try {
+      const first = await service.start();
+      service.stop();
+      const second = await service.start();
+      expect(first.runtimeGeneration).not.toBe(second.runtimeGeneration);
+
+      probes[0]({ ok: true });
+      await Promise.resolve();
+      expect(service.getStatus().webuiHealth).toBe('checking');
+      expect(ready).not.toHaveBeenCalled();
+
+      expect(probes).toHaveLength(2);
+      probes[1]({ ok: true });
+      await Promise.resolve();
+      expect(ready).toHaveBeenCalledExactlyOnceWith(second.runtimeGeneration);
+      expect(service.getStatus().webuiHealth).toBe('ready');
+
+      const obsoleteRestart = service.restartIfUnresponsive();
+      service.stop();
+      const third = await service.start();
+      probes[2]({ ok: false });
+      expect(await obsoleteRestart).toBe(false);
+      expect(service.getStatus().runtimeGeneration).toBe(third.runtimeGeneration);
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('can probe past an occupied local port', async () => {
     const server = createServer();
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));

@@ -59,7 +59,8 @@ function Proof(): React.JSX.Element {
   return (
     <DesktopI18nProvider>
       <div className="first-run-fullscreen-wrap" data-nav="backdrop">
-        <div className="first-run-fullscreen">overlay</div>
+        {/* Leave the real buttons outside the panel so this checks the backdrop itself. */}
+        <div className="first-run-fullscreen" style={{ maxWidth: 420 }}>overlay</div>
       </div>
       <ModernTitlebar
         sidebarMode={sidebarMode}

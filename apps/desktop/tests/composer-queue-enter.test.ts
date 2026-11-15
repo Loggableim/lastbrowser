@@ -1,5 +1,5 @@
 import React from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ChatComposer } from '../src/renderer/panels/ChatComponents.js';
 import { DesktopI18nProvider } from '../src/renderer/i18n.js';
@@ -11,6 +11,9 @@ import {
 } from '../src/renderer/composer-queue.js';
 
 describe('composer enter while a turn is running', () => {
+  beforeEach(() => vi.stubGlobal('navigator', { language: 'en-US' }));
+  afterEach(() => vi.unstubAllGlobals());
+
   it('queues a non-empty standard-chat draft instead of dropping it or starting another turn', () => {
     expect(composerEnterAction({ ready: true, text: 'Send this next', running: true, busy: true, sendBlocked: false })).toBe('queue');
     expect(composerEnterAction({ ready: true, text: '   ', running: true, busy: true, sendBlocked: false })).toBe('ignore');

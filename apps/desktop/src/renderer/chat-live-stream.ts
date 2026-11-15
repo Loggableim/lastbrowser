@@ -115,6 +115,7 @@ export function claimRestoredChatStream(
 export function restorePendingChatTurn<T extends LiveChatMessage>(
   messages: T[],
   pendingUserMessage: string,
+  placeholderText = restoredChatLatencyPlaceholderText(),
 ): T[] {
   const prompt = String(pendingUserMessage || '');
   if (!prompt.trim()) return messages;
@@ -140,7 +141,7 @@ export function restorePendingChatTurn<T extends LiveChatMessage>(
   }
   return [...withUser, {
     role: 'assistant',
-    content: restoredChatLatencyPlaceholderText(),
+    content: placeholderText,
     pending: true,
     latencyPlaceholder: true,
   } as T];
@@ -300,7 +301,7 @@ export function finishLiveChatMessage<T extends LiveChatMessage>(messages: T[], 
     const inFlight = Boolean(message.pending || message.streaming || message.progress || message.latencyPlaceholder);
     if (!inFlight || (streamId && message.chatStreamId !== streamId)) return [message];
     // A placeholder that never received a real token must not remain as the answer.
-    if (message.latencyPlaceholder) {
+    if (shouldDiscardPlaceholderContent(message)) {
       if (message.reasoning?.trim()) {
         const { latencyPlaceholder: _placeholder, ...rest } = message;
         return [{ ...rest, content: '', pending: false, streaming: false, progress: undefined } as T];

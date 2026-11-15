@@ -46,7 +46,8 @@ describe('startup readiness App and Main IPC integration contract', () => {
     expect(app).toContain('isVerifiedAccessAuthLogin(auth)');
     expect(app).toContain('const generation = accessAuthGateRef.current!.state.generation');
     expect(app).toContain("deriveStartupPhase(startupReadinessSignals, startupAuthPolicy)");
-    expect(app).toContain("if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged)");
+    expect(app).toContain("const startupGate = !startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged;");
+    expect(app).toContain('{startupGate ? (');
     expect(app).toContain("type: 'verified-password-login'");
     expect(app).toContain('passwordProtectedAtSubmit && auth.auth_enabled === true');
     expect(app).toContain("ready: startupPhase === 'ready' && startupReadyAcknowledged");

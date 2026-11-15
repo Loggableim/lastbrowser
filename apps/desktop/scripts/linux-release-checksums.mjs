@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Single checksum + signing step for Linux release artifacts (AppImage + tar.gz).
  * Writes SHA256SUMS and a detached, armored GPG signature SHA256SUMS.asc, then

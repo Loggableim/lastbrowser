@@ -1,0 +1,7 @@
+{
+  "signAndEditExecutable": true,
+  "verifyUpdateCodeSignature": true,
+  "signtoolOptions": {
+    "sign": "scripts/preserve-valid-windows-signatures.cjs"
+  }
+}

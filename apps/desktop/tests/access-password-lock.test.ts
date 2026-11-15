@@ -13,12 +13,14 @@ describe('desktop access password lock', () => {
   it('gates the browser shell before rendering the app and its webviews', () => {
     const source = readFileSync(appPath, 'utf8');
     const authGate = source.indexOf('const startupAuthAllowsShell = canRenderBrowserForAccessAuth(');
-    const startupGate = source.indexOf("if (!startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged)", authGate);
-    const startupScreen = source.indexOf('<StartupScreen', startupGate);
+    const startupGate = source.indexOf("const startupGate = !startupAuthAllowsShell || startupPhase !== 'ready' || !startupReadyAcknowledged;", authGate);
+    const startupBranch = source.indexOf('{startupGate ? (', startupGate);
+    const startupScreen = source.indexOf('<StartupScreen', startupBranch);
     const browserShell = source.indexOf('className={`app-shell', startupGate);
     expect(authGate).toBeGreaterThanOrEqual(0);
     expect(startupGate).toBeGreaterThan(authGate);
-    expect(startupScreen).toBeGreaterThan(startupGate);
+    expect(startupBranch).toBeGreaterThan(startupGate);
+    expect(startupScreen).toBeGreaterThan(startupBranch);
     expect(browserShell).toBeGreaterThan(startupScreen);
     expect(source).toContain('retryContent={accessAuthForm}');
     expect(source).toContain('canRenderBrowserForAccessAuth(accessAuthChecked');
@@ -148,7 +150,7 @@ describe('desktop access password lock', () => {
     expect(source).toContain("t('settings.panels.system.disableAuthFailed')");
     expect(source).toContain('disabled={!ready || !authEnabled || !loggedIn || passwordEnvLocked}');
     expect(source).toContain("t('settings.panels.system.authDisableLoginRequired')");
-    expect(source).toContain('onRefresh={refreshSettingsData}');
+    expect(source).toContain("onRefresh={section === 'codex-cli' ? undefined : refreshSettingsData}");
     expect(source).toContain('pluginsState.refresh()');
     expect(source).toContain("path: '/api/auth/status' });\n      if (confirmedAuth.auth_enabled !== false)");
     expect(source).toContain('authState.setData(confirmedAuth)');

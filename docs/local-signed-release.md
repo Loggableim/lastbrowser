@@ -82,6 +82,7 @@ foreach ($option in $signedOptions.PSObject.Properties) {
     $releaseConfig.win | Add-Member -NotePropertyName $option.Name -NotePropertyValue $option.Value -Force
 }
 $releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName certificateSha1 -NotePropertyValue $signingThumbprint -Force
+$releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName publisherName -NotePropertyValue $signingCertificate.Subject -Force
 $releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName signingHashAlgorithms -NotePropertyValue @('sha256') -Force
 $releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName rfc3161TimeStampServer -NotePropertyValue 'http://timestamp.digicert.com' -Force
 if (-not $releaseConfig.afterSign) { throw 'Package afterSign hook is missing' }

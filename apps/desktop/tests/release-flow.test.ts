@@ -19,8 +19,8 @@ describe('GitHub release auto-update flow', () => {
     const pkg = readJson(desktopPackagePath);
 
     expect(pkg.dependencies['electron-updater']).toBeTruthy();
-    // GitHub Actions signs the final installer files, then uploads them with
-    // action-gh-release. electron-builder must not publish unsigned artifacts.
+    // The signed workflow supplies its own signer and publisher configuration.
+    // electron-builder must never upload on its own.
     expect(pkg.scripts['package:win:publish']).toContain('--publish never');
     expect(pkg.build.afterSign).toBe('scripts/evs-sign.cjs');
     // Unsigned tagesbeta installers; Authenticode verification stays in release.yml for stable tags.
@@ -94,11 +94,9 @@ describe('GitHub release auto-update flow', () => {
     const setupIndex = workflow.indexOf('- name: Setup Node');
     const runtimeIndex = workflow.indexOf('- name: Prepare Python runtime');
     const desktopBuildIndex = workflow.indexOf('- name: Build desktop application');
-    const runtimeSigningIndex = workflow.indexOf('- name: Sign bundled local AI runtime before packaging');
-    const runtimeVerifyIndex = workflow.indexOf('- name: Verify bundled local AI signatures');
+    const signingToolsIndex = workflow.indexOf('- name: Install the Artifact Signing client module');
     const buildIndex = workflow.indexOf('- name: Package Windows installers with VMP signing');
     const inventoryIndex = workflow.indexOf('- name: Require exactly the expected Windows executables');
-    const signingIndex = workflow.indexOf('- name: Sign binaries with Azure Trusted Signing');
     const metadataIndex = workflow.indexOf('- name: Refresh signed installer checksum and differential blockmap');
     const publishJobIndex = workflow.indexOf('\n  publish:');
 
@@ -106,25 +104,21 @@ describe('GitHub release auto-update flow', () => {
     expect(runtimeIndex).toBeGreaterThan(setupIndex);
     expect(desktopBuildIndex).toBeGreaterThan(runtimeIndex);
     expect(buildIndex).toBeGreaterThan(desktopBuildIndex);
-    expect(runtimeSigningIndex).toBeGreaterThan(desktopBuildIndex);
-    expect(runtimeVerifyIndex).toBeGreaterThan(runtimeSigningIndex);
-    expect(buildIndex).toBeGreaterThan(runtimeVerifyIndex);
+    expect(signingToolsIndex).toBeGreaterThan(desktopBuildIndex);
+    expect(buildIndex).toBeGreaterThan(signingToolsIndex);
     expect(inventoryIndex).toBeGreaterThan(buildIndex);
-    expect(signingIndex).toBeGreaterThan(inventoryIndex);
-    expect(metadataIndex).toBeGreaterThan(signingIndex);
+    expect(metadataIndex).toBeGreaterThan(inventoryIndex);
     expect(publishJobIndex).toBeGreaterThan(metadataIndex);
 
     // No job-level env block may pass credentials to every step.
     expect(workflow).not.toMatch(/^    env:/m);
     expect(workflow).toContain('persist-credentials: false');
 
-    const dependencyAndTestSteps = workflow.slice(setupIndex, runtimeSigningIndex);
+    const dependencyAndTestSteps = workflow.slice(setupIndex, buildIndex);
     expect(dependencyAndTestSteps).not.toContain('secrets.');
     expect(dependencyAndTestSteps).not.toMatch(/\b(?:AZURE_|EVS_)[A-Z_]+\b/);
-    const runtimeSigningStep = workflow.slice(runtimeSigningIndex, runtimeVerifyIndex);
-    expect(runtimeSigningStep).toContain('Azure/trusted-signing-action@v0.5.1');
-    expect(runtimeSigningStep).toContain('files: ${{ steps.local-ai-signing.outputs.files }}');
-    expect(workflow.slice(runtimeVerifyIndex, buildIndex)).not.toContain('secrets.');
+    expect(dependencyAndTestSteps).toContain("Install-Module -Name TrustedSigning -RequiredVersion '0.5.3'");
+    expect(workflow).not.toContain('vendor/local-ai');
     const buildJob = workflow.slice(workflow.indexOf('\n  windows:'), publishJobIndex);
     expect(buildJob).toContain('contents: read');
     expect(buildJob).not.toContain('contents: write');
@@ -133,14 +127,10 @@ describe('GitHub release auto-update flow', () => {
     expect(installerBuildStep).toContain('electron-builder --win nsis portable --publish never');
     expect(installerBuildStep).toContain('EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}');
     expect(installerBuildStep).toContain('EVS_PASSWD: ${{ secrets.EVS_PASSWD }}');
-    expect(installerBuildStep).not.toContain('AZURE_CLIENT');
-    expect(installerBuildStep).not.toContain('AZURE_CLIENT_SECRET');
-
-    const authenticodeStep = workflow.slice(signingIndex, metadataIndex);
-    expect(authenticodeStep).toContain('azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}');
-    expect(authenticodeStep).toContain('azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}');
-    expect(authenticodeStep).not.toContain('EVS_ACCOUNT_NAME');
-    expect(authenticodeStep).not.toContain('EVS_PASSWD');
+    expect(installerBuildStep).toContain('AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}');
+    expect(installerBuildStep).toContain('AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}');
+    expect(installerBuildStep).toContain('forceCodeSigning -NotePropertyValue $true');
+    expect(installerBuildStep).toContain("sign = 'scripts/azure-windows-sign.cjs'");
 
     const publisherJob = workflow.slice(publishJobIndex);
     expect(publisherJob).toContain('contents: write');
@@ -156,14 +146,15 @@ describe('GitHub release auto-update flow', () => {
     const pythonDependencyIndex = workflow.indexOf('Install Sidekick backend test dependencies');
     const pythonSyntaxIndex = workflow.indexOf('Check Sidekick Python syntax');
     const backendTestIndex = workflow.indexOf('Test Sidekick backend');
+    const runtimeInputsIndex = workflow.indexOf('Provision pinned Windows Python wheels');
     const runtimeIndex = workflow.indexOf('Prepare Python runtime');
     const desktopBuildIndex = workflow.indexOf('Build desktop application');
     const buildIndex = workflow.indexOf('Package Windows installers with VMP signing');
-    const signingIndex = workflow.indexOf('Sign binaries with Azure Trusted Signing');
     const metadataIndex = workflow.indexOf('Refresh signed installer checksum and differential blockmap');
     const verificationIndex = workflow.indexOf('Verify Authenticode Signature');
     const vmpVerificationIndex = workflow.indexOf('Verify packaged Widevine VMP signature');
     const inventoryIndex = workflow.indexOf('Require exactly the expected Windows executables');
+    const uploadIndex = workflow.indexOf('Upload verified Windows release artifacts');
     const publishIndex = workflow.indexOf('Publish GitHub Release');
 
     expect(tagValidationIndex).toBeGreaterThan(-1);
@@ -173,10 +164,10 @@ describe('GitHub release auto-update flow', () => {
     expect(pythonSyntaxIndex).toBeGreaterThan(pythonDependencyIndex);
     expect(backendTestIndex).toBeGreaterThan(pythonSyntaxIndex);
     expect(backendTestIndex).toBeLessThan(buildIndex);
-    expect(runtimeIndex).toBeGreaterThan(backendTestIndex);
+    expect(runtimeInputsIndex).toBeGreaterThan(backendTestIndex);
+    expect(runtimeIndex).toBeGreaterThan(runtimeInputsIndex);
     expect(desktopBuildIndex).toBeGreaterThan(runtimeIndex);
     expect(buildIndex).toBeGreaterThan(desktopBuildIndex);
-    expect(backendTestIndex).toBeLessThan(signingIndex);
     expect(backendTestIndex).toBeLessThan(publishIndex);
     expect(workflow).toContain('python-version: \'3.12\'');
     expect(workflow).toContain('python -m pip install --disable-pip-version-check -e ".[web,all,dev]"');
@@ -184,19 +175,19 @@ describe('GitHub release auto-update flow', () => {
     expect(workflow).toContain('python -m pytest');
     expect(workflow).toContain("'^refs/tags/v(\\d+\\.\\d+\\.\\d+)(?:-beta\\.(\\d+))?$'");
     expect(workflow).toContain("beta releases start at the 0.1.57 line");
-    expect(workflow).toContain('--config.publish.channel=${{ steps.release-channel.outputs.channel }}');
+    expect(workflow).toContain('RELEASE_CHANNEL: ${{ steps.release-channel.outputs.channel }}');
+    expect(workflow).toContain('$config.publish[0].channel = $env:RELEASE_CHANNEL');
     expect(workflow).toContain('beta.yml');
     expect(workflow).toContain('prerelease: ${{ needs.windows.outputs.prerelease }}');
     expect(workflow).toContain('does not match desktop package version');
     expect(validationIndex).toBeGreaterThan(-1);
     expect(validationIndex).toBeLessThan(buildIndex);
     expect(buildIndex).toBeLessThan(inventoryIndex);
-    expect(inventoryIndex).toBeLessThan(signingIndex);
-    expect(buildIndex).toBeLessThan(signingIndex);
-    expect(signingIndex).toBeLessThan(metadataIndex);
+    expect(inventoryIndex).toBeLessThan(metadataIndex);
     expect(metadataIndex).toBeLessThan(verificationIndex);
     expect(verificationIndex).toBeLessThan(vmpVerificationIndex);
-    expect(vmpVerificationIndex).toBeLessThan(publishIndex);
+    expect(vmpVerificationIndex).toBeLessThan(uploadIndex);
+    expect(uploadIndex).toBeLessThan(publishIndex);
     for (const secret of [
       'AZURE_CLIENT_ID',
       'AZURE_CLIENT_SECRET',
@@ -210,7 +201,12 @@ describe('GitHub release auto-update flow', () => {
     }
     expect(workflow).toContain('Cannot publish without Azure Authenticode and Castlabs VMP signing');
     expect(workflow).toContain('Expected exactly these release executables:');
-    expect(workflow).toContain('Expected exactly these signed release executables:');
+    expect(workflow).toContain('verify-windows-package-signatures.ps1 -PackageDirectory $packageDir -InstallerPath $setup');
+    expect(workflow).toContain('WINDOWS_SIGNING_PUBLISHER_SUBJECT: ${{ vars.WINDOWS_SIGNING_PUBLISHER_SUBJECT }}');
+    expect(workflow).toContain("'WINDOWS_SIGNING_PUBLISHER_SUBJECT'");
+    expect(workflow).toContain('$config.win.verifyUpdateCodeSignature = $true');
+    expect(workflow).toContain('publisherName = $env:WINDOWS_SIGNING_PUBLISHER_SUBJECT');
+    expect(workflow).toContain('Packaged updater publisher verification failed.');
     expect(workflow).toContain('Lastbrowser-$version-x64-setup.exe');
     expect(workflow).toContain('Lastbrowser-$version-x64-portable.exe');
     expect(workflow).toContain('if ($LASTEXITCODE -ne 0)');

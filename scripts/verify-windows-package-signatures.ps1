@@ -32,8 +32,8 @@ function Test-PortableExecutable([string]$FilePath) {
     }
 }
 
-$nativeFiles = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File |
-    Where-Object { $_.Extension -in '.exe', '.dll', '.pyd', '.node' } |
+$nativeFiles = @(Get-ChildItem -LiteralPath $packageRoot -Recurse -File -Force |
+    Where-Object { $_.Extension -in '.exe', '.dll', '.pyd', '.node' -or (Test-PortableExecutable $_.FullName) } |
     Sort-Object FullName)
 if ($InstallerPath) {
     $installerFile = Get-Item -LiteralPath (Resolve-Path -LiteralPath $InstallerPath).Path

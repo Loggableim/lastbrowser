@@ -8,7 +8,7 @@ const verifier = path.resolve(__dirname, '../../../scripts/verify-windows-packag
 const temporaryDirectories: string[] = [];
 const psLiteral = (value: string) => `'${value.replaceAll("'", "''")}'`;
 
-function runVerification(options: { dependencyStatus?: string; timestamp?: boolean; foreignNode?: boolean; installerStatus?: string } = {}) {
+function runVerification(options: { dependencyStatus?: string; timestamp?: boolean; foreignNode?: boolean; installerStatus?: string; otherPeStatus?: string } = {}) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-store-verifier-'));
   temporaryDirectories.push(directory);
   const payload = path.join(directory, 'win-unpacked');
@@ -22,6 +22,7 @@ function runVerification(options: { dependencyStatus?: string; timestamp?: boole
   pe.writeUInt32LE(0x4550, 64);
   writeFileSync(path.join(payload, 'Lastbrowser.exe'), pe);
   writeFileSync(path.join(nativeDirectory, 'dependency.pyd'), pe);
+  if (options.otherPeStatus) writeFileSync(path.join(nativeDirectory, 'dependency.bin'), pe);
   if (options.foreignNode) writeFileSync(path.join(nativeDirectory, 'foreign.node'), Buffer.from('Mach-O fixture'));
   const installer = path.join(directory, 'setup.exe');
   if (options.installerStatus) writeFileSync(installer, pe);
@@ -32,6 +33,7 @@ function Get-AuthenticodeSignature {
   param([string]$LiteralPath)
   $status = 'Valid'
   if ([System.IO.Path]::GetFileName($LiteralPath) -eq 'dependency.pyd') { $status = ${psLiteral(options.dependencyStatus ?? 'Valid')} }
+  if ([System.IO.Path]::GetFileName($LiteralPath) -eq 'dependency.bin') { $status = ${psLiteral(options.otherPeStatus ?? 'Valid')} }
   if ([System.IO.Path]::GetFileName($LiteralPath) -eq 'setup.exe') { $status = ${psLiteral(options.installerStatus ?? 'Valid')} }
   $timestamp = ${options.timestamp === false ? '$null' : '[pscustomobject]@{ Subject = "test-timestamp" }'}
   [pscustomobject]@{ Status = $status; TimeStamperCertificate = $timestamp; SignerCertificate = [pscustomobject]@{ Thumbprint = 'test-certificate' } }
@@ -78,6 +80,12 @@ describe.skipIf(process.platform !== 'win32')('Windows package signature gate', 
     const result = runVerification({ foreignNode: true });
     expect(result.exitCode).not.toBe(0);
     expect(result.report.Files).toContainEqual(expect.objectContaining({ Status: 'UnsupportedNativeFormat' }));
+  });
+
+  it('evaluates PE headers even when a file does not use a standard executable extension', () => {
+    const result = runVerification({ otherPeStatus: 'NotSigned' });
+    expect(result.exitCode).not.toBe(0);
+    expect(result.report.Files).toContainEqual(expect.objectContaining({ File: expect.stringContaining('dependency.bin'), Status: 'NotSigned' }));
   });
 
   it('also rejects an unsigned final installer with a valid payload', () => {

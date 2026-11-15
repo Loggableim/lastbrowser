@@ -52,6 +52,23 @@ describe('settings update status and install action', () => {
     }
   });
 
+  it('explains publisher verification and manual unsigned daily betas in every shipped locale', () => {
+    const trustCopy = {
+      en: ['verify the publisher', 'download and install unsigned daily betas manually'],
+      de: ['den Herausgeber', 'unsignierte Tagesbetas manuell herunter'],
+      es: ['verifican el editor', 'instala manualmente las betas diarias sin firma'],
+      fr: ['vérifient l’éditeur', 'installez manuellement les bêtas quotidiennes non signées'],
+      it: ['verificano l’editore', 'installa manualmente le beta giornaliere non firmate'],
+      'pt-BR': ['verificam o editor', 'instale manualmente as versões beta diárias sem assinatura'],
+      ru: ['проверяют издателя', 'неподписанные ежедневные бета-версии вручную'],
+      ja: ['発行元を検証', '手動でダウンロードしてインストール'],
+    } as const;
+    for (const locale of desktopLocaleIds) {
+      const text = createDesktopI18n(locale).t('settings.panels.notifications.updateChannelBetaUnsigned');
+      for (const phrase of trustCopy[locale]) expect(text, locale).toContain(phrase);
+    }
+  });
+
   it('wires the settings action to the desktop install IPC without a Sidekick readiness gate', () => {
     const source = readFileSync(resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx'), 'utf8');
     expect(source).toContain("install: () => window.lastbrowser.updates.install()");

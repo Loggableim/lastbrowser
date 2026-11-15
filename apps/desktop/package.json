@@ -9,11 +9,13 @@
   "main": "dist/main/boot.js",
   "scripts": {
     "dev": "npm run build:main && vite --host 127.0.0.1",
-    "start": "electron dist/main/main.js",
+    "start": "electron .",
     "start:dev": "node electron-dev.mjs",
     "prepare:python": "node scripts/prepare-python-runtime.mjs",
     "prepare:python:online": "node scripts/prepare-python-runtime.mjs --online",
     "prepare:local-model-engines": "node scripts/prepare-local-model-engines.mjs",
+    "prepare:space-runtime": "node scripts/prepare-windows-space-runtime.mjs",
+    "prepare:space-runtime:online": "node scripts/prepare-windows-space-runtime.mjs --download",
     "build:installer-assets": "python scripts/generate-installer-assets.py",
     "build": "npm run build:main && npm run build:renderer",
     "build:main": "tsc -p tsconfig.main.json && node scripts/build-preload.mjs && node scripts/stage-packaged-ms.mjs",
@@ -25,8 +27,8 @@
     "smoke:linux:fresh-profile": "node scripts/smoke-linux-fresh-profile.mjs",
     "sync:sidekick": "node -e \"console.log('[sync:sidekick] Sidekick is integrated directly in-tree.')\"",
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
-    "package:win": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
-    "package:win:publish": "npm run prepare:python && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
+    "package:win": "npm run prepare:python && npm run prepare:space-runtime && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
+    "package:win:publish": "npm run prepare:python && npm run prepare:space-runtime && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
     "package:linux": "node scripts/linux-release-checksums.mjs --check-key && npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/linux-release-checksums.mjs release"
   },
   "dependencies": {
@@ -169,6 +171,9 @@
       }
     ],
     "win": {
+      "extraResources": [
+        { "from": "runtime/protected-spaces", "to": "protected-spaces" }
+      ],
       "target": [
         "nsis",
         "portable"

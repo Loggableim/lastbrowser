@@ -118,6 +118,12 @@ jobs:
       - name: Prepare Python runtime
         run: npm --workspace apps/desktop run prepare:python
 
+      - name: Provision pinned Windows protected Space dependencies
+        run: npm --workspace apps/desktop run prepare:space-runtime:online
+
+      - name: Stage the Windows protected Space runtime
+        run: npm --workspace apps/desktop run prepare:space-runtime
+
       - name: Build desktop application
         run: npm --workspace apps/desktop run build
 

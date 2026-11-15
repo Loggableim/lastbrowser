@@ -38,7 +38,7 @@ export type PortResolver = (preferredPort: number) => Promise<number>;
 export type WebuiHealthChecker = (webuiUrl: string) => Promise<{ ok: boolean; error?: string }>;
 export type HungPortRecoverer = (preferredPort: number) => Promise<PortRecoveryOutcome>;
 
-function stopWebuiProcess(child: ChildProcess): void {
+function stopWebuiProcess(child: ChildProcess, requireTree = false): void {
   const windowsDir = process.env.SystemRoot || process.env.WINDIR;
   if (process.platform === 'win32' && windowsDir && child.pid && child.exitCode === null && child.signalCode === null) {
     // TerminateProcess only stops the Python supervisor. Stop its tree before
@@ -47,7 +47,26 @@ function stopWebuiProcess(child: ChildProcess): void {
       ['/F', '/T', '/PID', String(child.pid)], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
     if (result.status === 0) return;
   }
+  if (requireTree && process.platform === 'win32') throw new Error('Windows did not confirm Sidekick process tree shutdown');
   child.kill();
+}
+
+async function closeSidekickWriter(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  let closed: () => void = () => {};
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const completion = new Promise<void>((resolve, reject) => {
+    closed = resolve;
+    child.once('close', closed);
+    timeout = setTimeout(() => reject(new Error('A Sidekick process did not close')), 8000);
+  });
+  try {
+    stopWebuiProcess(child, true);
+    await completion;
+  } finally {
+    clearTimeout(timeout);
+    child.removeListener('close', closed);
+  }
 }
 
 /** Minimum gap between forced restarts of an unresponsive backend. */
@@ -467,6 +486,7 @@ export class SidecarServices {
     startedAt: null
   };
   private isStopping = false;
+  private migrationStop: Promise<void> | undefined;
   private announcedRuntimeGeneration: string | null = null;
   private runtimeReadyListener: ((generation: string) => void) | null = null;
   private lastForcedRestartAt = 0;
@@ -513,7 +533,7 @@ export class SidecarServices {
   }
 
   startGateway(): Promise<GatewayStatus> {
-    if (this.gatewayProcess) {
+    if (this.gatewayProcess || this.migrationStop) {
       return Promise.resolve(this.getGatewayStatus());
     }
 
@@ -680,7 +700,7 @@ export class SidecarServices {
   }
 
   start(): Promise<ServiceStatus> {
-    if (this.webuiProcess) return Promise.resolve(this.getStatus());
+    if (this.webuiProcess || this.migrationStop) return Promise.resolve(this.getStatus());
     if (this.startPromise) return this.startPromise;
 
     this.startPromise = this.startInternal().finally(() => {
@@ -727,6 +747,7 @@ export class SidecarServices {
       return this.getStatus();
     }
 
+    if (this.migrationStop) return this.getStatus();
     const webuiUrl = `http://127.0.0.1:${webuiPort}`;
     const env = buildSidecarEnvironment(this.layout, webuiPort);
     this.status = { ...this.status, webuiUrl, port: webuiPort, webuiHealth: 'checking', lastError: null, runtimeGeneration: randomUUID() };
@@ -872,6 +893,25 @@ export class SidecarServices {
     this.stop();
     await this.start();
     return true;
+  }
+
+  /** Freeze launches and confirm that both owned writers are offline before copying the profile. */
+  stopForProfileMigration(): Promise<void> {
+    this.migrationStop ??= this.stopMigrationWriters();
+    return this.migrationStop;
+  }
+
+  private async stopMigrationWriters(): Promise<void> {
+    this.isStopping = true;
+    this.stopHealthLoop();
+    await this.startPromise;
+    const writers = [this.gatewayProcess, this.webuiProcess];
+    const stopped = await Promise.allSettled(writers.map(child => child && closeSidekickWriter(child)));
+    const failure = stopped.find(result => result.status === 'rejected');
+    if (failure) throw failure.reason;
+    this.gatewayProcess = this.webuiProcess = null;
+    this.gatewayStatus = { running: false, pid: null, lastError: null, startedAt: null };
+    this.status = { ...this.status, sidekick: 'stopped', webuiHealth: 'unreachable', runtimeGeneration: null };
   }
 
   stop(): void {

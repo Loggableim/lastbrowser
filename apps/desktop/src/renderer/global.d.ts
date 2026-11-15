@@ -192,6 +192,12 @@ declare global {
 declare global {
   interface Window {
     lastbrowser: {
+      protectedRendererSeed?: () => Promise<Record<string, string> | null>;
+      protectedSpaceSelection?: (selection?: readonly [string, string]) => Promise<
+        { unavailable: import('../main/windows-space-runtime.js').SpaceMigrationPrerequisite | null;
+          spaces: Array<{ spaceId: string; name: string; profileId: string; spacePath: string;
+          sessionKey: string }> } | { valid: true } | null>;
+      configureProtectedSpaces?: (proposal: unknown, primary: Uint8Array, emergency: Uint8Array) => Promise<boolean>;
       independent: IndependentTransport;
       quickChat: {
         start: (request: import('../main/quick-chat-controller.js').QuickChatStartRequest) => Promise<{

@@ -6,8 +6,10 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const desktopDir = path.resolve(scriptDir, '..');
 
 await build({
-  entryPoints: [path.join(desktopDir, 'src', 'main', 'preload.ts')],
-  outfile: path.join(desktopDir, 'dist', 'main', 'preload.cjs'),
+  entryPoints: ['preload.ts', 'protected-space-unlock-preload.ts']
+    .map(file => path.join(desktopDir, 'src', 'main', file)),
+  outdir: path.join(desktopDir, 'dist', 'main'),
+  outExtension: { '.js': '.cjs' },
   bundle: true,
   platform: 'node',
   format: 'cjs',

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import electron from 'electron';
 
-const app = spawn(electron, ['dist/main/main.js'], {
+const app = spawn(electron, ['.'], {
   stdio: 'inherit',
   env: {
     ...process.env,

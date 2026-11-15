@@ -9,6 +9,7 @@ import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } f
 import '../appearance.css';
 import { LocalAiSetupPane } from '../components/LocalAiSetupPane.js';
 import { BackendProfileControls } from '../components/BackendProfileControls.js';
+import { ProtectedSpaceSelection } from '../components/ProtectedSpaceSelection.js';
 import {
   AlertTriangle,
   Brain,
@@ -4375,6 +4376,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   activeBrowserProfileId={activeProfileId}
                   activeSpacePath={activeSpacePath}
                 />
+                {ready && <ProtectedSpaceSelection german={locale === 'de'} />}
 
                 <SettingsCard
                   title={t('settings.panels.preferences.searchEngine')}

@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { isTrustedPreloadDocumentUrl } from './preload-origin.js';
 
 if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMainWorld('lastbrowser', {
+  protectedRendererSeed: () => ipcRenderer.invoke('lastbrowser:protected-renderer-seed'),
+  protectedSpaceSelection: (selection?: readonly [string, string]) =>
+    ipcRenderer.invoke('lastbrowser:protected-space-selection', selection),
+  configureProtectedSpaces: (proposal: unknown, primary: Uint8Array, emergency: Uint8Array) =>
+    ipcRenderer.invoke('lastbrowser:configure-protected-spaces', proposal, primary, emergency),
   quickChat: {
     start: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:start', request),
     stop: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:stop', request),

@@ -249,6 +249,84 @@ describe('sidecar service layout', () => {
     }
   });
 
+  it('waits for both backend writers to close and prevents restarts during profile migration', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    const fakeChild = (pid: number) =>
+      Object.assign(new EventEmitter(), { pid, exitCode: null, signalCode: null, kill: vi.fn(() => true) });
+    const webui = fakeChild(43210);
+    const gateway = fakeChild(43211);
+    const spawn = vi.fn().mockReturnValueOnce(webui).mockReturnValueOnce(gateway);
+    const service = new SidecarServices(resolveServiceLayout(root), 8787, spawn as never, async () => 8787,
+      async () => ({ ok: true }), async () => ({ status: 'not-needed' }) as never);
+    try {
+      await service.start();
+      await service.startGateway();
+      let finished = false;
+      const shutdown = service.stopForProfileMigration().then(() => { finished = true; });
+      await service.start();
+      await service.startGateway();
+      expect(spawn).toHaveBeenCalledTimes(2);
+      webui.emit('close', 0, null);
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      gateway.emit('close', 0, null);
+      await shutdown;
+      expect(finished).toBe(true);
+      expect(service.getStatus().sidekick).toBe('stopped');
+      expect(service.getGatewayStatus().running).toBe(false);
+      await service.start();
+      expect(spawn).toHaveBeenCalledTimes(2);
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('cancels a starting Sidekick before it can open a database during migration', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    let releasePort!: (port: number) => void;
+    const port = new Promise<number>(resolve => { releasePort = resolve; });
+    const spawn = vi.fn();
+    const service = new SidecarServices(resolveServiceLayout(root), 8787, spawn as never, () => port,
+      async () => ({ ok: true }), async () => ({ status: 'not-needed' }) as never);
+    try {
+      const starting = service.start();
+      const stopping = service.stopForProfileMigration();
+      releasePort(8787);
+      await Promise.all([starting, stopping]);
+      expect(spawn).not.toHaveBeenCalled();
+      expect(service.getStatus().sidekick).toBe('stopped');
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('aborts profile migration when Windows cannot confirm the backend process tree was stopped', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    const child = Object.assign(new EventEmitter(), { pid: 43210, exitCode: null, signalCode: null, kill: vi.fn() });
+    const service = new SidecarServices(resolveServiceLayout(root), 8787, (() => child) as never, async () => 8787,
+      async () => ({ ok: true }), async () => ({ status: 'not-needed' }) as never);
+    try {
+      await service.start();
+      vi.mocked(spawnSync).mockReturnValueOnce({ status: 1 } as never);
+      await expect(service.stopForProfileMigration()).rejects.toThrow(/did not confirm/);
+      expect(child.kill).not.toHaveBeenCalled();
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('ignores an old health probe after Sidekick restarts on the same port', async () => {
     const root = mkdtempResourceRoot();
     const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');

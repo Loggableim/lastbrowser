@@ -227,6 +227,19 @@ export class IndependentController {
     if (!backendProfileName && rows.length > 1) throw new Error('Choose the backend profile for this browser Space');
     return rows[0] ? { scope: { ...rows[0].scope }, backendProfileName: rows[0].backendProfileName } : null;
   }
+  async protectedSpaceBindings() {
+    await this.loadPromise;
+    return [...this.bindings.values()].map(binding => ({
+      spaceId: binding.scope.spaceId,
+      browserProfileId: binding.scope.browserProfileId,
+      backendProfileName: binding.backendProfileName,
+      backendProfileId: binding.scope.backendProfileId,
+      partitionKey: binding.partitionKey,
+      agentPartitionKey: computeAgentExecutionPartition(binding.scope),
+      workspacePath: binding.workspacePath,
+      name: binding.spaceName
+    }));
+  }
   async bindSpaceRemoval(event: Pick<IpcMainInvokeEvent, 'sender' | 'senderFrame'>, raw: unknown): Promise<{
     request: { path: string; profile?: string; spaceScope?: BrowserScope }; recheck: () => void;
   }> {

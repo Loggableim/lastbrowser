@@ -1144,10 +1144,11 @@ function registerIpc(): void {
     return sendSidekickMessage(requireWebuiUrl(), scoped as { message: string });
   });
   ipcMain.handle('lastbrowser:terminal:start', (_event, request) => {
+    captureTrustedShellSender(_event, isTrustedShell);
     const webContents = _event.sender;
     const reqObj = typeof request === 'string' ? { cwd: request } : (request || {});
     const cwd = String(reqObj.cwd || '');
-    const mode = reqObj.mode === 'tui' ? 'tui' : 'shell';
+    const mode = reqObj.mode === 'tui' || reqObj.mode === 'codex' ? reqObj.mode : 'shell';
     const layout = services?.getLayout();
     const result = startTerminal(
       cwd,
@@ -1159,7 +1160,10 @@ function registerIpc(): void {
         pythonExe: layout?.pythonExe,
         sidekickDir: layout?.sidekickDir,
         cols: reqObj.cols,
-        rows: reqObj.rows
+        rows: reqObj.rows,
+        onExit: (id, exitCode) => {
+          try { webContents.send('lastbrowser:terminal:data', { id, exitCode }); } catch {}
+        }
       }
     );
     return result;

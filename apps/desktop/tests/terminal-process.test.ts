@@ -1,5 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
 
 // Mock node-pty
 vi.mock('node-pty', () => {
@@ -92,6 +97,25 @@ describe('terminal-process', () => {
     startTerminal('/tmp', vi.fn());
     const [, args] = vi.mocked(nodePty.spawn).mock.calls[0];
     expect(args).toEqual(['-i']);
+  });
+
+  it('runs Codex directly, relays its live output and terminates it on close', () => {
+    const directory = mkdtempSync(path.join(tmpdir(), 'lastbrowser-codex-test-'));
+    const executable = path.join(directory, process.platform === 'win32' ? 'codex.exe' : 'codex');
+    writeFileSync(executable, '', { mode: 0o755 });
+    const output = vi.fn();
+    const exited = vi.fn();
+    const { id, error } = startTerminal(directory, output, { mode: 'codex', env: { PATH: directory }, onExit: exited });
+    expect(error).toBeUndefined();
+    expect(vi.mocked(nodePty.spawn).mock.calls[0]?.slice(0, 2)).toEqual([executable, []]);
+    expect(vi.mocked(nodePty.spawn).mock.calls[0]?.[2]?.cwd).toBe(directory);
+    writeTerminal(id, 'hello');
+    expect(output).toHaveBeenCalledWith(id, 'hello');
+    expect(closeTerminal(id).ok).toBe(true);
+    expect(exited).toHaveBeenCalledWith(id, 0);
+    expect(getTerminalIds()).not.toContain(id);
+    unlinkSync(executable);
+    rmdirSync(directory);
   });
 
   it('writes data and receives output from terminal', () => {

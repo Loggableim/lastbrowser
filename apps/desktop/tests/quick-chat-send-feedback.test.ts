@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 const source = readFileSync(new URL('../src/renderer/App.tsx', import.meta.url), 'utf8');
 const boundary = source.slice(source.indexOf('  async function startQuickChatTurn('), source.indexOf('  async function stopQuickChat('));
@@ -16,6 +16,7 @@ function harness() {
   const ref = (current: any) => ({ current });
   const context: Record<string, any> = {
     quickChatBusyRef: ref(false), quickChatStopPendingRef: ref(false), quickChatResetPendingRef: ref(false),
+    quickLatencyRunRef: ref(null),
     quickChatBindingScopeKeyRef: ref(null), quickChatTranscriptScopeKeyRef: ref(null),
     quickChatGenerationRef: ref(0), quickChatStopEpochRef: ref(0), quickChatIdRef: ref('q'),
     quickChatAwaitingStartRef: ref(false), quickChatBusyScopeKeyRef: ref(null),
@@ -57,8 +58,11 @@ describe('Quickchat feedback before model discovery', () => {
   });
   it('offers Stop during discovery and removes the unsent echo without backend start', async () => {
     const h = harness(); const pending = h.send('hello');
+    const cancel = vi.fn();
+    h.context.quickLatencyRunRef.current = { cancel };
     expect(h.context.quickChatBusy).toBe(true);
     await h.stop();
+    expect(cancel).toHaveBeenCalledOnce();
     expect(h.context.quickChatBusy).toBe(false);
     expect(h.context.quickChatStopEpochRef.current).toBe(1);
     h.resolve();

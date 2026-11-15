@@ -17,9 +17,10 @@
 import { spawn as ptySpawn, type IPty } from 'node-pty';
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { statSync } from 'node:fs';
 import path from 'node:path';
 
-export type TerminalMode = 'shell' | 'tui';
+export type TerminalMode = 'shell' | 'tui' | 'codex';
 
 export type TerminalOptions = {
   mode?: TerminalMode;
@@ -69,7 +70,7 @@ export function startTerminal(
   options?: TerminalOptions
 ): { id: string; error?: string } {
   const id = createId();
-  const mode: TerminalMode = options?.mode === 'tui' ? 'tui' : 'shell';
+  const mode: TerminalMode = options?.mode ?? 'shell';
   const cols = options?.cols ?? DEFAULT_COLS;
   const rows = options?.rows ?? DEFAULT_ROWS;
 
@@ -80,10 +81,10 @@ export function startTerminal(
     COLORTERM: 'truecolor'
   };
 
-  if (options?.pythonExe) {
+  if (mode !== 'codex' && options?.pythonExe) {
     env.LASTBROWSER_PYTHON_EXE = options.pythonExe;
   }
-  if (options?.sidekickDir) {
+  if (mode !== 'codex' && options?.sidekickDir) {
     env.LASTBROWSER_SIDEKICK_DIR = options.sidekickDir;
     const delimiter = process.platform === 'win32' ? ';' : ':';
     env.PYTHONPATH = env.PYTHONPATH
@@ -95,7 +96,11 @@ export function startTerminal(
   let args: string[] = [];
   let spawnCwd = cwd || process.cwd();
 
-  if (mode === 'tui') {
+  if (mode === 'codex') {
+    const executable = resolveCodex(env.PATH || env.Path || '');
+    if (!executable) return { id, error: 'Codex CLI was not found on PATH. Install Codex CLI, add its executable to PATH, and reopen LastBrowser.' };
+    file = executable;
+  } else if (mode === 'tui') {
     file = options?.pythonExe || 'python';
     args = ['-m', 'cli.lastbrowser_tui'];
     if (options?.sessionId) args.push('--session', options.sessionId);
@@ -230,6 +235,22 @@ export function closeAllTerminals(): void {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function resolveCodex(searchPath: string): string | undefined {
+  const executable = process.platform === 'win32' ? 'codex.exe' : 'codex';
+  for (const entry of searchPath.split(path.delimiter)) {
+    const directory = entry.replace(/^"(.*)"$/, '$1');
+    if (!path.isAbsolute(directory)) continue;
+    const candidate = path.join(directory, executable);
+    try {
+      const metadata = statSync(candidate, { throwIfNoEntry: false });
+      if (metadata?.isFile() && (process.platform === 'win32' || (metadata.mode & 0o111))) return candidate;
+    } catch {
+      // A PATH entry may be inaccessible.
+    }
+  }
+  return undefined;
+}
 
 function resolveShell(): string {
   // Windows: prefer PowerShell 7 (pwsh), then Windows PowerShell (powershell), then cmd

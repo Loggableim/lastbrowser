@@ -1,7 +1,9 @@
 type Result = { ok: boolean; error?: string };
+export type TerminalMode = 'shell' | 'tui' | 'codex';
+type StartRequest = { cwd: string; mode: TerminalMode; sessionId?: string };
 export type TerminalEvent = { id: string; data?: string; exitCode?: number };
 type Bridge = {
-  start(request: { cwd: string; mode: 'shell' | 'tui'; sessionId?: string }): Promise<{ id: string; error?: string }>;
+  start(request: StartRequest): Promise<{ id: string; error?: string }>;
   close(id: string): Promise<Result>;
   write(request: { id: string; data: string }): Promise<Result>;
   onData(callback: (event: TerminalEvent) => void): () => void;
@@ -17,7 +19,7 @@ export function createTerminalSession(bridge: Bridge, output: (data: string) => 
   const deliver = (event: TerminalEvent) => {
     if (event.id !== id) return;
     if (event.data) output(event.data);
-    if (event.exitCode !== undefined) { id = ''; changed(''); error(`Terminal beendet (Exit ${event.exitCode}).`); }
+    if (event.exitCode !== undefined) { id = ''; changed(''); }
   };
   const unsubscribe = bridge.onData((event) => {
     if (disposed) return;
@@ -32,7 +34,7 @@ export function createTerminalSession(bridge: Bridge, output: (data: string) => 
     if (closing) await bridge.close(closing).catch(() => ({ ok: false }));
   }
   return {
-    async start(request: { cwd: string; mode: 'shell' | 'tui'; sessionId?: string }) {
+    async start(request: StartRequest) {
       const closing = close();
       const current = generation;
       await closing;

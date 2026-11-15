@@ -3,13 +3,12 @@ import { Terminal as TerminalIcon, X, Loader2, Sparkles } from 'lucide-react';
 import { Terminal } from '../vendor/xterm/xterm.mjs';
 import { FitAddon } from '../vendor/xterm/addon-fit.mjs';
 import '../vendor/xterm/xterm.css';
-import { createTerminalSession } from '../terminal-session.js';
+import { createTerminalSession, type TerminalMode } from '../terminal-session.js';
 import { useTerminalEnabled } from '../terminal-feature.js';
 import { usePanelStore } from '../stores/usePanelStore.js';
 import { useDesktopI18n } from '../i18n.js';
 import { shellText } from '../i18n/shell-text.js';
 type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
-export type TerminalMode = 'shell' | 'tui';
 
 type NativeTerminalProps = { serviceStatus: ServiceStatus | null; activeSessionId: string | null; workspacePath: string };
 
@@ -39,10 +38,11 @@ function NativeTerminalRuntime({ serviceStatus, activeSessionId, workspacePath }
   const { locale } = useDesktopI18n();
   const isWindows = /Windows/i.test(navigator.userAgent);
   const shellLabel = isWindows ? 'PowerShell' : 'Shell';
-  const shellDetail = isWindows
-    ? 'PowerShell und interaktiver Chat im aktuellen Space.'
-    : 'Interaktive System-Shell und Sidekick TUI im aktuellen Space.';
+  const shellDetail = shellText(locale,
+    'Starte die Shell, Sidekick TUI oder die installierte Codex CLI für diesen Space.',
+    'Launch the shell, Sidekick TUI, or the installed Codex CLI for this Space.');
   const [mode, setMode] = useState<TerminalMode>('shell');
+  const modeLabel = { shell: shellLabel, tui: 'Sidekick TUI', codex: 'Codex CLI' }[mode];
   const [termId, setTermId] = useState('');
   const [cwd, setCwd] = useState(workspacePath);
   const [starting, setStarting] = useState(false);
@@ -92,13 +92,17 @@ function NativeTerminalRuntime({ serviceStatus, activeSessionId, workspacePath }
   return <section className="browser-main native-rest-main">
     <header className="native-rest-header"><div className="native-rest-title"><TerminalIcon size={21}/><div><span className="eyebrow">Terminal & CLI</span><h1>Terminal & Sidekick</h1><p>{shellDetail}</p></div></div></header>
     {!termId && <form className="terminal-start-form" onSubmit={(event) => { event.preventDefault(); void start(); }}>
-      <div className="native-card-actions"><button type="button" aria-pressed={mode === 'shell'} onClick={() => setMode('shell')}><TerminalIcon size={14}/>{shellLabel}</button><button type="button" aria-pressed={mode === 'tui'} onClick={() => setMode('tui')}><Sparkles size={14}/>Sidekick TUI</button></div>
+      <div className="native-card-actions">
+        <button type="button" disabled={starting} aria-pressed={mode === 'shell'} onClick={() => setMode('shell')}><TerminalIcon size={14}/>{shellLabel}</button>
+        <button type="button" disabled={starting} aria-pressed={mode === 'tui'} onClick={() => setMode('tui')}><Sparkles size={14}/>Sidekick TUI</button>
+        <button type="button" disabled={starting} aria-pressed={mode === 'codex'} onClick={() => setMode('codex')}><TerminalIcon size={14}/>Codex CLI</button>
+      </div>
       <label>{shellText(locale, 'Arbeitsverzeichnis', 'Working directory')}<input value={cwd} onChange={(event) => setCwd(event.target.value)}/></label>
       <button type="submit" className="primary-action compact" disabled={starting || !cwd.trim() || (mode === 'tui' && serviceStatus?.webuiHealth !== 'ready')}>{starting && <Loader2 className="spin" size={14}/>} {starting ? shellText(locale, 'Startet…', 'Starting…') : shellText(locale, "Terminal öffnen", "Open terminal")}</button>
     </form>}
     {error && <div className="workspace-error" role="status">{error}</div>}
     <div className="terminal-container" style={{ minHeight: 260, flex: 1 }}>
-      {termId && <div className="terminal-toolbar"><span>{mode === 'tui' ? 'Sidekick TUI' : shellLabel} — {cwd}</span><button type="button" onClick={() => void session.current?.write('\x03')}>Ctrl+C</button><button type="button" aria-label={shellText(locale, "Terminal schließen", "Close terminal")} onClick={() => void session.current?.close()}><X size={14}/></button></div>}
+      {termId && <div className="terminal-toolbar"><span>{modeLabel} — {cwd}</span><button type="button" onClick={() => void session.current?.write('\x03')}>Ctrl+C</button><button type="button" aria-label={mode === 'codex' ? shellText(locale, 'Codex CLI stoppen', 'Stop Codex CLI') : shellText(locale, 'Terminal schließen', 'Close terminal')} onClick={() => void session.current?.close()}><X size={14}/>{mode === 'codex' && shellText(locale, 'Stoppen', 'Stop')}</button></div>}
       <div ref={host} className="terminal-emulator" style={{ flex: 1, minHeight: 240, padding: 8 }} />
     </div>
   </section>;

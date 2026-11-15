@@ -32,6 +32,14 @@ describe('Ollama settings configuration flow', () => {
     expect(modal).not.toContain('cleanSettingsPayload(settings)');
   });
 
+  it('requires a new or saved API key before activating Ollama Cloud', () => {
+    const modal = source.slice(source.indexOf('{/* Ollama Config Modal */}'));
+    expect(source).toMatch(/const ollamaCloudKeyMissing = ollamaModalProviderId === 'ollama-cloud' && !ollamaKey.trim\(\) && !ollamaHasSavedKey/);
+    expect(source).toMatch(/path: '\/api\/providers', scopeSelection \}\).then\(response => \{\s*if \(!isCurrentOllamaDialog\(scopeSelection\)\) return;/);
+    expect(modal).toMatch(/className="primary-action compact"\s+disabled=\{!ollamaUrl.trim\(\) \|\| ollamaCloudKeyMissing \|\| ollamaTesting \|\| saving\}/);
+    expect(modal).toMatch(/if \(!scopeSelection \|\| !isCurrentOllamaDialog\(scopeSelection\) \|\| ollamaCloudKeyMissing\) return;\s+setSaving\(true\);/);
+  });
+
   it('saves chat picker choices through the bound Space scope and applies them only to the captured view', () => {
     const chatSource = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/NativeChatMain.tsx'), 'utf8');
     expect(chatSource).toContain("operation: 'modelSelection'");

@@ -2535,6 +2535,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [ollamaModalLabel, setOllamaModalLabel] = useState('');
   const [ollamaUrl, setOllamaUrl] = useState('');
   const [ollamaKey, setOllamaKey] = useState('');
+  const [ollamaHasSavedKey, setOllamaHasSavedKey] = useState(false);
+  const ollamaCloudKeyMissing = ollamaModalProviderId === 'ollama-cloud' && !ollamaKey.trim() && !ollamaHasSavedKey;
   const [ollamaTestResult, setOllamaTestResult] = useState('');
   const [ollamaTesting, setOllamaTesting] = useState(false);
   const ollamaScopeRef = useRef<typeof activeProviderScope | null>(null);
@@ -4807,12 +4809,21 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                   const configuredProvider = providerConfigs[option.id];
                                   const providerConfig: AnyRecord = isRecord(configuredProvider) ? configuredProvider : {};
                                   const currentProviderSettings = activeProvider === option.id ? settings : providerConfig;
-                                  ollamaScopeRef.current = activeProviderScope;
+                                  const scopeSelection = { ...activeProviderScope };
+                                  ollamaScopeRef.current = scopeSelection;
                                   setOllamaModalProviderId(option.id);
                                   setOllamaModalLabel(option.label || option.id);
                                   setOllamaUrl(settingsText(currentProviderSettings.base_url, defaultUrl));
                                   setOllamaKey('');
+                                  setOllamaHasSavedKey(false);
                                   setOllamaTestResult('');
+                                  if (option.id === 'ollama-cloud') {
+                                    void window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection }).then(response => {
+                                      if (!isCurrentOllamaDialog(scopeSelection)) return;
+                                      const saved = arrayFrom(response, ['providers']).find(row => row.id === 'ollama-cloud');
+                                      setOllamaHasSavedKey(saved?.has_key === true);
+                                    }).catch(() => {});
+                                  }
                                 }}
                                 disabled={!ready || saving || !activeBackendProfileName}
                               >
@@ -5220,10 +5231,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         <button
                           type="button"
                           className="primary-action compact"
-                          disabled={!ollamaUrl.trim() || ollamaTesting || saving}
+                          disabled={!ollamaUrl.trim() || ollamaCloudKeyMissing || ollamaTesting || saving}
                           onClick={async () => {
                             const scopeSelection = ollamaScopeRef.current;
-                            if (!scopeSelection || !isCurrentOllamaDialog(scopeSelection)) return;
+                            if (!scopeSelection || !isCurrentOllamaDialog(scopeSelection) || ollamaCloudKeyMissing) return;
                             setSaving(true);
                             try {
                               if (ollamaKey.trim()) {

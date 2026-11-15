@@ -222,6 +222,9 @@ import { defaultSearchEngineId, searchEngineById } from './browser-search.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
+import { configureProfileDirectory } from './profile-directory.js';
+
+configureProfileDirectory(app);
 
 process.on('uncaughtException', (err, origin) => {
   console.error('[lastbrowser uncaughtException]', origin, err);
@@ -1647,8 +1650,6 @@ if (isCdpEnabled() && !process.argv.some((a) => a.startsWith('--remote-debugging
 // Enable Widevine DRM feature flag in Chromium
 app.commandLine.appendSwitch('enable-features', 'WidevineCdm');
 appendWindowsFirstPaintSwitches(app.commandLine);
-
-app.setName('Lastbrowser');
 
 // Enforce single instance lock: prevent port collisions and handle incoming external URLs
 const gotSingleInstanceLock = typeof app?.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;

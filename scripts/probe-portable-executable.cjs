@@ -9,26 +9,27 @@ const { randomUUID } = require('node:crypto');
 const assert = require('node:assert/strict');
 assert.equal(typeof globalThis.WebSocket, 'function', 'Use the existing Node WebSocket runtime');
 const root = path.resolve(__dirname, '..');
-const signedReleaseName = 'release-local-0.1.45-20261005-102014';
+const signedReleaseName = /^release-local-(\d+\.\d+\.\d+(?:-beta\.\d+)?)-\d{8}-\d{6}$/;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 function resolveProbeTarget() {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2).filter(arg => arg !== '--check-tray');
+  const checkTray = process.argv.includes('--check-tray');
   const signedRelease = args[0] === '--signed-release';
   if ((signedRelease && args.length !== 2) || (!signedRelease && args.length !== 1)) {
-    throw new Error(`Usage: node ${path.basename(__filename)} [--signed-release] <directory>`);
+    throw new Error(`Usage: node ${path.basename(__filename)} [--check-tray] [--signed-release] <directory>`);
   }
   const target = fs.realpathSync(path.resolve(signedRelease ? args[1] : args[0]));
   const expected = signedRelease
-    ? path.resolve(root, 'apps', 'desktop', signedReleaseName)
+    ? fs.realpathSync(path.join(root, 'apps', 'desktop'))
     : fs.realpathSync(path.join(root, 'output'));
   if (signedRelease) {
-    if (path.basename(target) !== signedReleaseName || path.dirname(target).toLowerCase() !== path.resolve(root, 'apps', 'desktop').toLowerCase()) {
-      throw new Error(`--signed-release accepts only ${expected}`);
+    if (!signedReleaseName.test(path.basename(target)) || path.dirname(target).toLowerCase() !== expected.toLowerCase()) {
+      throw new Error(`--signed-release requires a release-local-<version>-YYYYMMDD-HHMMSS directory directly under ${expected}`);
     }
   } else if (!target.startsWith(expected + path.sep)) {
     throw new Error(`Unsigned output directory must be under ${expected}`);
   }
-  return { target, signedRelease };
+  return { target, signedRelease, checkTray };
 }
 function verifyAuthenticodeTimestamp(executable) {
   const command = '$ErrorActionPreference="Stop"; $s=Get-AuthenticodeSignature -LiteralPath $env:LASTBROWSER_SIGNED_PROBE_EXE; [pscustomobject]@{status=[string]$s.Status; signer=if($s.SignerCertificate){$s.SignerCertificate.Subject}else{$null}; timestampPresent=($null -ne $s.TimeStamperCertificate); timestampSigner=if($s.TimeStamperCertificate){$s.TimeStamperCertificate.Subject}else{$null}} | ConvertTo-Json -Compress';
@@ -70,7 +71,7 @@ function snapshotTree(directory) {
   return { files, directories, bytes };
 }
 async function main() {
-  const { target: distDir, signedRelease } = resolveProbeTarget();
+  const { target: distDir, signedRelease, checkTray } = resolveProbeTarget();
   const portableCandidates = fs.readdirSync(distDir, { withFileTypes: true })
     .filter(entry => entry.isFile() && /^Lastbrowser-.+-x64-portable\.exe$/i.test(entry.name))
     .map(entry => path.join(distDir, entry.name));
@@ -81,6 +82,11 @@ async function main() {
     throw new Error(`Expected exactly one Lastbrowser-*-x64-portable.exe in ${distDir}; ${found}`);
   }
   const [portableExe] = portableCandidates;
+  if (signedRelease) {
+    const [, version] = signedReleaseName.exec(path.basename(distDir));
+    assert.equal(path.basename(portableExe).toLowerCase(), `lastbrowser-${version}-x64-portable.exe`,
+      'Portable wrapper version must match the signed release directory');
+  }
   const signature = signedRelease ? verifyAuthenticodeTimestamp(portableExe) : null;
 
   const owned = fs.mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-portable-'));
@@ -164,6 +170,13 @@ async function main() {
       if (reply.error) waiter.reject(Error(JSON.stringify(reply.error)));
       else waiter.resolve(reply.result);
     });
+    socket.addEventListener('close', () => {
+      for (const waiter of pending.values()) {
+        clearTimeout(waiter.timer);
+        waiter.reject(Error('Portable renderer disconnected'));
+      }
+      pending.clear();
+    });
     await new Promise((resolve, reject) => {
       socket.addEventListener('open', resolve, { once: true });
       socket.addEventListener('error', reject, { once: true });
@@ -182,6 +195,28 @@ async function main() {
     report.title = await evaluate('document.title');
     report.pid = task.pid;
 
+    const extracted = fs.readdirSync(env.TEMP)
+      .map(name => path.join(env.TEMP, name))
+      .filter(directory => fs.existsSync(path.join(directory, 'resources', 'runtime', 'python', 'python.exe')));
+    report.tempRuntimeDirsBeforeExit = extracted.length;
+    assert(extracted.length > 0, 'Portable launcher has an extracted runtime before exit');
+
+    if (checkTray) {
+      assert.equal(await evaluate('document.visibilityState'), 'visible', 'The first-run window is visible before close');
+      await evaluate('window.lastbrowser.window.close()');
+      const hiddenDeadline = Date.now() + 5000;
+      let hidden = false;
+      while (Date.now() < hiddenDeadline && !hidden) {
+        hidden = await evaluate("document.visibilityState === 'hidden'");
+        if (!hidden) await sleep(100);
+      }
+      assert(hidden, 'Closing the window hides LastBrowser when its tray is available');
+      assert.equal(task.exitCode, null, 'Closing the window leaves the Portable wrapper running');
+      const health = await evaluate('window.lastbrowser.services.status().then(result => result.webuiHealth)');
+      assert.equal(health, 'ready', 'The bundled backend remains available after the window is hidden');
+      report.tray = { windowHidden: hidden, wrapperRunning: true, backendHealth: health };
+    }
+
     let closeError;
     const closing = call('Browser.close').catch(error => { closeError = String(error); });
     const closeDeadline = Date.now() + 30000;
@@ -190,10 +225,19 @@ async function main() {
     await closing;
     if (closeError) report.closeAcknowledgement = closeError;
     report.exitCode = task.exitCode;
+    report.tempRuntimeDirsAfterExit = extracted.filter(directory => fs.existsSync(directory)).length;
+    assert.equal(report.tempRuntimeDirsAfterExit, 0, 'A full exit removes the extracted Portable runtime');
     report.passed = true;
   } catch (error) {
     report.error = String(error.stack || error);
     process.exitCode = 1;
+    if (task?.exitCode === null && socket?.readyState === WebSocket.OPEN) {
+      const quitting = call('Browser.close').catch(() => undefined);
+      const deadline = Date.now() + 8000;
+      while (task.exitCode === null && task.signalCode === null && Date.now() < deadline) await sleep(100);
+      socket.close();
+      await quitting;
+    }
   } finally {
     socket?.close();
     for (const waiter of pending.values()) {

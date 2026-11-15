@@ -149,6 +149,10 @@ export type FirstRunSetupPaneProps = {
 
 const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
 
+function providerSetupTab(providerId: string): 'featured' | 'custom' {
+  return !providerId || RECOMMENDED_PROVIDER_IDS.some(id => id === providerId) ? 'featured' : 'custom';
+}
+
 export function FirstRunSetupPane({
   initialSpaceName = 'Home',
   browserProfileId,
@@ -230,7 +234,7 @@ export function FirstRunSetupPane({
   const [personality, setPersonality] = useState<string>('nova');
 
   // Setup mode tab: featured recommendations vs API-key providers.
-  const [activeTab, setActiveTab] = useState<'featured' | 'custom'>('featured');
+  const [activeTab, setActiveTab] = useState(() => providerSetupTab(defaultProviderId));
 
   // Standalone Sidekick install migration (first-run assistant).
   const [standaloneReport, setStandaloneReport] = useState<{
@@ -286,12 +290,6 @@ export function FirstRunSetupPane({
   };
 
   useEffect(() => {
-    if (!providers.some((item) => item.id === provider) && providers[0]) {
-      setProvider(providers[0].id);
-    }
-  }, [provider, providers]);
-
-  useEffect(() => {
     setModel((current) => models.some((item) => item.id === current) ? current : (models[0]?.id || ''));
   }, [models]);
 
@@ -342,18 +340,20 @@ export function FirstRunSetupPane({
   }, [standaloneReport?.homeDir, migrateItems]);
 
   const selectProvider = useCallback((nextProvider: string) => {
+    if (nextProvider === provider) return;
     setProvider(nextProvider);
     setModel('');
     setApiKey('');
+    setBaseUrl('');
     setOAuthState(idleCodexOAuth);
-    if (['google-gemini-cli', 'openai-codex'].includes(nextProvider)) {
-      setActiveTab('featured');
-    } else if (nextProvider === 'ollama') {
-      setActiveTab('featured');
-    } else {
-      setActiveTab('custom');
+    setActiveTab(providerSetupTab(nextProvider));
+  }, [provider]);
+
+  useEffect(() => {
+    if (!visibleProviders.some(item => item.id === provider)) {
+      selectProvider(defaultProviderId || visibleProviders[0]?.id || '');
     }
-  }, []);
+  }, [defaultProviderId, provider, selectProvider, visibleProviders]);
 
   const loadLiveModels = useCallback(async (): Promise<Array<{ id: string; label: string }>> => {
     const capturedKey = modelRequestKey;
@@ -409,7 +409,7 @@ export function FirstRunSetupPane({
       return available;
     } catch (cause) {
       if (current()) {
-        setModelProbeError(cause instanceof Error ? cause.message : 'Modelle konnten nicht geladen werden.');
+        setModelProbeError(cause instanceof Error ? cause.message : shellText(locale, 'Modelle konnten nicht geladen werden.', 'Could not load models.'));
         setModelCatalogKey('');
         setModel('');
       }
@@ -418,7 +418,7 @@ export function FirstRunSetupPane({
       if (deadline) clearTimeout(deadline);
       if (current()) setModelProbeLoading(false);
     }
-  }, [aiChoice, apiKey, baseUrl, provider, browserProfileId, workspacePath, backendProfileName, modelRequestKey, canSubmit, oauthProviderId, activeProviderOption?.keyOptional]);
+  }, [aiChoice, apiKey, baseUrl, provider, browserProfileId, workspacePath, backendProfileName, modelRequestKey, canSubmit, oauthProviderId, activeProviderOption?.keyOptional, locale]);
 
   useEffect(() => {
     void loadLiveModels();
@@ -582,7 +582,7 @@ export function FirstRunSetupPane({
 
   async function cancelCodexLogin(): Promise<void> {
     const flowId = oauthState.flowId;
-    setOAuthState({ status: 'cancelled', message: 'Anmeldung abgebrochen.' });
+    setOAuthState({ status: 'cancelled', message: shellText(locale, 'Anmeldung abgebrochen.', 'Sign-in cancelled.') });
     if (flowId) {
       await window.lastbrowser.sidekick.cancelOAuth({ flowId, provider: oauthProviderId || 'openai-codex' }).catch(() => null);
     }
@@ -1493,7 +1493,9 @@ export function FirstRunSetupPane({
                   <label className="input-group" style={{ marginTop: '0.75rem' }}>
                     <span className="input-label">{provider === 'alibaba'
                       ? t('settings.panels.providers.alibabaBaseUrlLabel')
-                      : 'Server-Adresse / Endpoint (Optional)'}</span>
+                      : activeProviderOption.requiresBaseUrl
+                        ? shellText(locale, 'Serveradresse', 'Server address')
+                        : shellText(locale, 'Serveradresse (optional)', 'Server address (optional)')}</span>
                     <input
                       type="text"
                       value={baseUrl}
@@ -1520,7 +1522,7 @@ export function FirstRunSetupPane({
               {models.length === 0 ? (
                 <div className="field-hint">
                   <p>{modelProbeLoading ? shellText(locale, 'Modelle werden geladen …', 'Loading models …') : modelProbeError || (oauthProviderId ? shellText(locale, "Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.", "Connect your account and load the model list. No API key is required.") : shellText(locale, "Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.", "Load models with saved credentials, or enter an API key."))}</p>
-                  <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>Modelle neu laden</button>
+                  <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>{shellText(locale, 'Modelle neu laden', 'Reload models')}</button>
                 </div>
               ) : <div className="models-pills-row">
                 {models.map((m) => {

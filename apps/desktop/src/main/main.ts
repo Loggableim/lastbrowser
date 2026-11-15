@@ -1668,9 +1668,9 @@ configureDrmWidevine(app);
 // A secondary process must not continue into service/window initialization even
 // if Electron resolves whenReady after the initial quit request.
 startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.whenReady(), async () => {
-  // Missing/offline CDM installation must not indefinitely block the shell.
-  // Late component completion changes DRM status only while Main is alive.
-  await initializeCastlabsWidevine(undefined, {
+  // DRM readiness affects protected playback, not ordinary browser startup.
+  void initializeCastlabsWidevine(undefined, {
+    componentUpdatesDisabled: app.commandLine.hasSwitch('disable-component-update'),
     isActive: () => !isQuitting,
     onStatus: (status) => { widevineReadiness = status; }
   });

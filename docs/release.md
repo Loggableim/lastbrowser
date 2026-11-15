@@ -29,6 +29,8 @@ The release gate requires exactly one version-matched setup executable and one p
 
 The Windows Portable launcher extracts application files into Windows Temp and uses the same profile as the installer. New profiles use `%APPDATA%\Lastbrowser`. Existing profiles created under the earlier package-name path, `%APPDATA%\@lastbrowser\desktop`, continue to use that directory. Profiles stay on the host computer across launches. When the system tray is available, closing the window hides the app. Use **Quit Lastbrowser** in the tray menu for a full exit.
 
+LastBrowser opens the browser window while Castlabs checks for Widevine. On a fresh profile Chromium can contact Google's component update service at `update.googleapis.com`. To suppress Chromium component updates, fully quit LastBrowser, then launch the executable with `--disable-component-update`. This also disables Widevine downloads and can prevent protected-media playback. App updates and ad blocker filter downloads have separate controls.
+
 For local Ollama, start Ollama and install a local model before configuring the provider in LastBrowser. Enable the provider beta catalog if the Ollama card is hidden. The beta catalog resets when you reload the app. In the Ollama configuration dialog, **Test connection** checks the specified localhost server's model list. The general settings refresh can reuse a cached model catalog. Select the local Ollama model explicitly for chat, since automatic model selection can choose an enabled cloud provider.
 
 ## Requirements

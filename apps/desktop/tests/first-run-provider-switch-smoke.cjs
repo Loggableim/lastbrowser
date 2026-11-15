@@ -1,0 +1,128 @@
+const assert = require('node:assert/strict');
+const { spawn } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { pathToFileURL } = require('node:url');
+
+const fixture = `
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { FirstRunSetupPane } from './src/renderer/components/FirstRunSetupPane';
+import { DesktopI18nProvider } from './src/renderer/i18n';
+
+localStorage.setItem('lastbrowser.locale', 'en');
+const scope = { browserProfileId: 'fixture', backendProfileId: 'fixture', spaceId: 'fixture' };
+window.lastbrowser = {
+  i18n: { setLocale: async () => {} },
+  independent: { request: async ({ operation }) => ({
+    ok: true, value: operation === 'resolveScope'
+      ? { scope }
+      : { scope, groups: [] },
+  }) },
+  sidekick: {
+    detectExistingInstall: async () => ({ found: false }),
+    requestWebui: async () => ({ providers: [] }),
+  },
+  system: {
+    isDefaultBrowser: async () => false,
+    discoverBrowserImport: async () => ({ profiles: [] }),
+  },
+};
+const onboardingStatus = { setup: { providers: [
+  { id: 'alibaba', label: 'Alibaba Cloud', requires_base_url: true },
+  { id: 'ollama', label: 'Ollama', key_optional: true },
+] } };
+createRoot(document.getElementById('root')).render(<DesktopI18nProvider>
+  <FirstRunSetupPane aiChoice="enabled" status={{ sidekick: 'ready', webuiHealth: 'ready' }}
+    browserProfileId="fixture" backendProfileName="default" onboardingStatus={onboardingStatus}
+    error="" saving={false} setupLoading={false} />
+</DesktopI18nProvider>);
+`;
+
+async function runRenderer(directory) {
+  const { app, BrowserWindow } = require('electron');
+  try {
+    app.setPath('userData', path.join(directory, 'profile'));
+    app.commandLine.appendSwitch('disable-component-update');
+    await app.whenReady();
+    const window = new BrowserWindow({ show: false, webPreferences: { backgroundThrottling: false } });
+    await window.loadFile(path.join(directory, 'index.html'));
+    const run = (script) => window.webContents.executeJavaScript(script);
+    async function until(condition, label) {
+      const end = Date.now() + 8000;
+      while (Date.now() < end) {
+        if (await run(condition)) return;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+      throw new Error(`Timed out waiting for ${label}: ${await run('document.body.innerText.slice(0, 400)')}`);
+    }
+    const next = '.setup-action-footer .primary-btn';
+    for (let step = 0; step < 4; step += 1) {
+      await until(`document.querySelector('${next}')?.disabled === false`, 'enabled Next button');
+      await run(`document.querySelector('${next}').click()`);
+    }
+    await until("document.querySelector('#first-run-page-title')?.textContent === 'Connect your AI'", 'English provider step');
+    const chip = (label) => `[...document.querySelectorAll('.provider-chip')].find(button => button.querySelector('strong').textContent === '${label}')`;
+    const toggle = "document.querySelector('[data-testid=provider-beta-catalog-toggle] input')";
+    assert.equal(await run(`${chip('OpenCode Free')}?.classList.contains('active')`), true, 'The default provider is visible and selected');
+    await run(`${toggle}.click()`);
+    await until(`Boolean(${chip('Alibaba Cloud')})`, 'Alibaba Cloud provider chip');
+    await run(`${chip('Alibaba Cloud')}.click()`);
+    const endpoint = "document.querySelector('.input-group input[type=text].key-input')";
+    await until(`Boolean(${endpoint})`, 'Alibaba endpoint field');
+    const previous = 'https://catalog.example.invalid/compatible-mode/v1';
+    await run(`{
+      const input = ${endpoint};
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, '${previous}');
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    }`);
+    assert.equal(await run(`${endpoint}.value`), previous);
+    await run(`${chip('Ollama')}.click()`);
+    await until(`${endpoint}?.placeholder.includes('11434')`, 'Ollama endpoint field');
+    assert.equal(await run(`${endpoint}.value`), '', 'Ollama must start with a fresh endpoint');
+    assert.equal(await run(`${chip('Ollama')}?.classList.contains('active')`), true, 'Ollama stays visible and selected');
+    assert.equal(await run(`${endpoint}.parentElement.querySelector('.input-label').textContent`), 'Server address (optional)');
+    await until("Boolean(document.querySelector('.model-selection-area button:not(:disabled)'))", 'model reload button');
+    assert.equal(await run("document.querySelector('.model-selection-area button').textContent"), 'Reload models');
+    await run(`${toggle}.click()`);
+    await until(`${chip('OpenCode Free')}?.classList.contains('active')`, 'visible fallback after hiding the beta catalog');
+    assert.equal(await run(`Boolean(${endpoint})`), false, 'The hidden beta provider no longer owns the settings form');
+    console.log('First-run provider switch and English endpoint labels passed.');
+    app.exit(0);
+  } catch (error) {
+    console.error(error);
+    app.exit(1);
+  }
+}
+
+async function main() {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'lastbrowser-first-run-provider-'));
+  try {
+    require('esbuild').buildSync({
+      stdin: { contents: fixture, loader: 'tsx', resolveDir: path.resolve(__dirname, '..') },
+      bundle: true, platform: 'browser', format: 'iife',
+      define: { 'import.meta.url': JSON.stringify(pathToFileURL(path.join(directory, 'fixture.js')).href) },
+      loader: { '.css': 'empty' }, outfile: path.join(directory, 'fixture.js'),
+    });
+    fs.writeFileSync(path.join(directory, 'index.html'), '<meta charset="utf-8"><div id="root"></div><script src="fixture.js"></script>');
+    const env = { ...process.env };
+    delete env.ELECTRON_RUN_AS_NODE;
+    const child = spawn(require('electron'), [__filename, '--renderer', directory], { env, stdio: 'inherit', windowsHide: true });
+    const code = await new Promise((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', resolve);
+    });
+    assert.equal(code, 0);
+  } finally {
+    assert.equal(path.dirname(directory), path.resolve(os.tmpdir()));
+    assert.ok(path.basename(directory).startsWith('lastbrowser-first-run-provider-'));
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+if (process.argv[2] === '--renderer') {
+  void runRenderer(process.argv[3]);
+} else {
+  void main().catch(error => { console.error(error); process.exitCode = 1; });
+}

@@ -92,7 +92,7 @@
       Our binary contains no Google Analytics SDKs, no tracking pixels, and no device fingerprinting trackers. We do not log IP addresses or browsing timestamps.
     </p>
     <p style="margin-top:10px;">
-      LastBrowser can make background requests at startup. The ad blocker downloads filter lists and scriptlet resources from GitHub's raw content host when its cache needs refreshing. Turning off the ad blocker using the shield also turns off future filter downloads. The Castlabs Chromium runtime can fetch Google's Widevine component for protected video. The app updater can contact GitHub Releases. You can turn off automatic app updates in Settings.
+      LastBrowser can make background requests at startup. The ad blocker downloads filter lists and scriptlet resources from GitHub's raw content host when its cache needs refreshing. Turning off the ad blocker using the shield also turns off future filter downloads. The Castlabs Chromium runtime can contact Google's component update service at <code>update.googleapis.com</code> for Widevine. The <code>--disable-component-update</code> launch option turns off Chromium component updates and can prevent protected-media playback. The app updater can contact GitHub Releases. You can turn off automatic app updates in Settings.
     </p>
   </div>
 

@@ -177,7 +177,7 @@
         "!**/*.map"
       ],
       "icon": "build/icon.ico",
-      "signAndEditExecutable": false,
+      "signAndEditExecutable": true,
       "verifyUpdateCodeSignature": false,
       "signExts": [
         ".dll",

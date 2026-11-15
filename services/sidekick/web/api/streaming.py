@@ -1497,7 +1497,7 @@ def _generate_llm_session_title_via_aux(user_text: str, assistant_text: str, age
 def _generate_background_title(agent, user_text: str, assistant_text: str) -> tuple[Optional[str], str, str]:
     provider = str(getattr(agent, 'provider', '') or '').strip().lower()
     endpoint = getattr(agent, 'base_url', '')
-    if provider == 'ollama' and provider_deployment(
+    if provider_deployment(
         provider, {'model': {'provider': provider, 'base_url': endpoint}}
     ) == 'local':
         return _generate_llm_session_title_for_agent(agent, user_text, assistant_text)

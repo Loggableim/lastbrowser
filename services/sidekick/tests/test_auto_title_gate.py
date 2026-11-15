@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
+
 from shared.sessions import DEFAULT_SESSION_TITLE
 
 
@@ -112,10 +114,12 @@ def test_background_title_worker_does_not_own_chat_stream_termination(monkeypatc
     assert not any(event == "stream_end" for event, _data in events)
 
 
-def test_local_ollama_title_retries_do_not_use_auxiliary_provider(monkeypatch):
+@pytest.mark.parametrize("provider", ["ollama", "custom"])
+@pytest.mark.parametrize("aux_configured", [False, True])
+def test_local_ollama_title_retries_do_not_use_auxiliary_provider(monkeypatch, provider, aux_configured):
     from web.api import streaming
 
-    agent = SimpleNamespace(provider="ollama", model="qwen3:4b", base_url="http://127.0.0.1:11434/v1")
+    agent = SimpleNamespace(provider=provider, model="qwen3:4b", base_url="http://127.0.0.1:11434/v1")
     session = _session(DEFAULT_SESSION_TITLE, [{"role": "user", "content": "Plan a garden layout"}])
     session.save = lambda **kwargs: None
     calls = []
@@ -125,7 +129,7 @@ def test_local_ollama_title_retries_do_not_use_auxiliary_provider(monkeypatch):
         return "Remote title", "llm_aux", ""
 
     monkeypatch.setattr(streaming, "get_session", lambda _: session)
-    monkeypatch.setattr(streaming, "_aux_title_configured", lambda: True)
+    monkeypatch.setattr(streaming, "_aux_title_configured", lambda: aux_configured)
     monkeypatch.setattr(streaming, "_generate_llm_session_title_for_agent", lambda *args: (None, "llm_error", ""))
     monkeypatch.setattr(streaming, "_generate_llm_session_title_via_aux", try_aux)
     emit = lambda *args: None

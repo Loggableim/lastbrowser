@@ -1446,7 +1446,7 @@ export function FirstRunSetupPane({
                       />
                       <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                         <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
-                          {modelProbeLoading ? 'Modelle werden geladen…' : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
+                          {modelProbeLoading ? t('settings.panels.providers.loadingModels') : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
                         </button>
                         {modelProbeError && <p role="alert">{modelProbeError}</p>}
                       </div>
@@ -1479,25 +1479,30 @@ export function FirstRunSetupPane({
                   />
                   {activeProviderOption?.id === 'ollama' && (
                     <small className="field-hint">
-                      Tipp: Starte Ollama in deinem Terminal mit <code>ollama run llama3.2</code> oder nutze Modelle wie <code>qwen2.5</code> und <code>deepseek-r1</code>.
+                      {shellText(locale, 'Starte Ollama im Terminal mit ', 'Start Ollama in your terminal with ')}
+                      <code>ollama run llama3.2</code>
+                      {shellText(locale, ' oder nutze ein Modell wie ', ', or use a model such as ')}
+                      <code>qwen2.5</code>{shellText(locale, ' oder ', ' or ')}<code>deepseek-r1</code>.
                     </small>
                   )}
                   {activeProviderOption?.id === 'openrouter' && (
                     <small className="field-hint">
-                      Erhältlich unter <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>. Ein Key gewährt Zugriff auf über 200 Modelle.
+                      {shellText(locale, 'Erstelle einen API-Schlüssel unter ', 'Create an API key at ')}
+                      <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>.
                     </small>
                   )}
                   {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
                     <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                       <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
-                        {modelProbeLoading ? 'Modelle werden geladen…' : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
+                        {modelProbeLoading ? t('settings.panels.providers.loadingModels') : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
                       </button>
                       {modelProbeError && <p role="alert">{modelProbeError}</p>}
                     </div>
                   )}
                   {activeProviderOption?.id === 'deepseek' && (
                     <small className="field-hint">
-                      Erhältlich auf der <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">DeepSeek Platform</a>. Führend im Preis-Leistungs-Verhältnis.
+                      {shellText(locale, 'Erstelle einen API-Schlüssel auf der ', 'Create an API key on the ')}
+                      <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">DeepSeek Platform</a>.
                     </small>
                   )}
                 </label>

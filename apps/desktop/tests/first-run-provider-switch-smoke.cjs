@@ -34,6 +34,11 @@ window.lastbrowser = {
         window.ollamaCatalogRequests.push(request.body.base_url);
         return { models: [{ id: 'smollm2:135m', label: 'smollm2:135m' }] };
       }
+      if (request.path === '/api/models/probe' && request.body.provider === 'openrouter') {
+        return new Promise(resolve => {
+          window.finishCloudModelProbe = () => resolve({ models: [] });
+        });
+      }
       if (request.path === '/api/providers') window.providerScopeSelections.push(request.scopeSelection);
       return { providers: [] };
     },
@@ -46,6 +51,8 @@ window.lastbrowser = {
 const onboardingStatus = { setup: { providers: [
   { id: 'alibaba', label: 'Alibaba Cloud', requires_base_url: true },
   { id: 'ollama', label: 'Ollama', key_optional: true },
+  { id: 'openrouter', label: 'OpenRouter' },
+  { id: 'deepseek', label: 'DeepSeek' },
 ] } };
 createRoot(document.getElementById('root')).render(<DesktopI18nProvider>
   <FirstRunSetupPane aiChoice="enabled" status={{ sidekick: 'ready', webuiHealth: 'ready' }}
@@ -98,6 +105,8 @@ async function runRenderer(directory) {
     assert.equal(await run(`${endpoint}.value`), '', 'Ollama must start with a fresh endpoint');
     assert.equal(await run(`${chip('Ollama')}?.classList.contains('active')`), true, 'Ollama stays visible and selected');
     assert.equal(await run(`${endpoint}.parentElement.querySelector('.input-label').textContent`), 'Server address (optional)');
+    const ollamaTip = await run("document.querySelector('.api-key-panel input[type=password]').parentElement.querySelector('small.field-hint').textContent.trim()");
+    assert.equal(ollamaTip, 'Start Ollama in your terminal with ollama run llama3.2, or use a model such as qwen2.5 or deepseek-r1.');
     await until("Boolean(document.querySelector('.model-selection-area button:not(:disabled)'))", 'model reload button');
     assert.equal(await run("document.querySelector('.model-selection-area button').textContent"), 'Reload models');
     const localUrl = 'http://127.0.0.1:52087/v1';
@@ -111,10 +120,30 @@ async function runRenderer(directory) {
     await run("document.querySelector('.model-selection-area button').click()");
     await until("document.querySelector('.model-pill strong')?.textContent.includes('smollm2:135m')", 'installed local model');
     assert.deepEqual(await run('window.ollamaCatalogRequests'), [localUrl]);
+
+    await run(`${chip('OpenRouter')}.click()`);
+    const openRouterHint = await run("document.querySelector('.api-key-panel a[href*=openrouter]').parentElement.textContent.trim()");
+    await run(`{
+      const keyField = document.querySelector('.api-key-panel input[type=password]');
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(keyField, 'fixture-key');
+      keyField.dispatchEvent(new Event('input', { bubbles: true }));
+    }`);
+    await until("typeof window.finishCloudModelProbe === 'function'", 'pending cloud model probe');
+    const cloudLoading = await run("document.querySelector('.api-key-panel button:disabled').textContent");
+    await run("window.finishCloudModelProbe()");
+    await run(`${chip('DeepSeek')}.click()`);
+    const deepSeekHint = await run("document.querySelector('.api-key-panel a[href*=deepseek]').parentElement.textContent.trim()");
+    assert.deepEqual({ openRouterHint, deepSeekHint, cloudLoading }, {
+      openRouterHint: 'Create an API key at openrouter.ai/keys.',
+      deepSeekHint: 'Create an API key on the DeepSeek Platform.',
+      cloudLoading: 'Loading models…',
+    });
+
+    await run(`${chip('Ollama')}.click()`);
     await run(`${toggle}.click()`);
     await until(`${chip('OpenCode Free')}?.classList.contains('active')`, 'visible fallback after hiding the beta catalog');
     assert.equal(await run(`Boolean(${endpoint})`), false, 'The hidden beta provider no longer owns the settings form');
-    console.log('First-run provider switch and English endpoint labels passed.');
+    console.log('First-run provider switching, model reload, and English provider copy passed.');
     app.exit(0);
   } catch (error) {
     console.error(error);

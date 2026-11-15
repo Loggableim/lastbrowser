@@ -1880,8 +1880,7 @@ def _generate_title_via_ollama(messages) -> str | None:
             title = _sanitize_generated_title(raw_title or "")
             return title[:80] if title else None
 
-        import json
-        import urllib.request
+        import httpx
 
         user_msg = ''
         asst_msg = ''
@@ -1911,20 +1910,16 @@ def _generate_title_via_ollama(messages) -> str | None:
             f"Assistant: {asst_msg}"
         )
 
-        payload = json.dumps({
+        payload = {
             "model": "qwen3:4b",
             "messages": [{"role": "user", "content": prompt}],
             "temperature": 0.3,
             "max_tokens": 20,
-        }).encode()
-
-        req = urllib.request.Request(
-            "http://localhost:11434/v1/chat/completions",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
+        }
+        with httpx.Client(timeout=5, trust_env=False, follow_redirects=False) as client:
+            response = client.post("http://localhost:11434/v1/chat/completions", json=payload)
+            response.raise_for_status()
+            data = response.json()
         title = data["choices"][0]["message"]["content"].strip().strip('"\'')
         return title[:80] if title else None
     except Exception:

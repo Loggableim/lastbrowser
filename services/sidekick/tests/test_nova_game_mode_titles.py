@@ -2,26 +2,36 @@ from types import SimpleNamespace
 
 
 def test_local_ollama_title_does_not_use_auxiliary_provider_on_failure(monkeypatch, tmp_path):
+    import httpx
+
     from web.api import config as cfg
     from web.api import models
 
     monkeypatch.setattr(cfg, "SETTINGS_FILE", tmp_path / "settings.json")
     cfg.save_settings({"game_mode_enabled": False})
     auxiliary_calls = []
+    clients = []
+    real_client = httpx.Client
 
-    def unavailable(_request, *, timeout):
+    def unavailable(*_args, **_kwargs):
         raise TimeoutError("Ollama did not respond")
+
+    def direct_client(**options):
+        clients.append((options.get("trust_env"), options.get("follow_redirects")))
+        return real_client(transport=httpx.MockTransport(unavailable), **options)
 
     def generate_remote_title(*args, **kwargs):
         auxiliary_calls.append((args, kwargs))
         return "Remote title", "llm_aux"
 
     monkeypatch.setattr("urllib.request.urlopen", unavailable)
+    monkeypatch.setattr(httpx, "Client", direct_client)
     monkeypatch.setattr("web.api.streaming.generate_title_raw_via_aux", generate_remote_title)
 
     title = models._generate_title_via_ollama([{"role": "user", "content": "Example conversation"}])
 
     assert auxiliary_calls == []
+    assert clients == [(False, False)]
     assert title is None
 
 

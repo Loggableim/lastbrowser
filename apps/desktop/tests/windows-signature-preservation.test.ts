@@ -32,6 +32,10 @@ function signingConfiguration(filePath: string, hash: 'sha1' | 'sha256', isNest:
 }
 
 describe('electron-builder Windows signature preservation hook', () => {
+  it('edits Windows product and version resources in the standard build', () => {
+    expect(packageConfig.build.win.signAndEditExecutable).toBe(true);
+  });
+
   it('is resolved through the installed electron-builder custom sign hook contract', async () => {
     const packageRoot = path.dirname(require.resolve('../package.json'));
     const hookPath = signedOptions.signtoolOptions.sign;

@@ -8,6 +8,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
@@ -221,6 +223,52 @@ describe('Split tab detach transfer handshake', () => {
 });
 
 describe('Microsoft Store Generative AI Policy – Response Reporting & Feedback', () => {
+  it.each([
+    ['en', 'Open email draft', 'Excerpt (shown only here)'],
+    ['de', 'E-Mail-Entwurf öffnen', 'Auszug (nur hier sichtbar)'],
+  ])('explains the reviewable draft in %s', async (locale, action, excerptLabel) => {
+    const { AiFeedbackModal } = await import('../src/renderer/components/AiFeedbackModal.js');
+    const { DesktopI18nProvider } = await import('../src/renderer/i18n.js');
+    vi.stubGlobal('localStorage', { getItem: () => locale });
+    try {
+      const html = renderToStaticMarkup(createElement(DesktopI18nProvider, {
+        children: createElement(AiFeedbackModal, { open: true, messageContent: 'Local excerpt', onClose: () => {} }),
+      }));
+      expect(html).toContain(action);
+      expect(html).toContain(excerptLabel);
+      expect(html).toContain('support@lastbrowser.com');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('opens a reviewable draft to support with only the selected reason and typed details', async () => {
+    const { openAiFeedbackDraft } = await import('../src/renderer/components/AiFeedbackModal.js');
+    const openExternal = vi.fn().mockResolvedValue(true);
+    const comments = 'Harmful & misleading. ?cc=someone@example.invalid';
+    expect(await openAiFeedbackDraft('harmful', comments, openExternal)).toBe(true);
+    expect(openExternal).toHaveBeenCalledOnce();
+    const url = new URL(openExternal.mock.calls[0][0]);
+    expect(url.protocol).toBe('mailto:');
+    expect(url.pathname).toBe('support@lastbrowser.com');
+    expect([...url.searchParams.keys()]).toEqual(['subject', 'body']);
+    expect(url.searchParams.get('subject')).toBe('LastBrowser AI response report');
+    expect(url.searchParams.get('body')).toBe(`Reason: Inappropriate, misleading, or disruptive content\r\n\r\n${comments}`);
+  });
+
+  it('reports an unavailable email app without claiming the feedback was sent', async () => {
+    const { openAiFeedbackDraft } = await import('../src/renderer/components/AiFeedbackModal.js');
+    const openExternal = vi.fn().mockRejectedValue(new Error('no handler'));
+    expect(await openAiFeedbackDraft('harmful', '', openExternal)).toBe(false);
+  });
+
+  it('preserves the manual reporting option when details exceed the Windows URL limit', async () => {
+    const { openAiFeedbackDraft } = await import('../src/renderer/components/AiFeedbackModal.js');
+    const openExternal = vi.fn();
+    expect(await openAiFeedbackDraft('harmful', '界'.repeat(250), openExternal)).toBe(false);
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
   it('saves feedback entry with reason, snippet, timestamp and uuid', async () => {
     const { saveAiFeedback, AI_FEEDBACK_STORAGE_KEY } = await import('../src/renderer/components/AiFeedbackModal.js');
     const mockStore: Record<string, string> = {};

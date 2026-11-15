@@ -16,6 +16,13 @@ const props: ChatTranscriptProps = {
 };
 
 describe('chat child-history recovery UI', () => {
+  it('offers AI output reporting for assistant replies and leaves user messages unreportable', () => {
+    const html = renderToStaticMarkup(React.createElement(ChatTranscript, {
+      ...props, messages: [...props.messages, { role: 'assistant', content: 'Generated response' }],
+    }));
+    expect((html.match(/Report reply/g) || [])).toHaveLength(1);
+  });
+
   it('does not show a debug refresh button for normal chats without child runs', () => {
     const html = renderToStaticMarkup(React.createElement(ChatTranscript, props));
     expect(html).toContain('Hello');

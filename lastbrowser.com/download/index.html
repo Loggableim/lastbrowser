@@ -224,7 +224,7 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
       <div class="step-card">
         <div class="step-number">1</div>
         <h4>Installer starten</h4>
-        <p>Laden Sie die <code>.exe</code> herunter und führen Sie sie aus. Bei neuem Release auf „Trotzdem ausführen“ klicken.</p>
+        <p>Laden Sie den Installer aus einem offiziellen Lastbrowser-Release herunter und prüfen Sie die digitale Signatur vor dem Start.</p>
       </div>
 
       <div class="step-card">
@@ -248,7 +248,7 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
     <div class="grid-2">
       <div class="feature-card">
         <h3>Warum meldet Windows SmartScreen „Unbekannter Herausgeber“?</h3>
-        <p style="margin-top:8px;">Da Lastbrowser als Open-Source-Projekt kontinuierlich neue Releases ausliefert, benötigt jede neue Binärdatei einige Tage, um bei Microsoft die sogenannte SmartScreen-Reputation aufzubauen. Die Datei ist digital signiert und absolut sicher. Klicken Sie einfach auf <strong>„Weitere Informationen“</strong> und dann auf <strong>„Trotzdem ausführen“</strong>.</p>
+        <p style="margin-top:8px;">SmartScreen kann eine neu veröffentlichte Datei auch bei gültiger Signatur als unbekannte App einstufen. „Unbekannter Herausgeber“ bedeutet, dass Windows den Herausgeber nicht bestätigen konnte. Tagesbetas können unsigniert sein. Verwenden Sie bei fehlender oder ungültiger Signatur einen signierten stabilen Build aus dem offiziellen Release.</p>
       </div>
 
       <div class="feature-card">
@@ -287,29 +287,29 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
 <div id="smartscreen-modal" class="modal-backdrop">
   <div class="modal-dialog">
     <div class="modal-header">
-      <h3>🛡️ Windows SmartScreen Anleitung</h3>
+      <h3>🛡️ Download bei einer SmartScreen-Warnung prüfen</h3>
       <button class="modal-close" aria-label="Schließen">&times;</button>
     </div>
     <div class="modal-body">
       <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">
-        Beim ersten Start kann Windows SmartScreen einen blauen Dialog anzeigen, da es sich um eine brandneue Softwareversion handelt:
+        SmartScreen kann auch bei einer gültig signierten Datei warnen, wenn Windows die App noch nicht kennt.
       </p>
       <div class="ss-step">
         <div class="ss-step-num">1</div>
         <div>
-          <strong style="color:var(--text);font-size:15px;display:block;">Auf „Weitere Informationen“ klicken</strong>
-          <span style="color:var(--muted);font-size:13px;">Klicken Sie im blauen SmartScreen-Fenster auf den kleinen Textlink „Weitere Informationen“.</span>
+          <strong style="color:var(--text);font-size:15px;display:block;">Downloadquelle prüfen</strong>
+          <span style="color:var(--muted);font-size:13px;">Die Datei muss aus dem offiziellen Lastbrowser-Release stammen. Falls dort eine Prüfsumme angegeben ist, vergleichen Sie diese mit Ihrer Datei.</span>
         </div>
       </div>
       <div class="ss-step">
         <div class="ss-step-num">2</div>
         <div>
-          <strong style="color:var(--text);font-size:15px;display:block;">Auf „Trotzdem ausführen“ klicken</strong>
-          <span style="color:var(--muted);font-size:13px;">Daraufhin erscheint der Button „Trotzdem ausführen“. Klicken Sie darauf, um den Installer zu starten.</span>
+          <strong style="color:var(--text);font-size:15px;display:block;">Digitale Signatur prüfen</strong>
+          <span style="color:var(--muted);font-size:13px;">Öffnen Sie die Dateieigenschaften und prüfen Sie unter „Digitale Signaturen“ den Herausgeber und die Gültigkeit der Signatur.</span>
         </div>
       </div>
       <div style="background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.25);border-radius:10px;padding:14px;font-size:13px;color:var(--muted);">
-        <strong class="text-cyan">Release-Prüfung:</strong> Vergleichen Sie die Prüfsummen und Signaturen mit den veröffentlichten Dateien.
+        Tagesbetas können unsigniert sein. Wenn Sie Herkunft oder Signatur einer Datei nicht bestätigen können, lassen Sie die Warnung bestehen und verwenden Sie einen signierten stabilen Build.
       </div>
     </div>
   </div>

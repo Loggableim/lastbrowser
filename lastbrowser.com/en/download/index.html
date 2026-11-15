@@ -224,7 +224,7 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
       <div class="step-card">
         <div class="step-number">1</div>
         <h4>Run the Installer</h4>
-        <p>Download the installer and run it. If SmartScreen appears on brand-new builds, click "More info" -> "Run anyway".</p>
+        <p>Download the installer from an official Lastbrowser release and verify its digital signature before running it.</p>
       </div>
 
       <div class="step-card">
@@ -260,29 +260,29 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
 <div id="smartscreen-modal" class="modal-backdrop">
   <div class="modal-dialog">
     <div class="modal-header">
-      <h3>🛡️ Windows SmartScreen Guide</h3>
+      <h3>🛡️ Checking a download after a SmartScreen warning</h3>
       <button class="modal-close" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
       <p style="color:var(--muted);font-size:14px;margin-bottom:20px;">
-        When launching brand-new open-source releases, Windows SmartScreen may show a temporary blue warning:
+        SmartScreen can warn about a validly signed file when Windows does not yet recognize the app. An unknown publisher means Windows could not verify the publisher.
       </p>
       <div class="ss-step">
         <div class="ss-step-num">1</div>
         <div>
-          <strong style="color:var(--text);font-size:15px;display:block;">Click "More info"</strong>
-          <span style="color:var(--muted);font-size:13px;">Click the small link labeled "More info" on the SmartScreen dialog.</span>
+          <strong style="color:var(--text);font-size:15px;display:block;">Check the download source</strong>
+          <span style="color:var(--muted);font-size:13px;">Use a file from an official Lastbrowser release. If the release lists a checksum, compare it with your file.</span>
         </div>
       </div>
       <div class="ss-step">
         <div class="ss-step-num">2</div>
         <div>
-          <strong style="color:var(--text);font-size:15px;display:block;">Click "Run anyway"</strong>
-          <span style="color:var(--muted);font-size:13px;">The "Run anyway" button will appear. Click it to launch the setup.</span>
+          <strong style="color:var(--text);font-size:15px;display:block;">Verify the digital signature</strong>
+          <span style="color:var(--muted);font-size:13px;">Open the file properties and check the publisher and signature status under Digital Signatures.</span>
         </div>
       </div>
       <div style="background:rgba(0,229,255,0.06);border:1px solid rgba(0,229,255,0.25);border-radius:10px;padding:14px;font-size:13px;color:var(--muted);">
-        <strong class="text-cyan">Release verification:</strong> Compare checksums and signatures against the published files.
+        Daily beta builds may be unsigned. If you cannot verify the source or signature, leave the warning in place and use a signed stable build.
       </div>
     </div>
   </div>

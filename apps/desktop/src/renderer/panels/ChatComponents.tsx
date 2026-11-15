@@ -66,6 +66,7 @@ import { modelPolicyCopy } from '../i18n/model-policy-copy.js';
 import { useChatTranscriptScroll } from '../chat-transcript-scroll.js';
 import { TeamworkProcessCard } from '../components/TeamworkProcessCard.js';
 import { MemoryUsageBadge } from '../components/MemoryUsageBadge.js';
+import { AiFeedbackModal, aiFeedbackReportLabel } from '../components/AiFeedbackModal.js';
 import type { TeamworkMetadata } from '../teamwork-live-stream.js';
 import './chat-composer.css';
 
@@ -127,6 +128,8 @@ export function ChatTranscript({
   serviceStatus
 }: ChatTranscriptProps): React.JSX.Element {
   const { locale, t } = useDesktopI18n();
+  const [reportedReply, setReportedReply] = useState<string | null>(null);
+  useEffect(() => setReportedReply(null), [activeSession?.session_id]);
   const companion = useCompanionAppearance();
   const standardCompanion = useStandardChatCompanion();
   // A running turn speaks with the persona its conversation started with.
@@ -199,6 +202,11 @@ export function ChatTranscript({
               {message.isPartial === true && <span className="chat-partial-label">{nativeMessageCopy[locale].partial}</span>}
             </div>
             <ChatMessageBody content={String(message.content || '')} />
+            {message.role === 'assistant' && !message.pending && !message.streaming && Boolean(message.content?.trim()) && (
+              <button type="button" className="secondary-action compact" onClick={() => setReportedReply(message.content || '')}>
+                {aiFeedbackReportLabel(locale)}
+              </button>
+            )}
             {message.role === 'assistant' && <MemoryUsageBadge value={message.memory_usage} />}
             {message.role === 'assistant' && Boolean(message.teamwork && typeof message.teamwork === 'object') && (
               <TeamworkProcessCard metadata={message.teamwork as TeamworkMetadata} />
@@ -278,6 +286,7 @@ export function ChatTranscript({
           <AdvancedWebUiTools panel="chat" serviceStatus={serviceStatus} compact />
         </section>
       )}
+      <AiFeedbackModal open={reportedReply !== null} messageContent={reportedReply || ''} onClose={() => setReportedReply(null)} />
     </div>
   );
 }

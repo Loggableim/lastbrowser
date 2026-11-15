@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import type { DesktopChatMessage, DesktopSessionSummary } from '../shell-state.js';
 import { RichTextRenderer } from '../NativeRichText.js';
-import { AiFeedbackModal } from './AiFeedbackModal.js';
+import { AiFeedbackModal, aiFeedbackReportLabel } from './AiFeedbackModal.js';
 import { TeamworkProcessCard, type TeamworkMetadata } from './TeamworkProcessCard.js';
 import { SmartTrackProcessCard } from './SmartTrackProcessCard.js';
 import type { QuickActionChip } from '../quick-actions.js';
@@ -1251,7 +1251,8 @@ export function CopilotSplitView({
                         <button
                           type="button"
                           className="msg-action-icon-btn"
-                          title="Problem melden (Feedback)"
+                          title={aiFeedbackReportLabel(locale)}
+                          aria-label={aiFeedbackReportLabel(locale)}
                           onClick={() => setFeedbackMessage(msg.content || '')}
                         >
                           <ThumbsDown size={12} />

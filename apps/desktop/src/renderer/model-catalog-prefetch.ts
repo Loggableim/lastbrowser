@@ -29,6 +29,40 @@ export function clearModelCatalog(): void {
   try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
 }
 
+type ModelCatalogPrefetchGuard = (stage: 'discover' | 'publish') => boolean;
+
+export function watchModelCatalogPrefetch(prefetch: (guard: ModelCatalogPrefetchGuard) => Promise<void>): () => void {
+  let pending = true;
+  let revision = 0;
+  const run = () => {
+    if (!pending || document.visibilityState === 'hidden') return;
+    pending = false;
+    const requestedRevision = revision;
+    void prefetch(stage => {
+      if (requestedRevision !== revision) return false;
+      if (stage === 'discover' && document.visibilityState === 'hidden') {
+        pending = true;
+        return false;
+      }
+      return true;
+    }).catch(() => undefined);
+  };
+  const onSettings = () => {
+    revision++;
+    clearModelCatalog();
+    pending = true;
+    run();
+  };
+  window.addEventListener('lastbrowser:settings-changed', onSettings);
+  document.addEventListener('visibilitychange', run);
+  run();
+  return () => {
+    revision++;
+    window.removeEventListener('lastbrowser:settings-changed', onSettings);
+    document.removeEventListener('visibilitychange', run);
+  };
+}
+
 export function readQuickchatCatalog<T>(scopeKey: string): T[] {
   try {
     const raw = JSON.parse(window.localStorage.getItem(QUICKCHAT_CATALOG_KEY) || '');
@@ -52,7 +86,7 @@ export async function prefetchModelCatalog(input: {
   browserProfileId: string;
   workspacePath: string | null;
   backendProfileName?: string;
-}): Promise<void> {
+}, guard: ModelCatalogPrefetchGuard = () => true): Promise<void> {
   const bridge = window.lastbrowser?.independent;
   if (!bridge) return;
   const client = new IndependentAssistantClient(bridge);
@@ -62,7 +96,7 @@ export async function prefetchModelCatalog(input: {
     payload: { browserProfileId: input.browserProfileId, workspacePath: input.workspacePath },
     backendProfileName: input.backendProfileName
   });
-  if (!resolved.ok) return;
+  if (!resolved.ok || !guard('discover')) return;
   const result = await client.request({
     schemaVersion: 1,
     operation: 'modelSelection',
@@ -70,6 +104,6 @@ export async function prefetchModelCatalog(input: {
     payload: { action: 'get', includeCatalog: true },
     backendProfileName: input.backendProfileName
   });
-  if (!result.ok || !Array.isArray(result.value.groups)) return;
+  if (!guard('publish') || !result.ok || !Array.isArray(result.value.groups)) return;
   publishModelCatalog(input.viewKey, mapScopedModelPickerOptions(result.value));
 }

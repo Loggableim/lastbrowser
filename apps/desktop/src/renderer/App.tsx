@@ -1,5 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { clearModelCatalog, prefetchModelCatalog } from './model-catalog-prefetch.js';
+import { prefetchModelCatalog, watchModelCatalogPrefetch } from './model-catalog-prefetch.js';
 import { sidekickMotionFromRun, type SidekickMotion } from './sidekick-motion.js';
 import {
   BarChart3,
@@ -1983,20 +1983,13 @@ function AppContent(): JSX.Element {
   }, [searchEngineId]);
   useEffect(() => {
     if (!sidekickApiReady) return undefined;
-    let alive = true;
     const viewKey = JSON.stringify([activeProfileId, activeSpacePath || null, activeBackendProfileName || null]);
-    const run = () => {
-      void prefetchModelCatalog({
-        viewKey,
-        browserProfileId: activeProfileId,
-        workspacePath: activeSpacePath || null,
-        backendProfileName: activeBackendProfileName || undefined
-      }).catch(() => undefined);
-    };
-    run();
-    const onSettings = () => { if (alive) { clearModelCatalog(); run(); } };
-    window.addEventListener('lastbrowser:settings-changed', onSettings);
-    return () => { alive = false; window.removeEventListener('lastbrowser:settings-changed', onSettings); };
+    return watchModelCatalogPrefetch(guard => prefetchModelCatalog({
+      viewKey,
+      browserProfileId: activeProfileId,
+      workspacePath: activeSpacePath || null,
+      backendProfileName: activeBackendProfileName || undefined
+    }, guard));
   }, [sidekickApiReady, activeProfileId, activeSpacePath, activeBackendProfileName]);
 
   /** Drop a single entry from the history panel. */

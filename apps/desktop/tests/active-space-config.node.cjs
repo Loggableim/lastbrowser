@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { randomBytes, randomUUID } = require('node:crypto');
-const { mkdir, mkdtemp, rm, symlink, writeFile } = require('node:fs/promises');
+const { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 
@@ -33,7 +33,7 @@ test('startup finds the one installed pair and blocks incomplete or ambiguous mi
 });
 
 test('active configuration uses only vault paths inside the selected pair', async t => {
-  const { loadActiveSpaceConfiguration } = await import('../src/main/active-space-config.ts');
+  const { loadActiveSpaceConfiguration, removeRevokedPrimaryVault } = await import('../src/main/active-space-config.ts');
   const pair = await mkdtemp(path.join(tmpdir(), 'lastbrowser-active-pair-'));
   t.after(() => rm(pair, { recursive: true, force: true }));
   const configuration = path.join(pair, 'active-vaults.json');
@@ -62,7 +62,20 @@ test('active configuration uses only vault paths inside the selected pair', asyn
   await writeFile(configuration, JSON.stringify({ ...payload, decoy: primary }));
   await assert.rejects(loadActiveSpaceConfiguration(pair), /not active/);
   await writeFile(configuration, JSON.stringify(payload));
-  await rm(path.join(pair, primary.id), { recursive: true });
+  await writeFile(path.join(pair, primary.id, 'ciphertext'), 'synthetic encrypted fixture');
+  await writeFile(path.join(pair, decoy.id, 'keep'), 'synthetic decoy fixture');
+  await symlink(path.join(pair, decoy.id), path.join(pair, primary.id, 'redirect'),
+    process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(removeRevokedPrimaryVault(pair, decoy.id), /identity/);
+  await removeRevokedPrimaryVault(pair, primary.id);
+  await assert.rejects(lstat(path.join(pair, primary.id)), { code: 'ENOENT' });
+  assert.equal(await readFile(path.join(pair, decoy.id, 'keep'), 'utf8'), 'synthetic decoy fixture');
+  await removeRevokedPrimaryVault(pair, primary.id);
+  assert.equal((await loadActiveSpaceConfiguration(pair)).decoy.id, decoy.id);
+  assert.equal((await loadActiveSpaceConfiguration(pair)).primary.vaultDirectory, path.join(pair, primary.id));
   await symlink(path.dirname(pair), path.join(pair, primary.id), process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(loadActiveSpaceConfiguration(pair), /redirected/);
+  await assert.rejects(removeRevokedPrimaryVault(pair, primary.id), /redirected/);
+  await assert.rejects(removeRevokedPrimaryVault(pair, '../outside'), /identity/);
+  assert.equal((await readFile(configuration, 'utf8')).length > 0, true);
 });

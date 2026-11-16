@@ -1,5 +1,6 @@
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
+import { removeRevokedPrimaryVault } from './active-space-config.js';
 import { createSpaceUnlock } from './space-emergency-unlock.js';
 import { unwrapSpaceKey } from './space-key-envelope.js';
 import { runProtectedSpaceProcess } from './protected-space-process.js';
@@ -13,6 +14,7 @@ type VaultSelection = {
 };
 
 type BrokerOptions = {
+  root: string;
   primary: VaultSelection & { nvSlot: TpmNvSlot };
   decoy: VaultSelection & { wrappedPlatformSecret: string };
   helper: string;
@@ -29,19 +31,18 @@ type BrokerOptions = {
  * The broker must outlive the browser and own the drive for the full session.
  */
 export function createWindowsProtectedSpaceBroker(options: BrokerOptions) {
-  const { primary, decoy, helper, drive, executable, browserArgs, nvKeyHelper, lockPrimary } = options;
+  const { root, primary, decoy, helper, drive, executable, browserArgs, nvKeyHelper, lockPrimary } = options;
   if (process.platform !== 'win32') throw new Error('The protected browser broker requires Windows');
-  const primaryVault = realpathSync(primary.vaultDirectory);
+  const primaryVault = path.join(realpathSync(root), primary.id);
   const decoyVault = realpathSync(decoy.vaultDirectory);
-  function isSeparate(relative: string) {
-    return path.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${path.sep}`);
-  }
-  if (!isSeparate(path.relative(primaryVault, decoyVault)) || !isSeparate(path.relative(decoyVault, primaryVault))) {
+  if (path.relative(primaryVault, primary.vaultDirectory) || path.relative(decoyVault, path.join(root, decoy.id))
+    || !path.relative(primaryVault, decoyVault)) {
     throw new Error('The primary and decoy vaults must have separate backing directories');
   }
   const primaryProvider = createWindowsTpmNvSecretProvider(nvKeyHelper, primary.nvSlot);
   const decoyProvider = createWindowsSpaceKeyProvider(nvKeyHelper,
     new Map([[decoy.id, decoy.wrappedPlatformSecret]]));
+  let primaryCleanup: Promise<void> | undefined;
   return createSpaceUnlock({
     primary,
     decoy,
@@ -50,20 +51,27 @@ export function createWindowsProtectedSpaceBroker(options: BrokerOptions) {
       async revoke(id) {
         if (id !== primary.id) throw new Error('Only the primary vault can be revoked here');
         await primaryProvider.revoke();
+        // The TPM commit cannot be rolled back. Retry residual file cleanup on
+        // further decoy logins without turning an unlink failure into a cue.
+        primaryCleanup = removeRevokedPrimaryVault(root, primary.id).catch(() => {});
       }
     },
     unwrapSpaceKey,
     lockPrimary,
     async openSpace(id, key) {
       const vaultDirectory = id === primary.id ? primaryVault : decoyVault;
-      const exit = await runProtectedSpaceProcess(executable, browserArgs, async () => {
-        try {
-          return await mountWindowsSpaceVault({ helper, drive, vaultDirectory, vaultId: id, key });
-        } finally {
-          key.fill(0);
-        }
-      }, options.onMounted);
-      if (exit !== 0) throw new Error('The protected browser stopped unexpectedly');
+      try {
+        const exit = await runProtectedSpaceProcess(executable, browserArgs, async () => {
+          try {
+            return await mountWindowsSpaceVault({ helper, drive, vaultDirectory, vaultId: id, key });
+          } finally {
+            key.fill(0);
+          }
+        }, options.onMounted);
+        if (exit !== 0) throw new Error('The protected browser stopped unexpectedly');
+      } finally {
+        if (id === decoy.id) await primaryCleanup;
+      }
     }
   });
 }

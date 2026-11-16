@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { randomBytes, randomUUID } = require('node:crypto');
 const { execFileSync } = require('node:child_process');
-const { mkdtemp, readFile, rm, writeFile } = require('node:fs/promises');
+const { lstat, mkdir, mkdtemp, readFile, rm, writeFile } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 
@@ -20,8 +20,9 @@ async function main() {
   } = await import('../dist/main/windows-space-key-provider.js');
   const { wrapSpaceKey, unwrapSpaceKey } = await import('../src/main/space-key-envelope.ts');
   const { createSpaceUnlock } = await import('../src/main/space-emergency-unlock.ts');
+  const { removeRevokedPrimaryVault } = await import('../src/main/active-space-config.ts');
   const folder = await mkdtemp(path.join(tmpdir(), 'lastbrowser-key-replay-'));
-  const source = path.join(folder, 'current.json');
+  const source = path.join(folder, 'active-vaults.json');
   const snapshot = path.join(folder, 'before-emergency.json');
   const passwords = { primary: randomBytes(32), decoy: randomBytes(32) };
   const vaultKeys = { primary: randomBytes(32), decoy: randomBytes(32) };
@@ -66,9 +67,10 @@ async function main() {
           if (id === primary.id) return restoredPrimary.readSecret(password);
           return restoredDecoy.readSecret(id);
         },
-        revoke: id => {
+        async revoke(id) {
           assert.equal(id, primary.id);
-          return restoredPrimary.revoke();
+          await restoredPrimary.revoke();
+          await removeRevokedPrimaryVault(folder, id);
         }
       },
       async lockPrimary() {},
@@ -83,7 +85,15 @@ async function main() {
   try {
     const primary = await protect('primary');
     const decoy = await protect('decoy');
-    const header = JSON.stringify({ primary, decoy });
+    const header = JSON.stringify({
+      version: 3, state: 'active', primary, decoy: { ...decoy, wrappedPlatformSecret: decoy.wrapped }
+    });
+    const primaryDirectory = path.join(folder, primary.id);
+    const decoyDirectory = path.join(folder, decoy.id);
+    await mkdir(primaryDirectory);
+    await mkdir(decoyDirectory);
+    const ciphertext = 'synthetic ciphertext placeholder';
+    await writeFile(path.join(primaryDirectory, 'vault-fixture'), ciphertext);
     await writeFile(source, header, { flag: 'wx' });
     await writeFile(snapshot, header, { flag: 'wx' });
     phase = 'baseline and emergency login';
@@ -92,14 +102,19 @@ async function main() {
     assert.equal(await login(randomBytes(32)), false);
     assert.equal(await login(passwords.decoy), true);
     assert.deepEqual(sessions, ['primary', 'decoy']);
+    await assert.rejects(lstat(primaryDirectory), { code: 'ENOENT' });
+    assert.equal((await lstat(decoyDirectory)).isDirectory(), true);
 
     if (simulated) execFileSync(nvKeyHelper, ['power-cycle'], { windowsHide: true, stdio: 'ignore' });
     phase = 'restored application files';
     await writeFile(source, await readFile(snapshot));
+    await mkdir(primaryDirectory);
+    await writeFile(path.join(primaryDirectory, 'vault-fixture'), ciphertext);
     const restored = reopen(await readFile(source, 'utf8'));
     assert.equal(await restored(passwords.primary), false);
     assert.equal(await restored(passwords.decoy), true);
     assert.deepEqual(sessions, ['primary', 'decoy', 'decoy']);
+    await assert.rejects(lstat(primaryDirectory), { code: 'ENOENT' });
     console.log(JSON.stringify({ simulatedTpm: simulated, oldApplicationFilesRejected: true, decoyReadable: true }));
   } catch {
     throw new Error(`The ${simulated ? 'simulated TPM' : 'physical TPM'} replay check failed during ${phase}`);

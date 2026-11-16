@@ -1,4 +1,4 @@
-import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
+import { lstat, readdir, readFile, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 type ActiveVault = {
@@ -6,6 +6,7 @@ type ActiveVault = {
   envelope: unknown;
   vaultDirectory: string;
 };
+const vaultId = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 
 async function entry(directory: string) {
   try {
@@ -14,6 +15,26 @@ async function entry(directory: string) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
     return null;
   }
+}
+
+async function verifyVaultDirectory(directory: string, required: boolean) {
+  const stat = await entry(directory);
+  if (!stat && !required) return false;
+  if (!stat?.isDirectory() || path.relative(directory, await realpath(directory))) {
+    throw new Error('A protected vault directory is missing or redirected');
+  }
+  return true;
+}
+
+/** Call only after the TPM has acknowledged revocation of this specific vault. */
+export async function removeRevokedPrimaryVault(pair: string, id: string): Promise<void> {
+  if (!path.isAbsolute(pair) || !vaultId.test(id)) throw new Error('Invalid revoked primary vault identity');
+  const root = await realpath(pair);
+  if (path.relative(pair, root) || !(await lstat(pair)).isDirectory()) throw new Error('The protected pair is redirected');
+  const { primary } = await loadActiveSpaceConfiguration(root);
+  if (primary.id !== id) throw new Error('Invalid revoked primary vault identity');
+  const target = primary.vaultDirectory;
+  if (await verifyVaultDirectory(target, false)) await rm(target, { recursive: true, force: true });
 }
 
 export function protectedSpaceStore(profile: string): string {
@@ -61,7 +82,7 @@ export async function loadActiveSpaceConfiguration(directory: string) {
   function parseVault(record: unknown): ActiveVault | null {
     if (!record || typeof record !== 'object') return null;
     const { id, envelope } = record as Partial<ActiveVault>;
-    if (typeof id !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id)
+    if (typeof id !== 'string' || !vaultId.test(id)
       || !envelope || typeof envelope !== 'object') return null;
     return { id, envelope, vaultDirectory: path.join(root, id) };
   }
@@ -75,11 +96,7 @@ export async function loadActiveSpaceConfiguration(directory: string) {
     || typeof wrappedPlatformSecret !== 'string' || !/^[A-Za-z0-9+/]{342}==$/.test(wrappedPlatformSecret)) {
     throw new Error('The protected Space pair is not active');
   }
-  for (const vault of [primary, decoy]) {
-    if (!(await lstat(vault.vaultDirectory)).isDirectory()
-      || path.relative(vault.vaultDirectory, await realpath(vault.vaultDirectory))) {
-      throw new Error('A protected vault directory is redirected');
-    }
-  }
+  await verifyVaultDirectory(primary.vaultDirectory, false);
+  await verifyVaultDirectory(decoy.vaultDirectory, true);
   return { root, primary: { ...primary, nvSlot }, decoy: { ...decoy, wrappedPlatformSecret } };
 }

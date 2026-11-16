@@ -110,6 +110,7 @@ export async function adoptWindowsSpacePair(options: Pick<Parameters<typeof stag
       await unlink(pending).catch(() => {});
       throw error;
     }
+    await unlink(receipt).catch(() => {});
     return destination;
   } finally {
     primaryKey.fill(0);

@@ -1,22 +1,15 @@
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
-import { removeRevokedPrimaryVault } from './active-space-config.js';
+import { removeRevokedPrimaryVault, type SpaceKeyConfiguration } from './active-space-config.js';
 import { createSpaceUnlock } from './space-emergency-unlock.js';
 import { unwrapSpaceKey } from './space-key-envelope.js';
 import { runProtectedSpaceProcess } from './protected-space-process.js';
 import { mountWindowsSpaceVault, type WindowsVaultRuntime } from './windows-space-vault.js';
-import { createWindowsSpaceKeyProvider, createWindowsTpmNvSecretProvider, type TpmNvSlot } from './windows-space-key-provider.js';
+import { createWindowsSpaceKeyProvider, createWindowsTpmNvSecretProvider } from './windows-space-key-provider.js';
+import { createLocalSpaceKeyProvider } from './local-space-key-provider.js';
 
-type VaultSelection = {
-  id: string;
-  envelope: unknown;
-  vaultDirectory: string;
-};
-
-type BrokerOptions = WindowsVaultRuntime & {
+type BrokerOptions = WindowsVaultRuntime & SpaceKeyConfiguration & {
   root: string;
-  primary: VaultSelection & { nvSlot: TpmNvSlot };
-  decoy: VaultSelection & { wrappedPlatformSecret: string };
   executable: string;
   browserArgs: readonly string[];
   nvKeyHelper: string;
@@ -37,20 +30,25 @@ export function createWindowsProtectedSpaceBroker(options: BrokerOptions) {
     || !path.relative(primaryVault, decoyVault)) {
     throw new Error('The primary and decoy vaults must have separate backing directories');
   }
-  const primaryProvider = createWindowsTpmNvSecretProvider(nvKeyHelper, primary.nvSlot);
-  const decoyProvider = createWindowsSpaceKeyProvider(nvKeyHelper,
-    new Map([[decoy.id, decoy.wrappedPlatformSecret]]));
+  const local = options.protection === 'local' ? createLocalSpaceKeyProvider(root) : undefined;
+  const primaryProvider = options.protection === 'tpm' ? createWindowsTpmNvSecretProvider(nvKeyHelper, options.primary.nvSlot) : undefined;
+  const decoyProvider = options.protection === 'tpm' ? createWindowsSpaceKeyProvider(nvKeyHelper,
+    new Map([[decoy.id, options.decoy.wrappedPlatformSecret]])) : undefined;
   let primaryCleanup: Promise<void> | undefined;
   return createSpaceUnlock({
     primary,
     decoy,
     provider: {
-      readSecret: (id, password) => id === primary.id ? primaryProvider.readSecret(password) : decoyProvider.readSecret(id),
+      async readSecret(id, password) {
+        if (local) return local.readSecret(id);
+        return (id === primary.id ? primaryProvider?.readSecret(password) : decoyProvider?.readSecret(id)) ?? null;
+      },
       async revoke(id) {
         if (id !== primary.id) throw new Error('Only the primary vault can be revoked here');
-        await primaryProvider.revoke();
-        // The TPM commit cannot be rolled back. Retry residual file cleanup on
-        // further decoy logins without turning an unlink failure into a cue.
+        if (local) await local.revoke(id);
+        else if (primaryProvider) await primaryProvider.revoke();
+        else throw new Error('The primary key provider is unavailable');
+        // Retry residual file cleanup on later decoy logins.
         primaryCleanup = removeRevokedPrimaryVault(root, primary.id).catch(() => {});
       }
     },

@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { timingSafeEqual } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
+import type { SpaceProtection } from './active-space-config.js';
 
 const headerSize = 12;
 const maxPassword = 4096;
@@ -32,8 +33,9 @@ function readProposal(data: Buffer) {
   } catch {
     throw invalidRequest();
   }
-  if (!record(value) || Object.keys(value).length !== 4) throw invalidRequest();
-  const { primarySpaceId, decoySpaceId, rendererSeeds, rendererStore } = value;
+  if (!record(value) || Object.keys(value).length !== (Object.hasOwn(value, 'protection') ? 5 : 4)) throw invalidRequest();
+  const { primarySpaceId, decoySpaceId, rendererSeeds, rendererStore, protection } = value;
+  if (protection !== undefined && protection !== 'local' && protection !== 'tpm') throw invalidRequest();
   if (typeof primarySpaceId !== 'string' || !spaceId.test(primarySpaceId)
     || typeof decoySpaceId !== 'string' || !spaceId.test(decoySpaceId) || primarySpaceId === decoySpaceId
     || !record(rendererSeeds) || Object.keys(rendererSeeds).length !== 2
@@ -44,9 +46,11 @@ function readProposal(data: Buffer) {
   const changeKeys = Object.keys(legacyUpdates);
   if (Object.keys(expectedLegacyValues).length !== changeKeys.length
     || changeKeys.some(key => !Object.hasOwn(expectedLegacyValues, key))) throw invalidRequest();
+  const selection: { protection?: SpaceProtection } = protection === undefined ? {} : { protection };
   return {
     primarySpaceId, decoySpaceId, rendererSeeds: { primary: rendererSeeds.primary, decoy: rendererSeeds.decoy },
-    rendererStore: { expectedLegacyValues, legacyUpdates }
+    rendererStore: { expectedLegacyValues, legacyUpdates },
+    ...selection
   };
 }
 

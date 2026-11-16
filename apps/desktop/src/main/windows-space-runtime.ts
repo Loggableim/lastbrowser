@@ -1,6 +1,7 @@
 import { existsSync, lstatSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
+import type { SpaceProtection } from './active-space-config.js';
 
 export function resolveWindowsSpaceRuntime(resources: string) {
   const base = path.join(resources, 'protected-spaces');
@@ -25,7 +26,7 @@ export function resolveWindowsSpaceMigrationRuntime(resources: string) {
 export type SpaceMigrationPrerequisite = 'runtime' | 'winfsp' | 'tpm' | 'tpm-owner' | 'portable';
 
 /** Read-only checks before the user supplies passwords or LastBrowser closes its writers. */
-export async function spaceMigrationPrerequisite(resources: string): Promise<SpaceMigrationPrerequisite | null> {
+export async function spaceMigrationPrerequisite(resources: string, protection: SpaceProtection = 'tpm'): Promise<SpaceMigrationPrerequisite | null> {
   if (process.env.PORTABLE_EXECUTABLE_FILE) return 'portable';
   let helper: string;
   try {
@@ -34,7 +35,7 @@ export async function spaceMigrationPrerequisite(resources: string): Promise<Spa
     return 'runtime';
   }
   return new Promise(resolve => {
-    execFile(helper, ['probe-setup'], { windowsHide: true, timeout: 6000 }, error => {
+    execFile(helper, [protection === 'local' ? 'probe-storage' : 'probe-setup'], { windowsHide: true, timeout: 6000 }, error => {
       if (!error) resolve(null);
       else if (error.code === 5) resolve('winfsp');
       else if (error.code === 6) resolve('tpm');

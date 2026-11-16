@@ -6,17 +6,20 @@ import { resolveSpaceMigrationLayout } from './space-migration-layout.js';
 import { createWindowsSpaceKeyProvider, createWindowsTpmNvSecretProvider, provisionWindowsTpmNvSlot, type TpmNvSlot } from './windows-space-key-provider.js';
 import { stageWindowsSpacePair } from './windows-space-migration.js';
 import { initializeWindowsSpaceVault } from './windows-space-vault-initializer.js';
+import type { SpaceProtection } from './active-space-config.js';
+import { createLocalSpaceKeyProvider } from './local-space-key-provider.js';
 
 type SetupOptions = Omit<Parameters<typeof stageWindowsSpacePair>[0], 'primary' | 'decoy'> & {
   protectedRoot: string;
   nvKeyHelper: string;
   primaryPassword: Uint8Array;
   emergencyPassword: Uint8Array;
+  protection?: SpaceProtection;
 };
 
 /** Prepare both vaults while the trusted caller holds the offline migration lock. */
 export async function prepareWindowsSpacePair(options: SetupOptions): Promise<string> {
-  const { protectedRoot, nvKeyHelper, primaryPassword, emergencyPassword } = options;
+  const { protectedRoot, nvKeyHelper, primaryPassword, emergencyPassword, protection = 'tpm' } = options;
   if (process.platform !== 'win32' || !path.isAbsolute(protectedRoot)) throw new Error('The Windows protected store is unavailable');
   if (![primaryPassword, emergencyPassword].every(password => password.length > 0 && password.length <= 4096)
     || (primaryPassword.length === emergencyPassword.length && timingSafeEqual(primaryPassword, emergencyPassword))) {
@@ -26,15 +29,18 @@ export async function prepareWindowsSpacePair(options: SetupOptions): Promise<st
   const wrapped = new Map<string, string>();
   const provider = createWindowsSpaceKeyProvider(nvKeyHelper, wrapped);
   const directory = await mkdtemp(path.join(await realpath(protectedRoot), 'space-pair-'));
+  const local = protection === 'local' ? createLocalSpaceKeyProvider(directory) : undefined;
   const keys = [randomBytes(32), randomBytes(32)];
   let primaryProvider: ReturnType<typeof createWindowsTpmNvSecretProvider> | undefined;
 
   async function prepareVault(key: Buffer, password: Uint8Array, primarySlot?: TpmNvSlot) {
     const id = randomUUID();
     const vaultDirectory = path.join(directory, id);
-    let binding: { nvSlot: TpmNvSlot } | { wrappedPlatformSecret: string };
+    let binding: { nvSlot?: TpmNvSlot; wrappedPlatformSecret?: string } = {};
     let secret: Buffer | null;
-    if (primarySlot) {
+    if (local) {
+      secret = await local.create(id);
+    } else if (primarySlot) {
       binding = { nvSlot: primarySlot };
       primaryProvider = createWindowsTpmNvSecretProvider(options.nvKeyHelper, primarySlot);
       secret = await primaryProvider.readSecret(password);
@@ -55,7 +61,7 @@ export async function prepareWindowsSpacePair(options: SetupOptions): Promise<st
   }
 
   try {
-    const primarySlot = await provisionWindowsTpmNvSlot(options.nvKeyHelper, primaryPassword);
+    const primarySlot = local ? undefined : await provisionWindowsTpmNvSlot(options.nvKeyHelper, primaryPassword);
     const primary = await prepareVault(keys[0], primaryPassword, primarySlot);
     const decoy = await prepareVault(keys[1], emergencyPassword);
     await stageWindowsSpacePair({
@@ -69,7 +75,7 @@ export async function prepareWindowsSpacePair(options: SetupOptions): Promise<st
     const file = await open(pending, 'wx', 0o600);
     try {
       await file.writeFile(JSON.stringify({
-        version: 3, state: 'prepared',
+        version: 3, state: 'prepared', protection,
         selection: [options.primarySpaceId, options.decoySpaceId],
         primary, decoy
       }));

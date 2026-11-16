@@ -657,10 +657,14 @@ function registerIpc(): void {
     if (selection === undefined) {
       const counts = new Map<string, number>();
       for (const { spaceId } of bindings) counts.set(spaceId, (counts.get(spaceId) ?? 0) + 1);
-      const unavailable = path.relative(app.getPath('userData'), defaultBrowserProfileDirectory(app))
-        ? 'runtime' : await spaceMigrationPrerequisite(process.resourcesPath);
+      const [unavailable, hardwareUnavailable] = path.relative(app.getPath('userData'), defaultBrowserProfileDirectory(app))
+        ? ['runtime', 'runtime'] as const
+        : await Promise.all([
+          spaceMigrationPrerequisite(process.resourcesPath, 'local'),
+          spaceMigrationPrerequisite(process.resourcesPath, 'tpm')
+        ]);
       recheck(); auth();
-      return { unavailable, spaces: bindings.filter(record => counts.get(record.spaceId) === 1)
+      return { unavailable, hardwareUnavailable, spaces: bindings.filter(record => counts.get(record.spaceId) === 1)
         .map(({ spaceId, name, browserProfileId, workspacePath, partitionKey }) => ({
           spaceId, name, profileId: browserProfileId, spacePath: workspacePath ?? '',
           sessionKey: `${browserProfileId}::${partitionKey.slice('persist:space_'.length, -browserProfileId.length - 1)}`
@@ -685,12 +689,12 @@ function registerIpc(): void {
       const auth = await authorizePasswordAccess();
       const bindings = await independentController.protectedSpaceBindings();
       recheck(); auth();
-      if (await spaceMigrationPrerequisite(process.resourcesPath)) throw new Error('A protected Space prerequisite is unavailable');
-      recheck(); auth();
       frame = encodeWindowsSpaceMigrationRequest(proposal, primary, emergency);
       primary.fill(0);
       emergency.fill(0);
-      const selected = proposal as { primarySpaceId: string; decoySpaceId: string };
+      const selected = proposal as { primarySpaceId: string; decoySpaceId: string; protection?: 'local' | 'tpm' };
+      if (await spaceMigrationPrerequisite(process.resourcesPath, selected.protection)) throw new Error('A protected Space prerequisite is unavailable');
+      recheck(); auth();
       resolveSpaceMigrationLayout(app.getPath('userData'), bindings, selected.primarySpaceId, selected.decoySpaceId);
       await independentController.shutdown();
       await services.stopForProfileMigration();

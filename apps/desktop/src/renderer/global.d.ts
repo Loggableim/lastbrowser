@@ -195,6 +195,7 @@ declare global {
       protectedRendererSeed?: () => Promise<Record<string, string> | null>;
       protectedSpaceSelection?: (selection?: readonly [string, string]) => Promise<
         { unavailable: import('../main/windows-space-runtime.js').SpaceMigrationPrerequisite | null;
+          hardwareUnavailable: import('../main/windows-space-runtime.js').SpaceMigrationPrerequisite | null;
           spaces: Array<{ spaceId: string; name: string; profileId: string; spacePath: string;
           sessionKey: string }> } | { valid: true } | null>;
       configureProtectedSpaces?: (proposal: unknown, primary: Uint8Array, emergency: Uint8Array) => Promise<boolean>;

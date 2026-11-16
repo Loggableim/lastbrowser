@@ -151,7 +151,7 @@ internal static class SpaceTpmNvSecret
         }
     }
 
-    private static int ProbeSetup()
+    private static int ProbeSetup(bool needsTpm)
     {
         try
         {
@@ -176,6 +176,7 @@ internal static class SpaceTpmNvSecret
             }
         }
         catch (Exception) { return 5; }
+        if (!needsTpm) return 0;
         try
         {
             var device = new TbsDevice();
@@ -197,7 +198,8 @@ internal static class SpaceTpmNvSecret
 
     private static int Main(string[] args)
     {
-        if (args.Length == 1 && args[0] == "probe-setup") return ProbeSetup();
+        if (args.Length == 1 && args[0] == "probe-setup") return ProbeSetup(true);
+        if (args.Length == 1 && args[0] == "probe-storage") return ProbeSetup(false);
         if (args.Length == 2 && args[0].StartsWith("platform-", StringComparison.Ordinal))
         {
             return SpacePlatformKey.Run(args[0], args[1], new CngProvider("Microsoft Platform Crypto Provider"),

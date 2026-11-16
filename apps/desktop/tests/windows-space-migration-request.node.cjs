@@ -18,6 +18,20 @@ const proposal = {
   rendererStore: { expectedLegacyValues: { example: 'before' }, legacyUpdates: { example: null } }
 };
 
+test('the migration request carries an explicit local storage mode', async () => {
+  const { encodeWindowsSpaceMigrationRequest, readWindowsSpaceMigrationRequest } = await import('../src/main/windows-space-migration-request.ts');
+  const selected = { ...proposal, protection: 'local' };
+  const frame = encodeWindowsSpaceMigrationRequest(selected, Buffer.from([1]), Buffer.from([2]));
+  const request = await readWindowsSpaceMigrationRequest(Readable.from([frame]));
+  try {
+    assert.equal(request.proposal.protection, 'local');
+  } finally {
+    request.clearPasswords();
+  }
+  assert.throws(() => encodeWindowsSpaceMigrationRequest({ ...proposal, protection: 'unknown' },
+    Buffer.from([1]), Buffer.from([2])), /Invalid protected Space migration request/);
+});
+
 test('migration request accepts binary passwords over a fragmented inherited pipe', async () => {
   const { encodeWindowsSpaceMigrationRequest, readWindowsSpaceMigrationRequest } = await import('../src/main/windows-space-migration-request.ts');
   const primary = Buffer.from([10, 0, 255]);

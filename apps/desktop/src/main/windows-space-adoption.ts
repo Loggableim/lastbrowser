@@ -9,6 +9,8 @@ import { stageWindowsSpacePair } from './windows-space-migration.js';
 import { replaceLegacyRendererStore, stageLegacyRendererStore } from './legacy-renderer-db-replacement.js';
 import { retireLegacySpaceAccounts, retireLegacySpaceBindings } from './space-binding-migration.js';
 import { createRendererStoreWorker } from './renderer-store-worker-client.js';
+import type { SpaceProtection } from './active-space-config.js';
+import { createLocalSpaceKeyProvider } from './local-space-key-provider.js';
 
 type PreparedVault = { id: string; envelope: unknown };
 const vaultIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
@@ -23,11 +25,12 @@ export async function adoptWindowsSpacePair(options: Omit<Parameters<typeof stag
     nvKeyHelper: string;
     primaryPassword: Uint8Array;
     emergencyPassword: Uint8Array;
+    protection?: SpaceProtection;
     rendererStore: Pick<Parameters<typeof stageLegacyRendererStore>[0], 'expectedLegacyValues' | 'legacyUpdates'>;
     browserExecutable: string;
     browserArgs: readonly string[];
   }): Promise<string> {
-  const { legacyUserData, bindings, primarySpaceId, decoySpaceId, preparedDirectory } = options;
+  const { legacyUserData, bindings, primarySpaceId, decoySpaceId, preparedDirectory, protection = 'tpm' } = options;
   if (process.platform !== 'win32' || !path.isAbsolute(preparedDirectory)) {
     throw new Error('Protected Space adoption requires an absolute Windows setup directory');
   }
@@ -42,17 +45,23 @@ export async function adoptWindowsSpacePair(options: Omit<Parameters<typeof stag
     || prepared.selection[0] !== primarySpaceId || prepared.selection[1] !== decoySpaceId
     || ![prepared.primary, prepared.decoy].every(vault => vault && typeof vault.id === 'string'
       && vaultIdPattern.test(vault.id))
-    || !isTpmNvSlot(prepared.primary.nvSlot) || typeof prepared.decoy.wrappedPlatformSecret !== 'string'
+    || (prepared.protection ?? 'tpm') !== protection
+    || (protection === 'tpm' && (!isTpmNvSlot(prepared.primary.nvSlot)
+      || typeof prepared.decoy.wrappedPlatformSecret !== 'string'))
+    || (protection === 'local' && (prepared.primary.nvSlot !== undefined || prepared.decoy.wrappedPlatformSecret !== undefined))
     || prepared.primary.id === prepared.decoy.id) throw new Error('Invalid prepared Space selection');
 
-  const primary: PreparedVault & { nvSlot: TpmNvSlot } = prepared.primary;
-  const decoy: PreparedVault & { wrappedPlatformSecret: string } = prepared.decoy;
-  const primaryProvider = createWindowsTpmNvSecretProvider(options.nvKeyHelper, primary.nvSlot);
-  const provider = createWindowsSpaceKeyProvider(options.nvKeyHelper, new Map([
-    [decoy.id, decoy.wrappedPlatformSecret]
-  ]));
+  const primary: PreparedVault = prepared.primary;
+  const decoy: PreparedVault = prepared.decoy;
+  const local = protection === 'local' ? createLocalSpaceKeyProvider(directory) : undefined;
+  const primaryProvider = protection === 'tpm'
+    ? createWindowsTpmNvSecretProvider(options.nvKeyHelper, prepared.primary.nvSlot as TpmNvSlot) : undefined;
+  const decoyProvider = protection === 'tpm' ? createWindowsSpaceKeyProvider(options.nvKeyHelper, new Map([
+    [decoy.id, prepared.decoy.wrappedPlatformSecret]
+  ])) : undefined;
   async function openKey(vault: PreparedVault, password: Uint8Array) {
-    const secret = await (vault.id === primary.id ? primaryProvider.readSecret(password) : provider.readSecret(vault.id));
+    const secret = await (local ? local.readSecret(vault.id) : vault.id === primary.id
+      ? primaryProvider?.readSecret(password) : decoyProvider?.readSecret(vault.id));
     if (!secret) throw new Error('A prepared Space lost its device key');
     try {
       const key = await unwrapSpaceKey(vault.envelope, password, secret, vault.id);
@@ -100,7 +109,7 @@ export async function adoptWindowsSpacePair(options: Omit<Parameters<typeof stag
     try {
       const file = await open(pending, 'wx', 0o600);
       try {
-        await file.writeFile(JSON.stringify({ version: 3, state: 'active', primary, decoy }));
+        await file.writeFile(JSON.stringify({ version: 3, state: 'active', protection, primary, decoy }));
         await file.sync();
       } finally {
         await file.close();

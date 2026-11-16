@@ -2,13 +2,17 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { loadBookmarks } from '../bookmarks.js';
 import { splitProtectedSpacePair } from '../space-renderer-migration.js';
 import type { SpaceMigrationPrerequisite } from '../../main/windows-space-runtime.js';
+import type { SpaceProtection } from '../../main/active-space-config.js';
 
 type Choice = { spaceId: string; name: string; profileId: string; spacePath: string; sessionKey: string };
 
 export function ProtectedSpaceSelection({ german }: { german: boolean }) {
   const [spaces, setSpaces] = useState<Choice[] | null>(null);
   const [unavailable, setUnavailable] = useState<SpaceMigrationPrerequisite | null>('runtime');
-  const available = unavailable === null;
+  const [hardwareUnavailable, setHardwareUnavailable] = useState<SpaceMigrationPrerequisite | null>('runtime');
+  const [protection, setProtection] = useState<SpaceProtection>('local');
+  const restriction = protection === 'local' ? unavailable : hardwareUnavailable;
+  const available = restriction === null;
   const [primary, setPrimary] = useState('');
   const [decoy, setDecoy] = useState('');
   const [status, setStatus] = useState<'submitting' | 'invalid' | 'passwords' | null>(null);
@@ -19,6 +23,7 @@ export function ProtectedSpaceSelection({ german }: { german: boolean }) {
     window.lastbrowser?.protectedSpaceSelection?.().then(result => {
       if (!cancelled && result && 'spaces' in result) {
         setUnavailable(result.unavailable);
+        setHardwareUnavailable(result.hardwareUnavailable);
         setSpaces(result.spaces);
       }
     }).catch(() => {});
@@ -50,7 +55,7 @@ export function ProtectedSpaceSelection({ german }: { german: boolean }) {
         { ...primarySpace, bookmarkIds: data.getAll('primaryBookmarks').map(String) },
         { ...decoySpace, bookmarkIds: data.getAll('decoyBookmarks').map(String) });
       const started = await window.lastbrowser.configureProtectedSpaces?.({
-        primarySpaceId: primary, decoySpaceId: decoy, rendererSeeds,
+        primarySpaceId: primary, decoySpaceId: decoy, protection, rendererSeeds,
         rendererStore: { legacyUpdates, expectedLegacyValues }
       }, primaryBytes, emergencyBytes);
       if (!started) setStatus('invalid');
@@ -85,11 +90,21 @@ export function ProtectedSpaceSelection({ german }: { german: boolean }) {
     runtime: t('Die Windows-Komponenten für die Space-Verschlüsselung sind nicht verfügbar.', 'The Windows components for Space encryption are unavailable.'),
     portable: t('Verwende zur Einrichtung der Space-Verschlüsselung die installierte Windows-Version.', 'Use the installed Windows version to set up Space encryption.'),
     winfsp: t('Die Space-Verschlüsselung benötigt einen verfügbaren WinFsp-Treiber.', 'Space encryption requires an available WinFsp driver.'),
-    tpm: t('Die Space-Verschlüsselung benötigt ein verfügbares TPM 2.0.', 'Space encryption requires an available TPM 2.0.'),
+    tpm: t('Der hardwaregestützte Modus benötigt ein verfügbares TPM 2.0.', 'Hardware-backed protection requires an available TPM 2.0.'),
     'tpm-owner': t('Windows stellt die TPM-Berechtigung für die Einrichtung nicht bereit.', 'Windows is not providing the TPM authorization needed for setup.')
   };
   return (
     <form className="settings-field-grid" aria-label={t('Space-Verschlüsselung', 'Space encryption')} onSubmit={event => void configure(event)}>
+      <label>
+        <span>{t('Schlüsselschutz', 'Key protection')}</span>
+        <select value={protection} disabled={status === 'submitting'} onChange={event => {
+          setProtection(event.target.value === 'tpm' ? 'tpm' : 'local');
+          setStatus(null);
+        }}>
+          <option value="local">{t('Lokal verschlüsselt', 'Local encryption')}</option>
+          <option value="tpm">{t('Hardwaregestützt (TPM 2.0)', 'Hardware-backed (TPM 2.0)')}</option>
+        </select>
+      </label>
       {select(t('Hauptspace', 'Primary Space'), primary, decoy, setPrimary)}
       {select(t('Tarnspace', 'Decoy Space'), decoy, primary, setDecoy)}
       {available && <>
@@ -103,13 +118,17 @@ export function ProtectedSpaceSelection({ german }: { german: boolean }) {
             <select name="decoyBookmarks" multiple>{bookmarks.map(bookmark => <option key={bookmark.id} value={bookmark.id}>{bookmark.title}</option>)}</select>
           </label>
         </>}
-        <p>{t('Das Notfallpasswort widerruft den Hauptspace dauerhaft und öffnet den Tarnspace. LastBrowser startet für die Einrichtung neu.',
-          'The emergency password permanently revokes the primary Space and opens the decoy Space. LastBrowser restarts to finish setup.')}</p>
+        <p>{protection === 'local'
+          ? t('Das Notfallpasswort löscht den aktuellen lokalen Hauptschlüssel und öffnet den Tarnspace. Alte vollständige Backups bleiben mit dem Hauptpasswort entschlüsselbar.',
+            'The emergency password deletes the current local primary key and opens the decoy Space. Old complete backups remain decryptable with the primary password.')
+          : t('Das Notfallpasswort widerruft den TPM-Schlüssel des Hauptspaces und öffnet den Tarnspace.',
+            'The emergency password revokes the primary Space TPM key and opens the decoy Space.')}</p>
+        <p>{t('LastBrowser startet für die Einrichtung neu.', 'LastBrowser restarts to finish setup.')}</p>
         <button className="button button-secondary" type="submit" disabled={!primary || !decoy || status === 'submitting'}>
           {t('Verschlüsselung einrichten', 'Set up encryption')}
         </button>
       </>}
-      {unavailable && <p role="status">{prerequisites[unavailable]}</p>}
+      {restriction && <p role="status">{prerequisites[restriction]}</p>}
       {status === 'submitting' && <p role="status">{t('LastBrowser bereitet die Migration vor.', 'LastBrowser is preparing the migration.')}</p>}
       {status === 'passwords' && <p role="alert">{t('Wähle zwei unterschiedliche Passwörter.', 'Choose two different passwords.')}</p>}
       {status === 'invalid' && <p role="alert">{t('Die Migration konnte nicht gestartet werden. Prüfe die Auswahl und die Lesezeichen.', 'Migration could not start. Check the selected Spaces and bookmarks.')}</p>}

@@ -7,15 +7,12 @@ import { createWindowsSpaceKeyProvider, createWindowsTpmNvSecretProvider, provis
 import { stageWindowsSpacePair } from './windows-space-migration.js';
 import { initializeWindowsSpaceVault } from './windows-space-vault-initializer.js';
 
-type SetupOptions = Pick<Parameters<typeof stageWindowsSpacePair>[0],
-  'legacyUserData' | 'bindings' | 'primarySpaceId' | 'decoySpaceId' | 'helper' | 'drive' | 'rendererSeeds'>
-  & Pick<Parameters<typeof initializeWindowsSpaceVault>[0], 'java' | 'libraryDirectory' | 'initializerSource'>
-  & {
-    protectedRoot: string;
-    nvKeyHelper: string;
-    primaryPassword: Uint8Array;
-    emergencyPassword: Uint8Array;
-  };
+type SetupOptions = Omit<Parameters<typeof stageWindowsSpacePair>[0], 'primary' | 'decoy'> & {
+  protectedRoot: string;
+  nvKeyHelper: string;
+  primaryPassword: Uint8Array;
+  emergencyPassword: Uint8Array;
+};
 
 /** Prepare both vaults while the trusted caller holds the offline migration lock. */
 export async function prepareWindowsSpacePair(options: SetupOptions): Promise<string> {

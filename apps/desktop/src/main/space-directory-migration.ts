@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { constants, createReadStream } from 'node:fs';
+import { constants, createReadStream, realpathSync } from 'node:fs';
 import { copyFile, lstat, mkdir, mkdtemp, readdir, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
@@ -91,7 +91,7 @@ export async function stageSpaceDirectory(
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(destinationName)) throw new TypeError('Invalid migration destination');
   if (!(await lstat(offlineSource)).isDirectory()) throw new Error('Invalid legacy space root');
   const source = await realpath(offlineSource);
-  const mount = await realpath(authenticatedMount);
+  const mount = realpathSync(authenticatedMount);
   if (contains(source, mount) || contains(mount, source)) throw new Error('Space storage roots overlap');
   await publishStagedDirectory(mount, path.join(mount, destinationName), staging => copyVerifiedTree(source, staging));
 }
@@ -102,7 +102,9 @@ export async function stageSpaceProfile(
   stores: ReadonlyArray<{ source: string; target: string; optional?: boolean }>
 ): Promise<string> {
   const legacy = await realpath(legacyUserData);
-  const mount = await realpath(authenticatedMount);
+  // The component-wise resolver follows junctions without the native
+  // final-path query that WinFsp cannot answer for this drive.
+  const mount = realpathSync(authenticatedMount);
   if (contains(legacy, mount) || contains(mount, legacy)) throw new Error('Space storage roots overlap');
   const destination = path.join(mount, 'profile');
   const existing = await statIfPresent(destination);
@@ -131,7 +133,7 @@ export async function stageSpaceProfile(
       }
       if (path.relative(expected, actual)) throw new Error('Managed Space storage is redirected');
       if (verify) {
-        if (path.relative(target, await realpath(target))) throw new Error('Staged Space storage is redirected');
+        if (path.relative(target, realpathSync(target))) throw new Error('Staged Space storage is redirected');
         await verifyEntry(expected, target);
       } else {
         await mkdir(path.dirname(target), { recursive: true });

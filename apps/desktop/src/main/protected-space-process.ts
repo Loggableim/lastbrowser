@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { lstat, mkdir, realpath } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import { lstat, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 
 export type MountedSpace = {
@@ -23,11 +24,12 @@ export async function runProtectedSpaceProcess(
     if (!path.isAbsolute(volume.root) || !(await lstat(volume.root)).isDirectory()) {
       throw new Error('Protected mount is unavailable');
     }
-    const root = await realpath(volume.root);
+    // Resolve mount paths component by component on WinFsp.
+    const root = realpathSync(volume.root);
     if (path.relative(volume.root, root)) throw new Error('Protected mount is redirected');
     const temp = path.join(root, 'temp');
     await mkdir(temp, { recursive: true });
-    if (path.relative(temp, await realpath(temp))) throw new Error('Protected temporary directory is redirected');
+    if (path.relative(temp, realpathSync(temp))) throw new Error('Protected temporary directory is redirected');
     const env: NodeJS.ProcessEnv = { ...process.env, TEMP: temp, TMP: temp, TMPDIR: temp };
     for (const name of ['ELECTRON_RUN_AS_NODE', 'LASTBROWSER_ENABLE_CDP', 'LASTBROWSER_CDP_PORT', 'CDP_PORT']) {
       delete env[name];

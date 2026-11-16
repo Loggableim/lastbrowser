@@ -4,7 +4,7 @@ import { removeRevokedPrimaryVault } from './active-space-config.js';
 import { createSpaceUnlock } from './space-emergency-unlock.js';
 import { unwrapSpaceKey } from './space-key-envelope.js';
 import { runProtectedSpaceProcess } from './protected-space-process.js';
-import { mountWindowsSpaceVault } from './windows-space-vault.js';
+import { mountWindowsSpaceVault, type WindowsVaultRuntime } from './windows-space-vault.js';
 import { createWindowsSpaceKeyProvider, createWindowsTpmNvSecretProvider, type TpmNvSlot } from './windows-space-key-provider.js';
 
 type VaultSelection = {
@@ -13,12 +13,10 @@ type VaultSelection = {
   vaultDirectory: string;
 };
 
-type BrokerOptions = {
+type BrokerOptions = WindowsVaultRuntime & {
   root: string;
   primary: VaultSelection & { nvSlot: TpmNvSlot };
   decoy: VaultSelection & { wrappedPlatformSecret: string };
-  helper: string;
-  drive: string;
   executable: string;
   browserArgs: readonly string[];
   nvKeyHelper: string;
@@ -31,7 +29,7 @@ type BrokerOptions = {
  * The broker must outlive the browser and own the drive for the full session.
  */
 export function createWindowsProtectedSpaceBroker(options: BrokerOptions) {
-  const { root, primary, decoy, helper, drive, executable, browserArgs, nvKeyHelper, lockPrimary } = options;
+  const { root, primary, decoy, executable, browserArgs, nvKeyHelper, lockPrimary } = options;
   if (process.platform !== 'win32') throw new Error('The protected browser broker requires Windows');
   const primaryVault = path.join(realpathSync(root), primary.id);
   const decoyVault = realpathSync(decoy.vaultDirectory);
@@ -63,7 +61,7 @@ export function createWindowsProtectedSpaceBroker(options: BrokerOptions) {
       try {
         const exit = await runProtectedSpaceProcess(executable, browserArgs, async () => {
           try {
-            return await mountWindowsSpaceVault({ helper, drive, vaultDirectory, vaultId: id, key });
+            return await mountWindowsSpaceVault({ ...options, vaultDirectory, vaultId: id, key });
           } finally {
             key.fill(0);
           }

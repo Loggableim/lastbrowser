@@ -13,12 +13,17 @@ import org.cryptomator.cryptofs.CryptoFileSystemProperties;
 import org.cryptomator.cryptofs.CryptoFileSystemProvider;
 import org.cryptomator.cryptolib.api.Masterkey;
 import org.cryptomator.cryptolib.common.MasterkeyFileAccess;
+import org.cryptomator.frontend.fuse.mount.WinFspMountProvider;
 
 public final class InitializeSpaceVault {
     private InitializeSpaceVault() {}
 
     public static void main(String[] args) {
         try {
+            if (args.length == 3 && args[0].equals("mount")) {
+                mount(Path.of(args[1]), Path.of(args[2]));
+                return;
+            }
             if (args.length != 2) {
                 throw new IllegalArgumentException("Expected an empty vault path and a vault ID");
             }
@@ -26,8 +31,41 @@ public final class InitializeSpaceVault {
             UUID id = UUID.fromString(args[1]);
             initialize(vault, id);
         } catch (Exception failure) {
-            System.err.println("Cryptomator vault initialization failed.");
+            System.err.println("Cryptomator vault operation failed.");
             System.exit(1);
+        }
+    }
+
+    private static void mount(Path vault, Path mountPoint) throws Exception {
+        byte[] input = System.in.readNBytes(32);
+        char[] passphrase = new char[64];
+        try {
+            if (input.length != 32) {
+                throw new IOException("A 256-bit volume key is required");
+            }
+            HexFormat.of().formatHex(CharBuffer.wrap(passphrase), input);
+            var access = new MasterkeyFileAccess(new byte[0], new SecureRandom());
+            var properties = CryptoFileSystemProperties.cryptoFileSystemProperties()
+                    .withKeyLoader(ignored -> access.load(vault.resolve("masterkey.cryptomator"), CharBuffer.wrap(passphrase)))
+                    .build();
+            try (var filesystem = CryptoFileSystemProvider.newFileSystem(vault, properties)) {
+                Arrays.fill(input, (byte) 0);
+                Arrays.fill(passphrase, '\0');
+                var service = new WinFspMountProvider();
+                try (var mounted = service.forFileSystem(filesystem.getPath("/"))
+                        .setFileSystemName("cryptoFs")
+                        .setMountFlags(service.getDefaultMountFlags())
+                        .setMountpoint(mountPoint)
+                        .mount()) {
+                    System.out.println("LASTBROWSER_VAULT_READY");
+                    System.out.flush();
+                    // The broker closes the input pipe after all profile writers exit.
+                    if (System.in.read() != -1) throw new IOException("Unexpected mount input");
+                }
+            }
+        } finally {
+            Arrays.fill(input, (byte) 0);
+            Arrays.fill(passphrase, '\0');
         }
     }
 

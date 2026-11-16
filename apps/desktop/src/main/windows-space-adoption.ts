@@ -17,8 +17,8 @@ const vaultIdPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
  * The offline migration owner calls this after exporting scoped renderer and
  * shared backend data. It must keep legacy writers stopped through adoption.
  */
-export async function adoptWindowsSpacePair(options: Pick<Parameters<typeof stageWindowsSpacePair>[0],
-  'legacyUserData' | 'bindings' | 'primarySpaceId' | 'decoySpaceId' | 'helper' | 'drive' | 'rendererSeeds'> & {
+export async function adoptWindowsSpacePair(options: Omit<Parameters<typeof stageWindowsSpacePair>[0],
+  'primary' | 'decoy'> & {
     preparedDirectory: string;
     nvKeyHelper: string;
     primaryPassword: Uint8Array;

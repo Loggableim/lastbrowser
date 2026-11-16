@@ -3,7 +3,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { stageSpaceProfile } from './space-directory-migration.js';
 import { resolveSpaceMigrationLayout } from './space-migration-layout.js';
-import { mountWindowsSpaceVault } from './windows-space-vault.js';
+import { mountWindowsSpaceVault, type WindowsVaultRuntime } from './windows-space-vault.js';
 import { loadProtectedRendererSeed, writeProtectedRendererSeed } from './protected-renderer-seed.js';
 import { readSpaceAccountMigration, readSpaceBindingMigration, stageProtectedSpaceAccounts, stageProtectedSpaceBinding } from './space-binding-migration.js';
 import { readWindowsChromiumKeys, stageWindowsChromiumKeys } from './windows-space-chromium-keys.js';
@@ -14,18 +14,16 @@ type MigrationVault = { vaultId: string; vaultDirectory: string; key: Buffer };
  * Stage both existing Spaces on their already provisioned volumes while the
  * caller holds the migration lock and all writers are stopped.
  */
-export async function stageWindowsSpacePair(options: {
+export async function stageWindowsSpacePair(options: WindowsVaultRuntime & {
   legacyUserData: string;
   bindings: Parameters<typeof resolveSpaceMigrationLayout>[1];
   primarySpaceId: string;
   decoySpaceId: string;
   primary: MigrationVault;
   decoy: MigrationVault;
-  helper: string;
-  drive: string;
   rendererSeeds: { primary: Readonly<Record<string, string>>; decoy: Readonly<Record<string, string>> };
 }): Promise<void> {
-  const { legacyUserData, bindings, primarySpaceId, decoySpaceId, primary, decoy, helper, drive } = options;
+  const { legacyUserData, bindings, primarySpaceId, decoySpaceId, primary, decoy } = options;
   const layout = resolveSpaceMigrationLayout(legacyUserData, bindings, primarySpaceId, decoySpaceId);
   if (primary.vaultId === decoy.vaultId || primary.key.length !== 32 || decoy.key.length !== 32
     || timingSafeEqual(primary.key, decoy.key)) {
@@ -49,7 +47,7 @@ export async function stageWindowsSpacePair(options: {
     [decoy, decoyDir, layout.decoy, options.rendererSeeds.decoy, scopedBindings.decoy, accounts?.decoy]
   ] as const) {
     const mounted = await mountWindowsSpaceVault({
-      ...vault, vaultDirectory, helper, drive, preparingProfile: true
+      ...options, ...vault, vaultDirectory, preparingProfile: true
     });
     try {
       const profile = await stageSpaceProfile(legacyUserData, mounted.root, Object.values(stores));

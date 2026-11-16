@@ -9,7 +9,8 @@ test('a protected mount refuses an occupied root before starting the vault helpe
   const { mountWindowsSpaceVault } = await import('../src/main/windows-space-vault.ts');
   const systemRoot = path.parse(process.execPath).root;
   await assert.rejects(mountWindowsSpaceVault({
-    helper: process.execPath, vaultDirectory: path.dirname(process.execPath),
+    java: process.execPath, libraryDirectory: __dirname, initializerSource: __filename,
+    vaultDirectory: path.dirname(process.execPath),
     drive: systemRoot, vaultId: randomUUID(),
     key: randomBytes(32)
   }), /unused drive/);
@@ -23,7 +24,8 @@ test('a plain directory cannot be treated as an encrypted backing store', {
   const drive = [...'ZYXWVUTSRQPONMLKJIHGFED'].map(letter => `${letter}:\\`).find(root => !existsSync(root));
   assert.ok(drive, 'An unused test drive is required');
   await assert.rejects(mountWindowsSpaceVault({
-    helper: process.execPath, vaultDirectory: __dirname,
+    java: process.execPath, libraryDirectory: __dirname, initializerSource: __filename,
+    vaultDirectory: __dirname,
     drive, vaultId: randomUUID(),
     key: randomBytes(32)
   }), /vault configuration/);

@@ -4,25 +4,22 @@ import path from 'node:path';
 
 export function resolveWindowsSpaceRuntime(resources: string) {
   const base = path.join(resources, 'protected-spaces');
-  const helper = path.join(base, 'cryptomator-cli', 'cryptomator-cli.exe');
   const nvKeyHelper = path.join(base, 'space-tpm-nv.exe');
-  requireRuntimeFiles([helper, nvKeyHelper]);
+  const java = path.join(base, 'jdk', 'bin', 'java.exe');
+  const initializerSource = path.join(base, 'InitializeSpaceVault.java');
+  const libraryDirectory = path.join(base, 'cryptomator-cli', 'app', 'mods');
+  requireRuntimeFiles([nvKeyHelper, java, initializerSource]);
+  if (!lstatSync(libraryDirectory, { throwIfNoEntry: false })?.isDirectory()) throw new Error('The protected Space runtime is missing');
   const drive = [...'ZYXWVUTSRQPONMLKJIHGFED'].map(letter => `${letter}:\\`).find(root => !existsSync(root));
   if (!drive) throw new Error('The protected Space needs an unused drive');
-  return { helper, nvKeyHelper, drive };
+  return { nvKeyHelper, drive, java, initializerSource, libraryDirectory };
 }
 
 export function resolveWindowsSpaceMigrationRuntime(resources: string) {
   if (process.env.PORTABLE_EXECUTABLE_FILE) {
     throw new Error('The Portable launcher cannot keep the migration runtime available after browser exit');
   }
-  const base = path.join(resources, 'protected-spaces');
-  const java = path.join(base, 'jdk', 'bin', 'java.exe');
-  const initializerSource = path.join(base, 'InitializeSpaceVault.java');
-  const libraryDirectory = path.join(base, 'cryptomator-cli', 'app', 'mods');
-  requireRuntimeFiles([java, initializerSource]);
-  if (!lstatSync(libraryDirectory, { throwIfNoEntry: false })?.isDirectory()) throw new Error('The protected Space runtime is missing');
-  return { ...resolveWindowsSpaceRuntime(resources), java, initializerSource, libraryDirectory };
+  return resolveWindowsSpaceRuntime(resources);
 }
 
 export type SpaceMigrationPrerequisite = 'runtime' | 'winfsp' | 'tpm' | 'tpm-owner' | 'portable';

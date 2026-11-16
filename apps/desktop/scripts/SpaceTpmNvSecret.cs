@@ -157,12 +157,22 @@ internal static class SpaceTpmNvSecret
         {
             using (var registry = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
             using (var installed = registry.OpenSubKey(@"SOFTWARE\WinFsp"))
-            using (var driver = registry.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\WinFsp"))
             {
                 var directory = installed == null ? null : installed.GetValue("InstallDir") as string;
                 if (String.IsNullOrEmpty(directory) || !Path.IsPathRooted(directory)
-                    || !File.Exists(Path.Combine(directory, "bin", "winfsp-x64.dll"))
-                    || driver == null || Object.Equals(driver.GetValue("Start"), 4)) return 5;
+                    || !File.Exists(Path.Combine(directory, "bin", "winfsp-x64.dll"))) return 5;
+                var serviceName = "WinFsp";
+                var sxs = installed.GetValue("SxsDir") as string;
+                if (!String.IsNullOrEmpty(sxs))
+                {
+                    var leaf = Path.GetFileName(sxs.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    if (!System.Text.RegularExpressions.Regex.IsMatch(leaf, @"\Asxs\.[0-9]{8}T[0-9]{6}Z\z")) return 5;
+                    serviceName += "+" + leaf.Substring(4);
+                }
+                using (var driver = registry.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + serviceName))
+                {
+                    if (driver == null || Object.Equals(driver.GetValue("Start"), 4)) return 5;
+                }
             }
         }
         catch (Exception) { return 5; }

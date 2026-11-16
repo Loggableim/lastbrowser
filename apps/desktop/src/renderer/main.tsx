@@ -131,11 +131,31 @@ class RootErrorBoundary extends Component<RootErrorBoundaryProps, RootErrorBound
   }
 }
 
-createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    <RootErrorBoundary>
-      <App />
-    </RootErrorBoundary>
-    <BootCommitted />
-  </React.StrictMode>
-);
+function renderBrowser() {
+  createRoot(document.getElementById('root')!).render(
+    <React.StrictMode>
+      <RootErrorBoundary>
+        <App />
+      </RootErrorBoundary>
+      <BootCommitted />
+    </React.StrictMode>
+  );
+}
+
+const migrated = 'lastbrowser.protectedRendererImported.v1';
+if (!window.lastbrowser?.protectedRendererSeed) {
+  renderBrowser();
+} else {
+  void window.lastbrowser.protectedRendererSeed().then(values => {
+    if (values && !window.localStorage.getItem(migrated)) {
+      for (const [key, value] of Object.entries(values)) window.localStorage.setItem(key, value);
+      window.localStorage.setItem(migrated, '1');
+    }
+    renderBrowser();
+  }).catch(() => {
+    const locale = readShellLocale();
+    document.getElementById('root')!.textContent = shellText(locale,
+      'Das geschützte Profil konnte nicht geladen werden.',
+      'The protected profile could not be loaded.');
+  });
+}

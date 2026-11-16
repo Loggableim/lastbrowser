@@ -7,6 +7,31 @@ import os
 import pytest
 
 
+def test_first_run_local_ollama_key_does_not_overwrite_cloud_credentials(monkeypatch, tmp_path):
+    from web.api import onboarding, profiles
+
+    config_path = tmp_path / "config.yaml"
+    env_file = tmp_path / ".env"
+    env_file.write_text("OLLAMA_API_KEY=cloud-test-only\n", encoding="utf-8")
+    monkeypatch.setenv("OLLAMA_API_KEY", "cloud-test-only")
+    monkeypatch.setattr(onboarding, "_get_config_path", lambda: config_path)
+    monkeypatch.setattr(onboarding, "_get_active_profile_home", lambda: tmp_path)
+    monkeypatch.setattr(onboarding, "get_onboarding_status", lambda: {"ok": True})
+    monkeypatch.setattr(onboarding, "reload_config", lambda: None)
+    monkeypatch.setattr(profiles, "_reload_dotenv", lambda _home: None)
+
+    assert onboarding.apply_onboarding_setup({
+        "provider": "ollama",
+        "model": "smollm2:135m",
+        "api_key": "local-test-only",
+    }) == {"ok": True}
+
+    saved = onboarding._load_yaml_config(config_path)
+    assert env_file.read_text(encoding="utf-8") == "OLLAMA_API_KEY=cloud-test-only\n"
+    assert os.environ["OLLAMA_API_KEY"] == "cloud-test-only"
+    assert saved["providers"]["ollama"]["api_key"] == "local-test-only"
+
+
 def test_local_ollama_key_is_saved_provider_scoped_without_changing_cloud_env(monkeypatch, tmp_path):
     from web.api import config, providers
 
@@ -189,7 +214,10 @@ def test_local_ollama_probe_counts_api_tags_models(monkeypatch):
             assert request.full_url == "http://127.0.0.1:11434/api/tags"
             return Response()
 
-    monkeypatch.setattr(providers.urllib.request, "build_opener", lambda _handler: Opener())
+    def local_opener(_redirect, proxy):
+        assert proxy.proxies == {}
+        return Opener()
+    monkeypatch.setattr(providers.urllib.request, "build_opener", local_opener)
 
     assert providers.probe_ollama_connection(
         "ollama", "http://127.0.0.1:11434"
@@ -360,6 +388,39 @@ def test_ollama_cloud_runtime_rejects_explicit_non_official_endpoint(monkeypatch
         )
 
     assert exc.value.code == "invalid_ollama_cloud_base_url"
+
+
+@pytest.mark.parametrize("requested", ["ollama", "custom"])
+def test_local_ollama_runtime_keeps_configured_endpoint_and_credentials(monkeypatch, requested):
+    from cli import runtime_provider
+
+    config = {
+        "model": {"provider": "ollama", "default": "qwen3:4b", "base_url": "http://127.0.0.1:11435"},
+        "providers": {"ollama": {"api_key": "local-test-credential"}},
+    }
+    monkeypatch.setattr(runtime_provider, "load_config", lambda: config)
+    monkeypatch.setattr(runtime_provider, "_try_resolve_from_custom_pool", lambda *args, **kwargs: None)
+    monkeypatch.setenv("CUSTOM_BASE_URL", "https://custom.example.invalid/v1")
+    monkeypatch.setenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+    monkeypatch.setenv("CUSTOM_API_KEY", "stale-generic-test-credential")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "stale-cloud-test-credential")
+
+    runtime = runtime_provider.resolve_runtime_provider(requested=requested)
+
+    assert runtime["provider"] == "custom"
+    assert runtime["base_url"] == "http://127.0.0.1:11435/v1"
+    assert runtime["api_key"] == "local-test-credential"
+
+
+def test_local_ollama_runtime_ignores_ambient_cloud_url_when_using_default(monkeypatch):
+    from cli import runtime_provider
+
+    monkeypatch.setattr(runtime_provider, "load_config", lambda: {})
+    monkeypatch.setattr(runtime_provider, "_try_resolve_from_custom_pool", lambda *args, **kwargs: None)
+    monkeypatch.delenv("CUSTOM_BASE_URL", raising=False)
+    monkeypatch.setenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+    assert runtime_provider.resolve_runtime_provider(requested="ollama")["base_url"] == "http://localhost:11434/v1"
 
 
 def test_other_provider_probe_keeps_provider_scoped_config_key_precedence(monkeypatch):

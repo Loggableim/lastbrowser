@@ -40,6 +40,7 @@ from web.api.metering import meter
 from web.api.nova_paths import get_nova_session_start_path
 from web.api.turn_journal import append_turn_journal_event_for_stream
 from shared.sessions import is_default_session_title
+from runtime.provider_deployment import provider_deployment
 from web.api.runtime_identity import RUNTIME_GENERATION, provider_config_generation
 
 # Global lock for os.environ writes. Per-session locks (_agent_lock) prevent
@@ -1493,6 +1494,24 @@ def _generate_llm_session_title_via_aux(user_text: str, assistant_text: str, age
     return None, 'llm_invalid_aux', str(raw)[:120]
 
 
+def _generate_background_title(agent, user_text: str, assistant_text: str) -> tuple[Optional[str], str, str]:
+    provider = str(getattr(agent, 'provider', '') or '').strip().lower()
+    endpoint = getattr(agent, 'base_url', '')
+    if provider_deployment(
+        provider, {'model': {'provider': provider, 'base_url': endpoint}}
+    ) == 'local':
+        return _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+    if agent and not _aux_title_configured():
+        result = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+        if not result[0] and result[1] in ('llm_error', 'llm_invalid'):
+            return _generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent, use_agent_model=True)
+        return result
+    result = _generate_llm_session_title_via_aux(user_text, assistant_text)
+    if not result[0] and agent and result[1] in ('llm_error_aux', 'llm_invalid_aux'):
+        return _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+    return result
+
+
 def _put_title_status(put_event, session_id: str, status: str, reason: str = '', title: str = '', raw_preview: str = '') -> None:
     payload = {'session_id': session_id, 'status': status}
     if reason:
@@ -1620,15 +1639,7 @@ def _run_background_title_update(session_id: str, user_text: str, assistant_text
         if not still_auto:
             _put_title_status(put_event, session_id, 'skipped', 'manual_title', current)
             return
-        aux_title_configured = _aux_title_configured()
-        if agent and not aux_title_configured:
-            next_title, llm_status, raw_preview = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
-            if not next_title and llm_status in ('llm_error', 'llm_invalid'):
-                next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent, use_agent_model=True)
-        else:
-            next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text)
-            if not next_title and agent and llm_status in ('llm_error_aux', 'llm_invalid_aux'):
-                next_title, llm_status, raw_preview = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+        next_title, llm_status, raw_preview = _generate_background_title(agent, user_text, assistant_text)
         source = llm_status
         if not next_title:
             fallback_title = _fallback_title_from_exchange(user_text, assistant_text)
@@ -1699,15 +1710,7 @@ def _run_background_title_refresh(session_id: str, user_text: str, assistant_tex
             return
         if is_default_session_title(effective):
             return
-        aux_title_configured = _aux_title_configured()
-        if agent and not aux_title_configured:
-            next_title, llm_status, raw_preview = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
-            if not next_title and llm_status in ('llm_error', 'llm_invalid'):
-                next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text, agent=agent, use_agent_model=True)
-        else:
-            next_title, llm_status, raw_preview = _generate_llm_session_title_via_aux(user_text, assistant_text)
-            if not next_title and agent and llm_status in ('llm_error_aux', 'llm_invalid_aux'):
-                next_title, llm_status, raw_preview = _generate_llm_session_title_for_agent(agent, user_text, assistant_text)
+        next_title, llm_status, raw_preview = _generate_background_title(agent, user_text, assistant_text)
         if not next_title:
             _put_title_status(put_event, session_id, 'refresh_skipped', llm_status or 'empty', effective, raw_preview)
             return

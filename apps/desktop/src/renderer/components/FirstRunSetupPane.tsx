@@ -148,6 +148,11 @@ export type FirstRunSetupPaneProps = {
 };
 
 const idleCodexOAuth: CodexOAuthState = { status: 'idle' };
+const defaultLocalOllamaUrl = 'http://127.0.0.1:11434/v1';
+
+function providerSetupTab(providerId: string): 'featured' | 'custom' {
+  return !providerId || RECOMMENDED_PROVIDER_IDS.some(id => id === providerId) ? 'featured' : 'custom';
+}
 
 export function FirstRunSetupPane({
   initialSpaceName = 'Home',
@@ -178,6 +183,9 @@ export function FirstRunSetupPane({
   const [firstSpaceName, setFirstSpaceName] = useState(initialSpaceName.slice(0, 80));
   const [choicePending, setChoicePending] = useState(false);
   const [detectionReady, setDetectionReady] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const finishInFlight = useRef(false);
+  const wizardRef = useRef<HTMLDivElement>(null);
   const pageContentRef = useRef<HTMLDivElement>(null);
   const pageHeadingRef = useRef<HTMLHeadingElement>(null);
   const providers = cloudProviderOptions(onboardingStatus);
@@ -189,11 +197,15 @@ export function FirstRunSetupPane({
   const evidenceStorage = typeof window === 'undefined' ? undefined : window.localStorage;
   const qualifiedProviders = providers.filter(item => isStableProvider(item.id) || Boolean(browserProfileId && evidenceStorage
     && getProviderChatEvidence(item.id, browserProfileId, backendProfileName || 'default', evidenceStorage)));
-  const defaultProviderId = qualifiedProviders.some((p) => p.id === 'opencode')
+  const connectedProviderId = onboardingStatus?.system?.chat_ready === true
+    ? String(onboardingStatus.system.current_provider || '').trim().toLowerCase()
+    : '';
+  const defaultProviderId = qualifiedProviders.find(item => connectedProviderId && (item.id === connectedProviderId || item.oauthProvider === connectedProviderId))?.id
+    || (qualifiedProviders.some((p) => p.id === 'opencode')
     ? 'opencode'
     : qualifiedProviders.some((p) => p.id === 'openai-codex')
     ? 'openai-codex'
-    : (qualifiedProviders[0]?.id || '');
+    : (qualifiedProviders[0]?.id || ''));
 
   const [provider, setProvider] = useState<string>(defaultProviderId);
   const [apiKey, setApiKey] = useState('');
@@ -223,7 +235,7 @@ export function FirstRunSetupPane({
   const [personality, setPersonality] = useState<string>('nova');
 
   // Setup mode tab: featured recommendations vs API-key providers.
-  const [activeTab, setActiveTab] = useState<'featured' | 'custom'>('featured');
+  const [activeTab, setActiveTab] = useState(() => providerSetupTab(defaultProviderId));
 
   // Standalone Sidekick install migration (first-run assistant).
   const [standaloneReport, setStandaloneReport] = useState<{
@@ -238,6 +250,7 @@ export function FirstRunSetupPane({
   const readiness = firstRunStatus(status, onboardingStatus);
   const canSubmit = canSubmitCloudSetup(readiness);
   const activeProviderOption = providers.find((item) => item.id === provider);
+  const defaultProviderEndpoint = activeProviderOption?.defaultBaseUrl || (provider === 'ollama' ? defaultLocalOllamaUrl : '');
   const visibleProviders = showUntestedBetas ? providers : qualifiedProviders;
 
   const oauthProviderId = activeProviderOption?.oauthProvider || '';
@@ -269,11 +282,14 @@ export function FirstRunSetupPane({
     } catch (cause) { setFlowError(cause instanceof Error ? cause.message : String(cause)); }
   };
 
-  useEffect(() => {
-    if (!providers.some((item) => item.id === provider) && providers[0]) {
-      setProvider(providers[0].id);
-    }
-  }, [provider, providers]);
+  const finishSetup = async (complete: () => Promise<void>) => {
+    if (finishInFlight.current) return;
+    finishInFlight.current = true;
+    setFinishing(true);
+    try { await complete(); }
+    catch (cause) { setFlowError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { finishInFlight.current = false; setFinishing(false); }
+  };
 
   useEffect(() => {
     setModel((current) => models.some((item) => item.id === current) ? current : (models[0]?.id || ''));
@@ -288,11 +304,15 @@ export function FirstRunSetupPane({
   // Detect an existing standalone Sidekick installation once on mount.
   useEffect(() => {
     let cancelled = false;
-    const timeout = window.setTimeout(() => { if (!cancelled) setDetectionReady(true); }, 5000);
+    let settled = false;
+    const timeout = window.setTimeout(() => {
+      settled = true;
+      if (!cancelled) setDetectionReady(true);
+    }, 5000);
     const detect = async () => {
       try {
         const report = await window.lastbrowser?.sidekick?.detectExistingInstall?.();
-        if (!cancelled && report?.found) setStandaloneReport(report);
+        if (!cancelled && !settled && report?.found) setStandaloneReport(report);
       } catch {
         // Only a positively detected installation adds the optional import page.
       } finally {
@@ -322,20 +342,22 @@ export function FirstRunSetupPane({
   }, [standaloneReport?.homeDir, migrateItems]);
 
   const selectProvider = useCallback((nextProvider: string) => {
+    if (nextProvider === provider) return;
     setProvider(nextProvider);
     setModel('');
     setApiKey('');
+    setBaseUrl('');
     setOAuthState(idleCodexOAuth);
-    if (['google-gemini-cli', 'openai-codex'].includes(nextProvider)) {
-      setActiveTab('featured');
-    } else if (nextProvider === 'ollama') {
-      setActiveTab('featured');
-    } else {
-      setActiveTab('custom');
-    }
-  }, []);
+    setActiveTab(providerSetupTab(nextProvider));
+  }, [provider]);
 
-  const loadLiveModels = useCallback(async (): Promise<Array<{ id: string; label: string }>> => {
+  useEffect(() => {
+    if (!visibleProviders.some(item => item.id === provider)) {
+      selectProvider(defaultProviderId || visibleProviders[0]?.id || '');
+    }
+  }, [defaultProviderId, provider, selectProvider, visibleProviders]);
+
+  const loadLiveModels = useCallback(async (reloadLocalOllama = false): Promise<Array<{ id: string; label: string }>> => {
     const capturedKey = modelRequestKey;
     const serial = ++modelRequestSerial.current;
     const current = () => activeModelRequestKey.current === capturedKey && modelRequestSerial.current === serial;
@@ -345,20 +367,24 @@ export function FirstRunSetupPane({
     let deadline: ReturnType<typeof setTimeout> | undefined;
     try {
       const readCatalog = async () => {
-        if (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider)) {
+        const probeLocalOllama = reloadLocalOllama && provider === 'ollama';
+        if (probeLocalOllama || (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider))) {
+          const endpoint = baseUrl.trim() || (probeLocalOllama ? defaultProviderEndpoint : '');
           const response = await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/models/probe',
-            body: { provider, api_key: apiKey.trim(), ...(baseUrl.trim() ? { base_url: baseUrl.trim() } : {}) }
+            body: { provider, api_key: apiKey.trim(), ...(endpoint ? { base_url: endpoint } : {}) }
           }) as { models?: Array<{ id?: string; name?: string; label?: string }>; error?: string };
           if (response.error) throw new Error(response.error);
           return { models: response.models || [], configured: false };
         }
-        if (!browserProfileId || !backendProfileName) throw new Error(shellText(locale, "Das aktive Browserprofil wird noch vorbereitet. Bitte erneut laden.", "The active browser profile is still being prepared. Please reload."));
-        const scopeSelection = { browserProfileId, workspacePath: workspacePath || null, backendProfileName };
+        if (!browserProfileId) throw new Error(shellText(locale, "Das aktive Browserprofil wird noch vorbereitet. Bitte erneut laden.", "The active browser profile is still being prepared. Please reload."));
         const client = new IndependentAssistantClient(window.lastbrowser.independent);
         const resolved = await client.request({ schemaVersion: 1, operation: 'resolveScope',
-          payload: { browserProfileId, workspacePath: workspacePath || null }, backendProfileName });
+          payload: { browserProfileId, workspacePath: workspacePath || null }, backendProfileName: backendProfileName || undefined });
         if (!resolved.ok) throw new Error(resolved.error.message);
         if (resolved.value.scope.browserProfileId !== browserProfileId) throw new Error(shellText(locale, "Modellkatalog gehört zu einem anderen Profil.", "The model catalog belongs to another profile."));
+        const resolvedProfileName = resolved.value.backendProfileName || backendProfileName;
+        if (!resolvedProfileName) throw new Error(shellText(locale, "Modellkatalog-Profil konnte nicht geladen werden.", "Could not resolve the model catalog profile."));
+        const scopeSelection = { browserProfileId, workspacePath: resolved.value.workspacePath, backendProfileName: resolvedProfileName };
         const [catalog, auth] = await Promise.all([
           client.request({ schemaVersion: 1, operation: 'modelSelection', scope: resolved.value.scope, payload: { action: 'get', includeCatalog: true } }),
           window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection }) as Promise<{ providers?: Array<{ id: string; has_key?: boolean; oauth_connected?: boolean; provider_available?: boolean }> }>
@@ -385,11 +411,17 @@ export function FirstRunSetupPane({
       setModelCatalogKey(capturedKey);
       setLiveProviderModels(previous => ({ ...previous, [provider]: available }));
       setModel(previous => available.some(item => item.id === previous) ? previous : available[0]?.id || '');
-      if (!available.length) setModelProbeError(oauthProviderId ? shellText(locale, "Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.", "No models came back from the connected account. Check the sign-in and reload.") : shellText(locale, "Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.", "No models came back. Check saved credentials or enter a key and reload."));
+      if (!available.length) {
+        setModelProbeError(provider === 'ollama'
+          ? shellText(locale, 'Keine lokalen Modelle gefunden. Prüfe die Serveradresse, installiere ein Modell in Ollama und lade die Liste neu.', 'No local models found. Check the server address, install a model in Ollama, and reload the list.')
+          : oauthProviderId
+            ? shellText(locale, 'Keine Modelle vom verbundenen Konto erhalten. Bitte Anmeldung prüfen und erneut laden.', 'No models came back from the connected account. Check the sign-in and reload.')
+            : shellText(locale, 'Keine Modelle erhalten. Gespeicherte Zugangsdaten prüfen oder einen Schlüssel eingeben und erneut laden.', 'No models came back. Check saved credentials or enter a key and reload.'));
+      }
       return available;
     } catch (cause) {
       if (current()) {
-        setModelProbeError(cause instanceof Error ? cause.message : 'Modelle konnten nicht geladen werden.');
+        setModelProbeError(cause instanceof Error ? cause.message : shellText(locale, 'Modelle konnten nicht geladen werden.', 'Could not load models.'));
         setModelCatalogKey('');
         setModel('');
       }
@@ -398,7 +430,7 @@ export function FirstRunSetupPane({
       if (deadline) clearTimeout(deadline);
       if (current()) setModelProbeLoading(false);
     }
-  }, [aiChoice, apiKey, baseUrl, provider, browserProfileId, workspacePath, backendProfileName, modelRequestKey, canSubmit, oauthProviderId, activeProviderOption?.keyOptional]);
+  }, [aiChoice, apiKey, baseUrl, provider, browserProfileId, workspacePath, backendProfileName, modelRequestKey, canSubmit, oauthProviderId, activeProviderOption?.keyOptional, defaultProviderEndpoint, locale]);
 
   useEffect(() => {
     void loadLiveModels();
@@ -562,7 +594,7 @@ export function FirstRunSetupPane({
 
   async function cancelCodexLogin(): Promise<void> {
     const flowId = oauthState.flowId;
-    setOAuthState({ status: 'cancelled', message: 'Anmeldung abgebrochen.' });
+    setOAuthState({ status: 'cancelled', message: shellText(locale, 'Anmeldung abgebrochen.', 'Sign-in cancelled.') });
     if (flowId) {
       await window.lastbrowser.sidekick.cancelOAuth({ flowId, provider: oauthProviderId || 'openai-codex' }).catch(() => null);
     }
@@ -748,6 +780,10 @@ export function FirstRunSetupPane({
 
   function submit(event: FormEvent): void {
     event.preventDefault();
+    if (page === 'space' && aiChoice === 'disabled' && !saving && firstSpaceName.trim()) {
+      void finishSetup(completeBrowserSetup);
+      return;
+    }
     if (page !== 'space' || aiChoice !== 'enabled' || saving || !firstSpaceName.trim() || !canSubmitForm) return;
     if (!oauthLoginReady) {
       setOAuthState((current) => ({
@@ -757,7 +793,7 @@ export function FirstRunSetupPane({
       }));
       return;
     }
-    void onSubmit({
+    void finishSetup(() => onSubmit({
       provider,
       model,
       apiKey,
@@ -767,7 +803,7 @@ export function FirstRunSetupPane({
       defaultBrowser: isDefaultBrowser === true,
       importedBookmarksCount: importedBookmarksCount || 0,
       firstSpaceName: firstSpaceName.trim()
-    });
+    }));
   }
 
   // Identify top featured recommendation cards
@@ -786,7 +822,7 @@ export function FirstRunSetupPane({
     provider: de ? 'KI verbinden' : 'Connect your AI',
     space: de ? 'Dein erster Space' : 'Your first Space'
   };
-  const busy = saving || choicePending || importRunning || migrationState === 'running';
+  const busy = saving || finishing || choicePending || importRunning || migrationState === 'running';
   const mayAdvance = !busy && (page !== 'search' || detectionReady)
     && (page !== 'ai' || aiChoice !== null)
     && (page !== 'provider' || canSubmitForm);
@@ -797,9 +833,25 @@ export function FirstRunSetupPane({
   }, [page]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const wizard = wizardRef.current;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (!wizard || (target?.closest('[role="dialog"]') && target.closest('[role="dialog"]') !== wizard)) return;
+      if (event.key === 'Tab') {
+        const controls = Array.from(wizard.querySelectorAll<HTMLElement>(
+          'button, input, select, textarea, a[href], summary, [tabindex]'
+        )).filter(element => element.tabIndex >= 0 && !element.matches(':disabled') && element.getClientRects().length);
+        const first = controls[0];
+        const last = controls.at(-1);
+        if (!first) return;
+        const active = document.activeElement;
+        if (!wizard.contains(active) || (event.shiftKey ? active === first || active === pageHeadingRef.current : active === last)) {
+          event.preventDefault();
+          (event.shiftKey ? last : first)?.focus();
+        }
+        return;
+      }
       if (event.key !== 'Escape' || busy || currentIndex <= 0) return;
       // Escape navigates back; it never finishes onboarding or changes the AI choice.
-      if ((event.target as HTMLElement)?.closest('[role="dialog"]')?.classList.contains('first-run-fullscreen-wrap') === false) return;
       event.preventDefault();
       movePage(pages[currentIndex - 1]);
     };
@@ -813,12 +865,11 @@ export function FirstRunSetupPane({
   };
 
   return (
-    <div className="first-run-fullscreen-wrap first-run-wizard" role="dialog" aria-modal="true" aria-labelledby="first-run-page-title">
+    <div ref={wizardRef} className="first-run-fullscreen-wrap first-run-wizard" role="dialog" aria-modal="true" aria-labelledby="first-run-page-title">
       <aside className="first-run-fullscreen">
         <header className="first-run-topbar">
           <div className="first-run-topbar-brand">
             <img src={brandAssets.logo} alt="LastBrowser" className="first-run-brand-logo" />
-            <span className="first-run-badge">{t('firstRun.welcomeBadge')}</span>
           </div>
           <span className="first-run-page-counter" aria-live="polite">{de ? 'Schritt' : 'Step'} {currentIndex + 1} / {pages.length}</span>
         </header>
@@ -826,23 +877,16 @@ export function FirstRunSetupPane({
           {pages.map((id, index) => <button key={id} type="button" aria-current={page === id ? 'step' : undefined}
             className={index < currentIndex ? 'is-complete' : page === id ? 'is-current' : ''}
             disabled={busy || index >= currentIndex} onClick={() => movePage(id)}>
-            <span>{index < currentIndex ? <Check size={12} /> : index + 1}</span><small>{titles[id]}</small>
+            <span aria-hidden="true">{index < currentIndex ? <Check size={12} /> : index + 1}</span><small>{titles[id]}</small>
           </button>)}
         </nav>
         <form className="setup-fullscreen-form" onSubmit={submit}>
           <div className="first-run-page-content" ref={pageContentRef}>
             <div className="first-run-page-heading">
               <h1 id="first-run-page-title" ref={pageHeadingRef} tabIndex={-1}>{titles[page]}</h1>
-              <p>{de ? 'Richte LastBrowser Schritt für Schritt ein. Deine Auswahl bleibt beim Zurückgehen erhalten.' : 'Set up LastBrowser one step at a time. Going back keeps your choices.'}</p>
             </div>
-            {page === 'search' && <>        <section className="setup-section-block search-engine-setup" aria-labelledby="search-engine-setup-title">
-          <div className="setup-section-header">
-            <span className="setup-step-number"><Globe size={14} /></span>
-            <div>
-              <h2 id="search-engine-setup-title">{t('searchEngineSetup.title')}</h2>
-              <p>{t('searchEngineSetup.description')}</p>
-            </div>
-          </div>
+            {page === 'search' && <>        <section className="setup-section-block search-engine-setup" aria-labelledby="first-run-page-title">
+          <p className="first-run-intro">{t('searchEngineSetup.description')}</p>
           <div className="search-engine-choices" role="group" aria-label={t('searchEngineSetup.recommended')}>
             {recommendedSearchEngines.map((engine) => (
               <button key={engine.id} type="button" className={`search-engine-choice ${searchEngineId === engine.id ? 'is-selected' : ''}`} aria-pressed={searchEngineId === engine.id} onClick={() => saveSearchEngineChoice(engine.id)}>
@@ -858,7 +902,6 @@ export function FirstRunSetupPane({
               </button>
             ))}
           </div>}
-          {flowError && <p role="alert" className="setup-error-banner">{flowError}</p>}
         </section>
 
 </>}
@@ -1061,7 +1104,7 @@ export function FirstRunSetupPane({
             <div className="setup-section-header">
               <span className="setup-step-number">{browserOnly ? '3' : '5'}</span>
               <div>
-                <h2>LastBrowser als Windows Standard-Browser</h2>
+                <h2>{shellText(locale, 'Standardbrowser', 'Default browser')}</h2>
                 <p>{shellText(locale, "Öffne Webseiten, HTML-Dateien und Links aus externen Apps wie Outlook, Teams oder Discord standardmäßig mit LastBrowser.", "Open web pages, HTML files, and links from external apps such as Outlook, Teams, or Discord in LastBrowser by default.")}</p>
               </div>
             </div>
@@ -1136,18 +1179,16 @@ export function FirstRunSetupPane({
               })}
             </div>
             <div className="setup-pinned-summary">
-              <small>{selectedAppIds.length} Apps im Slim Dock aktiv</small>
+              <small>{shellText(locale, `Ausgewählte Apps: ${selectedAppIds.length}`, `Selected apps: ${selectedAppIds.length}`)}</small>
             </div>
           </div>
 
 </>}
             {page === 'ai' && <section className="first-run-ai-page">
-              <img src={personalityAvatar('nova')} className="first-run-choice-avatar" alt="" />
-              <h2>{t('firstRun.aiChoiceTitle')}</h2>
-              <p>{t('firstRun.aiChoiceDescription')}</p>
+              <p className="first-run-intro">{t('firstRun.aiChoiceDescription')}</p>
               <div className="first-run-ai-choice-actions">
-                <button type="button" className={aiChoice === 'enabled' ? 'primary-btn' : 'secondary-btn'} aria-pressed={aiChoice === 'enabled'} disabled={busy} onClick={() => void chooseAi('enabled')}><Sparkles size={18} />{t('firstRun.aiChoiceYes')}</button>
-                <button type="button" className={aiChoice === 'disabled' ? 'primary-btn' : 'secondary-btn'} aria-pressed={aiChoice === 'disabled'} disabled={busy} onClick={() => void chooseAi('disabled')}><Globe size={18} />{t('firstRun.aiChoiceNo')}</button>
+                <button type="button" aria-pressed={aiChoice === 'enabled'} disabled={busy} onClick={() => void chooseAi('enabled')}><Sparkles size={22} /><span>{t('firstRun.aiChoiceYes')}</span></button>
+                <button type="button" aria-pressed={aiChoice === 'disabled'} disabled={busy} onClick={() => void chooseAi('disabled')}><Globe size={22} /><span>{t('firstRun.aiChoiceNo')}</span></button>
               </div>
               {aiChoice === 'disabled' && <p role="status">{t('firstRun.noAiDescription')}</p>}
             </section>}
@@ -1286,7 +1327,7 @@ export function FirstRunSetupPane({
                   {providerPresentation(provider).mark}
                 </span>
                 <div>
-                  <h4>Konfiguration: {activeProviderOption?.label || provider}</h4>
+                  <h4>{shellText(locale, 'Konfiguration', 'Configuration')}: {activeProviderOption?.label || provider}</h4>
                   <p>{localizedProviderDescription(provider, locale)}</p>
                 </div>
               </div>
@@ -1405,7 +1446,7 @@ export function FirstRunSetupPane({
                       />
                       <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                         <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
-                          {modelProbeLoading ? 'Modelle werden geladen…' : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
+                          {modelProbeLoading ? t('settings.panels.providers.loadingModels') : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
                         </button>
                         {modelProbeError && <p role="alert">{modelProbeError}</p>}
                       </div>
@@ -1438,25 +1479,30 @@ export function FirstRunSetupPane({
                   />
                   {activeProviderOption?.id === 'ollama' && (
                     <small className="field-hint">
-                      Tipp: Starte Ollama in deinem Terminal mit <code>ollama run llama3.2</code> oder nutze Modelle wie <code>qwen2.5</code> und <code>deepseek-r1</code>.
+                      {shellText(locale, 'Starte Ollama im Terminal mit ', 'Start Ollama in your terminal with ')}
+                      <code>ollama run llama3.2</code>
+                      {shellText(locale, ' oder nutze ein Modell wie ', ', or use a model such as ')}
+                      <code>qwen2.5</code>{shellText(locale, ' oder ', ' or ')}<code>deepseek-r1</code>.
                     </small>
                   )}
                   {activeProviderOption?.id === 'openrouter' && (
                     <small className="field-hint">
-                      Erhältlich unter <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>. Ein Key gewährt Zugriff auf über 200 Modelle.
+                      {shellText(locale, 'Erstelle einen API-Schlüssel unter ', 'Create an API key at ')}
+                      <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>.
                     </small>
                   )}
                   {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
                     <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                       <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
-                        {modelProbeLoading ? 'Modelle werden geladen…' : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
+                        {modelProbeLoading ? t('settings.panels.providers.loadingModels') : shellText(locale, "Verfügbare Modelle laden", "Load available models")}
                       </button>
                       {modelProbeError && <p role="alert">{modelProbeError}</p>}
                     </div>
                   )}
                   {activeProviderOption?.id === 'deepseek' && (
                     <small className="field-hint">
-                      Erhältlich auf der <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">DeepSeek Platform</a>. Führend im Preis-Leistungs-Verhältnis.
+                      {shellText(locale, 'Erstelle einen API-Schlüssel auf der ', 'Create an API key on the ')}
+                      <a href="https://platform.deepseek.com/api_keys" target="_blank" rel="noreferrer">DeepSeek Platform</a>.
                     </small>
                   )}
                 </label>
@@ -1464,20 +1510,24 @@ export function FirstRunSetupPane({
                   <label className="input-group" style={{ marginTop: '0.75rem' }}>
                     <span className="input-label">{provider === 'alibaba'
                       ? t('settings.panels.providers.alibabaBaseUrlLabel')
-                      : 'Server-Adresse / Endpoint (Optional)'}</span>
+                      : activeProviderOption.requiresBaseUrl
+                        ? shellText(locale, 'Serveradresse', 'Server address')
+                        : shellText(locale, 'Serveradresse (optional)', 'Server address (optional)')}</span>
                     <input
                       type="text"
                       value={baseUrl}
                       onChange={(e) => setBaseUrl(e.target.value)}
                       placeholder={provider === 'alibaba'
                         ? t('settings.panels.providers.alibabaBaseUrlPlaceholder')
-                        : activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}
+                        : defaultProviderEndpoint}
                       className="key-input"
                     />
                     <small className="field-hint">
                       {provider === 'alibaba'
                         ? t('settings.panels.providers.alibabaBaseUrlHint')
-                        : shellText(locale, `Für Standard (${activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}) leer lassen. Für Ollama Cloud oder Remote-Server hier die URL eintragen.`, `Leave empty for the default (${activeProviderOption?.defaultBaseUrl || 'http://localhost:11434/v1'}). Enter a URL here for Ollama Cloud or a remote server.`)}
+                        : provider === 'ollama'
+                          ? shellText(locale, 'Nutze die Adresse deines lokalen Ollama-Servers. „Modelle neu laden“ fragt diese Adresse direkt ab.', 'Use the address of your local Ollama server. Reload models queries this address directly.')
+                          : defaultProviderEndpoint && shellText(locale, `Für den Standard (${defaultProviderEndpoint}) leer lassen.`, `Leave empty for the default (${defaultProviderEndpoint}).`)}
                     </small>
                   </label>
                 )}
@@ -1490,8 +1540,7 @@ export function FirstRunSetupPane({
               {modelProbeError && models.length > 0 && <p role="alert">{modelProbeError}</p>}
               {models.length === 0 ? (
                 <div className="field-hint">
-                  <p>{modelProbeLoading ? 'Modelle werden geladen …' : modelProbeError || (oauthProviderId ? shellText(locale, "Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.", "Connect your account and load the model list. No API key is required.") : shellText(locale, "Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.", "Load models with saved credentials, or enter an API key."))}</p>
-                  <button type="button" className="import-file-btn" disabled={modelProbeLoading} onClick={() => void loadLiveModels()}>Modelle neu laden</button>
+                  <p>{modelProbeLoading ? shellText(locale, 'Modelle werden geladen …', 'Loading models …') : modelProbeError || (oauthProviderId ? shellText(locale, "Verbinde dein Konto und lade die Modellliste. Dafür ist kein API-Schlüssel erforderlich.", "Connect your account and load the model list. No API key is required.") : shellText(locale, "Lade Modelle mit gespeicherten Zugangsdaten oder gib einen API-Schlüssel ein.", "Load models with saved credentials, or enter an API key."))}</p>
                 </div>
               ) : <div className="models-pills-row">
                 {models.map((m) => {
@@ -1511,6 +1560,9 @@ export function FirstRunSetupPane({
                   );
                 })}
               </div>}
+              {(models.length === 0 || provider === 'ollama') && (
+                <button type="button" className="import-file-btn" disabled={modelProbeLoading || !canSubmit} onClick={() => void loadLiveModels(true)}>{shellText(locale, 'Modelle neu laden', 'Reload models')}</button>
+              )}
             </div>
           </div>}
 
@@ -1606,7 +1658,7 @@ export function FirstRunSetupPane({
                     <div className="persona-header">
                       <img className="persona-icon" src={personalityAvatar(profile.id)} alt="" style={{ width: 56, height: 56, objectFit: 'contain', flexShrink: 0 }} />
                       <div>
-                        <h3 className="persona-name">{profile.id === 'nova' ? `${effectiveBotName} (Standard)` : profile.name}</h3>
+                        <h3 className="persona-name">{profile.id === 'nova' ? `${effectiveBotName} (${shellText(locale, 'Standard', 'Default')})` : profile.name}</h3>
                         <span className="persona-tagline">{profile.tagline}</span>
                       </div>
                     </div>
@@ -1634,8 +1686,8 @@ export function FirstRunSetupPane({
           <footer className="setup-action-footer">
             <button type="button" className="secondary-btn" disabled={busy || currentIndex === 0} onClick={() => movePage(pages[currentIndex - 1])}><ArrowLeft size={16} />{de ? 'Zurück' : 'Back'}</button>
             {page !== 'space' ? <button type="button" className="primary-btn" disabled={!mayAdvance} onClick={() => movePage(pages[currentIndex + 1])}>{!detectionReady && page === 'search' ? <Loader2 size={16} className="spin" /> : null}{de ? 'Weiter' : 'Next'}<ArrowRight size={16} /></button>
-              : <button type={aiChoice === 'enabled' ? 'submit' : 'button'} className="primary-btn launch-btn" disabled={busy || !firstSpaceName.trim() || aiChoice === null || (aiChoice === 'enabled' && !canSubmitForm)} onClick={aiChoice === 'disabled' ? () => void completeBrowserSetup() : undefined}>
-                  {saving ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}{saving ? t('firstRun.configuring') : (de ? 'Einrichtung abschließen' : 'Finish setup')}
+              : <button type="submit" className="primary-btn launch-btn" disabled={busy || !firstSpaceName.trim() || aiChoice === null || (aiChoice === 'enabled' && !canSubmitForm)}>
+                  {saving || finishing ? <Loader2 size={16} className="spin" /> : <CheckCircle2 size={16} />}{saving || finishing ? t('firstRun.configuring') : (de ? 'Einrichtung abschließen' : 'Finish setup')}
                 </button>}
           </footer>
         </form>

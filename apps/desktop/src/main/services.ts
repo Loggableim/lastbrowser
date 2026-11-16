@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from 'node:child_process';
+import { ChildProcess, spawn, spawnSync } from 'node:child_process';
 import { StringDecoder } from 'node:string_decoder';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs';
@@ -37,6 +37,37 @@ export type ServiceStatus = {
 export type PortResolver = (preferredPort: number) => Promise<number>;
 export type WebuiHealthChecker = (webuiUrl: string) => Promise<{ ok: boolean; error?: string }>;
 export type HungPortRecoverer = (preferredPort: number) => Promise<PortRecoveryOutcome>;
+
+function stopWebuiProcess(child: ChildProcess, requireTree = false): void {
+  const windowsDir = process.env.SystemRoot || process.env.WINDIR;
+  if (process.platform === 'win32' && windowsDir && child.pid && child.exitCode === null && child.signalCode === null) {
+    // TerminateProcess only stops the Python supervisor. Stop its tree before
+    // the portable launcher tries to remove the extracted runtime.
+    const result = spawnSync(path.join(windowsDir, 'System32', 'taskkill.exe'),
+      ['/F', '/T', '/PID', String(child.pid)], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
+    if (result.status === 0) return;
+  }
+  if (requireTree && process.platform === 'win32') throw new Error('Windows did not confirm Sidekick process tree shutdown');
+  child.kill();
+}
+
+async function closeSidekickWriter(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  let closed: () => void = () => {};
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const completion = new Promise<void>((resolve, reject) => {
+    closed = resolve;
+    child.once('close', closed);
+    timeout = setTimeout(() => reject(new Error('A Sidekick process did not close')), 8000);
+  });
+  try {
+    stopWebuiProcess(child, true);
+    await completion;
+  } finally {
+    clearTimeout(timeout);
+    child.removeListener('close', closed);
+  }
+}
 
 /** Minimum gap between forced restarts of an unresponsive backend. */
 const FORCED_RESTART_COOLDOWN_MS = 30_000;
@@ -446,7 +477,7 @@ export class SidecarServices {
   private gatewayProcess: ChildProcess | null = null;
   private startPromise: Promise<ServiceStatus> | null = null;
   private healthTimer: ReturnType<typeof setInterval> | null = null;
-  private healthCheckInFlight = false;
+  private healthCheckGeneration: string | null = null;
   private status: ServiceStatus;
   private gatewayStatus: GatewayStatus = {
     running: false,
@@ -455,6 +486,7 @@ export class SidecarServices {
     startedAt: null
   };
   private isStopping = false;
+  private migrationStop: Promise<void> | undefined;
   private announcedRuntimeGeneration: string | null = null;
   private runtimeReadyListener: ((generation: string) => void) | null = null;
   private lastForcedRestartAt = 0;
@@ -501,7 +533,7 @@ export class SidecarServices {
   }
 
   startGateway(): Promise<GatewayStatus> {
-    if (this.gatewayProcess) {
+    if (this.gatewayProcess || this.migrationStop) {
       return Promise.resolve(this.getGatewayStatus());
     }
 
@@ -668,7 +700,7 @@ export class SidecarServices {
   }
 
   start(): Promise<ServiceStatus> {
-    if (this.webuiProcess) return Promise.resolve(this.getStatus());
+    if (this.webuiProcess || this.migrationStop) return Promise.resolve(this.getStatus());
     if (this.startPromise) return this.startPromise;
 
     this.startPromise = this.startInternal().finally(() => {
@@ -715,6 +747,7 @@ export class SidecarServices {
       return this.getStatus();
     }
 
+    if (this.migrationStop) return this.getStatus();
     const webuiUrl = `http://127.0.0.1:${webuiPort}`;
     const env = buildSidecarEnvironment(this.layout, webuiPort);
     this.status = { ...this.status, webuiUrl, port: webuiPort, webuiHealth: 'checking', lastError: null, runtimeGeneration: randomUUID() };
@@ -815,22 +848,25 @@ export class SidecarServices {
   }
 
   private async refreshHealth(): Promise<void> {
-    const webuiUrl = this.status.webuiUrl;
-    if (!webuiUrl || this.status.sidekick !== 'ready' || this.healthCheckInFlight) return;
+    const { webuiUrl, runtimeGeneration } = this.status;
+    if (!webuiUrl || !runtimeGeneration || this.status.sidekick !== 'ready'
+      || this.healthCheckGeneration === runtimeGeneration) return;
 
-    this.healthCheckInFlight = true;
+    this.healthCheckGeneration = runtimeGeneration;
     let result: { ok: boolean; error?: string };
     try {
       result = await this.healthChecker(webuiUrl);
+    } catch (error) {
+      result = { ok: false, error: error instanceof Error ? error.message : String(error) };
     } finally {
-      this.healthCheckInFlight = false;
+      if (this.healthCheckGeneration === runtimeGeneration) this.healthCheckGeneration = null;
     }
+    if (this.status.runtimeGeneration !== runtimeGeneration || this.status.sidekick !== 'ready') return;
     if (result.ok) {
-      const generation = this.status.runtimeGeneration;
       this.status = { ...this.status, webuiHealth: 'ready', lastError: null };
-      if (generation && generation !== this.announcedRuntimeGeneration) {
-        this.announcedRuntimeGeneration = generation;
-        this.runtimeReadyListener?.(generation);
+      if (runtimeGeneration !== this.announcedRuntimeGeneration) {
+        this.announcedRuntimeGeneration = runtimeGeneration;
+        this.runtimeReadyListener?.(runtimeGeneration);
       }
       return;
     }
@@ -847,16 +883,35 @@ export class SidecarServices {
    * Guarded by a cooldown so a failing probe cannot restart-loop.
    */
   async restartIfUnresponsive(): Promise<boolean> {
-    const webuiUrl = this.status.webuiUrl;
-    if (!webuiUrl || this.isStopping || this.startPromise) return false;
+    const { webuiUrl, runtimeGeneration } = this.status;
+    if (!webuiUrl || !runtimeGeneration || this.isStopping || this.startPromise) return false;
     if (Date.now() - this.lastForcedRestartAt < FORCED_RESTART_COOLDOWN_MS) return false;
     const health = await this.healthChecker(webuiUrl);
-    if (health.ok) return false;
+    if (health.ok || this.isStopping || this.status.runtimeGeneration !== runtimeGeneration) return false;
     this.lastForcedRestartAt = Date.now();
     console.warn(`[lastbrowser] Sidekick backend at ${webuiUrl} is not responding (${health.error || 'no response'}); restarting it.`);
     this.stop();
     await this.start();
     return true;
+  }
+
+  /** Freeze launches and confirm that both owned writers are offline before copying the profile. */
+  stopForProfileMigration(): Promise<void> {
+    this.migrationStop ??= this.stopMigrationWriters();
+    return this.migrationStop;
+  }
+
+  private async stopMigrationWriters(): Promise<void> {
+    this.isStopping = true;
+    this.stopHealthLoop();
+    await this.startPromise;
+    const writers = [this.gatewayProcess, this.webuiProcess];
+    const stopped = await Promise.allSettled(writers.map(child => child && closeSidekickWriter(child)));
+    const failure = stopped.find(result => result.status === 'rejected');
+    if (failure) throw failure.reason;
+    this.gatewayProcess = this.webuiProcess = null;
+    this.gatewayStatus = { running: false, pid: null, lastError: null, startedAt: null };
+    this.status = { ...this.status, sidekick: 'stopped', webuiHealth: 'unreachable', runtimeGeneration: null };
   }
 
   stop(): void {
@@ -880,7 +935,7 @@ export class SidecarServices {
       return;
     }
     try {
-      this.webuiProcess.kill();
+      stopWebuiProcess(this.webuiProcess);
     } catch {}
     this.webuiProcess = null;
     this.status = { ...this.status, sidekick: 'stopped', runtimeGeneration: null };

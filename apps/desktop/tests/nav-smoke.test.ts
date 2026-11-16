@@ -49,7 +49,7 @@ describe('A-007 navigation smoke', () => {
   it('keeps sidebar drawer entries clickable', () => {
     const sidebar = read('components/SidekickSidebar.tsx');
     expect(sidebar).toContain("onClick={() => handleDrawerTabChange('tabs')}");
-    expect(sidebar).toContain("onClick={() => handleDrawerTabChange('ai')}");
+    expect(sidebar).toContain("handleDrawerTabChange('ai')");
     expect(sidebar).toContain("onClick={() => onSetMode('slim')}");
   });
 

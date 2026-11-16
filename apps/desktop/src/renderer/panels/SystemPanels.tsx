@@ -1,3 +1,4 @@
+import { NativeTerminalMain } from './NativeTerminalMain.js';
 import { MailPluginSettings } from './MailPluginSettings.js';
 import { PasswordVaultPanel } from '../components/PasswordVaultPanel.js';
 import { StartupPreferencesPanel } from '../startup/StartupPreferencesPanel.js';
@@ -8,6 +9,7 @@ import React, { FormEvent, useCallback, useEffect, useMemo, useRef, useState } f
 import '../appearance.css';
 import { LocalAiSetupPane } from '../components/LocalAiSetupPane.js';
 import { BackendProfileControls } from '../components/BackendProfileControls.js';
+import { ProtectedSpaceSelection } from '../components/ProtectedSpaceSelection.js';
 import {
   AlertTriangle,
   Brain,
@@ -211,7 +213,7 @@ export function normalizeAppstoreRecord(app: AnyRecord): NormalizedAppstoreRecor
   };
 }
 
-export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'local-ai' | 'advanced' | 'teamwork' | 'plugins' | 'system';
+export type SettingsSectionId = 'conversation' | 'appearance' | 'preferences' | 'providers' | 'codex-cli' | 'local-ai' | 'advanced' | 'teamwork' | 'plugins' | 'system';
 
 export type SettingsSectionMeta ={
   title: string;
@@ -265,6 +267,11 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
     description: 'AI providers, per-Space local models and model routing settings.',
     icon: <Brain size={16} />
   },
+  'codex-cli': {
+    title: 'Codex CLI',
+    description: 'Launch the installed Codex CLI in this Space.',
+    icon: <Terminal size={16} />
+  },
   advanced: {
     title: 'Advanced',
     description: 'Automatic model selection and policy for the active chat and Space.',
@@ -287,7 +294,7 @@ export const SETTINGS_SECTIONS: Record<SettingsSectionId, SettingsSectionMeta> =
   }
 };
 
-const SETTINGS_SECTION_COPY: Record<SettingsSectionId, { title: DesktopTranslationKey; description: DesktopTranslationKey }> ={
+const SETTINGS_SECTION_COPY: Record<Exclude<SettingsSectionId, 'codex-cli'>, { title: DesktopTranslationKey; description: DesktopTranslationKey }> ={
   'local-ai': {title:'settings.sections.localAi',description:'settings.sectionDescriptions.localAi'},
   conversation: { title: 'settings.sections.conversation', description: 'settings.sectionDescriptions.conversation' },
   appearance: { title: 'settings.sections.appearance', description: 'settings.sectionDescriptions.appearance' },
@@ -2228,6 +2235,7 @@ function VisionImpairedSettingsCard(): JSX.Element {
 
 export function normalizeSettingsSectionId(value: string): SettingsSectionId | null {
   const normalized = value.trim().toLowerCase();
+  if (normalized === 'codex cli') return 'codex-cli';
   if (normalized === 'extensions') return 'plugins';
   if (normalized === 'advanced' || normalized === 'conversation') return 'preferences';
   if (normalized === 'local-ai') return 'providers';
@@ -2439,15 +2447,17 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
   </SettingsCard>;
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void }): JSX.Element {
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose, onSectionChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void; onSectionChange?: (section: SettingsSectionId) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const ready = isReady(serviceStatus);
   const activeProviderScope = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null,
     ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {}) };
+  const activeProviderScopeRef = useRef(activeProviderScope);
+  activeProviderScopeRef.current = activeProviderScope;
   const isActiveProviderScope = (scope: { browserProfileId: string; workspacePath: string | null; backendProfileName?: string }): boolean =>
-    isProviderSettingsScopeCurrent(scope, activeProviderScope, 0, 0);
+    isProviderSettingsScopeCurrent(scope, activeProviderScopeRef.current, 0, 0);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models', scopeSelection: activeProviderScope }),
     [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
@@ -2509,7 +2519,13 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     });
     return () => { active = false; };
   }, []);
-  const [section, setSection] = useState<SettingsSectionId>('preferences');
+  const [localSection, setLocalSection] = useState<SettingsSectionId>(() => normalizeSettingsSectionId(activeContextItem) ?? 'preferences');
+  const section = onSectionChange ? normalizeSettingsSectionId(activeContextItem) ?? 'preferences' : localSection;
+  const setSection = onSectionChange ?? setLocalSection;
+  useEffect(() => {
+    const target = normalizeSettingsSectionId(activeContextItem);
+    if (!onSectionChange && target) setLocalSection(target);
+  }, [activeContextItem, onSectionChange]);
   const [providerPage, setProviderPage] = useState<'working' | 'beta' | 'local'>('working');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});
@@ -2520,8 +2536,27 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const [ollamaModalLabel, setOllamaModalLabel] = useState('');
   const [ollamaUrl, setOllamaUrl] = useState('');
   const [ollamaKey, setOllamaKey] = useState('');
+  const [ollamaHasSavedKey, setOllamaHasSavedKey] = useState(false);
+  const ollamaCloudKeyMissing = ollamaModalProviderId === 'ollama-cloud' && !ollamaKey.trim() && !ollamaHasSavedKey;
   const [ollamaTestResult, setOllamaTestResult] = useState('');
-  const [ollamaScope, setOllamaScope] = useState<typeof activeProviderScope | null>(null);
+  const [ollamaTesting, setOllamaTesting] = useState(false);
+  const ollamaScopeRef = useRef<typeof activeProviderScope | null>(null);
+
+  function closeOllamaSettings(): void {
+    ollamaScopeRef.current = null;
+    setOllamaModalProviderId(null);
+    setOllamaKey('');
+    setOllamaTesting(false);
+  }
+
+  const isCurrentOllamaDialog = (scope: typeof activeProviderScope): boolean =>
+    ollamaScopeRef.current === scope && isActiveProviderScope(scope);
+
+  useEffect(() => {
+    const scope = ollamaScopeRef.current;
+    if (scope && !isActiveProviderScope(scope)) closeOllamaSettings();
+  }, [providerCatalogKey]);
+  useEffect(() => () => { ollamaScopeRef.current = null; }, []);
   const [openRouterModalOpen, setOpenRouterModalOpen] = useState(false);
   const [openRouterScope, setOpenRouterScope] = useState<typeof activeProviderScope | null>(null);
   const [openRouterConfigProvider, setOpenRouterConfigProvider] = useState<'openrouter' | 'alibaba'>('openrouter');
@@ -2569,7 +2604,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       event.preventDefault();
       event.stopPropagation();
       if (action === 'close-nested') {
-        if (ollamaModalProviderId) setOllamaModalProviderId(null);
+        if (ollamaModalProviderId) closeOllamaSettings();
         if (openRouterModalOpen) setOpenRouterModalOpen(false);
         if (xiaomiModalOpen) {
           xiaomiGenerationRef.current += 1;
@@ -2888,11 +2923,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       fallbackState.refresh()
     ]);
   }, [settingsState.refresh, modelsState.refresh, authState.refresh, pluginsState.refresh, fallbackState.refresh]);
-
-  useEffect(() => {
-    const match = normalizeSettingsSectionId(activeContextItem);
-    if (match) setSection(match);
-  }, [activeContextItem]);
 
   useEffect(() => {
     if (settingsState.loading) return;
@@ -3604,6 +3634,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   }
 
   const sectionList = visibleSettingsSections();
+  const sectionCopy = (key: SettingsSectionId) => key === 'codex-cli'
+    ? { title: 'Codex CLI', description: shellText(locale, 'Starte die installierte Codex CLI im aktuellen Space.', SETTINGS_SECTIONS[key].description) }
+    : { title: t(SETTINGS_SECTION_COPY[key].title), description: t(SETTINGS_SECTION_COPY[key].description) };
   const updateAvailable = updateState === 'available';
 
   return (
@@ -3614,21 +3647,21 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         kicker={t('settings.system')}
         detail={t('settings.detail')}
         loading={settingsState.loading}
-        ready={ready}
-        onRefresh={refreshSettingsData}
+        ready={section === 'codex-cli' ? undefined : ready}
+        onRefresh={section === 'codex-cli' ? undefined : refreshSettingsData}
         onClose={onClose}
         closeLabel={t('browser.chrome.close')}
       />
-      <ErrorLine error={settingsState.error || authState.error || pluginsState.error} />
+      {section !== 'codex-cli' && <ErrorLine error={settingsState.error || authState.error || pluginsState.error} />}
 
       <div className="settings-native-grid">
         <nav className="settings-section-nav native-work-card">
           {sectionList.map(([key, meta]) => (
-            <button key={key} type="button" className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
+            <button key={key} type="button" aria-current={key === section ? 'page' : undefined} className={key === section ? 'active settings-section-button' : 'settings-section-button'} onClick={() => setSection(key)}>
               <span className="settings-section-button-icon">{meta.icon}</span>
               <span className="settings-section-button-text">
-                  <strong>{t(SETTINGS_SECTION_COPY[key].title)}</strong>
-                  <small>{t(SETTINGS_SECTION_COPY[key].description)}</small>
+                  <strong>{sectionCopy(key).title}</strong>
+                  <small>{sectionCopy(key).description}</small>
               </span>
             </button>
           ))}
@@ -3637,10 +3670,10 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         <main className={`native-work-card settings-editor${section === 'providers' ? ' settings-provider-editor' : ' settings-panel-scroll'}`}>
           <header className="settings-editor-head">
             <div>
-              <strong>{t(SETTINGS_SECTION_COPY[section].title)}</strong>
-              <span>{t(SETTINGS_SECTION_COPY[section].description)}</span>
+              <strong>{sectionCopy(section).title}</strong>
+              <span>{sectionCopy(section).description}</span>
             </div>
-            <div className="settings-editor-actions">
+            {section !== 'codex-cli' && <div className="settings-editor-actions">
               <span className={`native-rest-pill ${dirty ? '' : 'ready'}`}>
                 <span className={`status-dot ${dirty ? '' : 'ready'}`} />
                 {dirty ? t('settings.status.unsaved') : t('settings.status.saved')}
@@ -3653,10 +3686,11 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 {saving ? <Loader2 size={15} className="spin" /> : <Save size={15} />}
                 <span>{t('settings.save')}</span>
               </button>
-            </div>
+            </div>}
           </header>
 
           <div className="settings-panel-stack">
+            {section === 'codex-cli' && <NativeTerminalMain codexOnly serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} />}
             {section === 'advanced' && <AdvancedModelPolicySettings sessionId={activeSessionId} workspacePath={activeSpacePath}
               browserProfileId={activeProfileId} backendProfileName={activeBackendProfileName ?? null} ready={ready} locale={locale} />}
             {section === 'preferences' && (
@@ -4342,6 +4376,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   activeBrowserProfileId={activeProfileId}
                   activeSpacePath={activeSpacePath}
                 />
+                {ready && <ProtectedSpaceSelection german={locale === 'de'} />}
 
                 <SettingsCard
                   title={t('settings.panels.preferences.searchEngine')}
@@ -4776,14 +4811,23 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                   const configuredProvider = providerConfigs[option.id];
                                   const providerConfig: AnyRecord = isRecord(configuredProvider) ? configuredProvider : {};
                                   const currentProviderSettings = activeProvider === option.id ? settings : providerConfig;
-                                  setOllamaScope(activeProviderScope);
+                                  const scopeSelection = { ...activeProviderScope };
+                                  ollamaScopeRef.current = scopeSelection;
                                   setOllamaModalProviderId(option.id);
                                   setOllamaModalLabel(option.label || option.id);
                                   setOllamaUrl(settingsText(currentProviderSettings.base_url, defaultUrl));
                                   setOllamaKey('');
+                                  setOllamaHasSavedKey(false);
                                   setOllamaTestResult('');
+                                  if (option.id === 'ollama-cloud') {
+                                    void window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection }).then(response => {
+                                      if (!isCurrentOllamaDialog(scopeSelection)) return;
+                                      const saved = arrayFrom(response, ['providers']).find(row => row.id === 'ollama-cloud');
+                                      setOllamaHasSavedKey(saved?.has_key === true);
+                                    }).catch(() => {});
+                                  }
                                 }}
-                                disabled={!ready || saving}
+                                disabled={!ready || saving || !activeBackendProfileName}
                               >
                                 <Settings size={14} />
                                 <span>{t('settings.panels.providers.configure')}</span>
@@ -5107,27 +5151,35 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
                 {/* Ollama Config Modal */}
                 {ollamaModalProviderId && (
-                  <div className="settings-modal-overlay" onClick={() => setOllamaModalProviderId(null)}>
-                    <div className="settings-modal-box" onClick={(e) => e.stopPropagation()}>
-                      <h3 style={{ margin: '0 0 12px', fontSize: 15 }}>{t('settings.panels.providers.configure')} {ollamaModalLabel}</h3>
-                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.baseUrl')}</label>
+                  <div className="settings-modal-overlay" onClick={closeOllamaSettings}>
+                    <div className="settings-modal-box" role="dialog" aria-labelledby="ollama-settings-title" onClick={(e) => e.stopPropagation()}>
+                      <h3 id="ollama-settings-title" style={{ margin: '0 0 12px', fontSize: 15 }}>{t('settings.panels.providers.configure')} {ollamaModalLabel}</h3>
+                      {ollamaModalProviderId === 'ollama' && <p>
+                        {shellText(locale, 'Starte Ollama auf diesem Rechner und installiere ein lokales Modell. „Verbindung testen“ fragt den Server direkt nach seinen Modellen.',
+                          'Start Ollama on this computer and install a local model. Test connection asks the server directly for its model list.')}
+                      </p>}
+                      <label htmlFor="ollama-settings-url" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.baseUrl')}</label>
                       <input
+                        id="ollama-settings-url"
                         type="url"
                         value={ollamaUrl}
-                        onChange={(e) => setOllamaUrl(e.target.value)}
+                        disabled={ollamaTesting || saving}
+                        onChange={(e) => { setOllamaUrl(e.target.value); setOllamaTestResult(''); }}
                         placeholder={ollamaModalProviderId === 'ollama-cloud' ? 'https://ollama.com/v1' : 'http://localhost:11434'}
                         style={{ width: '100%', marginBottom: 8 }}
                       />
-                      <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.apiKey')} {ollamaModalProviderId === 'ollama-cloud' ? t('settings.panels.providers.apiKeyRequired') : t('settings.panels.providers.apiKeyOptional')}</label>
+                      <label htmlFor="ollama-settings-key" style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.apiKey')} {ollamaModalProviderId === 'ollama-cloud' ? t('settings.panels.providers.apiKeyRequired') : t('settings.panels.providers.apiKeyOptional')}</label>
                       <input
+                        id="ollama-settings-key"
                         type="password"
                         value={ollamaKey}
-                        onChange={(e) => setOllamaKey(e.target.value)}
+                        disabled={ollamaTesting || saving}
+                        onChange={(e) => { setOllamaKey(e.target.value); setOllamaTestResult(''); }}
                         placeholder={ollamaModalProviderId === 'ollama-cloud' ? t('settings.panels.providers.cloudKeyPlaceholder') : t('settings.panels.providers.localKeyPlaceholder')}
                         style={{ width: '100%', marginBottom: 12 }}
                       />
                       {ollamaTestResult && (
-                      <div style={{ fontSize: 12, marginBottom: 8, color: ollamaTestResult.startsWith('✓') ? 'var(--accent-primary)' : '#ff6b6b' }}>
+                      <div role="status" style={{ fontSize: 12, marginBottom: 8, color: ollamaTestResult.startsWith('✗') ? '#ff6b6b' : 'var(--text-secondary)' }}>
                           {ollamaTestResult}
                         </div>
                       )}
@@ -5135,12 +5187,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                         <button
                           type="button"
                           className="secondary-action compact"
+                          disabled={!ollamaUrl.trim() || ollamaTesting || saving}
                           onClick={async () => {
+                            const scopeSelection = ollamaScopeRef.current;
+                            if (!scopeSelection || !isCurrentOllamaDialog(scopeSelection)) return;
+                            setOllamaTesting(true);
                             setOllamaTestResult(t('settings.panels.providers.testing'));
                             try {
                               const isCloud = ollamaModalProviderId === 'ollama-cloud';
-                              const scopeSelection = ollamaScope ?? activeProviderScope;
-                              if (!isActiveProviderScope(scopeSelection)) { setOllamaTestResult('Provider scope changed. Reopen settings for the selected space.'); return; }
                               const result = await window.lastbrowser.sidekick.requestWebui({
                                 method: 'POST',
                                 path: '/api/providers/test',
@@ -5151,33 +5205,42 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                   api_key: ollamaKey.trim()
                                 }
                               });
-                              if (!isProviderSettingsScopeCurrent(scopeSelection, activeProviderScope, 0, 0)) return;
+                              if (!isCurrentOllamaDialog(scopeSelection)) return;
                               if (result.ok) {
-                                setOllamaTestResult(`✓ ${t('settings.panels.providers.connectionSuccess')} — ${isCloud ? 'Ollama Cloud' : 'Ollama'}`);
+                                const count = Number(result.model_count);
+                                const models = !isCloud && count === 0
+                                  ? shellText(locale, 'Keine lokalen Modelle gefunden. Installiere ein Modell in Ollama und teste erneut.',
+                                    'No local models found. Install a model in Ollama and test again.')
+                                  : '';
+                                setOllamaTestResult(`✓ ${t('settings.panels.providers.connectionSuccess')} — ${isCloud ? 'Ollama Cloud' : 'Ollama'}${models ? ` · ${models}` : ''}`);
                               } else {
                                 setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')}: ${String(result.error || t('common.error'))}`);
                               }
                             } catch (err) {
-                              setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')}: ${err instanceof Error ? err.message : String(err)}`);
+                              if (isCurrentOllamaDialog(scopeSelection)) {
+                                setOllamaTestResult(`✗ ${t('settings.panels.providers.connectionError')}: ${err instanceof Error ? err.message : String(err)}`);
+                              }
+                            } finally {
+                              if (isCurrentOllamaDialog(scopeSelection)) setOllamaTesting(false);
                             }
                           }}
                         >
                           {t('settings.panels.providers.testConnection')}
                         </button>
-                        <button type="button" className="secondary-action compact" onClick={() => setOllamaModalProviderId(null)}>
+                        <button type="button" className="secondary-action compact" onClick={closeOllamaSettings}>
                           {t('common.cancel')}
                         </button>
                         <button
                           type="button"
                           className="primary-action compact"
-                          disabled={!ollamaUrl.trim() || saving}
+                          disabled={!ollamaUrl.trim() || ollamaCloudKeyMissing || ollamaTesting || saving}
                           onClick={async () => {
+                            const scopeSelection = ollamaScopeRef.current;
+                            if (!scopeSelection || !isCurrentOllamaDialog(scopeSelection) || ollamaCloudKeyMissing) return;
                             setSaving(true);
                             try {
-                              const scopeSelection = ollamaScope ?? activeProviderScope;
-                              if (!isActiveProviderScope(scopeSelection)) throw new Error('Provider scope changed. Reopen settings for the selected space.');
                               if (ollamaKey.trim()) {
-                                await window.lastbrowser.sidekick.requestWebui({
+                                const result = await window.lastbrowser.sidekick.requestWebui({
                                   method: 'POST',
                                   path: '/api/providers',
                                   scopeSelection,
@@ -5186,22 +5249,29 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                     api_key: ollamaKey.trim()
                                   }
                                 });
+                                if (result.ok !== true) throw new Error(String(result.error || t('common.error')));
+                                if (!isCurrentOllamaDialog(scopeSelection)) return;
                               }
-                              if (!isProviderSettingsScopeCurrent(scopeSelection, activeProviderScope, 0, 0)) throw new Error('Provider scope changed. Reopen settings for the selected space.');
-                              await window.lastbrowser.sidekick.saveSettings({
+                              const result = await window.lastbrowser.sidekick.saveSettings({
+                                scopeSelection,
                                 settings: {
-                                  ...cleanSettingsPayload(settings),
                                   provider: ollamaModalProviderId,
                                   base_url: ollamaUrl.trim()
                                 }
                               });
+                              if (result.error || result.ok === false) throw new Error(String(result.error || t('common.error')));
                               clearProviderChatEvidence(ollamaModalProviderId, window.localStorage);
+                              if (!isCurrentOllamaDialog(scopeSelection)) return;
                               await settingsState.refresh();
+                              if (!isCurrentOllamaDialog(scopeSelection)) return;
                               await modelsState.refresh();
-                              showToast(`${ollamaModalLabel} configured. URL: ${ollamaUrl.trim()}`);
-                              setOllamaModalProviderId(null);
+                              if (!isCurrentOllamaDialog(scopeSelection)) return;
+                              showToast(shellText(locale, `${ollamaModalLabel} aktiviert.`, `${ollamaModalLabel} activated.`));
+                              closeOllamaSettings();
                             } catch (error) {
-                              showToast(`Could not configure Ollama: ${error instanceof Error ? error.message : String(error)}`);
+                              if (isCurrentOllamaDialog(scopeSelection)) {
+                                showToast(`${t('common.error')}: ${error instanceof Error ? error.message : String(error)}`);
+                              }
                             } finally {
                               setSaving(false);
                             }

@@ -52,10 +52,7 @@ export function NativeMailMain({ workspace, ready, activeContextItem = 'Inbox' }
   }, [workspace, account, folder, enabled]);
   function settings() {
     const store = usePanelStore.getState();
-    store.setActivePanel('settings');
-    // Panel changes reset the context item to the first settings section.
-    // Apply Plugins after that reset so Mail settings opens the account card.
-    setTimeout(() => store.setActiveContextItem('plugins'), 0);
+    store.setActivePanel('settings', 'plugins');
   }
   async function read(item: RecordData) {
     const key = tokenKey;

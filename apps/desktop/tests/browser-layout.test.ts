@@ -279,7 +279,7 @@ describe('browser shell layout', () => {
     expect(contextSource).toContain('function panelForContextItem');
     expect(contextSource).toContain('function handleContextItem(item: string): void');
     expect(contextSource).toContain('onClick={() => handleContextItem(item)}');
-    expect(contextSource).toContain('aria-pressed={item === activeContextItem}');
+    expect(contextSource).toContain('aria-pressed={normalizeContext(item) === selectedContext}');
     expect(contextSource).not.toContain("className={index === 0 ? 'active' : ''}");
   });
 

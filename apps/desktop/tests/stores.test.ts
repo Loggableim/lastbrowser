@@ -56,6 +56,17 @@ describe('Zustand stores', () => {
   });
 
   describe('usePanelStore', () => {
+    it('keeps a settings deep link when opening the panel', () => {
+      const store = usePanelStore.getState();
+      store.setActivePanel('browser');
+      store.setActivePanel('settings', 'codex-cli');
+      expect(usePanelStore.getState()).toMatchObject({ activePanel: 'settings', activeContextItem: 'codex-cli' });
+      store.setActivePanel('settings', 'providers');
+      expect(usePanelStore.getState().activeContextItem).toBe('providers');
+      store.setActivePanel('browser');
+      store.setActivePanel('settings');
+      expect(usePanelStore.getState().activeContextItem).toBe('Preferences');
+    });
     it('updates activePanel and sidebar collapse states', () => {
       usePanelStore.getState().setActivePanel('settings');
       expect(usePanelStore.getState().activePanel).toBe('settings');

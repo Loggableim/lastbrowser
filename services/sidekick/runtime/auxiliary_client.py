@@ -30,6 +30,8 @@ a model (auxiliary.<task>.provider + auxiliary.<task>.model).
 Per-task overrides are configured in config.yaml under the ``auxiliary:`` section
 (e.g. ``auxiliary.vision.provider``, ``auxiliary.compression.model``).
 Default "auto" follows the chains above.
+When the active chat has a loopback Ollama or compatible endpoint, automatic
+text auxiliaries use that same endpoint without crossing to cloud providers.
 
 Payment / credit exhaustion fallback:
   When a resolved provider returns HTTP 402 or a credit-related error,
@@ -1735,6 +1737,12 @@ def _normalize_main_runtime(main_runtime: Optional[Dict[str, Any]]) -> Dict[str,
     return normalized
 
 
+def _is_loopback_aux_endpoint(endpoint: str) -> bool:
+    from runtime.provider_deployment import provider_deployment
+
+    return provider_deployment("custom", {"model": {"provider": "custom", "base_url": endpoint}}) == "local"
+
+
 def _get_provider_chain() -> List[tuple]:
     """Return the ordered provider detection chain.
 
@@ -2012,26 +2020,19 @@ def _evict_cached_clients(provider: str) -> None:
             key for key in _client_cache
             if _normalize_aux_provider(str(key[0])) == normalized
         ]
-        for key in stale_keys:
-            client = _client_cache.get(key, (None, None, None))[0]
-            if client is not None:
-                # Cache keys are (provider, async_mode, ...). AsyncOpenAI's
-                # close() returns an awaitable and must not be called from this
-                # synchronous helper: awaiting it could block or require the
-                # caller's event loop, while dropping the coroutine leaks a
-                # RuntimeWarning. Only async transports use the force-close
-                # path; sync clients must run their normal transport close.
-                async_mode = len(key) > 1 and bool(key[1])
-                if async_mode:
-                    _force_close_async_httpx(client)
-                else:
-                    try:
-                        close_fn = getattr(client, "close", None)
-                        if callable(close_fn):
-                            close_fn()
-                    except Exception:
-                        pass
-            _client_cache.pop(key, None)
+        retired = [(key, _client_cache.pop(key)) for key in stale_keys]
+    for key, (client, _, owner_loop) in retired:
+        if client is None:
+            continue
+        if key[1]:
+            _close_evicted_async_client(client, owner_loop)
+        else:
+            try:
+                close = getattr(client, "close", None)
+                if callable(close):
+                    close()
+            except Exception:
+                pass
 
 
 def _evict_cached_client_instance(target: Any) -> bool:
@@ -2710,9 +2711,10 @@ def resolve_provider_client(
     if provider == "custom":
         if explicit_base_url:
             custom_base = _to_openai_base_url(explicit_base_url).strip()
+            loopback = _is_loopback_aux_endpoint(custom_base)
             custom_key = (
                 (explicit_api_key or "").strip()
-                or os.getenv("OPENAI_API_KEY", "").strip()
+                or ("" if loopback else os.getenv("OPENAI_API_KEY", "").strip())
                 or "no-key-required"  # local servers don't need auth
             )
             if not custom_base:
@@ -2729,6 +2731,24 @@ def resolve_provider_client(
             _clean_base, _dq = _extract_url_query_params(custom_base)
             if _dq:
                 extra["default_query"] = _dq
+            if loopback and api_mode in {None, "", "chat_completions"}:
+                import httpx
+
+                if async_mode:
+                    from openai import AsyncOpenAI
+
+                    return AsyncOpenAI(
+                        api_key=custom_key,
+                        base_url=_clean_base,
+                        http_client=httpx.AsyncClient(follow_redirects=False, trust_env=False),
+                        **extra,
+                    ), final_model
+                return OpenAI(
+                    api_key=custom_key,
+                    base_url=_clean_base,
+                    http_client=httpx.Client(follow_redirects=False, trust_env=False),
+                    **extra,
+                ), final_model
             if base_url_host_matches(custom_base, "api.kimi.com"):
                 extra["default_headers"] = {"User-Agent": "claude-code/0.1.0"}
             elif base_url_host_matches(custom_base, "api.githubcopilot.com"):
@@ -3091,7 +3111,7 @@ def get_text_auxiliary_client(
     Callers may override the returned model via config.yaml
     (e.g. auxiliary.compression.model, auxiliary.web_extract.model).
     """
-    provider, model, base_url, api_key, api_mode = _resolve_task_provider_model(task or None)
+    provider, model, base_url, api_key, api_mode = _resolve_task_provider_model(task or None, main_runtime=main_runtime)
     return resolve_provider_client(
         provider,
         model=model,
@@ -3109,7 +3129,7 @@ def get_async_text_auxiliary_client(task: str = "", *, main_runtime: Optional[Di
     (AsyncCodexAuxiliaryClient, model) which wraps the Responses API.
     Returns (None, None) when no provider is available.
     """
-    provider, model, base_url, api_key, api_mode = _resolve_task_provider_model(task or None)
+    provider, model, base_url, api_key, api_mode = _resolve_task_provider_model(task or None, main_runtime=main_runtime)
     return resolve_provider_client(
         provider,
         model=model,
@@ -3454,12 +3474,34 @@ def _force_close_async_httpx(client: Any) -> None:
     connections will be dropped by the OS when the process exits.
     """
     try:
-        from httpx._client import ClientState
         inner = getattr(client, "_client", None)
         if inner is not None and not getattr(inner, "is_closed", True):
-            inner._state = ClientState.CLOSED
+            # An SDK may use a different httpx implementation. Use the enum
+            # actually owned by the transport so its is_closed check agrees.
+            closed_state = getattr(type(getattr(inner, "_state", None)), "CLOSED", None)
+            if closed_state is not None:
+                inner._state = closed_state
     except Exception:
         pass
+
+
+def _close_evicted_async_client(client: Any, owner_loop: Any) -> None:
+    close = getattr(client, "close", None)
+    if owner_loop is None or not owner_loop.is_running() or not inspect.iscoroutinefunction(close):
+        _force_close_async_httpx(client)
+        return
+
+    async def close_on_owner() -> None:
+        try:
+            await close()
+        except Exception:
+            _force_close_async_httpx(client)
+
+    try:
+        owner_loop.call_soon_threadsafe(lambda: owner_loop.create_task(close_on_owner()))
+    except RuntimeError:
+        # The owner may have stopped between the readiness check and scheduling.
+        _force_close_async_httpx(client)
 
 
 def shutdown_cached_clients() -> None:
@@ -3635,6 +3677,8 @@ def _resolve_task_provider_model(
     model: str = None,
     base_url: str = None,
     api_key: str = None,
+    *,
+    main_runtime: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, Optional[str], Optional[str], Optional[str], Optional[str]]:
     """Determine provider + model for a call.
 
@@ -3667,10 +3711,10 @@ def _resolve_task_provider_model(
 
     if base_url:
         return "custom", resolved_model, base_url, api_key, resolved_api_mode
-    if provider:
+    if provider and provider != "auto":
         return provider, resolved_model, base_url, api_key, resolved_api_mode
 
-    if task:
+    if task and not provider:
         # Config.yaml is the primary source for per-task overrides.
         if cfg_base_url and cfg_api_key:
             # Both base_url and api_key explicitly set → custom endpoint.
@@ -3683,7 +3727,16 @@ def _resolve_task_provider_model(
         if cfg_provider and cfg_provider != "auto":
             return cfg_provider, resolved_model, None, None, resolved_api_mode
 
-        return "auto", resolved_model, None, None, resolved_api_mode
+    runtime = _normalize_main_runtime(main_runtime)
+    runtime_mode = runtime.get("api_mode", "")
+    runtime_endpoint = runtime.get("base_url", "")
+    if (
+        runtime.get("provider") in {"custom", "ollama"}
+        and runtime.get("model")
+        and runtime_mode in {"", "chat_completions"}
+        and _is_loopback_aux_endpoint(runtime_endpoint)
+    ):
+        return "custom", model or runtime["model"], runtime_endpoint, runtime.get("api_key") or "no-key-required", "chat_completions"
 
     return "auto", resolved_model, None, None, resolved_api_mode
 
@@ -4038,7 +4091,7 @@ def call_llm(
         RuntimeError: If no provider is configured.
     """
     resolved_provider, resolved_model, resolved_base_url, resolved_api_key, resolved_api_mode = _resolve_task_provider_model(
-        task, provider, model, base_url, api_key)
+        task, provider, model, base_url, api_key, main_runtime=main_runtime)
     required_endpoint = str(required_base_url or "").strip().rstrip("/")
     if required_endpoint:
         if not provider or resolved_provider != provider:

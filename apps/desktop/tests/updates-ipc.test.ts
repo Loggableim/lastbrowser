@@ -41,6 +41,9 @@ vi.mock('electron', () => ({
 }));
 
 vi.mock('electron-updater', () => ({ default: { autoUpdater: updater } }));
+vi.mock('../src/main/windows-nsis-updater.js', () => ({
+  WindowsNsisUpdater: class { constructor() { return updater; } },
+}));
 vi.mock('node:fs', () => ({
   mkdirSync: vi.fn(),
   readFileSync: vi.fn((filePath: string) => {

@@ -10,6 +10,14 @@ const UNSUPPORTED = new Set(['antigravity', 'gemini', 'copilot-acp', 'google-gem
 export function isDirectQuickchatProvider(provider: string): boolean {
   return !!provider.trim() && !UNSUPPORTED.has(provider.trim().toLowerCase());
 }
+
+export function quickchatEligibleGroups(selection: ScopedModelSelection) {
+  return mapScopedModelPickerOptions(selection)
+    .filter(group => group.configured && isDirectQuickchatProvider(group.providerId))
+    .map(group => ({ ...group, models: group.models.filter(model => model.supportsIndependent
+      && (canSelectNativeModel(group.providerId, model.nativeAvailability)
+        || (group.deployment === 'local' && model.quickchatAvailable === true))) }));
+}
 export type QuickchatChoice = { provider: string; model: string; basis: 'favorite' | 'measured' | 'estimated' };
 type Candidate = { provider: string; model: string; label: string; deployment?: string };
 const normalizedName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -44,9 +52,8 @@ function initialRank(model: string): number {
 
 export function chooseQuickchatModel(selection: ScopedModelSelection, scope: QuickchatPreferenceScope,
   favorite: QuickchatFavorite | null, storage: Storage, showBetas: boolean): QuickchatChoice | null {
-  const candidates = mapScopedModelPickerOptions(selection).flatMap(group => group.configured && isDirectQuickchatProvider(group.providerId)
-    ? group.models.filter(model => model.supportsIndependent && canSelectNativeModel(group.providerId, model.nativeAvailability))
-      .map(model => ({ provider: group.providerId, model: parseProviderModelId(model.id, group.providerId).model, label: model.label, deployment: group.deployment })) : [])
+  const candidates = quickchatEligibleGroups(selection).flatMap(group => group.models
+    .map(model => ({ provider: group.providerId, model: parseProviderModelId(model.id, group.providerId).model, label: model.label, deployment: group.deployment })))
     .filter(choice => isModelActive(storage, scope, choice.provider, choice.model)
       && (showBetas || choice.deployment === 'local'
         || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));

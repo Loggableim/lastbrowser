@@ -1,8 +1,8 @@
-# Bundled-runtime signing change
+# Historical bundled-runtime signing proposal
 
-The user authorized this change on 2026-10-03. It is implemented in the release workflow; successful Azure signing still requires verification in CI.
+This proposal was authorized on 2026-10-03 for the old vendor layout. The current [Windows release workflow](release.md) signs the package through electron-builder and verifies any staged local engine against its pinned upstream bytes. The earlier vendor paths below are kept as historical context.
 
-The current release workflow already invokes `Azure/trusted-signing-action@v0.5.1` with Azure tenant/client credentials, signing account, and certificate profile to sign the installers. Add a second invocation of that **same action/version and same existing secrets**, immediately after the desktop build and before `electron-builder` packages the installers.
+The workflow at the time invoked `Azure/trusted-signing-action@v0.5.1` with Azure tenant/client credentials, signing account, and certificate profile to sign the installers. The proposal added a second invocation of the same action before packaging.
 
 The additional signing targets are exactly:
 

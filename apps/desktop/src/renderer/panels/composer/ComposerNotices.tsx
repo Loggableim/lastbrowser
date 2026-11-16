@@ -147,7 +147,7 @@ export function ComposerNotices(props: ComposerNoticesProps): React.JSX.Element 
   if (!notice) return null;
 
   return (
-    <div className="composer-model-notice" role={notice.role}>
+    <div className="composer-model-notice" role={notice.role} data-catalog-state={notice.kind}>
       <span>{notice.message}</span>
       {notice.showBetaToggle && <ProviderBetaCatalogToggle />}
       {notice.showRetry && props.onRetryModelCatalog && (

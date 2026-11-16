@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, describe, expect, it, vi, beforeEach } from 'vitest';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { desktopLocaleCatalogs, desktopLocaleIds } from '../src/renderer/i18n.js';
@@ -92,7 +92,8 @@ describe('chat layout overflow guards (goal.md Paket 4)', () => {
 
 describe('Vision-Impaired 2.0 §2: config model & persistence', () => {
   // Lazy import: the store module touches window/document at load time.
-  vi.mock('../src/renderer/shell-state.js', () => ({
+  vi.mock('../src/renderer/shell-state.js', async (importOriginal) => ({
+    ...await importOriginal<typeof import('../src/renderer/shell-state.js')>(),
     lastbrowserPanels: [{ id: 'browser', label: 'Browser' }],
     loadInitialPanel: () => 'browser',
     saveActivePanel: () => undefined,
@@ -751,19 +752,20 @@ describe('Vision-Impaired 2.0: store integration (usePanelStore)', () => {
   beforeEach(() => {
     vi.resetModules();
   });
+  afterEach(() => vi.unstubAllGlobals());
 
   it('exposes setVisionImpaired which patches, persists and syncs the DOM', async () => {
     const storage = new Map<string, string>();
-    (globalThis as Record<string, unknown>).window = {
+    vi.stubGlobal('window', {
       localStorage: {
         getItem: (key: string) => (storage.has(key) ? storage.get(key) : null),
         setItem: (key: string, value: string) => void storage.set(key, value),
         removeItem: (key: string) => void storage.delete(key)
       }
-    };
+    });
     const dataset: Record<string, string> = {};
     const styleProps: Record<string, string> = {};
-    (globalThis as Record<string, unknown>).document = {
+    vi.stubGlobal('document', {
       documentElement: {
         dataset,
         style: {
@@ -771,7 +773,7 @@ describe('Vision-Impaired 2.0: store integration (usePanelStore)', () => {
           removeProperty: (name: string) => delete styleProps[name]
         }
       }
-    };
+    });
 
     const { usePanelStore } = await import('../src/renderer/stores/usePanelStore.js');
     const { visionImpairedStorageKey } = await import('../src/renderer/stores/a11y-config.js');
@@ -787,8 +789,6 @@ describe('Vision-Impaired 2.0: store integration (usePanelStore)', () => {
     expect(styleProps['--lb-min-target-size']).toBe('64px');
     expect(JSON.parse(storage.get(visionImpairedStorageKey) || '{}').enabled).toBe(true);
 
-    delete (globalThis as Record<string, unknown>).window;
-    delete (globalThis as Record<string, unknown>).document;
   });
 });
 

@@ -8,6 +8,7 @@ import springTiming from '../../../../../docs/design/startup-animation/timing/sp
 import unlockTiming from '../../../../../docs/design/startup-animation/timing/unlock-gesture.json';
 import type { StartupPhaseId } from './startup-screen-state.js';
 import { readStartupPreferences } from './startup-preferences.js';
+import { shellText } from '../i18n/shell-text.js';
 
 export const startupAnimationLocales = Object.keys(I18N_TEXTS);
 
@@ -85,6 +86,21 @@ function readActivePersona(): ReturnType<typeof startupPersona> {
 }
 
 type Frame = { currentTimeMs: number; durationMs: number; fps: number; driftMs: number; nextCue: string };
+type EventFeed = { clip: string; time: string; cue: string; fps: string; drift: string; last: string };
+
+export function StartupEventFeed({ locale, feed }: { locale: string; feed: EventFeed }) {
+  return (
+    <div role="status" aria-live="polite" style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 2, minWidth: 240, padding: '8px 10px', borderRadius: 8, background: 'rgba(6,16,26,.82)', color: '#d7e7f7', font: '12px/1.45 ui-monospace, Consolas, monospace' }}>
+      <div>{shellText(locale, 'Clip / Thema', 'Clip / Theme')}: {feed.clip}</div>
+      <div>{shellText(locale, 'Audiozeit', 'Audio time')}: {feed.time}</div>
+      <div>{shellText(locale, 'Nächster Cue', 'Next cue')}: {feed.cue}</div>
+      <div>FPS: {feed.fps}</div>
+      <div>A/V-Drift: {feed.drift}</div>
+      <div>{shellText(locale, 'Letztes Ereignis', 'Last event')}: {feed.last}</div>
+    </div>
+  );
+}
+
 type AnimationApi = {
   play: (scene?: string) => Promise<void> | void;
   setPhase: (phase: string) => void;
@@ -132,7 +148,7 @@ export function StartupAnimationLayer({
   const onFinishedRef = useRef(onFinished);
   phaseRef.current = phase;
   onFinishedRef.current = onFinished;
-  const [feed, setFeed] = useState<{ clip: string; time: string; cue: string; fps: string; drift: string; last: string } | null>(null);
+  const [feed, setFeed] = useState<EventFeed | null>(null);
   const showFeed = readStartupPreferences().eventFeed;
   const clipId = clipIdFromSound(soundId || readStartupPreferences().soundId, afterUnlock);
 
@@ -226,16 +242,7 @@ export function StartupAnimationLayer({
   return (
     <div className={`startup-animation-layer${locked ? ' is-external-auth' : ''}`} style={{ position: 'fixed', inset: 0, zIndex: 2100 }}>
       <div ref={host} style={{ position: 'absolute', inset: 0 }} />
-      {showFeed && feed && (
-        <div role="status" aria-live="polite" style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 2, minWidth: 240, padding: '8px 10px', borderRadius: 8, background: 'rgba(6,16,26,.82)', color: '#d7e7f7', font: '12px/1.45 ui-monospace, Consolas, monospace' }}>
-          <div>Clip / Theme: {feed.clip}</div>
-          <div>Audiozeit: {feed.time}</div>
-          <div>Nächster Cue: {feed.cue}</div>
-          <div>FPS: {feed.fps}</div>
-          <div>A/V-Drift: {feed.drift}</div>
-          <div>Letztes Ereignis: {feed.last}</div>
-        </div>
-      )}
+      {showFeed && feed && <StartupEventFeed locale={locale} feed={feed} />}
     </div>
   );
 }

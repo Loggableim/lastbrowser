@@ -118,6 +118,7 @@ class QuickAnswerBot:
         self.parts = []
         self.reasoning_effort = None
         self.local_capture = None
+        self.ollama_capture = None
         self.request_started = self.first_visible_token = None
         from runtime.think_scrubber import StreamingThinkScrubber
         self.scrubber = StreamingThinkScrubber()
@@ -166,8 +167,18 @@ class QuickAnswerBot:
             if self.provider in {"gemini", "antigravity", "copilot-acp", "google-gemini-cli"}:
                 raise ValueError("This provider has no direct Quickchat adapter yet. Use a standard chat.")
             from openai import OpenAI
-            client = create_pooled_sdk(OpenAI, kwargs, context=self.bridge.context,
-                provider=self.provider, api_mode=self.api_mode)
+            if self.ollama_capture is None:
+                client = create_pooled_sdk(OpenAI, kwargs, context=self.bridge.context,
+                    provider=self.provider, api_mode=self.api_mode)
+            else:
+                import httpx
+
+                http_client = httpx.Client(timeout=60, follow_redirects=False, trust_env=False)
+                try:
+                    client = OpenAI(**kwargs, http_client=http_client)
+                except BaseException:
+                    http_client.close()
+                    raise
         else:
             raise ValueError("This provider API has no direct Quickchat adapter. Use a standard chat.")
         self.client = self.bridge.wrap(client, agent=self, purpose="conversation",
@@ -219,9 +230,10 @@ class QuickAnswerBot:
                     raise PolicyDenied('context_budget_exceeded')
             else:
                 from runtime.auxiliary_client import _build_call_kwargs
+                max_tokens = self.ollama_capture.max_output_tokens if self.ollama_capture else 2048
                 kwargs = _build_call_kwargs(self.provider, self.model,
                     [{"role": "system", "content": system}, *messages],
-                    max_tokens=2048, timeout=60, base_url=self.base_url)
+                    max_tokens=max_tokens, timeout=60, base_url=self.base_url)
             if self.provider == "openai" and "max_tokens" in kwargs:
                 kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
             kwargs.update(stream=True, stream_options={"include_usage": True})
@@ -276,8 +288,18 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
             profile_home=context.profile_home, session_key=str(session.session_id))
         return
     local_capture = None
+    ollama_capture = None
+    from runtime.quickchat_ollama import MAX_QUICKCHAT_OLLAMA_CONTEXT, resolve_quickchat_ollama
+    captured_provider = getattr(getattr(context, "provider_capture", None), "provider", None)
+    captured_length = getattr(captured_provider, "context_length", None)
     if provider == 'local-store':
         runtime, local_capture = _local_quickchat_runtime(context, model, provider)
+    elif provider in {"ollama", "custom"} and type(captured_length) is int and captured_length <= MAX_QUICKCHAT_OLLAMA_CONTEXT:
+        ollama_capture = resolve_quickchat_ollama(context.profile_home, provider, model)
+        if ollama_capture.context_tokens != captured_length:
+            raise PermissionError("quickchat_ollama_context_changed")
+        runtime = {"provider": provider, "api_mode": "chat_completions", "base_url": ollama_capture.base_url,
+                   "api_key": ollama_capture.api_key or "no-key-required"}
     else:
         from web.api.oauth import resolve_runtime_provider_with_anthropic_env_lock
         from cli.runtime_provider import resolve_runtime_provider
@@ -329,15 +351,18 @@ def run_quickchat_direct(*, session, context, bridge, model, provider, text,
         # Only the explicitly supplied page snapshot is used; never fetch or
         # infer a page from active tabs or previous turns.
         page = str(grounding_context)[:(2000 if simple else 8000)].replace("<", "\\u003c").replace(">", "\\u003e")
-        if local_capture is None:
+        if local_capture is None and ollama_capture is None:
             current += "\n\n<untrusted_page_context>\n" + page + "\n</untrusted_page_context>"
     if local_capture is not None:
         messages = _fit_local_quickchat(system, messages, current, page, local_capture)
+    elif ollama_capture is not None:
+        messages = _fit_local_quickchat(system, messages, current, page, ollama_capture)
     else:
         messages.append({"role": "user", "content": current})
     bot = QuickAnswerBot(bridge, provider, model, runtime, cancel_event,
                          lambda delta: put("token", {"text": delta}))
     bot.local_capture = local_capture
+    bot.ollama_capture = ollama_capture
     bot.reasoning_effort = _quick_reasoning_effort(provider, model, bot.api_mode,
         supported_reasoning_efforts, requested_reasoning_effort)
     register(bot)

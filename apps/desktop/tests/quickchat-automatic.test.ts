@@ -36,6 +36,25 @@ describe('direct Quickchat automatic model selection', () => {
       { provider: 'xiaomi', model: 'missing' }, storage, true)).toBeNull();
   });
 
+  it('accepts a verified local Ollama favorite in text-only Quickchat', () => {
+    const id = 'smollm2:135m-instruct-q4_0';
+    const catalog = selection('custom', [id]);
+    const group = catalog.groups[0];
+    const entry = group.models[0];
+    const favorite = { provider: 'custom', model: id };
+    const localCatalog: ScopedModelSelection = {
+      ...catalog,
+      groups: [{ ...group, deployment: 'local', models: [{
+        ...entry, quickchatAvailable: true,
+        nativeAvailability: { ...entry.nativeAvailability!, available: false, reasonCode: 'context_missing' },
+      }] }],
+    };
+    expect(chooseQuickchatModel(localCatalog, scope, favorite, storage, false))
+      .toEqual({ ...favorite, basis: 'favorite' });
+    expect(chooseQuickchatModel({ ...localCatalog, groups: [{ ...localCatalog.groups[0], deployment: 'remote' }] },
+      scope, favorite, storage, true)).toBeNull();
+  });
+
   it('keeps an existing automatic choice ahead of the OpenRouter routers', () => {
     const catalog: ScopedModelSelection = {
       schemaVersion: 1, scope: nativeScope, revision: 1, model: 'deepseek-v4.1-flash-free', provider: 'opencode',

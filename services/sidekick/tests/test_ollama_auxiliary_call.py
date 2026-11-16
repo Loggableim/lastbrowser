@@ -2,6 +2,46 @@
 
 from types import SimpleNamespace
 
+import pytest
+
+
+def test_automatic_compression_stays_on_loopback_after_connection_error(monkeypatch):
+    import httpx
+
+    from runtime import auxiliary_client
+
+    endpoint = "http://127.0.0.1:11435/v1"
+    attempts = []
+
+    def complete(client, kwargs, provider, task):
+        if client.base_url == endpoint:
+            raise httpx.ConnectError("connection refused")
+        attempts.append("cloud-completion")
+        return None
+
+    def route(provider, model=None, **options):
+        attempts.append((provider, options["base_url"], options["api_key"]))
+        return SimpleNamespace(base_url=endpoint), model or "qwen3:4b"
+
+    def fallback(*_args, **_kwargs):
+        attempts.append("cloud-fallback")
+        return SimpleNamespace(base_url="https://cloud.example.invalid/v1"), "other-model", "openrouter"
+
+    monkeypatch.setattr(auxiliary_client, "_get_cached_client", route)
+    monkeypatch.setattr(auxiliary_client, "_get_auxiliary_task_config", lambda _task: {})
+    monkeypatch.setattr(auxiliary_client, "_raise_if_game_mode_blocks_local_request", lambda *_args: None)
+    monkeypatch.setattr(auxiliary_client, "_create_completion_with_metadata", complete)
+    monkeypatch.setattr(auxiliary_client, "_try_payment_fallback", fallback)
+
+    with pytest.raises(httpx.ConnectError):
+        auxiliary_client.call_llm(
+            task="compression",
+            main_runtime={"provider": "custom", "model": "qwen3:4b", "base_url": endpoint},
+            messages=[{"role": "user", "content": "Synthetic context"}],
+        )
+
+    assert attempts == [("custom", endpoint, "no-key-required")]
+
 
 def test_ollama_cloud_client_uses_deepseek_flash_when_model_is_omitted(monkeypatch):
     from cli import auth

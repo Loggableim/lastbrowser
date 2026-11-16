@@ -104,9 +104,9 @@ const rows: Partial<Record<DesktopTranslationKey, readonly [string, string, stri
   'settings.panels.notifications.updateChannelStable': ['Stable', 'Estável', 'Стабильный'],
   'settings.panels.notifications.updateChannelPreview': ['Beta', 'Beta', 'Бета'],
   'settings.panels.notifications.updateChannelBetaUnsigned': [
-    'Beta updates may ship unsigned builds. Windows may warn before install. Stable stays signed.',
-    'Atualizações Beta podem trazer builds não assinados. O Windows pode avisar antes da instalação. Stable permanece assinado.',
-    'Обновления Beta могут поставляться без подписи. Windows может предупредить перед установкой. Stable остаётся подписанным.'
+    'Signed Windows builds verify the publisher for every update. If your build is signed, download and install unsigned daily betas manually. Windows may warn when you run an unsigned build.',
+    'As versões assinadas para Windows verificam o editor em todas as atualizações. Se a sua versão é assinada, baixe e instale manualmente as versões beta diárias sem assinatura. O Windows pode exibir um aviso ao executá-las.',
+    'Подписанные сборки для Windows проверяют издателя при каждом обновлении. Если у вас подписанная сборка, скачивайте и устанавливайте неподписанные ежедневные бета-версии вручную. Windows может предупредить об этом при запуске.'
   ],
   'settings.panels.providers.title': ['Connected providers', 'Provedores conectados', 'Подключённые провайдеры'],
   'settings.panels.providers.description': ['Choose which providers Sidekick can use and how to sign in.', 'Escolha quais provedores o Sidekick pode usar e como entrar.', 'Выберите провайдеры для Sidekick и способ входа.'],

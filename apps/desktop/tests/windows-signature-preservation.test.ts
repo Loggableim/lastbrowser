@@ -10,7 +10,12 @@ const path = require('node:path') as typeof import('node:path');
 const fs = require('node:fs') as typeof import('node:fs');
 const os = require('node:os') as typeof import('node:os');
 const packageConfig = require('../package.json') as {
-  build: { appId: string; win: { signtoolOptions: { sign: string } } };
+  build: { appId: string; win: { signAndEditExecutable: boolean; verifyUpdateCodeSignature: boolean } };
+};
+const signedOptions = require('../build/windows-signed-overrides.json') as {
+  signAndEditExecutable: boolean;
+  verifyUpdateCodeSignature: boolean;
+  signtoolOptions: { sign: string };
 };
 const { resolveFunction } = require('../../../node_modules/app-builder-lib/out/util/resolve.js') as {
   resolveFunction: (type: string, executor: string, name: string) => Promise<(...args: unknown[]) => unknown>;
@@ -27,9 +32,17 @@ function signingConfiguration(filePath: string, hash: 'sha1' | 'sha256', isNest:
 }
 
 describe('electron-builder Windows signature preservation hook', () => {
+  it('edits Windows product and version resources in the standard build', () => {
+    expect(packageConfig.build.win.signAndEditExecutable).toBe(true);
+  });
+
   it('is resolved through the installed electron-builder custom sign hook contract', async () => {
     const packageRoot = path.dirname(require.resolve('../package.json'));
-    const hookPath = packageConfig.build.win.signtoolOptions.sign;
+    const hookPath = signedOptions.signtoolOptions.sign;
+    expect({ ...packageConfig.build.win, ...signedOptions }).toMatchObject({
+      signAndEditExecutable: true,
+      verifyUpdateCodeSignature: true,
+    });
     expect(path.resolve(process.cwd(), hookPath)).toBe(path.resolve(packageRoot, hookPath));
     const resolved = await resolveFunction(packageConfig.build.appId, hookPath, 'sign');
 

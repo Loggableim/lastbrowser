@@ -5,7 +5,7 @@ import { BrowserHistoryStorage } from './browser-history-storage.js';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, screen, shell, session, webContents, type MessageBoxOptions, type Session } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, powerMonitor, screen, shell, session, webContents, type MessageBoxOptions, type Session } from 'electron';
 import { getChatCompletionNotification, shouldNotifyChatCompletion } from './chat-notifications.js';
 import { detachRequestKey, ensureDetachedPageReady, isGuestOwnedByRenderer, normalizeRestoredNavigationHistory, parseDetachTabPayload, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
 import { clearDeletedProfilePartitions } from './profile-partition-cleanup.js';
@@ -222,6 +222,14 @@ import { defaultSearchEngineId, searchEngineById } from './browser-search.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
+import { configureProfileDirectory, defaultBrowserProfileDirectory } from './profile-directory.js';
+import { loadProtectedRendererSeed } from './protected-renderer-seed.js';
+import { resolveSpaceMigrationLayout } from './space-migration-layout.js';
+import { spaceMigrationPrerequisite } from './windows-space-runtime.js';
+import { encodeWindowsSpaceMigrationRequest } from './windows-space-migration-request.js';
+import { launchWindowsSpaceMigration } from './windows-space-migration-launch.js';
+
+const protectedProfileStartup = configureProfileDirectory(app);
 
 process.on('uncaughtException', (err, origin) => {
   console.error('[lastbrowser uncaughtException]', origin, err);
@@ -237,7 +245,7 @@ app.on('child-process-gone', (_event, details) => {
 });
 
 const mainDir = moduleDirname(import.meta.url);
-const cdpPreference = loadCdpPreference(app.getPath('userData'));
+const cdpPreference = protectedProfileStartup ? { enabled: false } : loadCdpPreference(app.getPath('userData'));
 setPersistedCdpEnabled(cdpPreference.enabled);
 let mainWindow: BrowserWindow | null = null;
 let appReady = false;
@@ -312,6 +320,7 @@ let appTray: TrayController | null = null;
 let isQuitting = false;
 let widevineReadiness: WidevineReadiness = { status: 'pending', reason: 'initializing' };
 let quitCleanupComplete = false;
+let protectedSpaceMigrationStarting = false;
 let quitCleanupStarted = false;
 let independentController: IndependentController | null = null;
 let quickChatController: QuickChatController | null = null;
@@ -346,7 +355,10 @@ async function boundPurposeChatRequest(event: Electron.IpcMainInvokeEvent, raw: 
 function quitIfLastShellClosed(): void {
   if (!isQuitting && process.platform !== 'darwin' && !mainWindow && secondaryWindows.size === 0) app.quit();
 }
-const adblock = createAdblockController();
+const adblockPreferencePath = path.join(app.getPath('userData'), 'adblock-preference');
+let adblockEnabled = true;
+try { adblockEnabled = readFileSync(adblockPreferencePath, 'utf8') !== 'disabled'; } catch {}
+const adblock = createAdblockController({ enabled: adblockEnabled });
 const sidekickUpdater = createSidekickUpdater();
 const agentWorkspaceStreams = new Map<string, AbortController>();
 const chatStreams = new ChatStreamRegistry();
@@ -635,6 +647,79 @@ async function resolveSetupProfile(event: Electron.IpcMainInvokeEvent, selected:
 }
 
 function registerIpc(): void {
+  ipcMain.handle('lastbrowser:protected-space-selection', async (event, selection: unknown) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    recheck();
+    if (process.platform !== 'win32' || protectedProfileStartup || !independentController) return null;
+    const auth = await authorizePasswordAccess();
+    const bindings = await independentController.protectedSpaceBindings();
+    recheck(); auth();
+    if (selection === undefined) {
+      const counts = new Map<string, number>();
+      for (const { spaceId } of bindings) counts.set(spaceId, (counts.get(spaceId) ?? 0) + 1);
+      const [unavailable, hardwareUnavailable] = path.relative(app.getPath('userData'), defaultBrowserProfileDirectory(app))
+        ? ['runtime', 'runtime'] as const
+        : await Promise.all([
+          spaceMigrationPrerequisite(process.resourcesPath, 'local'),
+          spaceMigrationPrerequisite(process.resourcesPath, 'tpm')
+        ]);
+      recheck(); auth();
+      return { unavailable, hardwareUnavailable, spaces: bindings.filter(record => counts.get(record.spaceId) === 1)
+        .map(({ spaceId, name, browserProfileId, workspacePath, partitionKey }) => ({
+          spaceId, name, profileId: browserProfileId, spacePath: workspacePath ?? '',
+          sessionKey: `${browserProfileId}::${partitionKey.slice('persist:space_'.length, -browserProfileId.length - 1)}`
+        })) };
+    }
+    if (!Array.isArray(selection) || selection.length !== 2
+      || !selection.every(id => typeof id === 'string' && id.length > 0 && id.length <= 128)) {
+      throw new Error('Invalid protected Space selection');
+    }
+    resolveSpaceMigrationLayout(app.getPath('userData'), bindings, selection[0], selection[1]);
+    return { valid: true };
+  });
+  ipcMain.handle('lastbrowser:configure-protected-spaces', async (event, proposal: unknown, primary: unknown, emergency: unknown) => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    recheck();
+    if (process.platform !== 'win32' || protectedProfileStartup || !independentController || !services || isQuitting
+      || protectedSpaceMigrationStarting || !(primary instanceof Uint8Array) || !(emergency instanceof Uint8Array)
+      || path.relative(app.getPath('userData'), defaultBrowserProfileDirectory(app))) throw new Error('Space migration is unavailable');
+    protectedSpaceMigrationStarting = true;
+    let frame: Buffer | undefined;
+    try {
+      const auth = await authorizePasswordAccess();
+      const bindings = await independentController.protectedSpaceBindings();
+      recheck(); auth();
+      frame = encodeWindowsSpaceMigrationRequest(proposal, primary, emergency);
+      primary.fill(0);
+      emergency.fill(0);
+      const selected = proposal as { primarySpaceId: string; decoySpaceId: string; protection?: 'local' | 'tpm' };
+      if (await spaceMigrationPrerequisite(process.resourcesPath, selected.protection)) throw new Error('A protected Space prerequisite is unavailable');
+      recheck(); auth();
+      resolveSpaceMigrationLayout(app.getPath('userData'), bindings, selected.primarySpaceId, selected.decoySpaceId);
+      await independentController.shutdown();
+      await services.stopForProfileMigration();
+      recheck(); auth();
+      await launchWindowsSpaceMigration(process.execPath, app.isPackaged ? [] : [app.getAppPath()], frame);
+      quitCleanupComplete = true;
+      setImmediate(() => app.quit());
+      return true;
+    } catch (error) {
+      protectedSpaceMigrationStarting = false;
+      throw error;
+    } finally {
+      primary.fill(0);
+      emergency.fill(0);
+      frame?.fill(0);
+    }
+  });
+  ipcMain.handle('lastbrowser:protected-renderer-seed', async event => {
+    const recheck = captureTrustedShellSender(event, isTrustedShell);
+    recheck();
+    if (!protectedProfileStartup) return null;
+    const result = await loadProtectedRendererSeed(app.getPath('userData'));
+    recheck();
+    return result;
+  });
   const browserHistoryStorage = new BrowserHistoryStorage(app.getPath('userData'));
   for (const operation of ['load', 'merge', 'replace'] as const) {
     ipcMain.handle(`lastbrowser:history:${operation}`, async (event, request: unknown) => {
@@ -756,6 +841,7 @@ function registerIpc(): void {
   ipcMain.handle('lastbrowser:i18n:setLocale', (_event, locale: unknown) => {
     if (typeof locale === 'string' && locale.trim()) {
       currentLocale = locale.trim();
+      appTray?.updateMenu();
     }
     return true;
   });
@@ -1140,10 +1226,11 @@ function registerIpc(): void {
     return sendSidekickMessage(requireWebuiUrl(), scoped as { message: string });
   });
   ipcMain.handle('lastbrowser:terminal:start', (_event, request) => {
+    captureTrustedShellSender(_event, isTrustedShell);
     const webContents = _event.sender;
     const reqObj = typeof request === 'string' ? { cwd: request } : (request || {});
     const cwd = String(reqObj.cwd || '');
-    const mode = reqObj.mode === 'tui' ? 'tui' : 'shell';
+    const mode = reqObj.mode === 'tui' || reqObj.mode === 'codex' ? reqObj.mode : 'shell';
     const layout = services?.getLayout();
     const result = startTerminal(
       cwd,
@@ -1155,7 +1242,10 @@ function registerIpc(): void {
         pythonExe: layout?.pythonExe,
         sidekickDir: layout?.sidekickDir,
         cols: reqObj.cols,
-        rows: reqObj.rows
+        rows: reqObj.rows,
+        onExit: (id, exitCode) => {
+          try { webContents.send('lastbrowser:terminal:data', { id, exitCode }); } catch {}
+        }
       }
     );
     return result;
@@ -1391,8 +1481,11 @@ function registerIpc(): void {
   });
   registerUpdateIpc(() => mainWindow);
   ipcMain.handle('lastbrowser:adblock:status', () => adblock.getStatus());
-  ipcMain.handle('lastbrowser:adblock:setEnabled', (_event, enabled: unknown) => {
-    adblock.setEnabled(enabled !== false);
+  ipcMain.handle('lastbrowser:adblock:setEnabled', (event, enabled: unknown) => {
+    captureTrustedShellSender(event, isTrustedShell);
+    if (typeof enabled !== 'boolean') throw new Error('Invalid ad blocker preference');
+    writeFileSync(adblockPreferencePath, enabled ? 'enabled' : 'disabled', { mode: 0o600 });
+    adblock.setEnabled(enabled);
     return adblock.getStatus();
   });
   // Download tracking: the renderer polls the list and gets pushed updates.
@@ -1463,10 +1556,11 @@ function registerIpc(): void {
     return extensionManager.chooseDirectory(mainWindow || undefined);
   });
   ipcMain.handle('lastbrowser:cdp:getPreference', async () => ({
-    enabled: loadCdpPreference(app.getPath('userData')).enabled,
+    enabled: !protectedProfileStartup && loadCdpPreference(app.getPath('userData')).enabled,
     active: isCdpEnabled()
   }));
   ipcMain.handle('lastbrowser:cdp:savePreference', async (_event, value: unknown) => {
+    if (protectedProfileStartup) return { ok: false, error: 'Remote debugging is unavailable for the protected profile.' };
     if (!value || typeof value !== 'object' || typeof (value as { enabled?: unknown }).enabled !== 'boolean') {
       return { ok: false, error: 'A boolean enabled value is required.' };
     }
@@ -1637,8 +1731,6 @@ if (isCdpEnabled() && !process.argv.some((a) => a.startsWith('--remote-debugging
 app.commandLine.appendSwitch('enable-features', 'WidevineCdm');
 appendWindowsFirstPaintSwitches(app.commandLine);
 
-app.setName('Lastbrowser');
-
 // Enforce single instance lock: prevent port collisions and handle incoming external URLs
 const gotSingleInstanceLock = typeof app?.requestSingleInstanceLock === 'function' ? app.requestSingleInstanceLock() : true;
 if (gotSingleInstanceLock && typeof app?.on === 'function') {
@@ -1656,9 +1748,13 @@ configureDrmWidevine(app);
 // A secondary process must not continue into service/window initialization even
 // if Electron resolves whenReady after the initial quit request.
 startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.whenReady(), async () => {
-  // Missing/offline CDM installation must not indefinitely block the shell.
-  // Late component completion changes DRM status only while Main is alive.
-  await initializeCastlabsWidevine(undefined, {
+  if (protectedProfileStartup) {
+    powerMonitor.on('lock-screen', () => app.quit());
+    powerMonitor.on('suspend', () => app.quit());
+  }
+  // DRM readiness affects protected playback, not ordinary browser startup.
+  void initializeCastlabsWidevine(undefined, {
+    componentUpdatesDisabled: app.commandLine.hasSwitch('disable-component-update'),
     isActive: () => !isQuitting,
     onStatus: (status) => { widevineReadiness = status; }
   });
@@ -1748,6 +1844,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     getMainWindow: () => mainWindow,
     getWindows: () => BrowserWindow.getAllWindows(),
     getServices: () => services,
+    getLocale: () => currentLocale,
     resourcesDir: appResourcesDir(),
     onQuit: () => {
       isQuitting = true;
@@ -1795,7 +1892,9 @@ function attachSessionHandlers(targetSession: Session): void {
   });
 
   void adblock.attach(targetSession);
-  downloads.attach(targetSession, process.env.LASTBROWSER_DOWNLOADS_DIR || app.getPath('downloads'));
+  const downloadDirectory = protectedProfileStartup ? app.getPath('downloads')
+    : process.env.LASTBROWSER_DOWNLOADS_DIR || app.getPath('downloads');
+  downloads.attach(targetSession, downloadDirectory);
   const isIncognito = (targetSession as unknown as { isInMemory?: () => boolean }).isInMemory?.() ?? false;
   void extensionManager.attachToSession(targetSession, isIncognito);
   // Deny-by-default with whitelist (permissions.ts): Electron grants every permission silently

@@ -192,6 +192,13 @@ declare global {
 declare global {
   interface Window {
     lastbrowser: {
+      protectedRendererSeed?: () => Promise<Record<string, string> | null>;
+      protectedSpaceSelection?: (selection?: readonly [string, string]) => Promise<
+        { unavailable: import('../main/windows-space-runtime.js').SpaceMigrationPrerequisite | null;
+          hardwareUnavailable: import('../main/windows-space-runtime.js').SpaceMigrationPrerequisite | null;
+          spaces: Array<{ spaceId: string; name: string; profileId: string; spacePath: string;
+          sessionKey: string }> } | { valid: true } | null>;
+      configureProtectedSpaces?: (proposal: unknown, primary: Uint8Array, emergency: Uint8Array) => Promise<boolean>;
       independent: IndependentTransport;
       quickChat: {
         start: (request: import('../main/quick-chat-controller.js').QuickChatStartRequest) => Promise<{
@@ -450,7 +457,11 @@ declare global {
         onAccessAuthLocked: (callback: () => void) => () => void;
         getFallbackModel: () => Promise<Record<string, unknown>>;
         setFallbackModel: (request: { model: string; provider?: string; baseUrl?: string }) => Promise<Record<string, unknown>>;
-        saveSettings: (request: { settings: Record<string, unknown> }) => Promise<Record<string, unknown>>;
+        saveSettings: (request: { settings: Record<string, unknown>; scopeSelection?: {
+          browserProfileId: string;
+          workspacePath: string | null;
+          backendProfileName?: string;
+        } }) => Promise<Record<string, unknown>>;
         notifyChatCompleted: (enabled: boolean) => Promise<boolean>;
         listGmailAccounts: () => Promise<Record<string, unknown>>;
         listGmailMessages: (request?: { folder?: string; limit?: number; max?: number; account?: string }) => Promise<Record<string, unknown>>;
@@ -509,13 +520,13 @@ declare global {
         onStatus: (callback: (status: LastbrowserUpdateStatus) => void) => () => void;
       };
       terminal: {
-        start: (request: string | { cwd?: string; mode?: 'shell' | 'tui'; cols?: number; rows?: number }) =>
+        start: (request: string | { cwd?: string; mode?: 'shell' | 'tui' | 'codex'; cols?: number; rows?: number }) =>
           Promise<{ id: string; error?: string }>;
         write: (request: { id: string; data: string }) => Promise<{ ok: boolean; error?: string }>;
         resize?: (request: { id: string; cols: number; rows: number }) => Promise<{ ok: boolean; error?: string }>;
         close: (id: string) => Promise<{ ok: boolean; error?: string }>;
         list: () => Promise<string[]>;
-        onData: (callback: (event: { id: string; data: string }) => void) => () => void;
+        onData: (callback: (event: { id: string; data?: string; exitCode?: number }) => void) => () => void;
       };
       gateway: {
         status: () => Promise<{

@@ -13,7 +13,7 @@ export type ModelPickerOptionGroup = Readonly<{
   deployment?: ProviderDeployment;
   disabledReason?: 'unavailable' | 'notConfigured';
   models: readonly Readonly<{ id: string; label: string; listingStatus?: 'current' | 'configured' | 'fallback'; reasoningEfforts: string[]; supportsIndependent: boolean; nativeAvailability?: NativeModelAvailability;
-    deploymentKind?:ProviderDeployment;modelSource?:'explicit_config'|'local_catalog';contextLength?:number|null;contextLengthSource?:'live_catalog'|'local_catalog'|'official_model_docs'|'catalog'|'provided_catalog'|'models_dev'|'explicit_config'|'unknown';localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }>[];
+    quickchatAvailable?: boolean; deploymentKind?:ProviderDeployment;modelSource?:'explicit_config'|'local_catalog';contextLength?:number|null;contextLengthSource?:'live_catalog'|'local_catalog'|'official_model_docs'|'catalog'|'provided_catalog'|'models_dev'|'explicit_config'|'unknown';localRuntime?:LocalStoreRuntimeCapability;localUnavailableReason?:string }>[];
 }>;
 
 /** Device evidence is necessary, but never overrides the native adapter gate. */
@@ -166,6 +166,7 @@ export function mapScopedModelPickerOptions(selection: ScopedModelSelection & { 
           const local = group.provider_id==='local-store';
           const localUnavailableReason=local?localStoreModelUnavailableLabel(entry):null;
           return { id: entry.id, label: `${entry.label}${localUnavailableReason?` · ${localUnavailableReason}`:''}`, ...(listingStatus ? { listingStatus } : {}), reasoningEfforts: [...(entry.reasoning_efforts ?? [])], supportsIndependent: entry.supportsIndependent&&(!local||isLocalStoreModelRuntimeReady(entry)),
+            ...(entry.quickchatAvailable === true && availability && identityMatches ? { quickchatAvailable: true } : {}),
             ...(entry.deploymentKind?{deploymentKind:entry.deploymentKind}:{}),
             ...(entry.modelSource?{modelSource:entry.modelSource}:{}),
             ...(entry.contextLength!==undefined?{contextLength:entry.contextLength}:{}),

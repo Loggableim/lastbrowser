@@ -79,18 +79,25 @@ export function isChatLatencyPlaceholderMessage(message: LatencyPlaceholderMessa
   return Boolean(message.latencyPlaceholder);
 }
 
+function isLegacyTeamworkPlaceholder(message: LatencyPlaceholderMessage): boolean {
+  // Older snapshots put this stage label in the unfinished answer itself.
+  const content = message.content?.trim();
+  return Boolean(message.pending && (content === 'Teamwork: Synthese abgeschlossen' || content === 'Teamwork: Synthese abgeschlossen.'));
+}
+
 /** Pending UI placeholders that must never persist as assistant answers. */
 export function isClearablePendingStreamPlaceholder(message: LatencyPlaceholderMessage): boolean {
   if (!message.pending) return false;
   if (message.latencyPlaceholder) return true;
   if (message.content === 'Working on it...') return true;
+  if (isLegacyTeamworkPlaceholder(message)) return true;
   if (!message.content?.trim() && !message.reasoning?.trim()) return true;
   return false;
 }
 
 export function shouldDiscardPlaceholderContent(message: LatencyPlaceholderMessage): boolean {
   if (message.latencyPlaceholder) return true;
-  return message.content === 'Working on it...';
+  return message.content === 'Working on it...' || isLegacyTeamworkPlaceholder(message);
 }
 
 export function restoredChatLatencyPlaceholderText(): string {

@@ -9,7 +9,8 @@ param(
     [switch]$Quick = $false,
     [string]$PackageDirectory,
     [string]$InstallerPath,
-    [string]$SignatureReportPath
+    [string]$SignatureReportPath,
+    [string]$ScreenshotReportPath
 )
 
 $ErrorActionPreference = "Stop"
@@ -117,7 +118,13 @@ if ($validStoreMainLogos.Count -gt 0) {
     Report-Warn "Store main box art" "Prepared 512/1024 icons do not meet the current 1080/2160 square listing requirement"
 }
 $captureReportPath = Join-Path $storeAssetDir 'screenshots\capture-report.json'
-if (Test-Path -LiteralPath $captureReportPath) {
+if ($ScreenshotReportPath) {
+    try {
+        if (-not $PackageDirectory) { throw 'ScreenshotReportPath requires the captured PackageDirectory' }
+        $evidence = & (Join-Path $PSScriptRoot 'verify-store-screenshot-receipt.ps1') -PackageDirectory $PackageDirectory -ScreenshotReportPath $ScreenshotReportPath
+        Report-Pass "Store screenshot content" $evidence
+    } catch { Report-Fail "Store screenshot content" $_.Exception.Message }
+} elseif (Test-Path -LiteralPath $captureReportPath) {
     try {
         $captureReport = Get-Content -LiteralPath $captureReportPath -Raw | ConvertFrom-Json
         if ($captureReport.failures.Count -gt 0) { throw 'Screenshot navigation failures are present' }

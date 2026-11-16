@@ -34,6 +34,22 @@ vi.mock('electron', () => {
 import { buildTrayContextMenu, createAppTray, setupMinimizeToTray, resolveTrayIconPath, revealBrowserWindows } from '../src/main/tray.js';
 
 describe('system tray and background operation', () => {
+  it('uses English for the tray actions when the shell is in English', () => {
+    const menu = buildTrayContextMenu({
+      getMainWindow: () => null,
+      getServices: () => null,
+      getLocale: () => 'en-US'
+    }, {
+      showWindow: vi.fn(), toggleGateway: vi.fn(), restartGateway: vi.fn(), quit: vi.fn()
+    }) as unknown as { template: Array<{ label?: string; sublabel?: string }> };
+
+    expect(menu.template[0].label).toBe('Open Lastbrowser');
+    expect(menu.template[3].label).toBe('Messaging Gateway: Inactive');
+    expect(menu.template[3].sublabel).toBe('Click to start');
+    expect(menu.template[4].label).toBe('Restart gateway');
+    expect(menu.template[6].label).toBe('Quit Lastbrowser');
+  });
+
   it.each([
     ['missing tray controller', false, 'win32', null, false],
     ['missing native tray', false, 'win32', { tray: null }, false],
@@ -124,7 +140,8 @@ describe('system tray and background operation', () => {
 
     const options = {
       getMainWindow: () => null,
-      getServices: () => null
+      getServices: () => null,
+      getLocale: () => 'de-DE'
     };
 
     const menu = buildTrayContextMenu(options, actions) as any;
@@ -162,7 +179,8 @@ describe('system tray and background operation', () => {
 
     const options = {
       getMainWindow: () => null,
-      getServices: () => fakeServices
+      getServices: () => fakeServices,
+      getLocale: () => 'de-DE'
     };
 
     const menu = buildTrayContextMenu(options, actions) as any;

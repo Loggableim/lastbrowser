@@ -7,8 +7,9 @@ import https from 'node:https';
 import { createUpdateController, normalizeUpdateChannel, type LastbrowserUpdateStatus, type UpdateChannel, type UpdateController } from './update-controller.js';
 import { isOfflineTestBuild } from './update-build-variant.js';
 import { acknowledgeUpdateNotice, decideUpdateNotice, parseUpdateNoticeState, recordDownloadedUpdate } from './update-notice-state.js';
+import { WindowsNsisUpdater } from './windows-nsis-updater.js';
 
-const { autoUpdater } = electronUpdater;
+const autoUpdater = process.platform === 'win32' ? new WindowsNsisUpdater() : electronUpdater.autoUpdater;
 
 let controller: UpdateController | null = null;
 type PersistedUpdatePreferences = { automaticUpdatesEnabled: boolean; channel: UpdateChannel };

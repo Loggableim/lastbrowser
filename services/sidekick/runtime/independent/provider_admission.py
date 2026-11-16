@@ -161,6 +161,10 @@ def provider_endpoint(home: Path, provider: str) -> str | None:
         if isinstance(row, dict) and slug == provider:
             rows.append(row)
     urls = {row["base_url"] for row in rows if isinstance(row.get("base_url"), str) and row["base_url"]}
+    from runtime.quickchat_ollama import configured_local_ollama_endpoint
+    ollama = configured_local_ollama_endpoint(configuration, provider)
+    if ollama and all(url.rstrip("/") in {ollama, ollama[:-3]} for url in urls):
+        return ollama
     return next(iter(urls)) if len(urls) == 1 else None
 
 

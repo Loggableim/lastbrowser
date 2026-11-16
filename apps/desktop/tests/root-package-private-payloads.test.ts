@@ -23,4 +23,7 @@ it('retains in-tree service sources, excludes private data, and omits the unqual
   }
   expect(manifest.build.extraResources.some((entry: { from: string; to: string }) =>
     entry.from === 'runtime/local-ai/b11377-cpu' || entry.to === 'apps/desktop/runtime/local-ai/b11377-cpu')).toBe(false);
+  const runtime = manifest.build.extraResources.find((entry: { from: string }) => entry.from === 'runtime/local-ai');
+  expect(runtime.filter.some((pattern: string) => pattern.startsWith('!')
+    && minimatch('b11377-cpu/llama-server.exe', pattern.slice(1), { dot: true }))).toBe(true);
 });

@@ -27,6 +27,7 @@ function fakeBlocker() {
     disableBlockingInSession: vi.fn((session: unknown) => {
       enabled.delete(session);
     }),
+    isBlockingEnabled: (session: unknown) => enabled.has(session),
     emit(event: string, ...args: unknown[]) {
       for (const listener of listeners.get(event) || []) listener(...args);
     },
@@ -110,6 +111,19 @@ describe('adblock controller', () => {
     expect(status.enabled).toBe(true);
     expect(status.blockedCount).toBe(0);
     expect(status.lastError).toBeNull();
+  });
+
+  it('skips filter loading while disabled and loads for existing sessions on enable', async () => {
+    const blocker = fakeBlocker();
+    const loadBlocker = vi.fn(async () => blocker as never);
+    const controller = createAdblockController({ enabled: false, loadBlocker });
+    const session = fakeSession();
+    await controller.attach(session);
+    expect(loadBlocker).not.toHaveBeenCalled();
+
+    controller.setEnabled(true);
+    await vi.waitFor(() => expect(blocker.enableBlockingInSession).toHaveBeenCalledWith(session));
+    expect(loadBlocker).toHaveBeenCalledOnce();
   });
 
   it('loads the blocker and attaches it to a session', async () => {

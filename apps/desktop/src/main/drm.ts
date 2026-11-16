@@ -21,15 +21,16 @@ export interface AppLike {
   commandLine: CommandLineLike;
 }
 
-export const widevineStartupDeadlineMs = 3_000;
+export const widevineReadinessDeadlineMs = 3_000;
 
 export type WidevineReadiness = Readonly<{
   status: 'pending' | 'ready' | 'unavailable';
-  reason: 'initializing' | 'deadline_exceeded' | 'components_ready' | 'component_error' | 'unsupported';
+  reason: 'initializing' | 'deadline_exceeded' | 'components_ready' | 'component_error' | 'unsupported' | 'component_updates_disabled';
 }>;
 
 export type WidevineInitializationOptions = {
   timeoutMs?: number;
+  componentUpdatesDisabled?: boolean;
   /** Late component completion must not update a shell that is quitting. */
   isActive?: () => boolean;
   onStatus?: (status: WidevineReadiness) => void;
@@ -231,20 +232,24 @@ export async function initializeCastlabsWidevine(
   electronModule?: unknown,
   options: WidevineInitializationOptions = {}
 ): Promise<boolean> {
-  const timeoutMs = options.timeoutMs ?? widevineStartupDeadlineMs;
+  const timeoutMs = options.timeoutMs ?? widevineReadinessDeadlineMs;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > 60_000) {
-    throw new Error('Invalid Widevine startup deadline');
+    throw new Error('Invalid Widevine readiness deadline');
   }
   const notify = (status: WidevineReadiness): void => {
     if (!options.isActive || options.isActive()) options.onStatus?.(Object.freeze(status));
   };
+  if (options.componentUpdatesDisabled) {
+    notify({ status: 'unavailable', reason: 'component_updates_disabled' });
+    return false;
+  }
   let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
     const mod = electronModule || (await import('electron'));
     const components = (mod as unknown as { components?: { whenReady?: () => Promise<void>; status?: () => unknown } }).components;
     if (components && typeof components.whenReady === 'function') {
       notify({ status: 'pending', reason: 'initializing' });
-      // The native updater may still complete after the shell's bounded wait.
+      // The native updater may still complete after the readiness deadline.
       // Keep its promise handled and report ready only on actual fulfillment.
       const completion = Promise.resolve().then(() => components.whenReady!()).then(() => {
         notify({ status: 'ready', reason: 'components_ready' });
@@ -264,7 +269,7 @@ export async function initializeCastlabsWidevine(
         deadline = setTimeout(() => {
           notify({ status: 'pending', reason: 'deadline_exceeded' });
           if (!options.isActive || options.isActive()) {
-            console.warn('[DRM/Widevine] Component readiness exceeded the shell startup deadline; DRM remains pending.');
+            console.warn('[DRM/Widevine] Component readiness exceeded the deadline; DRM remains pending.');
           }
           resolve(false);
         }, timeoutMs);

@@ -408,3 +408,23 @@ export function saveNumericPreference(
     // Ignore unavailable storage, for example in restricted renderer contexts.
   }
 }
+
+export const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
+  skills: ['Library', 'Editor', 'Linked files', 'Create skill'],
+  agents: ['Dashboard', 'Agents', 'Chat sessions', 'Workspace terminal', 'Create agent'],
+  memory: [],
+  workspaces: ['Spaces', 'Active workspace', 'Files', 'New chat'],
+  profiles: ['Profiles', 'Active profile', 'Gateway', 'Model defaults'],
+  'task-center': [],
+  tasks: [],
+  kanban: [],
+  todos: [],
+  insights: ['Usage', 'Models', 'Cost', 'LLM wiki'],
+  logs: ['Agent', 'WebUI', 'Errors', 'Gateway'],
+  gmail: ['Inbox', 'Search', 'Compose', 'Mail settings'],
+  discord: ['Guild', 'Channels', 'Members', 'Moderation'],
+  appstore: ['Home', 'Categories', 'My apps', 'SDK', 'Submit'],
+  settings: ['Preferences', 'Appearance', 'Providers', 'Codex CLI', 'Plugins', 'System'],
+  browser: ['AI Search', 'Brief', 'Sources', 'Automation tools'],
+  terminal: ['Terminal', 'New session', 'Close']
+};

@@ -1,6 +1,6 @@
 # Local Windows release with Certum / SimplySign
 
-This route uses the installed Windows certificate, not Azure Trusted Signing. It was reconstructed from the installed electron-builder implementation on 2026-10-01; the commands below have not been executed as a new release. The final v0.1.41 setup has a valid Authenticode signature with certificate thumbprint `1AD3C19A7338BBC3FFE4D62853411AD73E139857` and a DigiCert timestamp. The same certificate is currently present in `Cert:\CurrentUser\My` with a private-key association. This does not prove that SimplySign will authorize a new signature without interaction.
+This route uses a Windows certificate from the Certum/SimplySign session. It was reconstructed from the installed electron-builder implementation on 2026-10-01. The final v0.1.41 setup had a valid Authenticode signature with certificate thumbprint `1AD3C19A7338BBC3FFE4D62853411AD73E139857` and a DigiCert timestamp. That certificate was visible in `Cert:\CurrentUser\My` during the October check. The PR #384 test host had no usable code-signing certificate in either the current-user or local-machine personal store on 2026-11-15. Verify the current certificate and authenticated SimplySign session on the signing host before building.
 
 ## Preconditions and gates
 
@@ -75,12 +75,14 @@ $releaseConfig = $desktopManifest.build
 $releaseConfig.directories.output = $releaseOutput
 $releaseConfig | Add-Member -NotePropertyName forceCodeSigning -NotePropertyValue $true -Force
 $releaseConfig.win.PSObject.Properties.Remove('azureSignOptions')
-# Keep package.json's custom `sign` hook (preserve-valid-windows-signatures.cjs)
-# and merge the certificate/hash/timestamp settings into its existing options.
-if (-not $releaseConfig.win.signtoolOptions) {
-    $releaseConfig.win | Add-Member -NotePropertyName signtoolOptions -NotePropertyValue ([pscustomobject]@{})
+# Apply certificate-preserving signing and update verification before
+# selecting the certificate. The unsigned Tagesbeta workflow has explicit overrides.
+$signedOptions = Get-Content apps/desktop/build/windows-signed-overrides.json -Raw | ConvertFrom-Json
+foreach ($option in $signedOptions.PSObject.Properties) {
+    $releaseConfig.win | Add-Member -NotePropertyName $option.Name -NotePropertyValue $option.Value -Force
 }
 $releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName certificateSha1 -NotePropertyValue $signingThumbprint -Force
+$releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName publisherName -NotePropertyValue $signingCertificate.Subject -Force
 $releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName signingHashAlgorithms -NotePropertyValue @('sha256') -Force
 $releaseConfig.win.signtoolOptions | Add-Member -NotePropertyName rfc3161TimeStampServer -NotePropertyValue 'http://timestamp.digicert.com' -Force
 if (-not $releaseConfig.afterSign) { throw 'Package afterSign hook is missing' }

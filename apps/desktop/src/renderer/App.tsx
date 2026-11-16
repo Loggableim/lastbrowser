@@ -1,5 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { clearModelCatalog, prefetchModelCatalog } from './model-catalog-prefetch.js';
+import { prefetchModelCatalog, watchModelCatalogPrefetch } from './model-catalog-prefetch.js';
 import { sidekickMotionFromRun, type SidekickMotion } from './sidekick-motion.js';
 import {
   BarChart3,
@@ -297,7 +297,7 @@ import { readNativeModelResolutionEvent } from './native-model-resolution.js';
 import { openPluginBrowserCapability, type PluginBrowserContext } from './plugin-browser-navigation.js';
 import { WorkspacePanel } from './panels/WorkspacePanel.js';
 import { ShellRail } from './components/ShellRail.js';
-import { ContextSidebar, panelContextItems, type SidekickMessage } from './components/ContextSidebar.js';
+import { ContextSidebar, type SidekickMessage } from './components/ContextSidebar.js';
 import { AddressBar } from './components/AddressBar.js';
 import { useTabStore, type SplitLayoutMode } from './stores/useTabStore.js';
 import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepaliveEntry } from './space-audio-keepalive.js';
@@ -1183,7 +1183,7 @@ function AppContent(): JSX.Element {
   const quickChatAwaitingStartRef = useRef(false);
   const quickChatStoppedStreamIdRef = useRef<string | null>(null);
   const quickChatStopPendingRef = useRef(false);
-  const quickChatStopEpochRef = useRef(0);
+  const cancelQuickChatPreparationRef = useRef<(() => void) | null>(null);
   const quickChatGenerationRef = useRef(0);
   const quickChatBufferedEventsRef = useRef<import('../main/quick-chat-controller.js').QuickChatStreamEvent[]>([]);
   const quickChatScopeKeyRef = useRef<string | null>(null);
@@ -1983,20 +1983,13 @@ function AppContent(): JSX.Element {
   }, [searchEngineId]);
   useEffect(() => {
     if (!sidekickApiReady) return undefined;
-    let alive = true;
     const viewKey = JSON.stringify([activeProfileId, activeSpacePath || null, activeBackendProfileName || null]);
-    const run = () => {
-      void prefetchModelCatalog({
-        viewKey,
-        browserProfileId: activeProfileId,
-        workspacePath: activeSpacePath || null,
-        backendProfileName: activeBackendProfileName || undefined
-      }).catch(() => undefined);
-    };
-    run();
-    const onSettings = () => { if (alive) { clearModelCatalog(); run(); } };
-    window.addEventListener('lastbrowser:settings-changed', onSettings);
-    return () => { alive = false; window.removeEventListener('lastbrowser:settings-changed', onSettings); };
+    return watchModelCatalogPrefetch(guard => prefetchModelCatalog({
+      viewKey,
+      browserProfileId: activeProfileId,
+      workspacePath: activeSpacePath || null,
+      backendProfileName: activeBackendProfileName || undefined
+    }, guard));
   }, [sidekickApiReady, activeProfileId, activeSpacePath, activeBackendProfileName]);
 
   /** Drop a single entry from the history panel. */
@@ -2217,10 +2210,6 @@ function AppContent(): JSX.Element {
   useEffect(() => {
     saveInstalledSidebarApps(undefined, installedSidebarApps);
   }, [installedSidebarApps]);
-
-  useEffect(() => {
-    setActiveContextItem(panelContextItems[activePanel]?.[0] || '');
-  }, [activePanel]);
 
   useEffect(() => {
     saveBooleanPreference(undefined, leftSidebarCollapsedStorageKey, leftSidebarCollapsed);
@@ -2674,13 +2663,14 @@ function AppContent(): JSX.Element {
       spacePath: activeSpacePathRef.current
     };
     if (!isActiveTurnContextCurrent(turnContext, current)) return;
+    const placeholder = t('chat.latencyPlaceholder.01');
     const localOwnerId = chatUiOwnershipRef.current.ownerForStream(restored.streamId);
     if (localOwnerId !== null) {
       if (sidekickBusy && chatUiOwnershipRef.current.activeSessionId !== restored.sessionId) return;
       if (chatUiOwnershipRef.current.reactivate(localOwnerId, restored.sessionId)) {
         setActivePanel('chat');
-        setChatMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
-        setMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage));
+        setChatMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage, placeholder));
+        setMessages((messages) => restorePendingChatTurn(messages, restored.pendingUserMessage, placeholder));
         updateActiveStreamId(restored.streamId);
         setSidekickBusy(true);
         setChatRunState('streaming');
@@ -2692,11 +2682,11 @@ function AppContent(): JSX.Element {
 
     setActivePanel('chat');
     setChatMessages((messages) => {
-      const bound = bindLiveChatAssistantStream(restorePendingChatTurn(messages, restored.pendingUserMessage), restored.sessionId, restored.streamId, restored.pendingUserMessage);
+      const bound = bindLiveChatAssistantStream(restorePendingChatTurn(messages, restored.pendingUserMessage, placeholder), restored.sessionId, restored.streamId, restored.pendingUserMessage);
       return activeSession?.model === 'teamwork' ? beginLiveTeamworkTurn(bound, restored.streamId) : bound;
     });
     setMessages((messages) => {
-      const bound = bindLiveChatAssistantStream(restorePendingChatTurn(messages, restored.pendingUserMessage), restored.sessionId, restored.streamId, restored.pendingUserMessage);
+      const bound = bindLiveChatAssistantStream(restorePendingChatTurn(messages, restored.pendingUserMessage, placeholder), restored.sessionId, restored.streamId, restored.pendingUserMessage);
       return activeSession?.model === 'teamwork' ? beginLiveTeamworkTurn(bound, restored.streamId) : bound;
     });
     updateActiveStreamId(restored.streamId);
@@ -3458,10 +3448,15 @@ function AppContent(): JSX.Element {
     }
     const captured = { browserProfileId: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current || null,
       backendProfileName: activeBackendProfileNameRef.current };
-    const originalWorkspacePath = captured.workspacePath;
-    const isCurrent = () => activeProfileIdRef.current === captured.browserProfileId
-      && (activeSpacePathRef.current || null) === originalWorkspacePath
-      && activeBackendProfileNameRef.current === captured.backendProfileName;
+    let backendProfileName = captured.backendProfileName;
+    const isCurrent = () => {
+      const currentBackendProfile = activeBackendProfileNameRef.current;
+      return activeProfileIdRef.current === captured.browserProfileId
+        && (activeSpacePathRef.current || null) === captured.workspacePath
+        && (captured.backendProfileName
+          ? currentBackendProfile === captured.backendProfileName
+          : !currentBackendProfile || !backendProfileName || currentBackendProfile === backendProfileName);
+    };
     const ensureCurrent = () => { if (!isCurrent()) throw new Error('The active browser profile changed. Reopen setup for the selected profile.'); };
     const requireSuccess = (result: Record<string, unknown>) => {
       if (result.error || result.ok === false) throw new Error(String(result.message || result.error || 'Setup could not be saved.'));
@@ -3470,14 +3465,16 @@ function AppContent(): JSX.Element {
     setSetupSaving(true);
     firstSetupSavingRef.current = true;
     try {
-      if (!captured.backendProfileName) throw new Error('The browser profile is still preparing. Please retry.');
-      captured.workspacePath = await prepareFirstSetupSpace(form.firstSpaceName);
+      const workspacePath = await prepareFirstSetupSpace(form.firstSpaceName);
       ensureCurrent();
-      const scopeSelection = { ...captured, backendProfileName: captured.backendProfileName };
-      const resolved = await assistantController.resolveScope({ browserProfileId: captured.browserProfileId, workspacePath: captured.workspacePath }, captured.backendProfileName);
-      ensureCurrent();
+      const requestedBackendProfileName = captured.backendProfileName || activeBackendProfileNameRef.current;
+      const resolved = await assistantController.resolveScope({ browserProfileId: captured.browserProfileId, workspacePath }, requestedBackendProfileName);
       if (!resolved.ok) throw new Error(resolved.error.message);
       if (resolved.value.scope.browserProfileId !== captured.browserProfileId) throw new Error('Setup profile binding changed.');
+      backendProfileName = resolved.value.backendProfileName || requestedBackendProfileName;
+      if (!backendProfileName) throw new Error('The selected Space has no backend profile binding.');
+      ensureCurrent();
+      const scopeSelection = { browserProfileId: captured.browserProfileId, workspacePath, backendProfileName };
       if (form.provider === 'openai-codex') {
         const request = { model: form.model.startsWith('@openai-codex:') ? form.model : `@openai-codex:${form.model}`, scopeSelection };
         requireSuccess(await window.lastbrowser.sidekick.setDefaultModel(request));
@@ -3501,8 +3498,8 @@ function AppContent(): JSX.Element {
       setSetupState(nextState);
       if (!setupState.cloudSetupComplete && !setupState.browserSetupComplete) setFirstLaunchOpening(true);
       setExplicitBackendProfileBySpace(current => ({ ...current,
-        [`${captured.browserProfileId}::${captured.workspacePath}`]: captured.backendProfileName! }));
-      handleSpaceSelect(captured.workspacePath!);
+        [`${captured.browserProfileId}::${workspacePath}`]: scopeSelection.backendProfileName }));
+      handleSpaceSelect(workspacePath);
       setSetupReopenRequested(false);
       setOnboardingStatus(nextStatus as OnboardingStatus);
       void refreshSessions();
@@ -3637,7 +3634,10 @@ function AppContent(): JSX.Element {
     quickChatPreparedRef.current = null;
     setQuickChatPrepared(null);
     if (!sidekickApiReady || !copilotOpen || !activeBackendProfileName) return;
-    const prepare = () => { void prepareQuickChatModelSelection(true).catch(() => { /* Send retains the actionable error and draft. */ }); };
+    const prepare = () => {
+      if (document.visibilityState === 'hidden') return;
+      void prepareQuickChatModelSelection(true).catch(() => { /* Send retains the actionable error and draft. */ });
+    };
     const invalidate = () => {
       quickChatPreparationEpochRef.current++;
       quickChatPreparedRef.current = null;
@@ -3649,11 +3649,13 @@ function AppContent(): JSX.Element {
     window.addEventListener('lastbrowser:settings-changed', invalidate);
     window.addEventListener('lastbrowser:provider-config-changed', invalidate);
     window.addEventListener('focus', prepare);
+    document.addEventListener('visibilitychange', prepare);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener('lastbrowser:settings-changed', invalidate);
       window.removeEventListener('lastbrowser:provider-config-changed', invalidate);
       window.removeEventListener('focus', prepare);
+      document.removeEventListener('visibilitychange', prepare);
     };
   }, [sidekickApiReady, copilotOpen, quickChatMode, activeProfileId, activeSpacePath, activeBackendProfileName, status?.runtimeGeneration, status?.webuiUrl]);
 
@@ -4995,6 +4997,7 @@ function AppContent(): JSX.Element {
     return runQuickChatResetOnce(quickChatResetPromiseRef, async () => {
       const resetGeneration = quickChatGenerationRef.current;
       const resetChatId = quickChatIdRef.current;
+      cancelQuickChatPreparationRef.current?.();
       const stopWasPending = quickChatStopPendingRef.current;
       let resetScopeKey = quickChatBindingScopeKeyRef.current
         ?? quickChatStartPromiseRef.current?.scopeKey
@@ -5119,7 +5122,6 @@ function AppContent(): JSX.Element {
       || quickChatTranscriptScopeKeyRef.current !== null && quickChatTranscriptScopeKeyRef.current !== activeScopeKey
       || !prompt.trim()) return false;
     const generation = quickChatGenerationRef.current;
-    const stopEpoch = quickChatStopEpochRef.current;
     quickChatStopPendingRef.current = true;
     setQuickChatBusy(true);
     const chatId = quickChatIdRef.current;
@@ -5142,30 +5144,42 @@ function AppContent(): JSX.Element {
       }
       return false;
     };
-    let scopedSelection: Awaited<ReturnType<typeof readCapturedSpaceModelSelection>>;
-    try {
-      scopedSelection = await prepareQuickChatModelSelection();
-    } catch (error) {
+    let cancelled = false;
+    let resolveCancellation!: () => void;
+    const cancellation = new Promise<null>(resolve => { resolveCancellation = () => resolve(null); });
+    // Model discovery may still populate the scoped cache, but it no longer owns a send after Stop.
+    const cancelPreparation = () => {
+      cancelled = true;
+      cancelQuickChatPreparationRef.current = null;
       quickChatStopPendingRef.current = false;
-      setQuickChatErrorForScope(capturedScopeKey, error instanceof Error ? error.message : String(error));
-      return rejectPreflight();
-    }
-    if (stopEpoch !== quickChatStopEpochRef.current) {
-      quickChatStopPendingRef.current = false;
-      // Stop during preflight never reached inference. Keep the cleared draft
-      // cleared rather than undoing the user's explicit cancellation.
       rejectPreflight();
+      resolveCancellation();
+    };
+    cancelQuickChatPreparationRef.current = cancelPreparation;
+    let scopedSelection: ScopedModelSelection | null = null;
+    try {
+      scopedSelection = await Promise.race([prepareQuickChatModelSelection(), cancellation]);
+    } catch (error) {
+      if (!cancelled) {
+        setQuickChatErrorForScope(capturedScopeKey, error instanceof Error ? error.message : String(error));
+        return rejectPreflight();
+      }
+    } finally {
+      if (cancelQuickChatPreparationRef.current === cancelPreparation) {
+        cancelQuickChatPreparationRef.current = null;
+        quickChatStopPendingRef.current = false;
+      }
+    }
+    if (cancelled) {
       if (preserveUnknownOutcome) throw new Error('Quickchat stopped before start');
       return false;
     }
-    if (capturedScopeKey !== `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`) {
-      quickChatStopPendingRef.current = false;
+    if (!scopedSelection || capturedScopeKey !== `${activeProfileIdRef.current}::${activeSpacePathRef.current}::${activeBackendProfileNameRef.current || ''}`) {
       return rejectPreflight();
     }
     const preferenceScope = { browserProfileId, workspacePath: workspacePath || '', backendProfileName: backendProfileName || 'default' };
     const favoriteState = readQuickchatFavoriteState(preferenceScope);
     if (favoriteState.invalid) {
-      quickChatStopPendingRef.current = false;
       setQuickChatErrorForScope(capturedScopeKey, locale === 'de'
         ? 'Der gespeicherte Quickchat-Favorit ist ungültig. Bitte ein Modell oder Automatisch wählen.'
         : 'The saved Quickchat favorite is invalid. Choose a model or Automatic.');
@@ -5174,16 +5188,12 @@ function AppContent(): JSX.Element {
     const favorite = favoriteState.favorite;
     const selection = chooseQuickchatModel(scopedSelection, preferenceScope, favorite, window.localStorage, readShowUntestedProviderBetas());
     if (!selection) {
-      quickChatStopPendingRef.current = false;
       setQuickChatErrorForScope(capturedScopeKey, favorite
         ? (locale === 'de' ? 'Dein Quickchat-Favorit ist derzeit nicht verfügbar. Wähle ein anderes Modell oder Automatisch.' : 'Your Quickchat favorite is unavailable. Choose another model or Automatic.')
         : t('settings.panels.providers.noActiveModels'));
       return rejectPreflight();
     }
     quickChatBusyRef.current = true;
-    // The synchronous busy reservation now owns the turn. Leaving the
-    // preflight/stop gate set here prevents every later follow-up send.
-    quickChatStopPendingRef.current = false;
     quickChatTranscriptScopeKeyRef.current = capturedScopeKey;
     quickChatErrorScopeKeyRef.current = capturedScopeKey;
     setQuickChatBusy(true);
@@ -5270,14 +5280,11 @@ function AppContent(): JSX.Element {
   async function stopQuickChat(): Promise<void> {
     quickLatencyRunRef.current?.cancel();
     if (quickChatResetPendingRef.current) return;
-    const generation = quickChatGenerationRef.current;
-    quickChatStopEpochRef.current += 1;
-    if (quickChatStopPendingRef.current && !quickChatBusyRef.current && !quickChatAwaitingStartRef.current) {
-      // The optimistic echo is still waiting for model discovery. Its send
-      // path observes stopEpoch and removes only that unsent turn.
-      setQuickChatBusy(false);
+    if (cancelQuickChatPreparationRef.current) {
+      cancelQuickChatPreparationRef.current();
       return;
     }
+    const generation = quickChatGenerationRef.current;
     const pendingStart = quickChatStartPromiseRef.current;
     // A follow-up still carries the preceding turn's binding until its start
     // acknowledgement arrives. Stop that new turn, never reset the chat.
@@ -6384,7 +6391,8 @@ function AppContent(): JSX.Element {
                 modelName={copilotModelSelection.model || setupState.model || 'AI'}
                 modelProvider={copilotModelSelection.provider}
                 preparedModelSelection={currentQuickChatPrepared?.selection}
-                preparedModelSelectionScopeKey={currentQuickChatPrepared?.key}
+                preparedModelSelectionScopeKey={quickChatPreparedScopeKey}
+                onRetryModelCatalog={() => { void prepareQuickChatModelSelection(true).catch(() => {}); }}
                 messages={selectScopedQuickChatValue(quickChatMessages, quickChatTranscriptScopeKeyRef.current,
                   createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), [])}
                 busy={selectScopedQuickChatValue(quickChatBusy, quickChatBusyScopeKeyRef.current ?? quickChatBindingScopeKeyRef.current ?? quickChatStartPromiseRef.current?.scopeKey ?? null,
@@ -6411,7 +6419,7 @@ function AppContent(): JSX.Element {
                 browserProfileId={activeProfileId}
                 workspacePath={activeSpacePath || null}
                 backendProfileName={activeBackendProfileName}
-                onOpenSettings={() => { setActiveContextItem('providers'); setActivePanel('settings'); }}
+                onOpenSettings={() => setActivePanel('settings', 'providers')}
               />}
             </div>
           </div>
@@ -7796,8 +7804,7 @@ function BrowserMain({
         aiConnected={serviceStatus?.sidekick === 'ready' && onboardingStatus?.system?.chat_ready === true}
         onOpenModelSettings={() => {
           activatePane();
-          usePanelStore.getState().setActiveContextItem('providers');
-          usePanelStore.getState().setActivePanel('settings');
+          usePanelStore.getState().setActivePanel('settings', 'providers');
         }}
         onOpenCommandPalette={() => { activatePane(); usePanelStore.getState().setCommandPaletteOpen(true); }}
       />
@@ -7892,7 +7899,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} activeSpacePath={activeSpacePath} activeBackendProfileName={activeBackendProfileName || activeSession?.profile || null} activeSessionId={activeSessionId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} onClose={() => usePanelStore.getState().setActivePanel('browser')} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} activeSpacePath={activeSpacePath} activeBackendProfileName={activeBackendProfileName || activeSession?.profile || null} activeSessionId={activeSessionId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} onSectionChange={usePanelStore.getState().setActiveContextItem} onClose={() => usePanelStore.getState().setActivePanel('browser')} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:

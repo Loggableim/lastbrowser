@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { I18N_TEXTS } from '../../../docs/design/startup-animation/startup-animation.js';
-import { clipIdFromSound, startupAnimationLocales, startupPersona, startupPlaybackScene, startupSceneForState, timingForClip } from '../src/renderer/startup/StartupAnimationLayer.js';
+import { clipIdFromSound, StartupEventFeed, startupAnimationLocales, startupPersona, startupPlaybackScene, startupSceneForState, timingForClip } from '../src/renderer/startup/StartupAnimationLayer.js';
 import { defaultStartupPreferences } from '../src/renderer/startup/startup-preferences.js';
 
 describe('startup animation integration', () => {
@@ -8,6 +10,15 @@ describe('startup animation integration', () => {
     expect(startupAnimationLocales).toEqual(['de', 'en', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja']);
     expect(Object.keys(I18N_TEXTS)).toEqual(startupAnimationLocales);
     expect(defaultStartupPreferences.eventFeed).toBe(true);
+  });
+
+  it.each([
+    ['en', 'Audio time', 'Next cue', 'Last event'],
+    ['de', 'Audiozeit', 'Nächster Cue', 'Letztes Ereignis'],
+  ])('localizes the visible startup event feed in %s', (locale, time, cue, last) => {
+    const feed = { clip: 'Welcome', time: '0 ms', cue: 'start', fps: '60 fps', drift: '0 ms', last: 'init' };
+    const html = renderToStaticMarkup(createElement(StartupEventFeed, { locale, feed }));
+    for (const label of [time, cue, last]) expect(html).toContain(label);
   });
 
   it('reads duration and onset marks from timing json', () => {

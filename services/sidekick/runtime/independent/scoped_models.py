@@ -35,7 +35,7 @@ _CATALOG_REUSE_SECONDS = 300.0
 _CATALOG_SETUP_LOCK = threading.Lock()
 _CATALOG_DISK_NAME = "model-catalog-cache.json"
 # Bump when device-catalog discovery changes, so a stale disk receipt is rebuilt.
-_CATALOG_DISCOVERY_REVISION = 3
+_CATALOG_DISCOVERY_REVISION = 4
 
 
 def _catalog_disk_path(profile_home):
@@ -71,7 +71,8 @@ def opencode_model_identity(profile_home) -> str:
     return digest.hexdigest()
 
 
-def read_persistent_model_catalog(profile_home, digest: str, *, model_identity: str | None = None):
+def read_persistent_model_catalog(profile_home, digest: str, *, model_identity: str | None = None,
+                                  receipt_key: str | None = None):
     """Return the startup catalog only when the saved provider connections still match."""
     try:
         payload = json.loads(_catalog_disk_path(profile_home).read_text(encoding="utf-8"))
@@ -83,23 +84,29 @@ def read_persistent_model_catalog(profile_home, digest: str, *, model_identity: 
         return None
     if model_identity is not None and payload.get("modelIdentity") != model_identity:
         return None
+    if receipt_key is not None:
+        written_at = payload.get("writtenAt")
+        if (payload.get("receiptKey") != receipt_key or type(written_at) not in {int, float}
+                or not 0 <= time.time() - written_at < _CATALOG_REUSE_SECONDS):
+            return None
     catalog = payload.get("catalog")
     if not isinstance(catalog, dict) or catalog.get("providerConfigurationDigest") != digest or not isinstance(catalog.get("groups"), list):
         return None
     return copy.deepcopy(catalog)
 
 
-def write_persistent_model_catalog(profile_home, digest: str, catalog: dict, *, model_identity: str | None = None) -> None:
+def write_persistent_model_catalog(profile_home, digest: str, catalog: dict, *, model_identity: str | None = None,
+                                   receipt_key: str | None = None) -> None:
     if not isinstance(catalog, dict) or catalog.get("providerConfigurationDigest") != digest or not isinstance(catalog.get("groups"), list):
         return
-    path = _catalog_disk_path(profile_home)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".json.tmp")
+    from shared.utils import atomic_json_write
+
     body = {"digest": digest, "discoveryRevision": _CATALOG_DISCOVERY_REVISION, "catalog": catalog}
     if model_identity is not None:
         body["modelIdentity"] = model_identity
-    temporary.write_text(json.dumps(body, ensure_ascii=False), encoding="utf-8")
-    temporary.replace(path)
+    if receipt_key is not None:
+        body.update(receiptKey=receipt_key, writtenAt=time.time())
+    atomic_json_write(_catalog_disk_path(profile_home), body)
 
 
 def _catalog_cache_state(manager):
@@ -176,6 +183,7 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
     """Allowlist public fields; never return account emails, URLs or raw config."""
     providers = []
     from runtime.provider_deployment import provider_deployment
+    from runtime.quickchat_ollama import configured_local_ollama_endpoint
     connections = {}
     for row in accounts.get("providers", []) if isinstance(accounts, dict) else []:
         if not isinstance(row, dict) or not _text(row.get("id"), 128):
@@ -230,6 +238,8 @@ def public_catalog(raw: dict, accounts: dict, configuration: dict) -> dict:
         clean = {"provider_id": pid, "provider": _text(group.get("provider"), 256) or pid,
                  "configured": True if connection_catalog else connections.get(pid, False), "models": [],
                  "deployment": provider_deployment(pid, configuration, active_provider=raw.get("active_provider"))}
+        if configured_local_ollama_endpoint(configuration, pid):
+            clean.update(provider="Ollama", deployment="local", quickchatLocalOllama=True)
         if connection_catalog:
             clean["catalog_source"] = "connection"
             if group.get("catalog_tier") in {"paid", "free"}:
@@ -331,11 +341,14 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
     space_state = _catalog_space_state(resolved)
     fingerprint = (evidence_digest(resolved.profile_home), _catalog_credential_state(resolved.profile_home))
     model_identity = opencode_model_identity(resolved.profile_home)
-    stored = read_persistent_model_catalog(resolved.profile_home, digest, model_identity=model_identity)
-    if stored is not None:
-        return _with_runtime_catalog(stored, scope, resolved.profile.name)
     key = (getattr(manager, "generation", None), scope.key, resolved.binding.partition_key, resolved.binding.revision,
            bool(include_capabilities), digest, fingerprint, space_state)
+    receipt_key = hashlib.sha256(canonical_json(key).encode()).hexdigest()
+    _verify_catalog_state(manager, scope, resolved, digest, fingerprint, space_state)
+    stored = read_persistent_model_catalog(resolved.profile_home, digest, model_identity=model_identity,
+                                           receipt_key=receipt_key)
+    if stored is not None:
+        return _with_runtime_catalog(stored, scope, resolved.profile.name)
     cache, inflight, lock = _catalog_cache_state(manager)
     with lock:
         receipt = cache.get(key)
@@ -365,7 +378,8 @@ def probe_catalog(manager, scope: Scope, resolved=None, *, include_capabilities=
         if not isinstance(result, dict) or result.get("providerConfigurationDigest") != digest or not isinstance(result.get("groups"), list):
             raise PolicyDenied("invalid_model_catalog")
         try:
-            write_persistent_model_catalog(resolved.profile_home, digest, result, model_identity=model_identity)
+            write_persistent_model_catalog(resolved.profile_home, digest, result, model_identity=model_identity,
+                                           receipt_key=receipt_key)
         except OSError:
             pass
         with lock:
@@ -483,6 +497,8 @@ def _native_availability(scope, revision, catalog, provider, model, *, profile_h
 
 
 def _catalog_with_native_availability(scope, revision, catalog, *, profile_home=None, account_id=None):
+    from runtime.quickchat_ollama import is_listed_local_ollama_model
+
     groups = copy.deepcopy(catalog.get("groups") or [])
     for group in groups:
         if not isinstance(group, dict):
@@ -493,6 +509,9 @@ def _catalog_with_native_availability(scope, revision, catalog, *, profile_home=
                 if isinstance(row, dict) and isinstance(row.get("id"), str):
                     row["nativeAvailability"] = _native_availability(
                         scope, revision, catalog, provider, row["id"], profile_home=profile_home, account_id=account_id)
+                    if (group.get("configured") is True and row.get("supportsIndependent") is True
+                            and is_listed_local_ollama_model(catalog, provider, row["id"])):
+                        row["quickchatAvailable"] = True
     return groups
 
 

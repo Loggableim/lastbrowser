@@ -25,6 +25,13 @@ const pluginApi = {
   toggleIncognito: async () => ({}), remove: async () => ({})
 };
 window.lastbrowser = {
+  terminal: {
+    start: async request => (window.__settingsProbe.terminalCalls.push(request), { id: 'codex-fixture' }),
+    close: async id => (window.__settingsProbe.terminalCalls.push(id), { ok: true }),
+    resize: async () => ({ ok: true }),
+    write: async () => ({ ok: true }),
+    onData: () => () => {}
+  },
   extensions: pluginApi,
   i18n: {setLocale: async () => {}},
   updates: {status: async () => ({state:'idle',currentVersion:'test'}), onStatus: () => () => {}},
@@ -56,12 +63,12 @@ class Boundary extends React.Component {
 
 const props = {
   serviceStatus:{sidekick:'ready',webuiHealth:'ready',webuiUrl:'http://controlled.invalid'},
-  activeContextItem:'plugins', onboardingStatus:null, onReopenSetup:()=>{}, searchEngineId:'google',
+  activeContextItem:'plugins', activeSpacePath:'C:/space', onboardingStatus:null, onReopenSetup:()=>{}, searchEngineId:'google',
   onSearchEngineChange:()=>{}, desktopSettings:{}, profiles:[], activeProfileId:'default',
   onSelectProfile:()=>{}, onCreateProfile:()=>{}, onRenameProfile:()=>{}, onDeleteProfile:()=>{}
 };
 const root = createRoot(document.getElementById('root'));
-window.__settingsProbe = {boundary:[],mode:'null',remount(next) {
+window.__settingsProbe = {boundary:[],terminalCalls:[],mode:'null',remount(next) {
   mode = next; this.mode = next; this.boundary = [];
   root.render(<Boundary key={next}><DesktopI18nProvider><NativeSettingsMain key={next} {...props}/></DesktopI18nProvider></Boundary>);
 }};
@@ -129,13 +136,22 @@ async function child(temp) {
         await until("document.querySelector('#extension-settings-tab-installed')?.getAttribute('aria-selected')==='true'",'installed tab selected for valid fixture');
         await until("document.querySelector('.extension-installed-card')?.textContent.includes('Controlled Reader')",'valid IPC fixture renders extension');
       }
-      if(expectation==='error') await until("document.querySelector('[role=alert]')?.textContent.includes('Invalid extensions response')",'invalid IPC fixture displays local error');
+      if(expectation==='error') await until("[...document.querySelectorAll('[role=alert]')].some(alert => alert.textContent.includes('Invalid extensions response'))",'invalid IPC fixture displays local error');
       const boundary=await run('window.__settingsProbe.boundary');
       assert.equal(boundary.length,0,`${mode} caused ErrorBoundary: ${JSON.stringify(boundary)}`);
     }
+    await until("document.querySelector('.mail-plugin-settings [role=alert]')?.textContent.includes('Invalid mail configuration')", 'malformed mail configuration stays confined to its card');
     const finalState=await run("({heading:document.querySelector('.settings-editor-head')?.innerText, boundary:window.__settingsProbe.boundary, enabledCard:document.querySelector('.extension-installed-card')?.className||null, alert:document.querySelector('[role=alert]')?.innerText||null})");
     assert(!consoleErrors.some(line=>/Cannot convert undefined or null to object/.test(line)),`Observed target TypeError: ${consoleErrors.join('\n')}`);
     process.stdout.write(JSON.stringify({phase:'settings-plugins-mounted-fixtures:passed',cases:['null','valid','invalid'],boundaryErrors:finalState.boundary,targetTypeErrorObserved:false,finalState})+'\n');
+    await run("[...document.querySelectorAll('.settings-section-nav button')].find(button => button.querySelector('strong')?.textContent === 'Codex CLI').click()");
+    await until("document.querySelector('.settings-section-nav [aria-current=page] strong')?.textContent === 'Codex CLI' && !!document.querySelector('.terminal-start-form button[type=submit]')", 'Codex CLI is selectable without a beta or terminal opt-in');
+    await run("document.querySelector('.terminal-start-form button[type=submit]').click()");
+    await until("window.__settingsProbe.terminalCalls[0]?.mode === 'codex' && !!document.querySelector('.terminal-toolbar')", 'Codex starts inside Settings');
+    assert.equal(await run("window.__settingsProbe.terminalCalls[0].cwd"), 'C:/space');
+    await run("document.querySelector('.terminal-toolbar button:last-child').click()");
+    await until("window.__settingsProbe.terminalCalls.includes('codex-fixture') && !!document.querySelector('.terminal-start-form')", 'Codex stops and can start again');
+    process.stdout.write('settings-codex-cli:passed\n');
     await app.exit(0);
   } catch(error) { console.error(error); await app.exit(1); }
   finally { if(win&&!win.isDestroyed())win.destroy(); }

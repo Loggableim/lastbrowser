@@ -57,6 +57,7 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
           AZURE_CERTIFICATE_PROFILE: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
+          WINDOWS_SIGNING_PUBLISHER_SUBJECT: ${{ vars.WINDOWS_SIGNING_PUBLISHER_SUBJECT }}
           EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
           EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
         run: |
@@ -66,12 +67,13 @@ jobs:
             'AZURE_TENANT_ID',
             'AZURE_TRUSTED_SIGNING_ACCOUNT',
             'AZURE_CERTIFICATE_PROFILE',
+            'WINDOWS_SIGNING_PUBLISHER_SUBJECT',
             'EVS_ACCOUNT_NAME',
             'EVS_PASSWD'
           )
           $missing = @($required | Where-Object { [string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($_)) })
           if ($missing.Count -gt 0) {
-            throw "Cannot publish without Azure Authenticode and Castlabs VMP signing. Missing required secrets: $($missing -join ', ')"
+            throw "Cannot publish without Azure Authenticode and Castlabs VMP signing. Missing signing inputs: $($missing -join ', ')"
           }
 
       - name: Setup Node
@@ -110,58 +112,58 @@ jobs:
       - name: Verify Microsoft Store release readiness
         run: npm run verify:store
 
+      - name: Provision pinned Windows Python wheels
+        run: npm --workspace apps/desktop run prepare:python -- --download-wheels
+
       - name: Prepare Python runtime
         run: npm --workspace apps/desktop run prepare:python
+
+      - name: Provision pinned Windows protected Space dependencies
+        run: npm --workspace apps/desktop run prepare:space-runtime:online
+
+      - name: Stage the Windows protected Space runtime
+        run: npm --workspace apps/desktop run prepare:space-runtime
 
       - name: Build desktop application
         run: npm --workspace apps/desktop run build
 
-      - name: Select bundled local AI signing targets
-        id: local-ai-signing
+      - name: Install the Artifact Signing client module
         shell: pwsh
-        run: |
-          $files = foreach ($backend in @('cpu', 'vulkan')) {
-            $dir = Join-Path 'apps/desktop/vendor/local-ai' $backend
-            (Get-Item -LiteralPath (Join-Path $dir 'llama-server.exe') -ErrorAction Stop).FullName
-            Get-ChildItem -LiteralPath $dir -File -Filter '*.dll' | ForEach-Object { $_.FullName }
-          }
-          "files<<LOCAL_AI_SIGNING_FILES" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          $files | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-          "LOCAL_AI_SIGNING_FILES" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
-
-      - name: Sign bundled local AI runtime before packaging
-        uses: Azure/trusted-signing-action@v0.5.1
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT || 'https://weu.codesigning.azure.net/' }}
-          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
-          files: ${{ steps.local-ai-signing.outputs.files }}
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-
-      - name: Verify bundled local AI signatures
-        shell: pwsh
-        run: |
-          foreach ($backend in @('cpu', 'vulkan')) {
-            $dir = Join-Path 'apps/desktop/vendor/local-ai' $backend
-            $files = @(Get-Item -LiteralPath (Join-Path $dir 'llama-server.exe')) + @(Get-ChildItem -LiteralPath $dir -File -Filter '*.dll')
-            foreach ($file in $files) {
-              & signtool.exe verify /pa /v $file.FullName
-              if ($LASTEXITCODE -ne 0) { throw "Local AI signature verification failed: $($file.Name)" }
-            }
-          }
+        run: Install-Module -Name TrustedSigning -RequiredVersion '0.5.3' -Scope CurrentUser -Repository PSGallery -Force
 
       - name: Package Windows installers with VMP signing
-        run: npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never --config.publish.channel=${{ steps.release-channel.outputs.channel }} --config.publish.releaseType=${{ steps.release-channel.outputs.prerelease == 'true' && 'prerelease' || 'release' }}
+        shell: pwsh
         env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_CERTIFICATE_PROFILE: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT || 'https://weu.codesigning.azure.net/' }}
+          WINDOWS_SIGNING_PUBLISHER_SUBJECT: ${{ vars.WINDOWS_SIGNING_PUBLISHER_SUBJECT }}
           EVS_ACCOUNT_NAME: ${{ secrets.EVS_ACCOUNT_NAME }}
           EVS_PASSWD: ${{ secrets.EVS_PASSWD }}
           EVS_REQUIRED: '1'
           EVS_NO_ASK: '1'
+          EVS_REQUIRE_EXPLICIT_CREDENTIALS: '1'
+          RELEASE_CHANNEL: ${{ steps.release-channel.outputs.channel }}
+          RELEASE_TYPE: ${{ steps.release-channel.outputs.prerelease == 'true' && 'prerelease' || 'release' }}
+        run: |
+          $config = (Get-Content 'apps/desktop/package.json' -Raw | ConvertFrom-Json).build
+          $config | Add-Member -NotePropertyName forceCodeSigning -NotePropertyValue $true -Force
+          $config.win.signAndEditExecutable = $true
+          $config.win.verifyUpdateCodeSignature = $true
+          $config.win | Add-Member -NotePropertyName signtoolOptions -NotePropertyValue @{
+            sign = 'scripts/azure-windows-sign.cjs'
+            signingHashAlgorithms = @('sha256')
+            publisherName = $env:WINDOWS_SIGNING_PUBLISHER_SUBJECT
+          } -Force
+          $config.publish[0].channel = $env:RELEASE_CHANNEL
+          $config.publish[0].releaseType = $env:RELEASE_TYPE
+          $configPath = Join-Path $env:RUNNER_TEMP 'lastbrowser-signed-release.json'
+          $config | ConvertTo-Json -Depth 40 | Set-Content -LiteralPath $configPath -Encoding utf8
+          npm --workspace apps/desktop exec -- electron-builder --win nsis portable --publish never --config $configPath
+          if ($LASTEXITCODE -ne 0) { throw 'Signed package build failed.' }
 
       - name: Require exactly the expected Windows executables
         shell: pwsh
@@ -176,36 +178,26 @@ jobs:
             throw "Expected exactly these release executables: $($expected -join ', '). Found: $($actual -join ', ')."
           }
 
-      - name: Sign binaries with Azure Trusted Signing (Microsoft Store / Authenticode)
-        uses: Azure/trusted-signing-action@v0.5.1
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT || 'https://weu.codesigning.azure.net/' }}
-          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ secrets.AZURE_CERTIFICATE_PROFILE }}
-          files: |
-            apps/desktop/release/*.exe
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-
       - name: Refresh signed installer checksum and differential blockmap
         run: node scripts/refresh-signed-release-metadata.mjs apps/desktop/release node_modules/app-builder-bin/win/x64/app-builder.exe ${{ steps.release-channel.outputs.metadata }}
 
       - name: Verify Authenticode Signature
-        shell: powershell
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_PUBLISHER_SUBJECT: ${{ vars.WINDOWS_SIGNING_PUBLISHER_SUBJECT }}
         run: |
           $version = (Get-Content 'apps/desktop/package.json' -Raw | ConvertFrom-Json).version
-          $expected = @(
-            "Lastbrowser-$version-x64-setup.exe",
-            "Lastbrowser-$version-x64-portable.exe"
-          ) | Sort-Object
-          $executables = @(Get-ChildItem -Path 'apps/desktop/release' -File -Filter '*.exe')
-          $actual = @($executables | ForEach-Object { $_.Name } | Sort-Object)
-          if ($actual.Count -ne 2 -or (Compare-Object -ReferenceObject $expected -DifferenceObject $actual)) {
-            throw "Expected exactly these signed release executables: $($expected -join ', '). Found: $($actual -join ', ')."
+          $releaseDir = 'apps/desktop/release'
+          $packageDir = Join-Path $releaseDir 'win-unpacked'
+          $setup = Join-Path $releaseDir "Lastbrowser-$version-x64-setup.exe"
+          $portable = Join-Path $releaseDir "Lastbrowser-$version-x64-portable.exe"
+          $executables = Get-Item -LiteralPath @((Join-Path $packageDir 'Lastbrowser.exe'), $setup, $portable)
+          if (-not (Get-Command signtool.exe -ErrorAction SilentlyContinue)) {
+            $sdkBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+            $tool = Get-ChildItem -LiteralPath $sdkBin -Recurse -File -Filter 'signtool.exe' |
+              Where-Object { $_.Directory.Name -eq 'x64' } | Sort-Object FullName -Descending | Select-Object -First 1
+            if (-not $tool) { throw 'Windows SDK x64 SignTool is required for release verification.' }
+            $env:PATH = $tool.DirectoryName + [IO.Path]::PathSeparator + $env:PATH
           }
           foreach ($executable in $executables) {
             Write-Host "Verifying signature for: $($executable.FullName)"
@@ -213,7 +205,27 @@ jobs:
             if ($LASTEXITCODE -ne 0) {
               throw "Authenticode verification failed for $($executable.Name) with exit code $LASTEXITCODE"
             }
+            $signature = Get-AuthenticodeSignature -LiteralPath $executable.FullName
+            if ($signature.Status -ne 'Valid' -or -not $signature.TimeStamperCertificate -or
+                $signature.SignerCertificate.Subject -cne $env:WINDOWS_SIGNING_PUBLISHER_SUBJECT) {
+              throw "Wrong, invalid, or untimestamped signing identity for $($executable.Name)."
+            }
           }
+          & ./scripts/verify-windows-package-signatures.ps1 -PackageDirectory $packageDir -InstallerPath $setup
+          $checkPublisher = @'
+          const fs = require('node:fs');
+          const yaml = require('js-yaml');
+          const config = yaml.load(fs.readFileSync(process.argv[1], 'utf8'));
+          const configured = config?.publisherName;
+          if (!Array.isArray(configured) || configured.length !== 1 || configured[0] !== process.env.WINDOWS_SIGNING_PUBLISHER_SUBJECT) {
+            throw new Error('Packaged updater publisher does not match the authorized signing identity.');
+          }
+          if (typeof config.updaterCacheDirName !== 'string' || !/^[a-z0-9][a-z0-9_.-]*$/i.test(config.updaterCacheDirName)) {
+            throw new Error('Packaged updater cache configuration is invalid.');
+          }
+          '@
+          node -e $checkPublisher (Join-Path $packageDir 'resources/app-update.yml')
+          if ($LASTEXITCODE -ne 0) { throw 'Packaged updater publisher verification failed.' }
 
       - name: Verify packaged Widevine VMP signature
         shell: powershell

@@ -43,7 +43,7 @@ describe('en_US shell copy', () => {
   it('wires the reported components through the catalog', () => {
     expect(renderer('App.tsx')).toContain("t('shell.backToWeb')");
     expect(renderer('App.tsx')).not.toContain('>Zurück zum Web<');
-    expect(renderer('components/FirstRunSetupPane.tsx')).toContain("t('firstRun.welcomeBadge')");
+    expect(renderer('components/FirstRunSetupPane.tsx')).toContain("t('searchEngineSetup.more')");
     expect(renderer('components/CommandPalette.tsx')).toContain("t('commands.nav.settings')");
     expect(renderer('components/CommandPalette.tsx')).not.toContain("title: 'Einstellungen öffnen'");
     expect(renderer('components/CopilotSplitView.tsx')).toContain("t('copilot.modelMenuTitle')");

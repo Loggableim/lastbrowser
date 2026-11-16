@@ -1,9 +1,14 @@
 import { EventEmitter } from 'node:events';
+import { spawnSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
+vi.mock('node:child_process', async (importOriginal) => ({
+  ...await importOriginal<typeof import('node:child_process')>(),
+  spawnSync: vi.fn(() => ({ status: 0 }))
+}));
 import {
   SidecarServices,
   buildSidecarEnvironment,
@@ -218,6 +223,156 @@ describe('sidecar service layout', () => {
       service.stop();
       expect(service.getStatus().runtimeGeneration).toBeNull();
       rmSync(resourcesRoot, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('stops the owned Windows Python supervisor and its children together', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    const child = Object.assign(new EventEmitter(), { pid: 43210, exitCode: null, signalCode: null, kill: vi.fn() });
+    const service = new SidecarServices(resolveServiceLayout(root), 8787, (() => child) as never, async () => 8787);
+
+    try {
+      await service.start();
+      service.stop();
+      expect(spawnSync).toHaveBeenCalledWith(
+        expect.stringMatching(/System32[\\/]taskkill\.exe$/i),
+        ['/F', '/T', '/PID', '43210'],
+        expect.objectContaining({ windowsHide: true })
+      );
+      expect(child.kill).not.toHaveBeenCalled();
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for both backend writers to close and prevents restarts during profile migration', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    const fakeChild = (pid: number) =>
+      Object.assign(new EventEmitter(), { pid, exitCode: null, signalCode: null, kill: vi.fn(() => true) });
+    const webui = fakeChild(43210);
+    const gateway = fakeChild(43211);
+    const spawn = vi.fn().mockReturnValueOnce(webui).mockReturnValueOnce(gateway);
+    const service = new SidecarServices(resolveServiceLayout(root), 8787, spawn as never, async () => 8787,
+      async () => ({ ok: true }), async () => ({ status: 'not-needed' }) as never);
+    try {
+      await service.start();
+      await service.startGateway();
+      let finished = false;
+      const shutdown = service.stopForProfileMigration().then(() => { finished = true; });
+      await service.start();
+      await service.startGateway();
+      expect(spawn).toHaveBeenCalledTimes(2);
+      webui.emit('close', 0, null);
+      await Promise.resolve();
+      expect(finished).toBe(false);
+      gateway.emit('close', 0, null);
+      await shutdown;
+      expect(finished).toBe(true);
+      expect(service.getStatus().sidekick).toBe('stopped');
+      expect(service.getGatewayStatus().running).toBe(false);
+      await service.start();
+      expect(spawn).toHaveBeenCalledTimes(2);
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('cancels a starting Sidekick before it can open a database during migration', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    let releasePort!: (port: number) => void;
+    const port = new Promise<number>(resolve => { releasePort = resolve; });
+    const spawn = vi.fn();
+    const service = new SidecarServices(resolveServiceLayout(root), 8787, spawn as never, () => port,
+      async () => ({ ok: true }), async () => ({ status: 'not-needed' }) as never);
+    try {
+      const starting = service.start();
+      const stopping = service.stopForProfileMigration();
+      releasePort(8787);
+      await Promise.all([starting, stopping]);
+      expect(spawn).not.toHaveBeenCalled();
+      expect(service.getStatus().sidekick).toBe('stopped');
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it.runIf(process.platform === 'win32')('aborts profile migration when Windows cannot confirm the backend process tree was stopped', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    const child = Object.assign(new EventEmitter(), { pid: 43210, exitCode: null, signalCode: null, kill: vi.fn() });
+    const service = new SidecarServices(resolveServiceLayout(root), 8787, (() => child) as never, async () => 8787,
+      async () => ({ ok: true }), async () => ({ status: 'not-needed' }) as never);
+    try {
+      await service.start();
+      vi.mocked(spawnSync).mockReturnValueOnce({ status: 1 } as never);
+      await expect(service.stopForProfileMigration()).rejects.toThrow(/did not confirm/);
+      expect(child.kill).not.toHaveBeenCalled();
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('ignores an old health probe after Sidekick restarts on the same port', async () => {
+    const root = mkdtempResourceRoot();
+    const entry = path.join(root, 'services', 'sidekick', 'cli', 'web_server.py');
+    mkdirSync(path.dirname(entry), { recursive: true });
+    writeFileSync(entry, '');
+    const probes: Array<(result: { ok: boolean }) => void> = [];
+    const service = new SidecarServices(
+      resolveServiceLayout(root),
+      8787,
+      (() => {
+        const child = Object.assign(new EventEmitter(), { kill: vi.fn() });
+        queueMicrotask(() => child.emit('spawn'));
+        return child;
+      }) as never,
+      async () => 8787,
+      () => new Promise(resolve => probes.push(resolve))
+    );
+    const ready = vi.fn();
+    service.onRuntimeReady(ready);
+
+    try {
+      const first = await service.start();
+      service.stop();
+      const second = await service.start();
+      expect(first.runtimeGeneration).not.toBe(second.runtimeGeneration);
+
+      probes[0]({ ok: true });
+      await Promise.resolve();
+      expect(service.getStatus().webuiHealth).toBe('checking');
+      expect(ready).not.toHaveBeenCalled();
+
+      expect(probes).toHaveLength(2);
+      probes[1]({ ok: true });
+      await Promise.resolve();
+      expect(ready).toHaveBeenCalledExactlyOnceWith(second.runtimeGeneration);
+      expect(service.getStatus().webuiHealth).toBe('ready');
+
+      const obsoleteRestart = service.restartIfUnresponsive();
+      service.stop();
+      const third = await service.start();
+      probes[2]({ ok: false });
+      expect(await obsoleteRestart).toBe(false);
+      expect(service.getStatus().runtimeGeneration).toBe(third.runtimeGeneration);
+    } finally {
+      service.stop();
+      rmSync(root, { recursive: true, force: true });
     }
   });
 

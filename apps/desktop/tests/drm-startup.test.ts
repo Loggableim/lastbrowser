@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { initializeCastlabsWidevine, type WidevineReadiness } from '../src/main/drm.js';
 import { startPrimaryInstanceStartup } from '../src/main/app-startup.js';
 
-describe('bounded Widevine shell startup', () => {
+describe('Widevine startup', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -10,22 +10,33 @@ describe('bounded Widevine shell startup', () => {
   });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
 
-  it('creates the shell after a hanging component deadline without declaring DRM ready', async () => {
+  it('creates the shell while the component is still pending', async () => {
     const statuses: WidevineReadiness[] = [];
     const createShell = vi.fn();
     const whenReady = vi.fn(() => new Promise<void>(() => {}));
     startPrimaryInstanceStartup(true, () => {}, () => Promise.resolve(), async () => {
-      const ready = await initializeCastlabsWidevine({ components: { whenReady } }, { timeoutMs: 3000, onStatus: status => statuses.push(status) });
-      expect(ready).toBe(false);
+      void initializeCastlabsWidevine({ components: { whenReady } }, { timeoutMs: 3000, onStatus: status => statuses.push(status) });
       createShell();
     }, () => {});
     await vi.advanceTimersByTimeAsync(2999);
-    expect(createShell).not.toHaveBeenCalled();
+    expect(createShell).toHaveBeenCalledOnce();
     expect(statuses).toEqual([{ status: 'pending', reason: 'initializing' }]);
     await vi.advanceTimersByTimeAsync(1);
     expect(createShell).toHaveBeenCalledOnce();
     expect(whenReady).toHaveBeenCalledOnce();
     expect(statuses.at(-1)).toEqual({ status: 'pending', reason: 'deadline_exceeded' });
+  });
+
+  it('does not ask Castlabs to start component downloads when updates are disabled', async () => {
+    const statuses: WidevineReadiness[] = [];
+    const whenReady = vi.fn();
+    expect(await initializeCastlabsWidevine({ components: { whenReady } }, {
+      componentUpdatesDisabled: true,
+      onStatus: status => statuses.push(status),
+    })).toBe(false);
+    expect(whenReady).not.toHaveBeenCalled();
+    expect(statuses).toEqual([{ status: 'unavailable', reason: 'component_updates_disabled' }]);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('starts immediately after actual component readiness and clears its deadline', async () => {
@@ -77,6 +88,6 @@ describe('bounded Widevine shell startup', () => {
     const statuses: WidevineReadiness[] = [];
     expect(await initializeCastlabsWidevine({}, { onStatus: status => statuses.push(status) })).toBe(false);
     expect(statuses).toEqual([{ status: 'unavailable', reason: 'unsupported' }]);
-    await expect(initializeCastlabsWidevine({}, { timeoutMs: Infinity })).rejects.toThrow('Invalid Widevine startup deadline');
+    await expect(initializeCastlabsWidevine({}, { timeoutMs: Infinity })).rejects.toThrow('Invalid Widevine readiness deadline');
   });
 });

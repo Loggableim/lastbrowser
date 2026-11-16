@@ -82,12 +82,15 @@
   <div class="feature-card" style="margin-bottom: 24px;">
     <h2>1. Das Local-First Prinzip</h2>
     <p style="margin-top:10px;">
-      Lastbrowser ist als <strong>Local-First</strong> Anwendung konzipiert. Browserprofile mit Verläufen, Lesezeichen, geöffnete Tabs, Passwörter, Cookie-Jars und gespeicherte Zugangsdaten liegen auf Ihrem Endgerät im Verzeichnis <code>%APPDATA%\Lastbrowser</code>. Lastbrowser betreibt keinen zentralen Dienst zur Synchronisierung dieser Profile. Bei externen KI-Anfragen werden die in Abschnitt 3 beschriebenen Daten an den gewählten Anbieter übertragen.
+      Lastbrowser ist als <strong>Local-First</strong> Anwendung konzipiert. Browserprofile mit Verlauf, Lesezeichen, offenen Tabs, Passwörtern, Cookies und gespeicherten Zugangsdaten liegen auf Ihrem Endgerät. Unter Windows liegen neue Profile in <code>%APPDATA%\Lastbrowser</code>. Vorhandene Profile aus älteren Builds unter <code>%APPDATA%\@lastbrowser\desktop</code> bleiben dort. Lastbrowser betreibt keinen zentralen Dienst zur Synchronisierung dieser Profile. Bei externen KI-Anfragen werden die in Abschnitt 3 beschriebenen Daten an den gewählten Anbieter übertragen.
     </p>
   </div>
 
   <div class="feature-card" style="margin-bottom: 24px;">
     <h2>2. Keine unaufgeforderte Telemetrie</h2>
+    <p style="margin-top:10px;">
+      LastBrowser kann beim Start Netzwerkverbindungen im Hintergrund aufbauen. Der Werbeblocker lädt Filterlisten und Scriptlet-Ressourcen von GitHub, wenn sein Cache aktualisiert werden muss. Wer den Werbeblocker über das Schildsymbol deaktiviert, verhindert auch künftige Filterdownloads. Die Chromium-Laufzeit von Castlabs kann Googles Komponenten-Updatedienst unter <code>update.googleapis.com</code> für Widevine kontaktieren. Die Startoption <code>--disable-component-update</code> deaktiviert Chromium-Komponentenupdates und kann die Wiedergabe geschützter Medien verhindern. Die App-Aktualisierung kann GitHub Releases abfragen. Automatische App-Updates lassen sich in den Einstellungen deaktivieren.
+    </p>
     <p style="margin-top:10px;">
       Die Anwendungsbinärdatei enthält keinen Google-Analytics-Code, keine Tracking-Pixel und keine Werbe-IDs. Es werden keine IP-Adressen oder Hardware-Fingerprints an unsere Server übermittelt.
     </p>

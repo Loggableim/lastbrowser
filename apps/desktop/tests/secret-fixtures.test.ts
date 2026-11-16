@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -41,19 +42,21 @@ function removeManifestFixture(root: string): void {
 }
 
 describe('secret-shaped fixtures', () => {
-  it('does not contain Telegram bot-token-shaped literals in the actual validation sources', () => {
+  it('does not contain Telegram bot-token-shaped literals in the actual validation sources', async () => {
     const { origin, files } = sourceTextFiles(repoRoot);
     expect(files.length).toBeGreaterThan(100);
     expect(files).toContain('apps/desktop/src/renderer/App.tsx');
     expect(files).toContain('services/sidekick/cli/web_server.py');
-    // The repo has grown past the point where reading every tracked file fits
-    // in the default 5s vitest timeout (measured ~15s for ~1400 files), so the
-    // scan needs an explicit budget rather than a flaky failure.
-    const offenders = files.filter((file) => {
-      const fullPath = path.join(repoRoot, file);
-      // Missing listed sources fail the gate instead of silently shrinking it.
-      return telegramBotTokenPattern.test(readFileSync(fullPath, 'utf8'));
-    });
+    // Let slow Windows file opens overlap and keep the Vitest worker responsive.
+    // Missing listed sources still fail the gate.
+    const offenders: string[] = [];
+    const batchSize = 32;
+    for (let start = 0; start < files.length; start += batchSize) {
+      const batch = files.slice(start, start + batchSize);
+      const matches = await Promise.all(batch.map(async (file) =>
+        telegramBotTokenPattern.test(await readFile(path.join(repoRoot, file), 'utf8'))));
+      offenders.push(...batch.filter((_file, index) => matches[index]));
+    }
 
     console.info(`Secret gate: origin=${origin}; scannedTextFiles=${files.length}; offenders=${offenders.length}`);
     expect(offenders).toEqual([]);

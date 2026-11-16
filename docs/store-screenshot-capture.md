@@ -31,3 +31,16 @@ Die Bilder zeigen einen Entwicklungsstand vor dem Abschluss von **Multiagent Ums
 Sichtbare Übersetzungslücken wurden an den abhängigen Chat gemeldet: deutsche Space-Karten, englische Favoriten-/Verlaufstexte auf der Startseite, „Zurück zum Web“, „Deaktiviert“ bei Dock-Einstellungen und nicht übersetzte native Panel-/Hub-Beschriftungen. Im nicht eingerichteten KI-Bereich erscheinen zudem Modellerkennungs-/Anfragefehlermeldungen; diese Ansicht wurde nicht für den Store ausgewählt.
 
 Vor der Zertifizierung den Test aus dem fertigen gemeinsamen Stand erneut ausführen, Bilder visuell prüfen und die Store-Auswahl aktualisieren. **Die Store-Freigabesperre bleibt bestehen.**
+
+## Aufnahmen dem Windows-Paket zuordnen
+
+Starten Sie den Aufnahmelauf unter Windows mit Node.js 22. Geben Sie das entpackte Windows-Programm und ein neues Ausgabeverzeichnis an. Der Treiber öffnet ein neues Testprofil und leitet externe Anfragen an einen blockierenden lokalen Proxy. Die vier Ansichten `browser`, `downloads`, `appearance` und `preferences` werden in acht UI-Sprachen aufgenommen. Die Systemdiagnose und der Erweiterungs-Hub können lokale Dateipfade anzeigen.
+
+```powershell
+node scripts/capture-store-package.cjs '<release-folder>/win-unpacked/Lastbrowser.exe' '<new-capture-folder>'
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-store-screenshot-receipt.ps1 -PackageDirectory '<release-folder>/win-unpacked' -ScreenshotReportPath '<new-capture-folder>/capture-report.json'
+```
+
+Für den vollständigen Store-Preflight übergeben Sie denselben Aufnahmebericht an `scripts/verify-store-readiness.ps1` mit `-ScreenshotReportPath` und `-PackageDirectory`. Der Bericht enthält Laufzeiten, den Abschlussstatus, EXE- und ASAR-Hashes sowie Locale, Ansicht, Pfad und Hash je Bild. Die Prüfung akzeptiert je Sprache ein bis zehn echte 1920×1080-PNGs.
+
+Der Prüfer vergleicht die Programmdaten und jede Bilddatei mit ihren Hashes. Die Store-Vorschau braucht weiterhin eine Sichtprüfung. Nach dem Signieren ändert sich der EXE-Hash. Verwenden Sie den Aufnahmebericht des signierten Builds, wenn die endgültigen Store-Bilder geprüft werden.

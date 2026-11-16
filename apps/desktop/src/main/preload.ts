@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from 'electron';
 import { isTrustedPreloadDocumentUrl } from './preload-origin.js';
 
 if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMainWorld('lastbrowser', {
+  protectedRendererSeed: () => ipcRenderer.invoke('lastbrowser:protected-renderer-seed'),
+  protectedSpaceSelection: (selection?: readonly [string, string]) =>
+    ipcRenderer.invoke('lastbrowser:protected-space-selection', selection),
+  configureProtectedSpaces: (proposal: unknown, primary: Uint8Array, emergency: Uint8Array) =>
+    ipcRenderer.invoke('lastbrowser:configure-protected-spaces', proposal, primary, emergency),
   quickChat: {
     start: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:start', request),
     stop: (request: unknown) => ipcRenderer.invoke('lastbrowser:quickchat:stop', request),
@@ -255,15 +260,15 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     sendMessage: (request: unknown) => ipcRenderer.invoke('lastbrowser:sidekick:sendMessage', request)
   },
   terminal: {
-    start: (request: string | { cwd?: string; mode?: 'shell' | 'tui'; cols?: number; rows?: number }) =>
+    start: (request: string | { cwd?: string; mode?: 'shell' | 'tui' | 'codex'; cols?: number; rows?: number }) =>
       ipcRenderer.invoke('lastbrowser:terminal:start', request),
     write: (request: { id: string; data: string }) => ipcRenderer.invoke('lastbrowser:terminal:write', request),
     resize: (request: { id: string; cols: number; rows: number }) =>
       ipcRenderer.invoke('lastbrowser:terminal:resize', request),
     close: (id: string) => ipcRenderer.invoke('lastbrowser:terminal:close', id),
     list: () => ipcRenderer.invoke('lastbrowser:terminal:list'),
-    onData: (callback: (event: { id: string; data: string }) => void) => {
-      const listener = (_event: Electron.IpcRendererEvent, payload: { id: string; data: string }) => callback(payload);
+    onData: (callback: (event: { id: string; data?: string; exitCode?: number }) => void) => {
+      const listener = (_event: Electron.IpcRendererEvent, payload: { id: string; data?: string; exitCode?: number }) => callback(payload);
       ipcRenderer.on('lastbrowser:terminal:data', listener);
       return () => ipcRenderer.removeListener('lastbrowser:terminal:data', listener);
     }

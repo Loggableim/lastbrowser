@@ -11071,13 +11071,18 @@ def _handle_browser_sse_stream(handler, parsed):
 
 
 def _handle_model_probe(handler, body):
-    """Probe a fixed provider catalog with a transient user-supplied key.
+    """Probe an allowed provider catalog with transient user-supplied settings.
 
     The key is never persisted or included in a URL/log. Only providers with a
-    known, fixed catalog endpoint are accepted to avoid SSRF.
+    known catalog endpoint or a local Ollama server are accepted.
     """
     provider = str(body.get("provider") or "").strip().lower()
     api_key = str(body.get("api_key") or "").strip()
+    if provider == "ollama":
+        result = probe_ollama_connection(
+            provider, str(body.get("base_url") or ""), api_key, include_models=True
+        )
+        return j(handler, result, status=200 if result.get("ok") else 400)
     if provider in {"alibaba", "alibaba-cloud"}:
         import urllib.request
         from urllib.parse import urlsplit

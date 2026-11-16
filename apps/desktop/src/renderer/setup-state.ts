@@ -93,7 +93,7 @@ const fallbackCloudProviders = [
   { id: 'opencode-go', label: 'OpenCode Go', key_optional: false },
   { id: 'opencode-zen', label: 'OpenCode Zen', key_optional: false },
   { id: 'xiaomi', label: 'Xiaomi MiMo', key_optional: false, requires_base_url: true, default_base_url: 'https://api.xiaomimimo.com/v1' },
-  { id: 'ollama', label: 'Ollama (Lokal)', requires_base_url: false, key_optional: true, default_base_url: 'http://127.0.0.1:11434/v1' },
+  { id: 'ollama', label: 'Ollama', requires_base_url: false, key_optional: true, default_base_url: 'http://127.0.0.1:11434/v1' },
   { id: 'ollama-cloud', label: 'Ollama Cloud', requires_base_url: false, key_optional: false, default_base_url: 'https://ollama.com/v1' },
   { id: 'openrouter', label: 'OpenRouter', key_optional: false },
   { id: 'alibaba', label: 'Alibaba Cloud (DashScope)', key_optional: false, requires_base_url: true },

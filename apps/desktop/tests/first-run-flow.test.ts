@@ -24,4 +24,14 @@ describe('first launch page flow', () => {
     expect(source).toContain("if (event.key !== 'Escape' || busy || currentIndex <= 0) return;");
     expect(source).not.toContain("else void chooseAi('disabled');");
   });
+
+  it('resolves the saved first Space before writing scoped AI settings', () => {
+    const source = readFileSync(new URL('../src/renderer/App.tsx', import.meta.url), 'utf8');
+    const completion = source.slice(source.indexOf('async function completeSetup('), source.indexOf('async function saveFirstRunAiChoice('));
+    expect(completion).not.toContain('The browser profile is still preparing.');
+    expect(completion).toContain('const workspacePath = await prepareFirstSetupSpace(form.firstSpaceName)');
+    expect(completion).toContain('backendProfileName = resolved.value.backendProfileName || requestedBackendProfileName');
+    expect(completion.indexOf('const scopeSelection =')).toBeGreaterThan(completion.indexOf('await assistantController.resolveScope'));
+    expect(completion.indexOf('await window.lastbrowser.sidekick.applyCloudSetup')).toBeGreaterThan(completion.indexOf('const scopeSelection ='));
+  });
 });

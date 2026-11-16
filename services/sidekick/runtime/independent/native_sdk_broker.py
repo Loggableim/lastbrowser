@@ -108,6 +108,8 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
     from .scoped_models import probe_catalog, _entry
     from .scope_binding import provider_selection
     from runtime.model_metadata import MINIMUM_CONTEXT_LENGTH
+    from runtime.quickchat_ollama import (is_listed_local_ollama_model,
+        profile_local_ollama_endpoint, resolve_quickchat_ollama)
     actor = session.profile or "default"
     if service is None:
         service, resolved = service_for_native_chat(session, session.space_scope, actor=actor, profile_hub=profile_hub)
@@ -147,6 +149,11 @@ def capture_fixed_provider(session, *, profile_hub=None, service=None, account_i
         local_runtime = _local_store_capture(scoped_store(scope, actor), model)
         if length != local_runtime.context_tokens:
             raise PolicyDenied('native_local_context_changed')
+    elif (getattr(session, "session_kind", None) == "quickchat"
+            and profile_local_ollama_endpoint(resolved.profile_home, provider)):
+        if not is_listed_local_ollama_model(catalog, provider, model):
+            raise PolicyDenied("quickchat_ollama_model_not_listed")
+        length = resolve_quickchat_ollama(resolved.profile_home, provider, model).context_tokens
     elif type(length) is not int or length < MINIMUM_CONTEXT_LENGTH:
         raise PolicyDenied("context_metadata_required")
     selected = ProviderSelection(provider=provider, model=model, provider_config_ref=catalog["providerConfigurationDigest"], context_length=length)

@@ -82,7 +82,7 @@
   <div class="feature-card" style="margin-bottom: 24px;">
     <h2>1. The Local-First Principle</h2>
     <p style="margin-top:10px;">
-      Lastbrowser is built as a <strong>Local-First</strong> desktop application. Browser profiles containing history, bookmarks, tabs, passwords, cookie jars and saved credentials are stored on your device in <code>%APPDATA%\Lastbrowser</code>. Lastbrowser does not operate a central service to synchronize those profiles. External AI requests send the data described in section 3 to your selected provider.
+      Lastbrowser is built as a <strong>Local-First</strong> desktop application. Browser profiles containing history, bookmarks, tabs, passwords, cookies and saved credentials are stored on your device. On Windows, new profiles use <code>%APPDATA%\Lastbrowser</code>. Existing profiles created by earlier builds under <code>%APPDATA%\@lastbrowser\desktop</code> remain there. Lastbrowser does not operate a central service to synchronize those profiles. External AI requests send the data described in section 3 to your selected provider.
     </p>
   </div>
 
@@ -90,6 +90,9 @@
     <h2>2. Zero Involuntary Telemetry</h2>
     <p style="margin-top:10px;">
       Our binary contains no Google Analytics SDKs, no tracking pixels, and no device fingerprinting trackers. We do not log IP addresses or browsing timestamps.
+    </p>
+    <p style="margin-top:10px;">
+      LastBrowser can make background requests at startup. The ad blocker downloads filter lists and scriptlet resources from GitHub's raw content host when its cache needs refreshing. Turning off the ad blocker using the shield also turns off future filter downloads. The Castlabs Chromium runtime can contact Google's component update service at <code>update.googleapis.com</code> for Widevine. The <code>--disable-component-update</code> launch option turns off Chromium component updates and can prevent protected-media playback. The app updater can contact GitHub Releases. You can turn off automatic app updates in Settings.
     </p>
   </div>
 

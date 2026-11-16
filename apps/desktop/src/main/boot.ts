@@ -1,6 +1,12 @@
+import { app, dialog } from 'electron';
 import Module from 'node:module';
+import { write } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { findWindowsProtectedPair } from './active-space-config.js';
+import { defaultBrowserProfileDirectory } from './profile-directory.js';
+import { rendererStoreWorkerSwitch } from './renderer-store-worker-client.js';
+import { migrationWorkerSwitch } from './windows-space-migration-request.js';
 
 // electron-builder can omit the hoisted `ms` package. `debug`, which
 // electron-updater loads while this process starts, requires it. Resolve
@@ -15,4 +21,53 @@ nodeModule._nodeModulePaths = function (this: unknown, from: string) {
   return paths;
 };
 
-await import('./main.js');
+async function launchProtectedProfile(): Promise<boolean> {
+  if (process.platform !== 'win32' || app.commandLine.hasSwitch('lastbrowser-protected-profile')) return false;
+  try {
+    const pair = await findWindowsProtectedPair(defaultBrowserProfileDirectory(app));
+    if (!pair) return false;
+    const { startWindowsProtectedSpace } = await import('./windows-protected-space-startup.js');
+    await startWindowsProtectedSpace(pair);
+  } catch {
+    dialog.showErrorBox('LastBrowser', app.getLocale().startsWith('de')
+      ? 'Der geschützte Space konnte nicht gestartet werden.'
+      : 'The protected Space could not start.');
+    app.exit(1);
+  }
+  return true;
+}
+
+async function runSpaceMigrationWorker() {
+  const parent = app.commandLine.getSwitchValue(migrationWorkerSwitch);
+  if (!/^[1-9][0-9]*$/.test(parent) || Number(parent) !== process.ppid) throw new Error('Invalid migration worker parent');
+  const { runOfflineWindowsSpaceMigration } = await import('./windows-space-offline-migration.js');
+  const { resolveWindowsSpaceMigrationRuntime } = await import('./windows-space-runtime.js');
+  let reserved = false;
+  try {
+    await runOfflineWindowsSpaceMigration({
+      ...resolveWindowsSpaceMigrationRuntime(process.resourcesPath),
+      legacyUserData: defaultBrowserProfileDirectory(app), parentPid: Number(parent),
+      browserExecutable: process.execPath, browserArgs: app.isPackaged ? [] : [app.getAppPath()],
+      async onReserved() {
+        await new Promise<void>((resolve, reject) => write(1, Buffer.from([1]), error => error ? reject(error) : resolve()));
+        reserved = true;
+      }
+    });
+  } catch (error) {
+    if (reserved) dialog.showErrorBox('LastBrowser', app.getLocale().startsWith('de')
+      ? 'Die Space-Migration wurde nicht abgeschlossen.'
+      : 'Space migration did not finish.');
+    throw error;
+  }
+}
+
+if (process.platform === 'win32' && app.commandLine.hasSwitch(migrationWorkerSwitch)) {
+  void runSpaceMigrationWorker().then(() => {
+    app.relaunch({ args: app.isPackaged ? [] : [app.getAppPath()] });
+    app.exit(0);
+  }, () => app.exit(1));
+} else if (process.platform === 'win32' && app.commandLine.hasSwitch(rendererStoreWorkerSwitch)) {
+  const { runRendererStoreWorker } = await import('./renderer-store-worker.js');
+  // Electron emits ready after loading the entry point.
+  void runRendererStoreWorker(app.commandLine.getSwitchValue(rendererStoreWorkerSwitch)).catch(() => app.exit(1));
+} else if (!await launchProtectedProfile()) await import('./main.js');

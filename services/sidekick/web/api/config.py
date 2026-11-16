@@ -3214,12 +3214,10 @@ def _configured_model_probe_api_key(
         if error or normalized_url != str(base_url or "").strip().rstrip("/"):
             return ""
         return scoped_key
-    if provider_id == "ollama":
-        providers_cfg = config.get("providers", {})
-        ollama_cfg = providers_cfg.get("ollama", {}) if isinstance(providers_cfg, dict) else {}
-        if isinstance(ollama_cfg, dict):
-            return str(ollama_cfg.get("api_key") or "").strip()
-        return ""
+    from runtime.quickchat_ollama import configured_local_ollama_endpoint, local_ollama_key
+    ollama_endpoint = configured_local_ollama_endpoint(config, provider_id)
+    if provider_id == "ollama" or (ollama_endpoint and base_url.rstrip("/") in {ollama_endpoint, ollama_endpoint[:-3]}):
+        return local_ollama_key(config)
     if provider_id == "ollama-cloud":
         from shared.utils import is_official_ollama_cloud_url
 
@@ -3873,8 +3871,15 @@ def get_available_models() -> dict:
                 # or unreachable provider must not stall the whole first-run
                 # flow — the hardcoded catalog below is the fallback.
                 _probe_timeout = float(os.getenv("SIDEKICK_MODELS_PROBE_TIMEOUT", "3"))
-                with urllib.request.urlopen(req, timeout=_probe_timeout) as response:  # nosec B310
-                    data = json.loads(response.read().decode("utf-8"))
+                from runtime.quickchat_ollama import configured_local_ollama_endpoint
+                ollama_endpoint = configured_local_ollama_endpoint(cfg, provider)
+                if ollama_endpoint and base_url.rstrip("/") in {ollama_endpoint, ollama_endpoint[:-3]}:
+                    from web.api.providers import probe_ollama_connection
+                    local_models = probe_ollama_connection("ollama", ollama_endpoint, api_key, include_models=True)
+                    data = {"models": local_models.get("models", [])}
+                else:
+                    with urllib.request.urlopen(req, timeout=_probe_timeout) as response:  # nosec B310
+                        data = json.loads(response.read().decode("utf-8"))
 
                 models_list = []
                 if "data" in data and isinstance(data["data"], list):

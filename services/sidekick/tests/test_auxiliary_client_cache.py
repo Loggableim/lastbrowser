@@ -82,3 +82,36 @@ def test_provider_eviction_closes_sync_and_async_clients_without_awaiting():
             auxiliary_client._client_cache.pop(unrelated_key, None)
         sync_client.close()
         unrelated_client.close()
+
+
+def test_provider_eviction_closes_async_client_on_its_live_owner_loop():
+    from openai import AsyncOpenAI
+    from runtime import auxiliary_client
+
+    async def exercise():
+        client = AsyncOpenAI(api_key="fixture-only", base_url="https://example.test/v1")
+        owner = asyncio.get_running_loop()
+        closed = asyncio.Event()
+        original_close = client.close
+
+        async def close():
+            assert asyncio.get_running_loop() is owner
+            await original_close()
+            closed.set()
+
+        client.close = close
+        key = auxiliary_client._client_cache_key(
+            "ollama-cloud", async_mode=True, base_url="https://example.test/v1"
+        )
+        auxiliary_client._store_cached_client(key, client, "fixture-model", bound_loop=owner)
+        try:
+            await asyncio.to_thread(auxiliary_client._evict_cached_clients, "ollama-cloud")
+            assert key not in auxiliary_client._client_cache
+            await asyncio.wait_for(closed.wait(), timeout=1)
+            assert client._client.is_closed
+        finally:
+            with auxiliary_client._client_cache_lock:
+                auxiliary_client._client_cache.pop(key, None)
+            await original_close()
+
+    asyncio.run(exercise())

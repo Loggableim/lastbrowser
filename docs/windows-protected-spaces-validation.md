@@ -1,6 +1,6 @@
 # Windows protected Spaces hardware validation
 
-Test on a dedicated Windows x64 machine with a physical TPM 2.0, WinFsp, and a Windows account with the TPM authorization required by setup. Use two disposable Spaces with distinct browser profiles, distinct named Sidekick profiles, and synthetic data. Keep other LastBrowser profiles and work files out of this test.
+Test with the installed Windows build on a dedicated Windows x64 machine with a physical TPM 2.0, WinFsp, and a Windows account with the TPM authorization required by setup. Use two disposable Spaces with distinct browser profiles, distinct named Sidekick profiles, and synthetic data. Keep other LastBrowser profiles and work files out of this test.
 
 Record the tested commit, installer SHA-256, Windows version, and WinFsp version. Validate Authenticode signatures on the installer and native payload. Run `space-tpm-nv.exe probe-setup` from the installed `resources/protected-spaces` directory. Exit code 0 means the prerequisite check passed.
 

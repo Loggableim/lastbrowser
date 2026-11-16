@@ -13,6 +13,9 @@ export function resolveWindowsSpaceRuntime(resources: string) {
 }
 
 export function resolveWindowsSpaceMigrationRuntime(resources: string) {
+  if (process.env.PORTABLE_EXECUTABLE_FILE) {
+    throw new Error('The Portable launcher cannot keep the migration runtime available after browser exit');
+  }
   const base = path.join(resources, 'protected-spaces');
   const java = path.join(base, 'jdk', 'bin', 'java.exe');
   const initializerSource = path.join(base, 'InitializeSpaceVault.java');
@@ -22,10 +25,11 @@ export function resolveWindowsSpaceMigrationRuntime(resources: string) {
   return { ...resolveWindowsSpaceRuntime(resources), java, initializerSource, libraryDirectory };
 }
 
-export type SpaceMigrationPrerequisite = 'runtime' | 'winfsp' | 'tpm' | 'tpm-owner';
+export type SpaceMigrationPrerequisite = 'runtime' | 'winfsp' | 'tpm' | 'tpm-owner' | 'portable';
 
 /** Read-only checks before the user supplies passwords or LastBrowser closes its writers. */
 export async function spaceMigrationPrerequisite(resources: string): Promise<SpaceMigrationPrerequisite | null> {
+  if (process.env.PORTABLE_EXECUTABLE_FILE) return 'portable';
   let helper: string;
   try {
     helper = resolveWindowsSpaceMigrationRuntime(resources).nvKeyHelper;

@@ -83,6 +83,7 @@ export function ProtectedSpaceSelection({ german }: { german: boolean }) {
   const bookmarks = loadBookmarks();
   const prerequisites = {
     runtime: t('Die Windows-Komponenten für die Space-Verschlüsselung sind nicht verfügbar.', 'The Windows components for Space encryption are unavailable.'),
+    portable: t('Verwende zur Einrichtung der Space-Verschlüsselung die installierte Windows-Version.', 'Use the installed Windows version to set up Space encryption.'),
     winfsp: t('Die Space-Verschlüsselung benötigt einen verfügbaren WinFsp-Treiber.', 'Space encryption requires an available WinFsp driver.'),
     tpm: t('Die Space-Verschlüsselung benötigt ein verfügbares TPM 2.0.', 'Space encryption requires an available TPM 2.0.'),
     'tpm-owner': t('Windows stellt die TPM-Berechtigung für die Einrichtung nicht bereit.', 'Windows is not providing the TPM authorization needed for setup.')

@@ -13,6 +13,11 @@ export function defaultBrowserProfileDirectory(app: Pick<App, 'getPath'>): strin
   return legacyBrowserProfileDirectory(app) ?? path.join(app.getPath('appData'), 'Lastbrowser');
 }
 
+export function startupBrowserProfileDirectory(app: Pick<App, 'getPath' | 'commandLine'>): string {
+  const override = app.commandLine.getSwitchValue('user-data-dir');
+  return override ? path.resolve(override) : defaultBrowserProfileDirectory(app);
+}
+
 function protectedDirectory(root: string, name: string): string {
   const directory = path.join(root, name);
   mkdirSync(directory, { recursive: true });

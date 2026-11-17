@@ -3,7 +3,7 @@ import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
 interface EvsHookDependencies {
-  spawnSync: (command: string, args: string[], options: { stdio: 'inherit'; shell: true }) => {
+  spawnSync: (command: string, args: string[], options: { stdio: 'inherit'; shell: false }) => {
     status: number | null;
     error?: Error;
   };
@@ -20,7 +20,7 @@ interface EvsHookModule {
 
 const require = createRequire(import.meta.url);
 const { createEvsSigningHook } = require('../scripts/evs-sign.cjs') as EvsHookModule;
-const appOutDir = path.join('release', 'win-unpacked');
+const appOutDir = path.join('release output', 'win-unpacked');
 const context = { electronPlatformName: 'win32', appOutDir };
 
 function createRequiredHook(results = [{ status: 0 }, { status: 0 }]) {
@@ -53,13 +53,13 @@ describe('Castlabs EVS Windows afterSign hook', () => {
       1,
       'python',
       ['-m', 'castlabs_evs.vmp', '-n', 'sign-pkg', appOutDir],
-      { stdio: 'inherit', shell: true }
+      { stdio: 'inherit', shell: false }
     );
     expect(spawnSync).toHaveBeenNthCalledWith(
       2,
       'python',
       ['-m', 'castlabs_evs.vmp', '-n', 'verify-pkg', appOutDir],
-      { stdio: 'inherit', shell: true }
+      { stdio: 'inherit', shell: false }
     );
     expect(log).toHaveBeenCalledWith('[EVS/VMP] Widevine VMP package signing and verification succeeded.');
   });
@@ -151,8 +151,8 @@ describe('Castlabs EVS Windows afterSign hook', () => {
     });
 
     await expect(hook(context)).resolves.toBeUndefined();
-    expect(spawnSync).toHaveBeenNthCalledWith(1, 'python', ['-m', 'castlabs_evs.vmp', '-n', 'sign-pkg', appOutDir], { stdio: 'inherit', shell: true });
-    expect(spawnSync).toHaveBeenNthCalledWith(2, 'python', ['-m', 'castlabs_evs.vmp', '-n', 'verify-pkg', appOutDir], { stdio: 'inherit', shell: true });
+    expect(spawnSync).toHaveBeenNthCalledWith(1, 'python', ['-m', 'castlabs_evs.vmp', '-n', 'sign-pkg', appOutDir], { stdio: 'inherit', shell: false });
+    expect(spawnSync).toHaveBeenNthCalledWith(2, 'python', ['-m', 'castlabs_evs.vmp', '-n', 'verify-pkg', appOutDir], { stdio: 'inherit', shell: false });
     expect(log).toHaveBeenCalledWith('[EVS/VMP] Widevine VMP package signing and verification succeeded.');
     expect(warn).not.toHaveBeenCalled();
   });

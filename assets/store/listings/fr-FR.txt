@@ -1,7 +1,7 @@
 LastBrowser — fr-FR
 
 DESCRIPTION
-LastBrowser associe un navigateur Chromium pour Windows à l’assistant IA intégré Nova. Organisez vos pages web dans des onglets verticaux et des espaces de travail, puis utilisez l’assistant à côté de vos pages ouvertes.
+LastBrowser est un navigateur Chromium pour Windows doté d’onglets verticaux et d’espaces de travail. L’assistant facultatif Nova utilise l’IA générative pour produire des réponses à vos demandes.
 
 Fonctionnalités :
 • Onglets verticaux et espaces de travail pour vos projets web.
@@ -11,13 +11,13 @@ Fonctionnalités :
 • Profils du navigateur stockés localement et outils pour effacer les données de navigation.
 • Les discussions utilisent un seul modèle par défaut. L’orchestration Teamwork est une version bêta facultative.
 
-LastBrowser est gratuit pour un usage personnel et commercial. Les services d’IA externes peuvent nécessiter un compte et des services payants. Lorsque vous utilisez un fournisseur d’IA externe, votre requête et le contexte que vous fournissez pour la tâche lui sont transmis. Les profils du navigateur sont stockés localement sur votre PC. Les licences et conditions des composants tiers, modèles et services externes restent applicables.
+LastBrowser est disponible en téléchargement gratuit. Les services d’IA externes peuvent nécessiter un compte et des services payants. Lorsque vous utilisez un fournisseur d’IA externe, votre requête et le contexte que vous fournissez pour la tâche lui sont transmis. Les profils du navigateur sont stockés localement sur votre PC. Les licences et conditions des composants tiers, modèles et services externes restent applicables.
 SHORT DESCRIPTION
-Navigateur Chromium pour Windows avec onglets verticaux, espaces de travail et assistant IA Nova. Les profils restent locaux ; les services d’IA externes reçoivent les requêtes et contenus que vous fournissez.
+Navigateur Chromium pour Windows avec onglets verticaux, espaces de travail et assistant Nova facultatif. Les profils restent sur votre PC. Les services d’IA externes reçoivent les requêtes et les contenus que vous fournissez pour la tâche.
 
 PRODUCT FEATURES
 • Onglets verticaux et espaces de travail
-• Assistant IA Nova intégré
+• Assistant Nova facultatif doté d’une IA générative
 • Combinaisons fournisseur/modèle d’IA testées et qualifiées ; modèles Ollama selon disponibilité
 • Terminal intégré et extensions du navigateur
 • Profils du navigateur stockés localement
@@ -30,9 +30,9 @@ onglets verticaux
 assistant ia
 espaces de travail
 WHAT'S NEW
-Améliorations de la stabilité et corrections.
+
 APPLICABLE LICENSE TERMS
-LastBrowser est gratuit pour un usage personnel et commercial. Les services d’IA externes peuvent nécessiter un compte et des services payants. Lorsque vous utilisez un fournisseur d’IA externe, votre requête et le contexte que vous fournissez pour la tâche lui sont transmis. Les profils du navigateur sont stockés localement sur votre PC. Les licences et conditions des composants tiers, modèles et services externes restent applicables.
+LastBrowser est disponible en téléchargement gratuit. La licence GPL-3.0-or-later s’applique aux éléments originaux de LastBrowser dans le périmètre défini dans LICENSE-SCOPE.md. Les composants tiers inclus, les modèles et les services externes restent soumis à leurs licences et conditions respectives. Les services d’IA externes peuvent exiger un compte distinct et être payants.
 COPYRIGHT
 © 2026 Dominik Rainer / Lastbrowser.com
 

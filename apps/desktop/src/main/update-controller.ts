@@ -32,6 +32,7 @@ export type LastbrowserUpdateStatus = {
   percent: number | null;
   lastCheckedAt: string | null;
   message: string | null;
+  managedByStore?: boolean;
   startupCheck?: boolean;
   installError?: string | null;
 };
@@ -74,6 +75,7 @@ export type UpdateControllerOptions = {
   updater: UpdaterLike;
   isPackaged: boolean;
   currentVersion: string;
+  managedByStore?: boolean;
   unsupportedReason?: string;
   forceDevUpdates?: boolean;
   offlineTestBuild?: boolean;
@@ -87,7 +89,10 @@ export type UpdateControllerOptions = {
 export function createUpdateController(options: UpdateControllerOptions): UpdateController {
   const { updater } = options;
   const offlineTestBuild = options.offlineTestBuild === true;
-  const unsupportedReason = options.unsupportedReason?.trim() || null;
+  const managedByStore = options.managedByStore === true;
+  const unsupportedReason = managedByStore
+    ? 'Updates are managed by the Microsoft Store.'
+    : options.unsupportedReason?.trim() || null;
   const enabled = !offlineTestBuild && !unsupportedReason && (options.isPackaged || options.forceDevUpdates === true);
   let automaticUpdatesEnabled = enabled && options.automaticUpdatesEnabled !== false;
   let channel: UpdateChannel = normalizeUpdateChannel(options.updateChannel
@@ -103,6 +108,7 @@ export function createUpdateController(options: UpdateControllerOptions): Update
     lastCheckedAt: null,
     startupCheck: false,
     installError: null,
+    ...(managedByStore ? { managedByStore: true } : {}),
     message: offlineTestBuild
       ? 'Updates are unavailable in offline test builds.'
       : unsupportedReason ?? (enabled ? null : 'Auto updates are available only in packaged Lastbrowser builds.')

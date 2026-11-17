@@ -39,7 +39,8 @@ export async function installDownloadedUpdate(options: {
   formatUnavailable: () => string;
 }): Promise<UpdateInstallResult> {
   if (options.pending.current) return 'busy';
-  if (options.getStatus()?.state !== 'downloaded') return 'not-downloaded';
+  const status = options.getStatus();
+  if (status?.managedByStore || status?.state !== 'downloaded') return 'not-downloaded';
 
   options.pending.current = true;
   options.setPending(true);

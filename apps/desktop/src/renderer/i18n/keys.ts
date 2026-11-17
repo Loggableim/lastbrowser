@@ -1329,6 +1329,7 @@ export const desktopTranslationKeys = [
   'settings.panels.system.updateInstallUnavailable',
   'settings.panels.system.updateStatusLoading',
   'settings.panels.system.updateStatusUnavailable',
+  'settings.panels.system.updatesManagedByStore',
   'settings.panels.system.signOut',
   'settings.panels.system.disableAuth',
   'settings.panels.system.updateState',

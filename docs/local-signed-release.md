@@ -1,10 +1,16 @@
-# Local Windows release with Certum / SimplySign
+# Local Windows release with a trusted code-signing certificate
 
-This route uses a Windows certificate from the Certum/SimplySign session. It was reconstructed from the installed electron-builder implementation on 2026-10-01. The final v0.1.41 setup had a valid Authenticode signature with certificate thumbprint `1AD3C19A7338BBC3FFE4D62853411AD73E139857` and a DigiCert timestamp. That certificate was visible in `Cert:\CurrentUser\My` during the October check. The PR #384 test host had no usable code-signing certificate in either the current-user or local-machine personal store on 2026-11-15. Verify the current certificate and authenticated SimplySign session on the signing host before building.
+This route uses a code-signing certificate made available to Windows SignTool through the current user's certificate store. It was validated with Certum/SimplySign on 2026-10-01. The final v0.1.41 setup had a valid Authenticode signature with certificate thumbprint `1AD3C19A7338BBC3FFE4D62853411AD73E139857` and a DigiCert timestamp. For a new provider, verify that its signing client exposes the approved certificate and signing key to the build user. The [GitHub release workflow](../.github/workflows/release.yml) uses Azure Artifact Signing with its own certificate profile and identity.
 
 ## Preconditions and gates
 
-Use a dedicated PowerShell session. Finish and review source changes first, including the approved version and changelog updates. Root and desktop package versions must agree and must not duplicate an existing public release. Do not overwrite the existing preview folders. SimplySign must be authenticated with the certificate available. Castlabs needs either its existing local account session or credentials supplied securely outside these commands; never put credentials into source, command history, or this document.
+Use a dedicated PowerShell session. Finish and review source changes first, including the approved version and changelog updates. Root and desktop package versions must agree and must not duplicate an existing public release. Do not overwrite the existing preview folders. Confirm the signing client is authenticated and the approved certificate is available. Castlabs needs either its existing local account session or credentials supplied securely outside these commands. Keep credentials out of source, command history, and this document.
+
+### Verify publisher continuity before switching certificates
+
+Use the last public, signed Windows release and inspect the installed `resources/app-update.yml` for its `publisherName` list. Verify the release artifact's published SHA-256 before relying on its configuration. The current LastBrowser verifier requires a valid Authenticode signature and matches the certificate's complete Windows subject against that list, ignoring surrounding whitespace and case. Compare the proposed issuer's actual subject before relying on an existing installation's automatic update.
+
+Test the exact new installer against the updater in the last public build. If its publisher check rejects the new signer, qualify a manual in-place upgrade with synthetic profile data and document how installed users can move to the new publisher. Keep the signature check enabled.
 
 Run required verification from the repository root and stop on any failure:
 
@@ -31,7 +37,7 @@ try {
 } finally { Pop-Location }
 ```
 
-The signing service and timestamp server require network access; local packaging does not require cloning another Sidekick repository.
+The signing service and timestamp server require network access. The build packages the in-tree Sidekick source.
 
 ## Provision offline Python inputs
 
@@ -47,9 +53,23 @@ build. `LASTBROWSER_WHEELHOUSE` may point to an existing local cache.
 Assert-Exit 'Provision pinned runtime wheels'
 ```
 
-Runtime cache schema 8 includes the requirements lock digest; changing this lock
+The runtime cache includes the dependency digest. Changing the requirements lock
 invalidates an older prepared runtime. Sidekick itself is installed directly from
 the tracked monorepo with dependency resolution and build isolation disabled.
+
+## Provision the Windows protected Spaces runtime
+
+Populate the pinned cache once on the build host. Set `LASTBROWSER_SPACE_RUNTIME_CACHE`
+if the pinned archives are already available in a shared cache. The preparation step
+checks their SHA-256 hashes and stages the Windows helper, Java runtime and vault libraries.
+
+```powershell
+npm --workspace apps/desktop run prepare:space-runtime:online
+Assert-Exit 'Provision protected Spaces archives'
+```
+
+The build stages those inputs offline. WinFsp is a separate Windows installation
+for users who enable encrypted Spaces.
 
 ## Configure and build
 
@@ -61,7 +81,8 @@ $desktopManifest = Get-Content apps/desktop/package.json -Raw | ConvertFrom-Json
 $rootManifest = Get-Content package.json -Raw | ConvertFrom-Json
 $releaseVersion = $desktopManifest.version
 if ($rootManifest.version -ne $releaseVersion) { throw 'Version mismatch' }
-$signingThumbprint = '1AD3C19A7338BBC3FFE4D62853411AD73E139857'
+$signingThumbprint = (Read-Host 'Approved code-signing certificate thumbprint').Trim()
+if ($signingThumbprint -notmatch '^[0-9a-fA-F]{40}$') { throw 'Invalid certificate thumbprint' }
 $signingCertificate = Get-Item "Cert:\CurrentUser\My\$signingThumbprint"
 if (-not $signingCertificate.HasPrivateKey -or $signingCertificate.NotAfter -le (Get-Date)) {
     throw 'Certum certificate is unavailable or expired'
@@ -98,6 +119,8 @@ Remove-Item Env:EVS_REQUIRE_EXPLICIT_CREDENTIALS -ErrorAction SilentlyContinue
 Remove-Item Env:ELECTRON_BUILDER_OFFLINE -ErrorAction SilentlyContinue
 npm --workspace apps/desktop run prepare:python
 Assert-Exit 'Python runtime preparation'
+npm --workspace apps/desktop run prepare:space-runtime
+Assert-Exit 'Protected Spaces runtime preparation'
 Push-Location apps/desktop
 try {
     & "$releaseRoot/node_modules/.bin/electron-builder.cmd" --win nsis portable --x64 --publish never --config $releaseConfigPath
@@ -127,8 +150,8 @@ foreach ($releaseFile in $filesToVerify) {
 }
 python -m castlabs_evs.vmp -n verify-pkg $packageDirectory
 Assert-Exit 'Final VMP verification'
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-windows-package-signatures.ps1 -PackageDirectory $packageDirectory -InstallerPath (Join-Path $releaseOutput "Lastbrowser-$releaseVersion-x64-setup.exe") -ReportPath (Join-Path $releaseOutput 'store-signatures.json')
-Assert-Exit 'All native Windows payload and installer signatures'
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-store-readiness.ps1 -PackageDirectory $packageDirectory -InstallerPath (Join-Path $releaseOutput "Lastbrowser-$releaseVersion-x64-setup.exe") -SignatureReportPath (Join-Path $releaseOutput 'store-signatures.json')
+Assert-Exit 'Store preflight, license notices, protected Spaces and package signatures'
 node scripts/refresh-signed-release-metadata.mjs $releaseOutput node_modules/app-builder-bin/win/x64/app-builder.exe
 Assert-Exit 'Final signed checksums and blockmap'
 Get-FileHash -Algorithm SHA256 -LiteralPath $actualExecutables.FullName

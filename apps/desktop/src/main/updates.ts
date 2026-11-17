@@ -10,6 +10,7 @@ import { acknowledgeUpdateNotice, decideUpdateNotice, parseUpdateNoticeState, re
 import { WindowsNsisUpdater } from './windows-nsis-updater.js';
 
 const autoUpdater = process.platform === 'win32' ? new WindowsNsisUpdater() : electronUpdater.autoUpdater;
+const managedByStore = process.platform === 'win32' && process.windowsStore === true;
 
 let controller: UpdateController | null = null;
 type PersistedUpdatePreferences = { automaticUpdatesEnabled: boolean; channel: UpdateChannel };
@@ -43,7 +44,9 @@ function patchHttpExecutor(updater: unknown): void {
 
 export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): void {
   preferencesPath = path.join(app.getPath('userData'), 'update-preferences.json');
-  preferences = readUpdatePreferences(preferencesPath);
+  preferences = managedByStore
+    ? { ...DEFAULT_UPDATE_PREFERENCES, automaticUpdatesEnabled: false }
+    : readUpdatePreferences(preferencesPath);
   autoCheckPreferenceReceived = false;
   if (autoCheckPreferenceTimer) clearTimeout(autoCheckPreferenceTimer);
   autoCheckPreferenceTimer = null;
@@ -67,11 +70,12 @@ export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): vo
 
   patchHttpExecutor(autoUpdater);
   const currentVersion = app.getVersion();
-  const offlineTestBuild = app.isPackaged && isOfflineTestBuild(process.resourcesPath, currentVersion);
+  const offlineTestBuild = !managedByStore && app.isPackaged && isOfflineTestBuild(process.resourcesPath, currentVersion);
   controller = createUpdateController({
     updater: autoUpdater as AppUpdater,
     isPackaged: app.isPackaged,
     currentVersion,
+    managedByStore,
     offlineTestBuild,
     forceDevUpdates: process.env.LASTBROWSER_FORCE_DEV_UPDATES === '1',
     automaticUpdatesEnabled: preferences.automaticUpdatesEnabled,
@@ -140,7 +144,7 @@ export function registerUpdateIpc(getMainWindow: () => BrowserWindow | null): vo
 }
 
 export function startAutoUpdateChecks(): void {
-  if (autoCheckPreferenceReceived || autoCheckPreferenceTimer) return;
+  if (managedByStore || autoCheckPreferenceReceived || autoCheckPreferenceTimer) return;
   // Allow older persisted settings to hydrate before the default-on check starts.
   autoCheckPreferenceTimer = windowDelay(() => {
     autoCheckPreferenceTimer = null;
@@ -157,6 +161,7 @@ export function installDownloadedUpdateForAppRestart(): LastbrowserUpdateStatus 
 }
 
 function applyPreferences(next: PersistedUpdatePreferences): boolean {
+  if (managedByStore) return false;
   const channelChanged = next.channel !== preferences.channel;
   const normalized: PersistedUpdatePreferences = {
     automaticUpdatesEnabled: next.automaticUpdatesEnabled === true,

@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, rmdirSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { configureProfileDirectory } from '../src/main/profile-directory.js';
+import { configureProfileDirectory, startupBrowserProfileDirectory } from '../src/main/profile-directory.js';
 
 describe('desktop profile directory', () => {
   let root: string;
@@ -56,5 +56,18 @@ describe('desktop profile directory', () => {
     const app = fakeElectron(true);
     expect(app.getPath).not.toHaveBeenCalled();
     expect(app.setPath).not.toHaveBeenCalled();
+  });
+
+  it('looks for protected Spaces inside the explicit profile at startup', () => {
+    mkdirSync(legacyDirectory, { recursive: true });
+    hasLegacy = true;
+    const explicitProfile = path.join(root, 'isolated');
+    const app = {
+      commandLine: { getSwitchValue: vi.fn().mockReturnValue(explicitProfile) },
+      getPath: vi.fn().mockReturnValue(root)
+    } as unknown as Parameters<typeof startupBrowserProfileDirectory>[0];
+
+    expect(startupBrowserProfileDirectory(app)).toBe(explicitProfile);
+    expect(app.getPath).not.toHaveBeenCalled();
   });
 });

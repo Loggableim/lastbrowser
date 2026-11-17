@@ -4,7 +4,7 @@ import { write } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findWindowsProtectedPair } from './active-space-config.js';
-import { defaultBrowserProfileDirectory } from './profile-directory.js';
+import { defaultBrowserProfileDirectory, startupBrowserProfileDirectory } from './profile-directory.js';
 import { rendererStoreWorkerSwitch } from './renderer-store-worker-client.js';
 import { migrationWorkerSwitch } from './windows-space-migration-request.js';
 
@@ -24,7 +24,7 @@ nodeModule._nodeModulePaths = function (this: unknown, from: string) {
 async function launchProtectedProfile(): Promise<boolean> {
   if (process.platform !== 'win32' || app.commandLine.hasSwitch('lastbrowser-protected-profile')) return false;
   try {
-    const pair = await findWindowsProtectedPair(defaultBrowserProfileDirectory(app));
+    const pair = await findWindowsProtectedPair(startupBrowserProfileDirectory(app));
     if (!pair) return false;
     const { startWindowsProtectedSpace } = await import('./windows-protected-space-startup.js');
     await startWindowsProtectedSpace(pair);

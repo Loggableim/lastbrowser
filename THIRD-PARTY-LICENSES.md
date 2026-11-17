@@ -6,4 +6,6 @@ This overview references the version-pinned snapshot in [`docs/legal/drafts/thir
 
 The snapshot lists 488 npm third-party lockfile entries, 51 pinned desktop Python runtime packages, and two additional installed distributions: `pip==25.0.1` and the in-tree package `sidekick==0.8.84`. Sidekick’s distribution metadata has no license field in that snapshot; npm license fields come from lockfile metadata only.
 
-Each dependency still requires verification of origin and license text. This document does not assert GPL compatibility or commercial sublicensing rights. See [`docs/license-audit.md`](docs/license-audit.md).
+The [Windows protected Spaces runtime inventory](docs/legal/windows-protected-spaces-runtime.md) records the additional binary dependencies staged for Windows x64, the notices retained with them, and the open corresponding-source and licensing work.
+
+Each dependency still requires verification of origin and license text. This document does not assert GPL compatibility or commercial sublicensing rights. See [`docs/legal/license-audit.md`](docs/legal/license-audit.md).

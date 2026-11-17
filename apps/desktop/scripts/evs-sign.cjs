@@ -5,8 +5,8 @@ const fs = require('fs');
 /**
  * electron-builder afterSign hook for Castlabs EVS (Electron VMP Signing).
  * Signs the packaged and Authenticode-signed Windows executable with Google Widevine VMP.
- * Note: On Windows, VMP signing MUST run in afterSign (after signtool) so that
- * Authenticode certificate injection does not alter the PE header and invalidate the VMP signature.
+ * Run VMP signing after the final changes to the Windows executable.
+ * Authenticode certificate injection after VMP signing can invalidate the VMP signature.
  */
 function createEvsSigningHook(overrides = {}) {
   const deps = {
@@ -33,7 +33,7 @@ function createEvsSigningHook(overrides = {}) {
       deps.warn(`${diagnostic} Continuing only as a local test build without a verified VMP signature; do not release this artifact.`);
     };
 
-    deps.log(`\n[EVS/VMP] Executing afterSign hook: Widevine VMP signing for ${appOutDir}`);
+    deps.log(`\n[EVS/VMP] Widevine VMP signing for ${appOutDir}`);
 
     const explicitCredentials = Boolean(deps.env.EVS_ACCOUNT_NAME?.trim() && deps.env.EVS_PASSWD?.trim());
     const requireExplicitCredentials = deps.env.EVS_REQUIRE_EXPLICIT_CREDENTIALS === '1';
@@ -53,7 +53,7 @@ function createEvsSigningHook(overrides = {}) {
 
     const pythonCmd = deps.env.PYTHON || 'python';
     const vmpArgs = ['-m', 'castlabs_evs.vmp', '-n'];
-    const options = { stdio: 'inherit', shell: true };
+    const options = { stdio: 'inherit', shell: false };
 
     try {
       const signResult = deps.spawnSync(pythonCmd, [...vmpArgs, 'sign-pkg', appOutDir], options);
@@ -83,3 +83,10 @@ function createEvsSigningHook(overrides = {}) {
 
 exports.createEvsSigningHook = createEvsSigningHook;
 exports.default = createEvsSigningHook();
+
+if (require.main === module) {
+  exports.default({ electronPlatformName: 'win32', appOutDir: path.resolve(process.argv[2]) }).catch(error => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}

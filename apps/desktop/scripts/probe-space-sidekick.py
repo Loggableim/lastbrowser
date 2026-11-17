@@ -4,11 +4,14 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import traceback
 import uuid
 
 
 def main():
-    root = Path(sys.argv[1]).resolve(strict=True)
+    # The mounted WinFsp drive is usable even when GetFinalPathNameByHandle
+    # cannot resolve its volume. Use its drive-letter path.
+    root = Path(sys.argv[1]).absolute()
     receipt = root / "storage-probe.json"
     if root.name != "profile" or not receipt.is_file():
         raise ValueError("Run the Chromium fixture before the Sidekick fixture")
@@ -41,5 +44,11 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"The synthetic Sidekick storage probe failed ({type(error).__name__})", file=sys.stderr)
+        frame = traceback.extract_tb(error.__traceback__)[-1]
+        print(
+            f"The synthetic Sidekick storage probe failed in {Path(frame.filename).name}:{frame.lineno} "
+            f"({type(error).__name__}, errno={getattr(error, 'errno', None)}, "
+            f"winerror={getattr(error, 'winerror', None)})",
+            file=sys.stderr,
+        )
         sys.exit(1)

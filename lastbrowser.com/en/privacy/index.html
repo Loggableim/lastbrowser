@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Privacy Policy – Lastbrowser</title>
-<meta name="description" content="Lastbrowser Privacy Policy: Our Local-First guarantee, transparent AI data flow, and uncompromising protection of your browsing habits.">
+<meta name="description" content="Lastbrowser Privacy Policy: local browser profiles, network connections and how data is handled when you use AI.">
 <meta property="og:title" content="Privacy Policy – Lastbrowser">
-<meta property="og:description" content="Local-First architecture, zero involuntary telemetry, complete data ownership.">
+<meta property="og:description" content="Local browser profiles, network connections and how data is handled when you use AI.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lastbrowser.com/en/privacy/">
 <meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
@@ -76,23 +76,27 @@
   <div class="pill-badge">GDPR &amp; Privacy-First</div>
   <h1 style="margin-bottom: 16px;">Privacy Policy</h1>
   <p class="lead" style="margin-bottom: 40px;">
-    Our <strong>Local-First</strong> Commitment: With Lastbrowser, you are the sole owner of your data. We do not track, collect, or monetize your web activities.
+    Lastbrowser stores browser profiles on your device. This policy explains when Lastbrowser contacts external services and what data it shares.
   </p>
 
   <div class="feature-card" style="margin-bottom: 24px;">
-    <h2>1. The Local-First Principle</h2>
+    <h2>1. Local browser profiles</h2>
     <p style="margin-top:10px;">
-      Lastbrowser is built as a <strong>Local-First</strong> desktop application. Browser profiles containing history, bookmarks, tabs, passwords, cookies and saved credentials are stored on your device. On Windows, new profiles use <code>%APPDATA%\Lastbrowser</code>. Existing profiles created by earlier builds under <code>%APPDATA%\@lastbrowser\desktop</code> remain there. Lastbrowser does not operate a central service to synchronize those profiles. External AI requests send the data described in section 3 to your selected provider.
+      Browser profiles include history, bookmarks, open tabs, passwords, cookies and saved credentials. On Windows, the installed and portable versions use <code>%APPDATA%\Lastbrowser</code> for new default profiles. If an earlier version created a profile under <code>%APPDATA%\@lastbrowser\desktop</code>, Lastbrowser uses that directory by default. You can choose a different profile path with the <code>--user-data-dir</code> launch option. Lastbrowser does not operate a central service to sync these profiles.
+      For the MSIX edition, Windows can redirect newly written data to per-user package storage. Windows can remove those files when the Store package is uninstalled.
+    </p>
+    <p style="margin-top:10px;">
+      In the installed Windows version, you can set up encryption for selected Spaces. After setup, Lastbrowser stores the selected profiles in encrypted vaults. This feature requires WinFsp. Hardware-backed mode also requires TPM&nbsp;2.0.
     </p>
   </div>
 
   <div class="feature-card" style="margin-bottom: 24px;">
-    <h2>2. Zero Involuntary Telemetry</h2>
+    <h2>2. Background network connections</h2>
     <p style="margin-top:10px;">
-      Our binary contains no Google Analytics SDKs, no tracking pixels, and no device fingerprinting trackers. We do not log IP addresses or browsing timestamps.
+      LastBrowser can make background requests at startup. The ad blocker downloads filter lists and scriptlet resources from GitHub's raw content host when its cache needs refreshing. Turning off the ad blocker using the shield also turns off future filter downloads. The Castlabs Chromium runtime can contact Google's component update service at <code>update.googleapis.com</code> for Widevine. The <code>--disable-component-update</code> launch option turns off Chromium component updates and can prevent protected-media playback. For downloads outside the Microsoft Store, the app updater can contact GitHub Releases. You can turn off those automatic app updates in Settings. For the MSIX edition, the Microsoft Store manages app updates.
     </p>
     <p style="margin-top:10px;">
-      LastBrowser can make background requests at startup. The ad blocker downloads filter lists and scriptlet resources from GitHub's raw content host when its cache needs refreshing. Turning off the ad blocker using the shield also turns off future filter downloads. The Castlabs Chromium runtime can contact Google's component update service at <code>update.googleapis.com</code> for Widevine. The <code>--disable-component-update</code> launch option turns off Chromium component updates and can prevent protected-media playback. The app updater can contact GitHub Releases. You can turn off automatic app updates in Settings.
+      The Lastbrowser desktop app does not use analytics telemetry to track your browsing activity. The services listed above and the sites and services you open through the app receive standard connection data such as your IP address.
     </p>
   </div>
 
@@ -106,6 +110,9 @@
       <li><strong>Ollama Cloud and external AI providers:</strong> These connections send your requests and the context supplied for the task, such as selected tab content, to the selected provider. Credentials required for the connection are used to authenticate it. That provider's privacy policy and retention periods apply. A cloud connection is not offline processing.</li>
       <li><strong>Tasks and goals:</strong> Starting an AI task or ongoing goal can result in multiple requests within that task. Data transfers depend on the enabled providers and the tools and content authorized for the task.</li>
     </ul>
+    <p id="ai-reports" style="margin-top:10px;">
+      When you report an AI reply, Lastbrowser opens a draft in your email app addressed to <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a>. The draft contains the selected reason and any comments you enter. It does not automatically include the AI reply or your prompt. When the draft opens, Lastbrowser saves the reason and any comments locally in the app profile and keeps up to 100 recent entries. This also happens if you leave the draft unsent. If you send the email, support receives your sender address and email contents to review the report and respond when needed.
+    </p>
   </div>
 
   <div class="feature-card" style="margin-bottom: 24px;">
@@ -132,7 +139,7 @@
         <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
         <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
       </div>
-      <p>The modern Chromium browser for Windows 10 &amp; 11 with native AI, 48 workflows, and ConPTY terminal. 100% Local-First.</p>
+      <p>The Chromium browser for Windows 10 &amp; 11 with configurable AI, local browser profiles, and a ConPTY terminal.</p>
       <div style="margin-top:14px;">
         <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
       </div>
@@ -182,7 +189,7 @@
     </div>
   </div>
   <div class="container footer-bottom">
-    <div>&copy; 2026 Lastbrowser Project. All rights reserved. Zero Involuntary Telemetry.</div>
+    <div>&copy; 2026 Lastbrowser Project. All rights reserved.</div>
     <div style="display:flex;gap:14px;align-items:center;">
       <span>Windows 10 &amp; 11 (64-Bit)</span>
       <span>·</span>

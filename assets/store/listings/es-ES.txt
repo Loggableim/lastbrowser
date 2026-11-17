@@ -1,7 +1,7 @@
 LastBrowser — es-ES
 
 DESCRIPTION
-LastBrowser combina un navegador Chromium para Windows con el asistente de IA integrado Nova. Organiza las páginas web en pestañas verticales y espacios de trabajo y utiliza el asistente junto a las páginas abiertas.
+LastBrowser es un navegador Chromium para Windows con pestañas verticales y espacios de trabajo. El asistente opcional Nova usa IA generativa para crear respuestas a tus solicitudes.
 
 Funciones:
 • Pestañas verticales y espacios de trabajo para tus proyectos web.
@@ -11,13 +11,13 @@ Funciones:
 • Perfiles del navegador almacenados localmente y herramientas para borrar los datos de navegación.
 • Los chats usan un único modelo de forma predeterminada. La orquestación Teamwork es una versión beta opcional.
 
-LastBrowser es gratuito para uso personal y comercial. Los servicios externos de IA pueden requerir una cuenta y servicios de pago. Cuando utilizas un proveedor externo de IA, tu solicitud y el contexto que proporcionas para la tarea se envían a dicho proveedor. Los perfiles del navegador se guardan localmente en tu PC. Siguen aplicándose las licencias y condiciones de los componentes de terceros, modelos y servicios externos.
+LastBrowser se puede descargar gratis. Los servicios externos de IA pueden requerir una cuenta y servicios de pago. Cuando utilizas un proveedor externo de IA, tu solicitud y el contexto que proporcionas para la tarea se envían a dicho proveedor. Los perfiles del navegador se guardan localmente en tu PC. Siguen aplicándose las licencias y condiciones de los componentes de terceros, modelos y servicios externos.
 SHORT DESCRIPTION
-Navegador Chromium para Windows con pestañas verticales, espacios de trabajo y asistente de IA Nova. Los perfiles permanecen locales; los servicios externos de IA reciben las solicitudes y el contenido que proporcionas.
+Navegador Chromium para Windows con pestañas verticales, espacios de trabajo y el asistente opcional Nova. Los perfiles se guardan en el PC. Los servicios externos de IA reciben las solicitudes y el contenido que proporcionas para la tarea.
 
 PRODUCT FEATURES
 • Pestañas verticales y espacios de trabajo
-• Asistente de IA Nova integrado
+• Asistente opcional Nova con IA generativa
 • Combinaciones de proveedor y modelo de IA probadas y cualificadas; modelos de Ollama si están disponibles
 • Terminal integrado y extensiones del navegador
 • Perfiles del navegador almacenados localmente
@@ -30,9 +30,9 @@ pestañas verticales
 asistente ia
 espacios de trabajo
 WHAT'S NEW
-Mejoras de estabilidad y correcciones.
+
 APPLICABLE LICENSE TERMS
-LastBrowser es gratuito para uso personal y comercial. Los servicios externos de IA pueden requerir una cuenta y servicios de pago. Cuando utilizas un proveedor externo de IA, tu solicitud y el contexto que proporcionas para la tarea se envían a dicho proveedor. Los perfiles del navegador se guardan localmente en tu PC. Siguen aplicándose las licencias y condiciones de los componentes de terceros, modelos y servicios externos.
+LastBrowser se puede descargar gratis. La licencia GPL-3.0-or-later se aplica al material original de LastBrowser dentro del alcance definido en LICENSE-SCOPE.md. Los componentes de terceros incluidos, los modelos y los servicios externos se rigen por sus propias licencias y condiciones. Los servicios externos de IA pueden requerir una cuenta aparte y tener costes.
 COPYRIGHT
 © 2026 Dominik Rainer / Lastbrowser.com
 

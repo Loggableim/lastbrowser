@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Datenschutzerklärung – Lastbrowser</title>
-<meta name="description" content="Datenschutzerklärung für Lastbrowser: Unser Local-First Versprechen, transparente KI-Nutzung und voller Schutz Ihrer Surfdaten.">
+<meta name="description" content="Datenschutzerklärung für Lastbrowser: lokale Browserprofile, Netzwerkverbindungen und Datenverarbeitung bei der Nutzung von KI.">
 <meta property="og:title" content="Datenschutzerklärung – Lastbrowser">
-<meta property="og:description" content="Local-First Architektur, kein heimliches Tracking, volle Datenhoheit.">
+<meta property="og:description" content="Lokale Browserprofile, Netzwerkverbindungen und Datenverarbeitung bei der Nutzung von KI.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lastbrowser.com/privacy/">
 <meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
@@ -76,23 +76,27 @@
   <div class="pill-badge">DSGVO &amp; Privacy-First</div>
   <h1 style="margin-bottom: 16px;">Datenschutzerklärung</h1>
   <p class="lead" style="margin-bottom: 40px;">
-    Unser <strong>Local-First</strong> Versprechen: Bei Lastbrowser sind Sie der alleinige Eigentümer Ihrer Daten. Wir erfassen, speichern oder verkaufen keine persönlichen Surfprofile.
+    Lastbrowser speichert Browserprofile auf Ihrem Gerät. Hier erfahren Sie, wann Lastbrowser externe Dienste kontaktiert und welche Daten dabei übermittelt werden.
   </p>
 
   <div class="feature-card" style="margin-bottom: 24px;">
-    <h2>1. Das Local-First Prinzip</h2>
+    <h2>1. Lokale Browserprofile</h2>
     <p style="margin-top:10px;">
-      Lastbrowser ist als <strong>Local-First</strong> Anwendung konzipiert. Browserprofile mit Verlauf, Lesezeichen, offenen Tabs, Passwörtern, Cookies und gespeicherten Zugangsdaten liegen auf Ihrem Endgerät. Unter Windows liegen neue Profile in <code>%APPDATA%\Lastbrowser</code>. Vorhandene Profile aus älteren Builds unter <code>%APPDATA%\@lastbrowser\desktop</code> bleiben dort. Lastbrowser betreibt keinen zentralen Dienst zur Synchronisierung dieser Profile. Bei externen KI-Anfragen werden die in Abschnitt 3 beschriebenen Daten an den gewählten Anbieter übertragen.
+      Browserprofile enthalten unter anderem Verläufe, Lesezeichen, offene Tabs, Passwörter, Cookies und gespeicherte Zugangsdaten. Unter Windows speichern die installierte und die portable Version neue Standardprofile in <code>%APPDATA%\Lastbrowser</code>. Existiert bereits ein Profil aus einer älteren Version in <code>%APPDATA%\@lastbrowser\desktop</code>, verwendet Lastbrowser standardmäßig dieses Verzeichnis. Mit der Startoption <code>--user-data-dir</code> können Sie einen anderen Profilpfad wählen. Lastbrowser betreibt keinen zentralen Dienst zur Synchronisierung dieser Profile.
+      Bei der MSIX-Fassung kann Windows neu geschriebene Daten in einen benutzerspezifischen Paketspeicher umleiten. Windows kann diese Daten beim Deinstallieren des Store-Pakets entfernen.
+    </p>
+    <p style="margin-top:10px;">
+      In der installierten Windows-Version können Sie die Verschlüsselung für ausgewählte Spaces einrichten. Nach der Einrichtung speichert Lastbrowser die ausgewählten Profile in verschlüsselten Tresoren. Diese Funktion erfordert WinFsp. Der hardwaregestützte Modus erfordert zusätzlich TPM&nbsp;2.0.
     </p>
   </div>
 
   <div class="feature-card" style="margin-bottom: 24px;">
-    <h2>2. Keine unaufgeforderte Telemetrie</h2>
+    <h2>2. Netzwerkverbindungen im Hintergrund</h2>
     <p style="margin-top:10px;">
-      LastBrowser kann beim Start Netzwerkverbindungen im Hintergrund aufbauen. Der Werbeblocker lädt Filterlisten und Scriptlet-Ressourcen von GitHub, wenn sein Cache aktualisiert werden muss. Wer den Werbeblocker über das Schildsymbol deaktiviert, verhindert auch künftige Filterdownloads. Die Chromium-Laufzeit von Castlabs kann Googles Komponenten-Updatedienst unter <code>update.googleapis.com</code> für Widevine kontaktieren. Die Startoption <code>--disable-component-update</code> deaktiviert Chromium-Komponentenupdates und kann die Wiedergabe geschützter Medien verhindern. Die App-Aktualisierung kann GitHub Releases abfragen. Automatische App-Updates lassen sich in den Einstellungen deaktivieren.
+      LastBrowser kann beim Start Netzwerkverbindungen im Hintergrund aufbauen. Der Werbeblocker lädt Filterlisten und Scriptlet-Ressourcen von GitHub, wenn sein Cache aktualisiert werden muss. Wer den Werbeblocker über das Schildsymbol deaktiviert, verhindert auch künftige Filterdownloads. Die Chromium-Laufzeit von Castlabs kann Googles Komponenten-Updatedienst unter <code>update.googleapis.com</code> für Widevine kontaktieren. Die Startoption <code>--disable-component-update</code> deaktiviert Chromium-Komponentenupdates und kann die Wiedergabe geschützter Medien verhindern. Bei Downloads außerhalb des Microsoft Store kann die App-Aktualisierung GitHub Releases abfragen. Automatische App-Updates lassen sich dort in den Einstellungen deaktivieren. Bei der MSIX-Fassung verwaltet der Microsoft Store die App-Updates.
     </p>
     <p style="margin-top:10px;">
-      Die Anwendungsbinärdatei enthält keinen Google-Analytics-Code, keine Tracking-Pixel und keine Werbe-IDs. Es werden keine IP-Adressen oder Hardware-Fingerprints an unsere Server übermittelt.
+      Lastbrowser verwendet in der Desktop-App keine Analyse-Telemetrie zur Erfassung Ihrer Surfaktivität. Die genannten Dienste und die Websites oder Dienste, die Sie über die App aufrufen, erhalten übliche Verbindungsdaten wie Ihre IP-Adresse.
     </p>
   </div>
 
@@ -106,6 +110,9 @@
       <li><strong>Ollama Cloud und externe KI-Anbieter:</strong> Bei diesen Verbindungen werden Ihre Anfragen und der für die Aufgabe bereitgestellte Kontext, etwa ausgewählte Tab-Inhalte, an den gewählten Anbieter übertragen. Dazu werden die für die Verbindung erforderlichen Zugangsdaten verwendet. Es gelten die Datenschutzbestimmungen und Speicherfristen dieses Anbieters. Eine Cloud-Verbindung ist keine Offline-Verarbeitung.</li>
       <li><strong>Aufträge und Ziele:</strong> Wenn Sie einen KI-Auftrag oder ein fortlaufendes Ziel starten, können innerhalb dieses Auftrags mehrere Anfragen entstehen. Die Übertragungen richten sich nach den aktivierten Anbietern und den für die Aufgabe freigegebenen Werkzeugen und Inhalten.</li>
     </ul>
+    <p id="ai-reports" style="margin-top:10px;">
+      Wenn Sie eine KI-Antwort melden, erstellt Lastbrowser in Ihrem E-Mail-Programm einen Entwurf an <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a>. Der Entwurf enthält den gewählten Meldegrund und Ihren optionalen Kommentar. Die KI-Antwort und Ihre Eingabe werden nicht automatisch beigefügt. Beim Öffnen des Entwurfs speichert Lastbrowser den Meldegrund und den optionalen Kommentar lokal im App-Profil und behält bis zu 100 der jüngsten Einträge. Das geschieht auch, wenn Sie den Entwurf nicht absenden. Wenn Sie die E-Mail absenden, erhält der Support Ihre Absenderadresse und den Inhalt der E-Mail, um die Meldung zu prüfen und Ihnen gegebenenfalls zu antworten.
+    </p>
   </div>
 
   <div class="feature-card" style="margin-bottom: 24px;">
@@ -132,7 +139,7 @@
         <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
         <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
       </div>
-      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <p>Der Chromium-Browser für Windows 10 &amp; 11 mit konfigurierbarer KI, lokalen Browserprofilen und ConPTY-Terminal.</p>
       <div style="margin-top:14px;">
         <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
       </div>
@@ -182,7 +189,7 @@
     </div>
   </div>
   <div class="container footer-bottom">
-    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten.</div>
     <div style="display:flex;gap:14px;align-items:center;">
       <span>Windows 10 &amp; 11 (64-Bit)</span>
       <span>·</span>

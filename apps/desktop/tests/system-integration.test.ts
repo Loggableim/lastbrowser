@@ -85,12 +85,13 @@ describe('Single-Instance URL Dispatcher (extractUrlFromArgs)', () => {
     expect(extractUrlFromArgs(args)).toBe('file:///C:/Users/test/report.html');
   });
 
-  it('converts relative or absolute .html file arguments to file:// URLs', () => {
-    const args = ['Lastbrowser.exe', 'README.html'];
+  it.each(['htm', 'html', 'shtml', 'xhtml'])('opens .%s files registered by the package', extension => {
+    const filename = `README.${extension}`;
+    const args = ['Lastbrowser.exe', filename];
     const extracted = extractUrlFromArgs(args);
     expect(extracted).not.toBeNull();
     expect(extracted?.startsWith('file:///')).toBe(true);
-    expect(extracted?.endsWith('README.html')).toBe(true);
+    expect(extracted?.endsWith(filename)).toBe(true);
   });
 
   it('extracts URL when provided as a single standalone argument', () => {

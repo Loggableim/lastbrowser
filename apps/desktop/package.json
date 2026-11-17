@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.60",
+  "version": "0.1.61",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
@@ -29,6 +29,8 @@
     "catalog:generate": "node scripts/generate-api-catalog.mjs",
     "package:win": "npm run prepare:python && npm run prepare:space-runtime && npm run build:installer-assets && npm run build && electron-builder --win nsis portable",
     "package:win:publish": "npm run prepare:python && npm run prepare:space-runtime && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
+    "package:store:payload": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/build-store-payload.ps1",
+    "package:store:msix": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/package-store-msix.ps1",
     "package:linux": "node scripts/linux-release-checksums.mjs --check-key && npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/linux-release-checksums.mjs release"
   },
   "dependencies": {
@@ -172,7 +174,21 @@
     ],
     "win": {
       "extraResources": [
-        { "from": "runtime/protected-spaces", "to": "protected-spaces" }
+        { "from": "runtime/protected-spaces", "to": "protected-spaces" },
+        {
+          "from": "../..",
+          "to": "licenses",
+          "filter": [
+            "LICENSE",
+            "LICENSE-SCOPE.md",
+            "NOTICE",
+            "THIRD-PARTY-LICENSES.md",
+            "docs/legal/license-audit.md",
+            "docs/legal/drafts/third-party-inventory-20261011.json",
+            "docs/legal/windows-protected-spaces-runtime.md",
+            "docs/legal/notices/*.txt"
+          ]
+        }
       ],
       "target": [
         "nsis",

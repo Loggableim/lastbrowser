@@ -39,10 +39,10 @@
     },
     {
       "@type": "Question",
-      "name": "Where are my browser data and API keys stored?",
+      "name": "Is my browsing data synced to the cloud?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "All user data remains 100% locally under %APPDATA%\\Lastbrowser. API keys are encrypted with Windows DPAPI."
+        "text": "Lastbrowser stores your browser profiles on your device and does not operate a central service to sync them. In the installed Windows version, you can set up encryption for selected Spaces."
       }
     },
     {
@@ -156,7 +156,14 @@
     <div class="feature-card">
       <h3>Is my browsing data synced to the cloud?</h3>
       <p style="margin-top:8px;">
-        No. Lastbrowser is 100% Local-First. All history, bookmarks, and passwords remain encrypted on your local drive at <code>%APPDATA%\Lastbrowser</code>.
+        Lastbrowser stores your browser profiles on your device and does not operate a central service to sync them. In the installed Windows version, you can set up encryption for selected Spaces. The <a href="/en/privacy/">privacy policy</a> describes profile locations, encryption requirements and the data shared with external AI providers.
+      </p>
+    </div>
+
+    <div class="feature-card">
+      <h3>How do I report a problematic AI reply?</h3>
+      <p style="margin-top:8px;">
+        Select <strong>Report reply</strong> next to the AI reply. Choose a reason, add a comment if needed, and open the email draft. You can review and send the draft yourself. If the draft does not open, you can use webmail to send the report to <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a>. See the <a href="/en/privacy/#ai-reports">privacy policy for AI reports</a> for details.
       </p>
     </div>
   </div>
@@ -169,7 +176,7 @@
         <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
         <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
       </div>
-      <p>The modern Chromium browser for Windows 10 &amp; 11 with native AI, 48 workflows, and ConPTY terminal. 100% Local-First.</p>
+      <p>The Chromium browser for Windows 10 &amp; 11 with configurable AI, local browser profiles, and a ConPTY terminal.</p>
       <div style="margin-top:14px;">
         <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
       </div>
@@ -219,7 +226,7 @@
     </div>
   </div>
   <div class="container footer-bottom">
-    <div>&copy; 2026 Lastbrowser Project. All rights reserved. Zero Involuntary Telemetry.</div>
+    <div>&copy; 2026 Lastbrowser Project. All rights reserved.</div>
     <div style="display:flex;gap:14px;align-items:center;">
       <span>Windows 10 &amp; 11 (64-Bit)</span>
       <span>·</span>

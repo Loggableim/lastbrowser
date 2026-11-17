@@ -8,6 +8,7 @@ function group<P extends string, T extends Record<string, string>>(prefix: P, va
 }
 
 export const desktopJaOverrides = {
+  'settings.panels.system.updatesManagedByStore': 'このインストールの更新は Microsoft Store から入手できます。',
   'settings.panels.providers.stableRelease': '安定版',
   'chat.header.moreActions': 'チャットのその他の操作',
   'chat.header.status.unknown': '状態不明',

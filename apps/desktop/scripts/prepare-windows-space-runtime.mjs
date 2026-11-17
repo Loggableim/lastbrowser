@@ -9,9 +9,11 @@ import { pipeline } from 'node:stream/promises';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.dirname(scripts);
+const repository = path.resolve(desktop, '../..');
 const runtime = path.join(desktop, 'runtime');
 const cache = path.resolve(process.env.LASTBROWSER_SPACE_RUNTIME_CACHE || path.join(runtime, 'space-runtime-cache'));
 const output = path.join(runtime, 'protected-spaces');
+const notices = path.join(repository, 'docs', 'legal', 'notices');
 const archives = [
   {
     name: 'cryptomator-cli-0.6.2-win-x64.zip',
@@ -77,6 +79,13 @@ async function stage() {
     await rename(path.join(stageRoot, 'jdk-25.0.5.0.2+1'), path.join(staged, 'jdk'));
     const dll = path.join(staged, 'TSS.Net.dll');
     await copyFile(path.join(stageRoot, 'lib', 'net46', 'TSS.Net.dll'), dll);
+    await Promise.all([
+      copyFile(path.join(notices, 'microsoft-tss-2.1.1.txt'), path.join(staged, 'Microsoft.TSS-LICENSE.txt')),
+      copyFile(path.join(notices, 'jfuse-0.7.3.txt'), path.join(staged, 'jFUSE-LICENSE.txt')),
+      copyFile(path.join(repository, 'LICENSE'), path.join(staged, 'jFUSE-GPL-3.0.txt')),
+      copyFile(path.join(notices, 'auth0-java-jwt-4.4.0.txt'), path.join(staged, 'Auth0-java-jwt-LICENSE.txt')),
+      copyFile(path.join(notices, 'logback-1.5.18.txt'), path.join(staged, 'Logback-LICENSE-NOTICE.txt'))
+    ]);
     await copyFile(path.join(scripts, 'InitializeSpaceVault.java'), path.join(staged, 'InitializeSpaceVault.java'));
     run(path.join(system, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'), [
       '/nologo', '/target:exe', `/reference:${dll}`, `/out:${path.join(staged, 'space-tpm-nv.exe')}`,

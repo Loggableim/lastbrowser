@@ -39,10 +39,10 @@
     },
     {
       "@type": "Question",
-      "name": "Wo werden meine Browserdaten und API-Keys gespeichert?",
+      "name": "Werden meine Browserdaten synchronisiert?",
       "acceptedAnswer": {
         "@type": "Answer",
-        "text": "Alle Benutzerdaten verbleiben zu 100% lokal unter %APPDATA%\\Lastbrowser. API-Schlüssel werden mit Windows DPAPI verschlüsselt."
+        "text": "Lastbrowser speichert Ihre Browserprofile auf Ihrem Gerät und betreibt keinen zentralen Dienst zur Synchronisierung dieser Profile. In der installierten Windows-Version können Sie die Verschlüsselung für ausgewählte Spaces einrichten."
       }
     },
     {
@@ -167,7 +167,14 @@
     <div class="feature-card">
       <h3>Werden meine Browserdaten synchronisiert?</h3>
       <p style="margin-top:8px;">
-        Nein. Lastbrowser arbeitet 100% Local-First. Alle Verläufe, Lesezeichen und Passwörter verbleiben verschlüsselt auf Ihrer lokalen Festplatte unter <code>%APPDATA%\Lastbrowser</code>.
+        Lastbrowser speichert Ihre Browserprofile auf Ihrem Gerät und betreibt keinen zentralen Dienst zur Synchronisierung dieser Profile. In der installierten Windows-Version können Sie die Verschlüsselung für ausgewählte Spaces einrichten. Die <a href="/privacy/">Datenschutzerklärung</a> beschreibt die Profilpfade, die Voraussetzungen für die Verschlüsselung und die Datenübertragung an externe KI-Anbieter.
+      </p>
+    </div>
+
+    <div class="feature-card">
+      <h3>Wie melde ich eine problematische KI-Antwort?</h3>
+      <p style="margin-top:8px;">
+        Wählen Sie <strong>Antwort melden</strong> neben der KI-Antwort. Wählen Sie einen Grund, ergänzen Sie bei Bedarf einen Kommentar und öffnen Sie den E-Mail-Entwurf. Sie können den Entwurf prüfen und selbst absenden. Falls sich der Entwurf nicht öffnet, können Sie Ihre Meldung auch per Webmail an <a href="mailto:support@lastbrowser.com">support@lastbrowser.com</a> schicken. Weitere Informationen finden Sie in der <a href="/privacy/#ai-reports">Datenschutzerklärung zu KI-Meldungen</a>.
       </p>
     </div>
   </div>
@@ -180,7 +187,7 @@
         <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="36" height="36">
         <div><strong>Lastbrowser</strong><span>AI-Native Browser</span></div>
       </div>
-      <p>Der moderne Chromium-Browser für Windows 10 &amp; 11 mit nativer KI, 48 Workflows und ConPTY-Terminal. 100% Local-First.</p>
+      <p>Der Chromium-Browser für Windows 10 &amp; 11 mit konfigurierbarer KI, lokalen Browserprofilen und ConPTY-Terminal.</p>
       <div style="margin-top:14px;">
         <span class="footer-contact-highlight">Commercial Licensing: <a href="mailto:rainer@dominik.in" style="color:inherit;text-decoration:underline;">rainer@dominik.in</a></span>
       </div>
@@ -230,7 +237,7 @@
     </div>
   </div>
   <div class="container footer-bottom">
-    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten. Zero Involuntary Telemetry.</div>
+    <div>&copy; 2026 Lastbrowser Project. Alle Rechte vorbehalten.</div>
     <div style="display:flex;gap:14px;align-items:center;">
       <span>Windows 10 &amp; 11 (64-Bit)</span>
       <span>·</span>

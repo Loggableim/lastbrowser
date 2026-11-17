@@ -2898,6 +2898,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const updateCurrentVersion = settingsText(updateStatus?.currentVersion, '');
   const updateAvailableVersion = settingsText(updateStatus?.availableVersion, '');
   const updateMessage = settingsText(updateStatus?.message, '');
+  const updatesManagedByStore = updateStatus?.managedByStore === true;
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
   // Pages classify release eligibility, independently of saved selection or chat evidence.
   const providerOptions = useMemo(() => cloudProviderOptions(onboardingStatus).map(option => ({ ...option,
@@ -4550,42 +4551,47 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       checked={settingsBoolean(draft.sync_to_insights ?? settings.sync_to_insights, false)}
                       onChange={(value) => updateDraftToggle('sync_to_insights', value)}
                     />
-                    <SettingsToggle
-                      label={t('settings.panels.notifications.updates')}
-                      description={t('settings.panels.notifications.updatesDescription')}
-                      checked={autoUpdateChecksEnabled}
-                      onChange={(value) => updateDraftToggle('check_for_updates', value)}
-                    />
-                    <SettingsField
-                      label={t('settings.panels.notifications.updateChannel')}
-                      description={t('settings.panels.notifications.updateChannelDescription')}
-                    >
-                      <select
-                        value={updateChannel}
-                        disabled={updateChannelLoading || ['checking', 'available', 'downloading', 'downloaded'].includes(updateStatus?.state || '')}
-                        onChange={(event) => {
-                          const previous = updateChannel;
-                          const next = event.currentTarget.value === 'beta' ? 'beta' : 'stable';
-                          setUpdateChannel(next);
-                          void window.lastbrowser.updates.setChannel(next).then((result) => {
-                            if (result.persisted) return;
-                            setUpdateChannel(previous);
-                            showToast('Could not save the update channel.');
-                          }).catch((error) => {
-                            setUpdateChannel(previous);
-                            showToast(`Could not save update channel: ${error instanceof Error ? error.message : String(error)}`);
-                          });
-                        }}
+                    {updatesManagedByStore ? (
+                      <p className="settings-hint">{t('settings.panels.system.updatesManagedByStore')}</p>
+                    ) : <>
+                      <SettingsToggle
+                        label={t('settings.panels.notifications.updates')}
+                        description={t('settings.panels.notifications.updatesDescription')}
+                        checked={autoUpdateChecksEnabled}
+                        onChange={(value) => updateDraftToggle('check_for_updates', value)}
+                        disabled={!updateStatus}
+                      />
+                      <SettingsField
+                        label={t('settings.panels.notifications.updateChannel')}
+                        description={t('settings.panels.notifications.updateChannelDescription')}
                       >
-                        <option value="stable">{t('settings.panels.notifications.updateChannelStable')}</option>
-                        <option value="beta">{t('settings.panels.notifications.updateChannelPreview')}</option>
-                      </select>
-                    </SettingsField>
-                    {updateChannel === 'beta' && (
-                      <p className="settings-hint" role="alert">
-                        {t('settings.panels.notifications.updateChannelBetaUnsigned')}
-                      </p>
-                    )}
+                        <select
+                          value={updateChannel}
+                          disabled={!updateStatus || updateChannelLoading || ['checking', 'available', 'downloading', 'downloaded'].includes(updateStatus.state)}
+                          onChange={(event) => {
+                            const previous = updateChannel;
+                            const next = event.currentTarget.value === 'beta' ? 'beta' : 'stable';
+                            setUpdateChannel(next);
+                            void window.lastbrowser.updates.setChannel(next).then((result) => {
+                              if (result.persisted) return;
+                              setUpdateChannel(previous);
+                              showToast('Could not save the update channel.');
+                            }).catch((error) => {
+                              setUpdateChannel(previous);
+                              showToast(`Could not save update channel: ${error instanceof Error ? error.message : String(error)}`);
+                            });
+                          }}
+                        >
+                          <option value="stable">{t('settings.panels.notifications.updateChannelStable')}</option>
+                          <option value="beta">{t('settings.panels.notifications.updateChannelPreview')}</option>
+                        </select>
+                      </SettingsField>
+                      {updateChannel === 'beta' && (
+                        <p className="settings-hint" role="alert">
+                          {t('settings.panels.notifications.updateChannelBetaUnsigned')}
+                        </p>
+                      )}
+                    </>}
                   </div>
                 </SettingsCard>
                 {/* === Accessibility Card === */}
@@ -5389,12 +5395,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </div>
                   )}
                   <div className="settings-system-actions">
-                    <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || updateStatus?.state === 'checking'}>
-                      {updateStatus?.state === 'checking' ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-                      <span>{t('settings.panels.system.checkUpdates')}</span>
-                    </button>
-                    <UpdateNowButton status={updateStatus} pending={updateInstallPending}
-                      label={t('settings.panels.system.updateNow')} onInstall={() => void installUpdateNow()} />
+                    {!updatesManagedByStore && <>
+                      <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || !updateStatus || updateStatus.state === 'checking'}>
+                        {updateStatus?.state === 'checking' ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
+                        <span>{t('settings.panels.system.checkUpdates')}</span>
+                      </button>
+                      <UpdateNowButton status={updateStatus} pending={updateInstallPending}
+                        label={t('settings.panels.system.updateNow')} onInstall={() => void installUpdateNow()} />
+                    </>}
                     <button type="button" className="secondary-action compact" onClick={() => void signOut()} disabled={!ready || !loggedIn}>
                       <Shield size={15} />
                       <span>{t('settings.panels.system.signOut')}</span>
@@ -5409,10 +5417,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   )}
                   <div className="settings-system-status">
                     {updateStatus ? <>
-                      <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>
+                      {!updatesManagedByStore && <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>}
                       {updateCurrentVersion && <span className="settings-badge">{t('settings.panels.system.currentVersion', { version: updateCurrentVersion })}</span>}
-                      {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
-                      {updateMessage && <span className="settings-badge">{updateMessage}</span>}
+                      {updatesManagedByStore ? (
+                        <span className="settings-badge">{t('settings.panels.system.updatesManagedByStore')}</span>
+                      ) : <>
+                        {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
+                        {updateMessage && <span className="settings-badge">{updateMessage}</span>}
+                      </>}
                     </> : <span className="settings-badge">{t('settings.panels.system.updateStatusLoading')}</span>}
                   </div>
                   {updateStatusReadError && <p className="settings-hint" role="alert">{t('settings.panels.system.updateStatusUnavailable')} {updateStatusReadError}</p>}

@@ -42,6 +42,7 @@ function installer(getStatus: () => DesktopUpdateStatus | null, install: () => P
 
 describe('settings update status and install action', () => {
   it('provides all visible update-button and error copy in all eight shipped locales', () => {
+    const englishStoreNotice = createDesktopI18n('en').t('settings.panels.system.updatesManagedByStore');
     for (const locale of desktopLocaleIds) {
       const i18n = createDesktopI18n(locale);
       expect(i18n.t('settings.panels.system.updateNow'), locale).not.toBe('settings.panels.system.updateNow');
@@ -49,6 +50,9 @@ describe('settings update status and install action', () => {
       expect(i18n.t('settings.panels.system.updateInstallUnavailable'), locale).not.toBe('settings.panels.system.updateInstallUnavailable');
       expect(i18n.t('settings.panels.system.updateStatusLoading'), locale).not.toBe('settings.panels.system.updateStatusLoading');
       expect(i18n.t('settings.panels.system.updateStatusUnavailable'), locale).not.toBe('settings.panels.system.updateStatusUnavailable');
+      const storeNotice = i18n.t('settings.panels.system.updatesManagedByStore');
+      expect(storeNotice, locale).toContain('Microsoft Store');
+      if (locale !== 'en') expect(storeNotice, locale).not.toBe(englishStoreNotice);
     }
   });
 
@@ -85,6 +89,14 @@ describe('settings update status and install action', () => {
     expect(html).toContain('primary-action');
     expect(html).toContain('Update now');
     expect(html).not.toContain('disabled=""');
+  });
+
+  it('does not offer or invoke an installer for a Store-managed update', async () => {
+    const storeStatus = { ...status('downloaded'), managedByStore: true };
+    const install = vi.fn(async () => storeStatus);
+    expect(buttonMarkup(storeStatus)).toBe('');
+    await expect(installer(() => storeStatus, install).run()).resolves.toBe('not-downloaded');
+    expect(install).not.toHaveBeenCalled();
   });
 
   it('disables the downloaded action while the install request is pending', () => {

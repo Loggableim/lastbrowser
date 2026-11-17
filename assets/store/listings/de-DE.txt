@@ -1,7 +1,7 @@
 LastBrowser — de-DE
 
 DESCRIPTION
-LastBrowser verbindet einen Chromium-Browser für Windows mit dem integrierten Nova KI-Assistenten. Organisieren Sie Webseiten in vertikalen Tabs und Arbeitsbereichen und nutzen Sie den Assistenten neben Ihren geöffneten Seiten.
+LastBrowser ist ein Chromium-Browser für Windows mit vertikalen Tabs und Arbeitsbereichen. Der optionale Nova-Assistent nutzt generative KI, um Antworten auf Ihre Eingaben zu erstellen.
 
 Funktionen:
 • Vertikale Tabs und Arbeitsbereiche für Ihre Webprojekte.
@@ -11,13 +11,13 @@ Funktionen:
 • Lokal gespeicherte Browserprofile und Werkzeuge zum Löschen von Browserdaten.
 • Chats verwenden standardmäßig ein einzelnes Modell. Teamwork-Orchestrierung ist eine optionale Beta.
 
-LastBrowser ist kostenlos und darf privat wie kommerziell genutzt werden. Externe KI-Dienste können ein eigenes Konto und kostenpflichtige Leistungen erfordern. Wenn Sie einen externen KI-Anbieter nutzen, werden Ihre Anfrage und der von Ihnen für die Aufgabe bereitgestellte Kontext an diesen Anbieter gesendet. Browserprofile werden lokal auf Ihrem PC gespeichert. Für enthaltene Drittanbieter-Komponenten, Modelle und externe Dienste gelten deren jeweilige Lizenzen und Bedingungen.
+LastBrowser steht zum kostenlosen Download bereit. Externe KI-Dienste können ein eigenes Konto und kostenpflichtige Leistungen erfordern. Wenn Sie einen externen KI-Anbieter nutzen, werden Ihre Anfrage und der von Ihnen für die Aufgabe bereitgestellte Kontext an diesen Anbieter gesendet. Browserprofile werden lokal auf Ihrem PC gespeichert. Für enthaltene Drittanbieter-Komponenten, Modelle und externe Dienste gelten deren jeweilige Lizenzen und Bedingungen.
 SHORT DESCRIPTION
-Chromium-Browser für Windows mit vertikalen Tabs, Arbeitsbereichen und Nova KI-Assistent. Browserprofile bleiben lokal; externe KI-Dienste erhalten die von Ihnen bereitgestellten Anfragen und Inhalte.
+Chromium-Browser für Windows mit vertikalen Tabs, Arbeitsbereichen und optionalem Nova-Assistenten. Browserprofile bleiben lokal. Externe KI-Dienste erhalten die Anfragen und Inhalte, die Sie für Ihre Aufgabe bereitstellen.
 
 PRODUCT FEATURES
 • Vertikale Tabs und Arbeitsbereiche
-• Integrierter Nova KI-Assistent
+• Optionaler Nova-Assistent mit generativer KI
 • Getestete und qualifizierte KI-Anbieter-/Modellkombinationen; Ollama-Modelle, sofern verfügbar
 • Integriertes Terminal und Browser-Erweiterungen
 • Lokal gespeicherte Browserprofile
@@ -30,9 +30,9 @@ vertikale tabs
 ki assistent
 arbeitsbereiche
 WHAT'S NEW
-Fehlerbehebungen und Verbesserungen.
+
 APPLICABLE LICENSE TERMS
-LastBrowser ist kostenlos und darf privat wie kommerziell genutzt werden. Externe KI-Dienste können ein eigenes Konto und kostenpflichtige Leistungen erfordern. Wenn Sie einen externen KI-Anbieter nutzen, werden Ihre Anfrage und der von Ihnen für die Aufgabe bereitgestellte Kontext an diesen Anbieter gesendet. Browserprofile werden lokal auf Ihrem PC gespeichert. Für enthaltene Drittanbieter-Komponenten, Modelle und externe Dienste gelten deren jeweilige Lizenzen und Bedingungen.
+LastBrowser steht zum kostenlosen Download bereit. Für die in LICENSE-SCOPE.md beschriebenen Originalbestandteile von LastBrowser gilt GPL-3.0-or-later im dort angegebenen Umfang. Für enthaltene Komponenten Dritter, Modelle und externe Dienste gelten die jeweiligen Lizenzen und Nutzungsbedingungen. Externe KI-Dienste können ein eigenes Konto erfordern und Kosten verursachen.
 COPYRIGHT
 © 2026 Dominik Rainer / Lastbrowser.com
 

@@ -23,7 +23,7 @@ export function extractUrlFromArgs(args: string[]): string | null {
       return raw;
     }
     // Local HTML files
-    if (/\.(html?|xhtml)$/i.test(raw)) {
+    if (/\.(html?|shtml|xhtml)$/i.test(raw)) {
       try {
         const resolved = path.resolve(raw);
         return `file:///${resolved.replace(/\\/g, '/')}`;

@@ -221,7 +221,7 @@ export function UpdatePill({ status, busy = false }: { status: UpdateStatus | nu
       document.removeEventListener('keydown', escape);
     };
   }, [open]);
-  if (!status || (status.state !== 'downloaded' && !(open && startupPrompt))) return null;
+  if (!status || status.managedByStore || (status.state !== 'downloaded' && !(open && startupPrompt))) return null;
   const ready = status.state === 'downloaded';
   const label = ready ? t('browser.chrome.updateReady', { version: status.availableVersion ?? '' })
     : `${t('browser.chrome.updateAvailable')} ${status.availableVersion ?? ''}`;

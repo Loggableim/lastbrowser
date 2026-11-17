@@ -5,6 +5,16 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [0.1.61] - Unreleased
+
+### Features and fixes
+- Improve local Ollama setup, model discovery, and chat routing on Windows.
+- Add Codex CLI settings and chat streaming with a stop control.
+- Add optional encryption for selected Spaces in the installed Windows app. The storage mode uses WinFsp. The hardware-backed mode also requires TPM 2.0.
+- Clarify Windows profile storage, Widevine startup connections, and voluntary AI feedback in the German and English privacy and support pages.
+
+---
+
 ## [0.1.60] - 2026-10-25
 
 ### Features and fixes

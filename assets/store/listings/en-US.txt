@@ -1,7 +1,7 @@
 LastBrowser — en-US
 
 DESCRIPTION
-LastBrowser combines a Chromium browser for Windows with the integrated Nova AI assistant. Organize webpages in vertical tabs and workspaces, and use the assistant alongside your open pages.
+LastBrowser is a Chromium browser for Windows with vertical tabs and workspaces. The optional Nova assistant uses live generative AI to respond to your prompts.
 
 Features:
 • Vertical tabs and workspaces for your web projects.
@@ -11,13 +11,13 @@ Features:
 • Locally stored browser profiles and tools for clearing browsing data.
 • Chats use a single model by default. Teamwork orchestration is an opt-in beta.
 
-LastBrowser is free for personal and commercial use. External AI services may require their own account and paid services. When you use an external AI provider, your request and the context you provide for the task are sent to that provider. Browser profiles are stored locally on your PC. The respective licenses and terms apply to included third-party components, models, and external services.
+LastBrowser is free to download. External AI services may require their own account and paid services. When you use an external AI provider, your request and the context you provide for the task are sent to that provider. Browser profiles are stored locally on your PC. The respective licenses and terms apply to included third-party components, models, and external services.
 SHORT DESCRIPTION
-Chromium browser for Windows with vertical tabs, workspaces, and Nova AI assistant. Browser profiles stay local; external AI services receive the requests and content you provide.
+Chromium browser for Windows with vertical tabs, workspaces, and an optional Nova assistant. Browser profiles stay local. External AI services receive the requests and content you provide for your task.
 
 PRODUCT FEATURES
 • Vertical tabs and workspaces
-• Integrated Nova AI assistant
+• Optional Nova assistant with live generative AI
 • Tested and qualified AI provider/model combinations; Ollama models where available
 • Integrated terminal and browser extensions
 • Locally stored browser profiles
@@ -30,9 +30,9 @@ vertical tabs
 ai assistant
 workspaces
 WHAT'S NEW
-Stability improvements and fixes.
+
 APPLICABLE LICENSE TERMS
-LastBrowser is free for personal and commercial use. External AI services may require their own account and paid services. When you use an external AI provider, your request and the context you provide for the task are sent to that provider. Browser profiles are stored locally on your PC. The respective licenses and terms apply to included third-party components, models, and external services.
+LastBrowser is free to download. GPL-3.0-or-later applies to original LastBrowser material within the scope defined in LICENSE-SCOPE.md. Included third-party components, models, and external services are subject to their respective licenses and terms. External AI services may require a separate account and charge fees.
 COPYRIGHT
 © 2026 Dominik Rainer / Lastbrowser.com
 

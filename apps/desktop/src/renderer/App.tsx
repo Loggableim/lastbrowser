@@ -1299,6 +1299,7 @@ function AppContent(): JSX.Element {
   const [workspaceShowHidden, setWorkspaceShowHidden] = useState(false);
   const [workspaceRefreshNonce, setWorkspaceRefreshNonce] = useState(0);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus | null>(null);
+  const updatesManagedByStore = updateStatus?.managedByStore === true;
   const [hasActiveDownloads, setHasActiveDownloads] = useState(false);
   const [sidekickBusy, setSidekickBusy] = useState(false);
   const [sidekickMotion, setSidekickMotion] = useState<SidekickMotion>('idle');
@@ -1897,12 +1898,13 @@ function AppContent(): JSX.Element {
   }, [desktopSettings]);
 
   useEffect(() => {
+    if (updatesManagedByStore) return;
     const enabled = resolveAutoUpdateCheckPreference(desktopSettings, desktopSettingsHydrated);
     if (enabled === null) return;
     void window.lastbrowser.updates.setAutoCheckEnabled(enabled).catch((error) => {
       console.warn('[App] Could not apply automatic update-check preference:', error);
     });
-  }, [desktopSettingsHydrated, desktopSettings !== null, desktopSettings?.check_for_updates]);
+  }, [desktopSettingsHydrated, desktopSettings !== null, desktopSettings?.check_for_updates, updatesManagedByStore]);
 
   useEffect(() => watchSystemThemeChanges(desktopSettings), [desktopSettings]);
 

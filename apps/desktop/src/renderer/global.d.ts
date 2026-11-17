@@ -111,6 +111,7 @@ type LastbrowserUpdateStatus = {
   message: string | null;
   startupCheck?: boolean;
   installError?: string | null;
+  managedByStore?: boolean;
 };
 
 type LastbrowserUpdatePreferences = {

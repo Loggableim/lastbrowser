@@ -1,7 +1,7 @@
 # ==============================================================================
 # Lastbrowser - Microsoft Store Release Readiness & Certification Preflight
-# Validates Win32 Store Submission requirements, image assets, legal pages,
-# NSIS installer configurations, CI signing workflows, and test suites.
+# Validates Store listing assets, legal pages, application integration,
+# MSIX packages and legacy Windows EXE installers.
 # ==============================================================================
 
 [CmdletBinding()]
@@ -10,11 +10,23 @@ param(
     [string]$PackageDirectory,
     [string]$InstallerPath,
     [string]$SignatureReportPath,
-    [string]$ScreenshotReportPath
+    [string]$ScreenshotReportPath,
+    [string]$MsixPath,
+    [string]$ExpectedStoreIdentityName,
+    [string]$ExpectedStorePublisher,
+    [string]$ExpectedStorePublisherDisplayName
 )
 
 $ErrorActionPreference = "Stop"
 $rootDir = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$legacyInstaller = $InstallerPath -or ($PackageDirectory -and -not $MsixPath)
+if ($MsixPath -and ($InstallerPath -or $SignatureReportPath)) {
+    throw 'MSIX and EXE signature checks must run separately'
+}
+if ([bool]$ExpectedStoreIdentityName -ne [bool]$ExpectedStorePublisher -or
+    ($ExpectedStorePublisherDisplayName -and -not $ExpectedStoreIdentityName)) {
+    throw 'Provide the Partner Center name and publisher together'
+}
 
 $passCount = 0
 $failCount = 0
@@ -48,7 +60,7 @@ function Report-Warn($name, $detail) {
 
 Write-Host ""
 Write-Host "======================================================================" -ForegroundColor Magenta
-Write-Host "  Lastbrowser Store Certification Preflight (Windows / Win32 Store)" -ForegroundColor Magenta
+Write-Host "  Lastbrowser Microsoft Store Certification Preflight" -ForegroundColor Magenta
 Write-Host "======================================================================" -ForegroundColor Magenta
 
 # ------------------------------------------------------------------------------
@@ -157,9 +169,10 @@ if ($ScreenshotReportPath) {
 # ------------------------------------------------------------------------------
 Write-SectionHeader "2. Web Presence & Legal Compliance (Phase 3.1 & 3.2)"
 
+$privacyDisclosures = @('%APPDATA%\Lastbrowser', 'update.googleapis.com', 'mailto:support@lastbrowser.com')
 $webFiles = @(
-    @{ Path = "lastbrowser.com\privacy\index.html"; Desc = "Datenschutzerklaerung (DE)"; MustContain = "Local-First" }
-    @{ Path = "lastbrowser.com\en\privacy\index.html"; Desc = "Privacy Policy (EN)"; MustContain = "Local-First" }
+    @{ Path = "lastbrowser.com\privacy\index.html"; Desc = "Datenschutzerklaerung (DE)"; MustContain = $privacyDisclosures }
+    @{ Path = "lastbrowser.com\en\privacy\index.html"; Desc = "Privacy Policy (EN)"; MustContain = $privacyDisclosures }
     @{ Path = "lastbrowser.com\support\index.html"; Desc = "Support Portal (DE)"; MustContain = "support@lastbrowser.com" }
     @{ Path = "lastbrowser.com\en\support\index.html"; Desc = "Support Portal (EN)"; MustContain = "support@lastbrowser.com" }
     @{ Path = "lastbrowser.com\index.html"; Desc = "Product Landing Page (DE)"; MustContain = "Lastbrowser" }
@@ -175,28 +188,28 @@ foreach ($webSpec in $webFiles) {
     }
 
     $content = Get-Content -Path $fullPath -Raw -Encoding UTF8
-    if ($content.Contains($webSpec.MustContain)) {
-        Report-Pass "Web $($webSpec.Desc)" "Verified content keyword: '$($webSpec.MustContain)'"
+    $missingKeywords = @($webSpec.MustContain | Where-Object { -not $content.Contains($_) })
+    if ($missingKeywords.Count -eq 0) {
+        Report-Pass "Web $($webSpec.Desc)" ("Verified content: " + ($webSpec.MustContain -join ', '))
     } else {
-        Report-Fail "Web $($webSpec.Desc)" "Missing mandatory keyword '$($webSpec.MustContain)' in $fullPath"
+        Report-Fail "Web $($webSpec.Desc)" ("Missing content in ${fullPath}: " + ($missingKeywords -join ', '))
     }
 }
 
 # ------------------------------------------------------------------------------
 # 3. Packaging & NSIS Silent Execution (apps/desktop/build/installer.nsh)
 # ------------------------------------------------------------------------------
-Write-SectionHeader "3. NSIS & Silent Execution Compliance (Phase 1.1 - 1.3)"
+Write-SectionHeader "3. Desktop Browser Registration"
 
-$installerNshPath = Join-Path $rootDir "apps\desktop\build\installer.nsh"
-if (Test-Path $installerNshPath) {
-    $nshContent = Get-Content -Path $installerNshPath -Raw
-    if ($nshContent -match '\$\{ifNot\}\s+\$\{Silent\}') {
+if ($legacyInstaller) {
+    $installerNshPath = Join-Path $rootDir "apps\desktop\build\installer.nsh"
+    if (-not (Test-Path -LiteralPath $installerNshPath)) {
+        Report-Fail "NSIS Configuration" "installer.nsh not found at $installerNshPath"
+    } elseif ((Get-Content -LiteralPath $installerNshPath -Raw) -match '\$\{ifNot\}\s+\$\{Silent\}') {
         Report-Pass "NSIS Uninstaller Silent Check" "Guards against blocking MessageBox dialogs during silent uninstall (/S)"
     } else {
         Report-Fail "NSIS Uninstaller Silent Check" "Missing '\${ifNot} \${Silent}' guard in customUnInstall"
     }
-} else {
-    Report-Fail "NSIS Configuration" "installer.nsh not found at $installerNshPath"
 }
 
 $desktopPkgPath = Join-Path $rootDir "apps\desktop\package.json"
@@ -226,12 +239,14 @@ if (Test-Path $desktopPkgPath) {
         Report-Warn "Application ID" "$($pkgJson.build.appId) differs from standard com.lastbrowser.desktop"
     }
 
-    $nativeSigningExtensions = @($pkgJson.build.win.signExts)
-    $missingNativeSigningExtensions = @('.dll', '.pyd', '.node' | Where-Object { $_ -notin $nativeSigningExtensions })
-    if ($missingNativeSigningExtensions.Count -eq 0) {
-        Report-Pass "Native payload signing configuration" "DLL, Python and Node native modules are included in Authenticode signing"
-    } else {
-        Report-Fail "Native payload signing configuration" "Missing extensions: $($missingNativeSigningExtensions -join ', ')"
+    if ($legacyInstaller) {
+        $nativeSigningExtensions = @($pkgJson.build.win.signExts)
+        $missingNativeSigningExtensions = @('.dll', '.pyd', '.node' | Where-Object { $_ -notin $nativeSigningExtensions })
+        if ($missingNativeSigningExtensions.Count -eq 0) {
+            Report-Pass "Native payload signing configuration" "DLL, Python and Node native modules are included in Authenticode signing"
+        } else {
+            Report-Fail "Native payload signing configuration" "Missing extensions: $($missingNativeSigningExtensions -join ', ')"
+        }
     }
 } else {
     Report-Fail "Desktop package.json" "Not found at $desktopPkgPath"
@@ -240,10 +255,16 @@ if (Test-Path $desktopPkgPath) {
 # ------------------------------------------------------------------------------
 # 4. CI/CD Code Signing Pipeline (.github/workflows/release.yml)
 # ------------------------------------------------------------------------------
-Write-SectionHeader "4. CI/CD Release Pipeline & Code Signing (Phase 2)"
+Write-SectionHeader "4. Windows Packaging"
 
 $releaseYmlPath = Join-Path $rootDir ".github\workflows\release.yml"
-if (Test-Path $releaseYmlPath) {
+if (-not $legacyInstaller) {
+    if ($pkgJson.scripts.'package:store:payload' -and $pkgJson.scripts.'package:store:msix') {
+        Report-Pass "MSIX build commands" "The desktop package exposes the Windows payload and MSIX packaging commands"
+    } else {
+        Report-Fail "MSIX build commands" "Missing package:store:payload or package:store:msix"
+    }
+} elseif (Test-Path $releaseYmlPath) {
     $ymlContent = Get-Content -Path $releaseYmlPath -Raw
     $hasTrustedSigning = $ymlContent.Contains("trusted-signing-action") -or $ymlContent.Contains("AZURE_TRUSTED_SIGNING_ACCOUNT")
     $hasSigntoolVerify = $ymlContent.Contains("signtool.exe verify") -or $ymlContent.Contains("signtool verify")
@@ -369,8 +390,12 @@ if (Test-Path -LiteralPath $listingDraftPath) {
             if (@($localeDraft.productFeatures).Count -gt 20 -or @($localeDraft.productFeatures | Where-Object { $_.Length -gt 200 }).Count -gt 0) {
                 $draftIssues += 'Features exceed 20 entries or 200 characters per entry'
             }
-            if ([string]::IsNullOrWhiteSpace($localeDraft.productName) -or [string]::IsNullOrWhiteSpace($localeDraft.whatsNew) -or $localeDraft.whatsNew.Length -gt 1500) {
-                $draftIssues += 'Product name or initial release note missing, or release note longer than 1500 characters'
+            if ([string]::IsNullOrWhiteSpace($localeDraft.productName)) {
+                $draftIssues += 'Product name missing'
+            }
+            $releaseNotes = $localeDraft.whatsNew
+            if ($null -ne $releaseNotes -and ($releaseNotes -isnot [string] -or $releaseNotes.Length -gt 1500)) {
+                $draftIssues += 'Optional release note must be text and at most 1500 characters'
             }
             if ($draftIssues.Count -gt 0) {
                 Report-Fail "Current Store text draft ($locale)" ($draftIssues -join '; ')
@@ -402,10 +427,126 @@ if ($Quick) {
     }
 }
 
-# Package checks are separate from source/configuration checks. A green source
-# preflight must not hide unsigned binaries inside an otherwise signed installer.
-Write-SectionHeader "7. Final Windows Package Signatures"
-if ($PackageDirectory) {
+Write-SectionHeader "7. Final Windows Package"
+$requiredLicenses = @(
+    'LICENSE'
+    'LICENSE-SCOPE.md'
+    'NOTICE'
+    'THIRD-PARTY-LICENSES.md'
+    'docs/legal/license-audit.md'
+    'docs/legal/drafts/third-party-inventory-20261011.json'
+    'docs/legal/windows-protected-spaces-runtime.md'
+)
+$requiredSpaceFiles = @(
+    'space-tpm-nv.exe'
+    'TSS.Net.dll'
+    'InitializeSpaceVault.java'
+    'jdk/bin/java.exe'
+    'Microsoft.TSS-LICENSE.txt'
+    'jFUSE-LICENSE.txt'
+    'jFUSE-GPL-3.0.txt'
+    'Auth0-java-jwt-LICENSE.txt'
+    'Logback-LICENSE-NOTICE.txt'
+)
+$requiredSpaceModules = @('cryptomator-cli-*.jar', 'cryptofs-*.jar', 'cryptolib-*.jar')
+if ($MsixPath) {
+    $package = $null
+    try {
+        $packagePath = (Resolve-Path -LiteralPath $MsixPath).Path
+        if ([IO.Path]::GetExtension($packagePath) -ne '.msix') { throw 'Pass an .msix package' }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        $package = [IO.Compression.ZipFile]::OpenRead($packagePath)
+        $manifestEntry = $package.GetEntry('AppxManifest.xml')
+        if (-not $manifestEntry) { throw 'The MSIX manifest is missing' }
+        $readerSettings = [System.Xml.XmlReaderSettings]::new()
+        $readerSettings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
+        $readerSettings.CloseInput = $true
+        $reader = [System.Xml.XmlReader]::Create($manifestEntry.Open(), $readerSettings)
+        try {
+            $manifest = [System.Xml.XmlDocument]::new()
+            $manifest.Load($reader)
+        } finally { $reader.Dispose() }
+        $identity = $manifest.DocumentElement.SelectSingleNode("*[local-name()='Identity']")
+        $application = $manifest.DocumentElement.SelectSingleNode("*[local-name()='Applications']/*[local-name()='Application']")
+        if (-not $identity -or -not $application) { throw 'MSIX identity or application is missing' }
+        $identityName = $identity.GetAttribute('Name')
+        $publisher = $identity.GetAttribute('Publisher')
+        $packageVersion = $identity.GetAttribute('Version')
+        if (-not $identityName -or -not $publisher -or $identity.GetAttribute('ProcessorArchitecture') -ne 'x64' -or
+            $packageVersion -notmatch '^[1-9][0-9]*\.[0-9]+\.[0-9]+\.0$' -or
+            $application.GetAttribute('EntryPoint') -ne 'Windows.FullTrustApplication') {
+            throw 'The expected x64 desktop identity or Store package version is missing'
+        }
+        if ($ExpectedStoreIdentityName -and ($identityName -cne $ExpectedStoreIdentityName -or $publisher -cne $ExpectedStorePublisher)) {
+            throw 'The manifest identity differs from Partner Center'
+        }
+        $displayNameNode = $manifest.DocumentElement.SelectSingleNode("*[local-name()='Properties']/*[local-name()='PublisherDisplayName']")
+        if (-not $displayNameNode -or ($ExpectedStorePublisherDisplayName -and $displayNameNode.InnerText -cne $ExpectedStorePublisherDisplayName)) {
+            throw 'The manifest publisher display name is missing or differs from Partner Center'
+        }
+        $appVersion = [version]$pkgJson.version
+        $expectedPackageVersion = '{0}.{1}.{2}.0' -f ($appVersion.Major + 1), $appVersion.Minor, $appVersion.Build
+        if ($packageVersion -ne $expectedPackageVersion) {
+            throw "The MSIX version $packageVersion differs from the current expected version $expectedPackageVersion"
+        }
+        $protocols = @($application.SelectNodes(".//*[local-name()='Protocol']") | ForEach-Object { $_.GetAttribute('Name') })
+        $extensions = @($application.SelectNodes(".//*[local-name()='FileType']") | ForEach-Object { $_.InnerText })
+        if ('http' -notin $protocols -or 'https' -notin $protocols -or '.html' -notin $extensions -or '.htm' -notin $extensions) {
+            throw 'The browser URI and HTML activation declarations are missing'
+        }
+        $appExecutable = $application.GetAttribute('Executable').Replace('\', '/')
+        if (-not $appExecutable -or $appExecutable -notmatch '(?i)Lastbrowser\.exe$') { throw 'LastBrowser executable is missing from the manifest' }
+        $resources = $appExecutable.Substring(0, $appExecutable.LastIndexOf('/') + 1) + 'resources/'
+        $requiredEntries = @('AppxBlockMap.xml', $appExecutable, "${resources}app.asar", "${resources}runtime/python/python.exe") +
+            @($requiredLicenses | ForEach-Object { "${resources}licenses/$_" }) +
+            @($requiredSpaceFiles | ForEach-Object { "${resources}protected-spaces/$_" })
+        $missing = @($requiredEntries | Where-Object {
+            $entry = $package.GetEntry($_)
+            -not $entry -or $entry.Length -eq 0
+        })
+        $entryNames = @($package.Entries | ForEach-Object { $_.FullName })
+        $missingModules = @($requiredSpaceModules | Where-Object {
+            -not ($entryNames -like "${resources}protected-spaces/cryptomator-cli/app/mods/$_")
+        })
+        $missing += $missingModules
+        if ($missing.Count) { throw ('Missing packaged files: ' + ($missing -join ', ')) }
+        if ($package.GetEntry("${resources}app-update.yml") -or ($entryNames -like '*.sys')) {
+            throw 'A standalone update feed or Windows driver is present in the MSIX'
+        }
+        if ($package.GetEntry('AppxSignature.p7x')) { throw 'Use the unsigned MSIX intended for Store signing' }
+        Report-Pass "Unsigned MSIX" "$identityName $packageVersion, browser registration, licenses and runtime payload"
+        if (-not $ExpectedStoreIdentityName) {
+            Report-Warn "Partner Center identity" "Compare the package name and publisher against the real Store identity before upload"
+        }
+    } catch {
+        Report-Fail "MSIX package" $_.Exception.Message
+    } finally {
+        if ($package) { $package.Dispose() }
+    }
+} elseif ($PackageDirectory) {
+    $licenseDirectory = Join-Path $PackageDirectory 'resources/licenses'
+    $missingLicenses = @($requiredLicenses | Where-Object {
+        -not (Test-Path -LiteralPath (Join-Path $licenseDirectory $_) -PathType Leaf)
+    })
+    if ($missingLicenses.Count) {
+        Report-Fail "Package license notices" ("Missing packaged files: " + ($missingLicenses -join ', '))
+    } else {
+        Report-Pass "Package license notices" "Project license, scope and third-party inventory are present"
+    }
+    $protectedSpaces = Join-Path $PackageDirectory 'resources/protected-spaces'
+    $missingSpaceFiles = @($requiredSpaceFiles | Where-Object {
+        -not (Test-Path -LiteralPath (Join-Path $protectedSpaces $_) -PathType Leaf)
+    })
+    $spaceModules = Join-Path $protectedSpaces 'cryptomator-cli/app/mods'
+    $missingSpaceModules = @($requiredSpaceModules | Where-Object {
+        -not (Get-ChildItem -LiteralPath $spaceModules -Filter $_ -File -ErrorAction SilentlyContinue)
+    })
+    $missingSpaceRuntime = $missingSpaceFiles + $missingSpaceModules
+    if ($missingSpaceRuntime.Count) {
+        Report-Fail "Protected Spaces runtime" ("Missing packaged files or modules: " + ($missingSpaceRuntime -join ', '))
+    } else {
+        Report-Pass "Protected Spaces runtime" "Windows vault helper, Java runtime and Cryptomator modules are present"
+    }
     try {
         & (Join-Path $PSScriptRoot 'verify-windows-package-signatures.ps1') -PackageDirectory $PackageDirectory -InstallerPath $InstallerPath -ReportPath $SignatureReportPath
         if ($InstallerPath) {
@@ -419,7 +560,7 @@ if ($PackageDirectory) {
 } elseif ($InstallerPath) {
     Report-Fail "Final Windows package" "InstallerPath requires PackageDirectory so the native payload is checked as well"
 } else {
-    Report-Warn "Final Windows package" "No package supplied; binary signature readiness was not checked"
+    Report-Warn "Final Windows package" "No MSIX supplied for package validation"
 }
 
 # ------------------------------------------------------------------------------
@@ -442,7 +583,7 @@ Write-Host ""
 
 if ($failCount -eq 0) {
     Write-Host ">>> EXECUTED PREFLIGHT CHECKS PASSED <<<" -ForegroundColor Green
-    Write-Host "Review all warnings. This is not a Store certification result: final app behavior, listing content, published legal URLs, signed package and checksums still need validation." -ForegroundColor Yellow
+    Write-Host "Review all warnings and verify the final package, its behavior, the public legal URLs and the listing before Store certification." -ForegroundColor Yellow
     exit 0
 } else {
     Write-Host ">>> STORE CERTIFICATION CHECKS FAILED WITH $failCount ISSUES <<<" -ForegroundColor Red

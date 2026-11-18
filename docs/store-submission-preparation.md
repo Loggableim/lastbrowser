@@ -162,6 +162,14 @@ Der Store-Quellzweig übernimmt die gespeicherte KI-Auswahl, bevor er die automa
 
 Der Desktop-Build und alle 2.673 Tests in 297 Dateien bestanden. Der Store-Vorabcheck nutzte das vorhandene Beta-MSIX als Paketreferenz und meldete 37 bestandene Prüfungen, 0 Fehler und eine Warnung zum Screenshot-Abgleich. Die geänderte Startlogik wurde im Quellzweig und im Einstellungs-Test geprüft.
 
+### Windows-Pakettest für Dock und KI-Auswahl
+
+- Für den lokalen Test wurde der Renderer aus `4eea4db` gebaut und in das bisherige Beta-MSIX übernommen. Von 12.270 Dateien der Blockliste änderte sich nur `app/resources/app.asar`. Die Prüfung des ASAR-Inhalts bestätigte, dass alle Dateien außerhalb von `dist/renderer` ihre bisherigen Inhalte behalten. SHA-256 des Pakets: `5072e0b4c0b947100c7ddb1c23d3640cb72e376bb38554398f1d554ca4e420be`.
+- Das temporär registrierte Paket startete über die Windows-Paketkennung unter Windows 10 22H2 mit einem frischen Profil. Im Einrichtungsassistenten war keine Dock-App ausgewählt. Das Dock blieb nach der Einrichtung und nach erneutem Laden des Renderers leer. „Ohne KI“ blieb gespeichert.
+- Ab dem ersten instrumentierten Neuladen des Renderers erfasste der Hauptprozess vor der KI-Auswahl, nach „Ohne KI“ und in den allgemeinen Einstellungen keine der überwachten automatischen lokalen Modell- oder Anbieterabfragen. Beim bewussten Öffnen von „KI & lokale Modelle“ erfasste der Mitschnitt sowohl `GET /api/models` als auch `GET /api/providers` am lokalen Backend. Der Mitschnitt deckt Loopback-Aufrufe des Hauptprozesses in diesen Prüfschritten ab. Die Zeit vor dem instrumentierten Neuladen und der übrige Netzwerkverkehr waren außerhalb dieser Messung.
+- Das gebündelte Python stellte das lokale Sidekick-Backend bereit. Der reguläre Aufruf von `app.quit()` beendete das Paket und alle beobachteten Kindprozesse mit geschlossenen lokalen Listenern. Die temporäre Registrierung wurde entfernt. Die Standardzuordnungen blieben erhalten.
+- Der Test erzeugte 32 Aufnahmen in acht Sprachen. `verify-store-readiness.ps1` prüfte sie über den Screenshot-Bericht gegen EXE und ASAR des Pakets. Der erneute Lauf mit Zugriff auf die lokale Vitest-Konfiguration ergab 37 bestandene Prüfungen, 0 Warnungen und 0 Fehler. Die Aufnahmen und der Lauf gehören zum lokalen Testpaket. Die Microsoft-signierte Installation auf einem sauberen System und WACK stehen aus.
+
 ## Historische Prüfergebnisse vor der MSIX-Umstellung
 
 - Fünf betroffene Desktop-Testsuiten: **61/61 Tests bestanden**, einschließlich sieben Tests des neuen Signaturchecks. Diese prüfen rekursiv erfasste Abhängigkeiten, fehlende und fehlerhafte Signaturen, fehlende Zeitstempel, fremde native Formate und einen unsignierten Installer. Die Signaturantworten in den Testfällen sind kontrollierte Testdaten; sie sind kein Nachweis einer neuen signierten Release-Datei.

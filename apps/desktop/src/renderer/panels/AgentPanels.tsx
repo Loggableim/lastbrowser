@@ -1,7 +1,5 @@
-import React, { FormEvent, useCallback, useContext, useEffect, useState, useSyncExternalStore } from 'react';
-import { AnimatedSidekick } from '../components/AnimatedSidekick.js';
+import React, { FormEvent, useContext, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react';
 import {
-  Bot,
   Brain,
   CheckCircle2,
   Edit3,
@@ -10,14 +8,22 @@ import {
   RefreshCw,
   Save,
   Search,
-  Send,
   Sparkles,
-  Terminal,
   Trash2,
   Users
 } from 'lucide-react';
 import { brandAssets } from '../brand.js';
 import { useDesktopI18n } from '../i18n.js';
+import { novaAssistantsCopy } from '../i18n/nova-assistants-copy.js';
+import { bundledNovaAssistants } from '../nova-assistant-templates.js';
+import type { IndependentScope } from '../independent-contracts.js';
+import type { IndependentAssistantController } from '../independent-assistant-controller.js';
+import type { DesktopSessionSummary } from '../shell-state.js';
+import {
+  deleteNovaAssistantProfile, novaAssistantInstructionsLimit, novaAssistantNameLimit,
+  readNovaAssistantProfiles, saveNovaAssistantProfile, type NovaAssistantProfile,
+} from '../nova-assistant-profiles.js';
+import { AssistantActivity } from './AssistantActivity.js';
 import { AdvancedWebUiTools } from './AdvancedWebUiTools.js';
 import { extractLinkedFiles, normalizeSkillCategories, normalizeSkillCategory } from './skill-categories.js';
 import { MemoryPanelStateModel, memoryDocumentId, type MemorySection } from './memory-panel-state.js';
@@ -203,308 +209,165 @@ export function NativeSkillsMain({ serviceStatus, activeContextItem }: { service
   );
 }
 
-export function NativeAssistantsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
-  const { locale } = useDesktopI18n();
-  const optional = useOptionalAiPolicy();
-  const [settings, setSettings] = useState(activeContextItem === 'Profiles');
-  return <div className="browser-main native-rest-main">
-    <div className="native-card-actions" role="tablist" aria-label={locale === 'de' ? 'Assistenten' : 'Assistants'}>
-      <button type="button" role="tab" aria-selected={!settings} onClick={() => setSettings(false)}>{locale === 'de' ? 'Assistenten' : 'Assistants'}</button>
-      <button type="button" role="tab" aria-selected={settings} onClick={() => setSettings(true)}>{locale === 'de' ? 'Erweiterte Einstellungen' : 'Advanced settings'}</button>
-    </div>
-    {!optional.policy.assistants_enabled && <p role="status">{locale === 'de' ? 'Zusätzliche Assistenten sind deaktiviert. Im Extension & Skill Hub aktivieren.' : 'Additional assistants are disabled. Enable them in the Extension & Skill Hub.'}</p>}
-    {optional.error && <p role="alert">{optional.error}</p>}
-    {settings ? <NativeProfilesMain serviceStatus={serviceStatus} activeContextItem="Profiles" /> : <NativeAgentsMain serviceStatus={serviceStatus} activeContextItem={activeContextItem} />}
-  </div>;
+type AssistantsTab = 'assistants' | 'activity' | 'manage';
+const assistantsTabs: AssistantsTab[] = ['assistants', 'activity', 'manage'];
+
+type AssistantsMainProps = {
+  serviceStatus: ServiceStatus | null;
+  activeContextItem: string;
+  browserProfileId: string;
+  scope?: IndependentScope;
+  controller?: IndependentAssistantController;
+  sessions?: readonly DesktopSessionSummary[];
+  selectedAssistantId?: string;
+  onOpenAssistant?: (assistantId: string | null) => Promise<'opened' | 'cancelled' | 'failed'>;
+  onSelectSession?: (sessionId: string) => void;
+  onOpenTask?: (sessionId: string) => void;
+};
+
+function assistantsTabForContext(item: string): AssistantsTab {
+  if (item === 'Activity' || item === 'Chat sessions') return 'activity';
+  if (item === 'Manage' || item === 'Create agent' || item === 'Profiles') return 'manage';
+  return 'assistants';
 }
 
-export function NativeAgentsMain({ serviceStatus, activeContextItem }: { serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
-  const profile = useContext(OptionalAiProfileContext);
-  if (!profile) return <ProfileResolutionPending />;
-  return <ScopedAgentsMain key={profile} profile={profile} serviceStatus={serviceStatus} activeContextItem={activeContextItem} />;
-}
-
-function ScopedAgentsMain({ profile, serviceStatus, activeContextItem }: { profile: string; serviceStatus: ServiceStatus | null; activeContextItem: string }): JSX.Element {
-  const [api] = useState(() => {
-    const bridge = window.lastbrowser.sidekick;
-    const methods = ['listAgents', 'getCurrentAgent', 'getAgentSplashStatus', 'getAgentStats', 'getAgentActivities', 'getAgentProfiles', 'getAgentWorkspaces', 'getAgent', 'getAgentMemory', 'getAgentSoul', 'createAgent', 'updateAgent', 'deleteAgent', 'activateAgent', 'setCurrentAgent', 'saveAgentProfile', 'startAgentChat', 'listAgentSessions', 'listAgentWorkspace', 'startAgentWorkspaceProcess', 'sendAgentWorkspaceCommand', 'stopAgentWorkspace'];
-    const scoped = Object.fromEntries(methods.map(operation => [operation, (request?: Record<string, unknown>) => bridge.scopedAgentOperation({ operation, profile, request })]));
-    return { ...bridge, ...scoped } as typeof bridge;
-  });
-  const optional = useOptionalAiPolicy();
+export function NativeAssistantsMain({
+  serviceStatus, activeContextItem, browserProfileId, scope, controller, sessions, selectedAssistantId,
+  onOpenAssistant, onSelectSession, onOpenTask
+}: AssistantsMainProps): JSX.Element {
+  const { locale, t } = useDesktopI18n();
+  const copy = novaAssistantsCopy[locale];
+  const optional = useOptionalAiPolicy(scope?.spaceId);
   const mayRun = optional.loaded && optional.policy.assistants_enabled;
-  const { t } = useDesktopI18n();
-  const ready = isReady(serviceStatus);
-  const agentsState = useApiState(() => api.listAgents(), [ready], ready);
-  const currentState = useApiState(() => api.getCurrentAgent(), [ready], ready);
-  const splashState = useApiState(() => api.getAgentSplashStatus(), [ready], ready);
-  const statsState = useApiState(() => api.getAgentStats(), [ready], ready);
-  const activitiesState = useApiState(() => api.getAgentActivities({ limit: 50 }), [ready], ready);
-  const profilesState = useApiState(() => api.getAgentProfiles(), [ready], ready);
-  const workspacesState = useApiState(() => api.getAgentWorkspaces(), [ready], ready);
-  const agents = arrayFrom(agentsState.data, ['agents', 'items']);
-  const [selectedSlug, setSelectedSlug] = useState('');
-  const [sessions, setSessions] = useState<AnyRecord[]>([]);
-  const [selectedSessionId, setSelectedSessionId] = useState('');
-  const [agentDetail, setAgentDetail] = useState<AnyRecord>({});
-  const [agentMemory, setAgentMemory] = useState<AnyRecord>({});
-  const [agentSoul, setAgentSoul] = useState<AnyRecord>({});
-  const [chatText, setChatText] = useState('');
-  const [command, setCommand] = useState('');
-  const [events, setEvents] = useState<string[]>([]);
+  const ready = isReady(serviceStatus) && scope?.browserProfileId === browserProfileId;
+  const tabsId = useId();
+  const [tab, setTab] = useState<AssistantsTab>(() => assistantsTabForContext(activeContextItem));
+  const [assistants, setAssistants] = useState<NovaAssistantProfile[]>(() => {
+    if (typeof window === 'undefined' || !browserProfileId) return [];
+    try { return readNovaAssistantProfiles(window.localStorage, browserProfileId); }
+    catch { return []; }
+  });
+  const [draft, setDraft] = useState<NovaAssistantProfile | null>(null);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState('');
-  const [section, setSection] = useState(activeContextItem || 'Dashboard');
-  const selectedAgent = agents.find((agent) => idOf(agent) === selectedSlug) || agents[0] || null;
-  const currentAgentId = currentState.data ? idOf(currentState.data) : '';
-  const currentAgentTitle = currentState.data ? titleOf(currentState.data) : t('agentPanels.noAgentSelected');
-  const selectedSession = sessions.find((session) => idOf(session) === selectedSessionId) || null;
-  const dashboardCards = [
-    { label: t('agentPanels.agents'), value: formatCompactNumber(agents.length) },
-    { label: t('agentPanels.sessions'), value: formatCompactNumber(sessions.length) },
-    { label: t('agentPanels.current'), value: currentAgentTitle },
-    { label: t('agentPanels.splash'), value: text(splashState.data?.status || splashState.data?.state || t('agentPanels.setup')) }
-  ];
-  const profileItems = arrayFrom(profilesState.data, ['profiles', 'items']);
-  const workspaceItems = arrayFrom(workspacesState.data, ['workspaces', 'items']);
-  const activityItems = arrayFrom(activitiesState.data, ['activities', 'items']);
+  const pendingOpen = useRef(false);
+  const availableAssistants = [...bundledNovaAssistants(locale), ...assistants];
+  const hasSelectedAssistant = availableAssistants.some((assistant) => assistant.id === selectedAssistantId);
 
-  useEffect(() => {
-    if (!selectedSlug && selectedAgent) setSelectedSlug(idOf(selectedAgent));
-  }, [selectedAgent, selectedSlug]);
+  useEffect(() => { setTab(assistantsTabForContext(activeContextItem)); }, [activeContextItem]);
 
-  useEffect(() => {
-    setSection(activeContextItem || 'Dashboard');
-  }, [activeContextItem]);
-
-  const refreshAgentSessions = useCallback(async (): Promise<void> => {
-    if (!ready || !selectedSlug) return;
+  async function openAssistant(id: string | null): Promise<void> {
+    if (pendingOpen.current || !ready || !onOpenAssistant || (id !== null && !mayRun)) return;
+    pendingOpen.current = true;
+    setPending(true);
+    setError('');
     try {
-      const payload = await api.listAgentSessions({ slug: selectedSlug });
-      const nextSessions = arrayFrom(payload, ['sessions', 'items']);
-      setSessions(nextSessions);
-      setSelectedSessionId((current) => current || (nextSessions[0] ? idOf(nextSessions[0]) : ''));
-      setError('');
-    } catch (sessionError) {
-      setError(sessionError instanceof Error ? sessionError.message : String(sessionError));
+      if (await onOpenAssistant(id) === 'failed') setError(copy.unableToOpen);
+    } catch {
+      setError(copy.unableToOpen);
+    } finally {
+      pendingOpen.current = false;
+      setPending(false);
     }
-  }, [ready, selectedSlug]);
-
-  useEffect(() => {
-    void refreshAgentSessions();
-  }, [refreshAgentSessions]);
-
-  useEffect(() => {
-    if (!ready || !selectedSlug) return;
-    void Promise.all([
-      api.getAgent({ slug: selectedSlug }),
-      api.getAgentMemory({ slug: selectedSlug }),
-      api.getAgentSoul({ slug: selectedSlug })
-    ]).then(([detail, memory, soul]) => {
-      setAgentDetail(detail);
-      setAgentMemory(memory);
-      setAgentSoul(soul);
-    }).catch((agentError) => setError(agentError instanceof Error ? agentError.message : String(agentError)));
-  }, [ready, selectedSlug]);
-
-  useEffect(() => {
-    return window.lastbrowser.sidekick.onAgentWorkspaceEvent((payload) => {
-      const event = isRecord(payload.event) ? payload.event : payload;
-      setEvents((current) => [...current.slice(-120), jsonPreview(event)]);
-    });
-  }, []);
-
-  async function createAgentRecord(): Promise<void> {
-    const slug = window.prompt(t('agentPanels.agentSlugPrompt'), 'researcher');
-    if (!slug?.trim()) return;
-    const name = window.prompt(t('agentPanels.agentNamePrompt'), slug.trim()) || slug.trim();
-    await api.createAgent({ slug: slug.trim(), name });
-    setSelectedSlug(slug.trim());
-    await agentsState.refresh();
   }
 
-  async function renameAgent(): Promise<void> {
-    if (!selectedSlug) return;
-    const name = window.prompt(t('agentPanels.agentNamePrompt'), titleOf(selectedAgent || {}, selectedSlug));
-    if (!name?.trim()) return;
-    await api.updateAgent({ slug: selectedSlug, patch: { name: name.trim() } });
-    await agentsState.refresh();
-  }
-
-  async function removeAgent(): Promise<void> {
-    if (!selectedSlug || !window.confirm(t('agentPanels.deleteAgentConfirm', { name: selectedSlug }))) return;
-    await api.deleteAgent({ slug: selectedSlug });
-    setSelectedSlug('');
-    await agentsState.refresh();
-  }
-
-  async function activateSelectedAgent(): Promise<void> {
-    if (!selectedSlug || !mayRun) return;
-    await api.activateAgent({ slug: selectedSlug });
-    await api.setCurrentAgent({ slug: selectedSlug });
-    await currentState.refresh();
-    await agentsState.refresh();
-  }
-
-  async function saveSelectedProfile(): Promise<void> {
-    if (!selectedSlug) return;
-    await api.saveAgentProfile({
-      slug: selectedSlug,
-      profile: isRecord(agentDetail.profile) ? agentDetail.profile : agentDetail
-    });
-  }
-
-  async function sendAgentChat(event: FormEvent): Promise<void> {
+  function saveAssistant(event: FormEvent): void {
     event.preventDefault();
-    if (!selectedSlug || !chatText.trim() || !mayRun) return;
-    const payload = await api.startAgentChat({
-      slug: selectedSlug,
-      sessionId: selectedSessionId,
-      message: chatText.trim()
-    });
-    setChatText('');
-    setSelectedSessionId(text(payload.session_id || payload.sessionId || selectedSessionId));
-    await refreshAgentSessions();
+    if (!draft?.name.trim() || !browserProfileId) return;
+    try {
+      setAssistants(saveNovaAssistantProfile(window.localStorage, browserProfileId, draft));
+      setDraft(null);
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
   }
 
-  async function startWorkspace(): Promise<void> {
-    if (!selectedSlug || !selectedSessionId || !mayRun) return;
-    await api.startAgentWorkspaceProcess({ slug: selectedSlug, sessionId: selectedSessionId });
-    const result = await window.lastbrowser.sidekick.startAgentWorkspaceStream({ sessionId: selectedSessionId, profile });
-    setEvents((current) => [...current, t('agentPanels.streamStarted', { id: result.streamId })]);
-  }
-
-  async function sendCommand(event: FormEvent): Promise<void> {
-    event.preventDefault();
-    if (!selectedSessionId || !command.trim() || !mayRun) return;
-    await api.sendAgentWorkspaceCommand({ sessionId: selectedSessionId, command: command.trim() });
-    setCommand('');
+  function removeAssistant(assistant: NovaAssistantProfile): void {
+    if (!window.confirm(copy.remove.replace('{name}', () => assistant.name))) return;
+    try {
+      setAssistants(deleteNovaAssistantProfile(window.localStorage, browserProfileId, assistant.id));
+      setDraft(null);
+      setError('');
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
   }
 
   return (
-    <section className="browser-main native-rest-main agents-main">
-      <NativeHeader icon={<AnimatedSidekick persona="custom" color={typeof selectedAgent?.color === 'string' ? selectedAgent.color : '#00e5ff'} mini label={t('agentPanels.agents')} />} title={t('agentPanels.agents')} kicker={t('agentPanels.agents')} detail={t('agentPanels.agentDetail')} loading={agentsState.loading} ready={ready} onRefresh={agentsState.refresh} />
-      <div className="native-card-actions insights-tabs">
-        {[
-          ['Dashboard', t('agentPanels.dashboard')],
-          ['Agents', t('agentPanels.agents')],
-          ['Chat sessions', t('agentPanels.sessions')],
-          ['Workspace terminal', t('agentPanels.workspaceTerminal')],
-          ['Create agent', t('agentPanels.createAgent')]
-        ].map(([item, label]) => (
-          <button key={item} type="button" className={item === section ? 'active' : ''} onClick={() => setSection(item)}>{label}</button>
+    <section className="browser-main native-rest-main assistants-main">
+      <h1>{copy.assistants}</h1>
+      <div className="native-card-actions insights-tabs" role="tablist" aria-label={copy.assistants}>
+        {assistantsTabs.map((item, index) => (
+          <button key={item} id={`${tabsId}-${item}`} type="button" role="tab" aria-selected={item === tab}
+            aria-controls={`${tabsId}-panel`} tabIndex={item === tab ? 0 : -1} onClick={() => { setTab(item); setError(''); }}
+            onKeyDown={(event) => {
+              const previous = event.key === 'ArrowLeft';
+              if (!previous && event.key !== 'ArrowRight') return;
+              event.preventDefault();
+              const next = assistantsTabs[(index + (previous ? assistantsTabs.length - 1 : 1)) % assistantsTabs.length];
+              setTab(next);
+              setError('');
+              document.getElementById(`${tabsId}-${next}`)?.focus();
+            }}>{copy[item]}</button>
         ))}
       </div>
-      <section className="native-work-card detail-json-card">
-        <header>
-          <strong>{section === 'Chat sessions' ? t('agentPanels.sessions') : section === 'Workspace terminal' ? t('agentPanels.workspaceTerminal') : section === 'Create agent' ? t('agentPanels.createAgent') : section === 'Dashboard' ? t('agentPanels.dashboard') : t('agentPanels.agents')}</strong>
-          <div className="native-card-actions">
-            <button type="button" onClick={() => void refreshAgentSessions()} disabled={!ready}><RefreshCw size={13} /><span>{t('agentPanels.sessions')}</span></button>
-            <button type="button" onClick={() => void agentsState.refresh()} disabled={!ready}><RefreshCw size={13} /><span>{t('agentPanels.refreshAgents')}</span></button>
-          </div>
-        </header>
-        <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
-          {dashboardCards.map((card) => (
-            <article key={card.label} className="metric-card">
-              <span>{card.label}</span>
-              <strong>{card.value}</strong>
-            </article>
-          ))}
-        </div>
-      </section>
-      <div className="agent-dashboard">
-        <aside className="integration-list">
-          <div className="native-card-actions">
-            <button type="button" onClick={() => void createAgentRecord()} disabled={!ready}><Plus size={13} /><span>{t('common.create')}</span></button>
-            <button type="button" onClick={() => void renameAgent()} disabled={!ready || !selectedSlug}><Edit3 size={13} /><span>{t('agentPanels.edit')}</span></button>
-            <button type="button" onClick={() => void activateSelectedAgent()} disabled={!ready || !selectedSlug || !mayRun}><CheckCircle2 size={13} /><span>{t('common.enable')}</span></button>
-            <button type="button" className="danger" onClick={() => void removeAgent()} disabled={!ready || !selectedSlug}><Trash2 size={13} /><span>{t('common.delete')}</span></button>
-          </div>
-          <section className="agent-splash-status">
-            <strong>{t('agentPanels.splash')}</strong>
-            <span>{text(splashState.data?.status || splashState.data?.state || t('agentPanels.setup'))}</span>
+      {error && <p role="alert">{error}</p>}
+      <div id={`${tabsId}-panel`} role="tabpanel" aria-labelledby={`${tabsId}-${tab}`}>
+        {tab === 'assistants' && (
+          <section className="native-work-card">
+            <p>{copy.space}</p>
+            {optional.loaded && !mayRun && <p role="status">{copy.disabled}</p>}
+            {optional.error && <p role="alert">{optional.error}</p>}
+            <div className="native-card-actions">
+              <button type="button" disabled={!ready || pending || !onOpenAssistant} onClick={() => void openAssistant(null)}>
+                Nova{!hasSelectedAssistant && <small>{copy.selected}</small>}
+              </button>
+              {availableAssistants.map((assistant) => (
+                <button key={assistant.id} type="button" disabled={!ready || !mayRun || pending || !onOpenAssistant}
+                  onClick={() => void openAssistant(assistant.id)}>
+                  {assistant.name}{selectedAssistantId === assistant.id && <small>{copy.selected}</small>}
+                </button>
+              ))}
+            </div>
           </section>
-          {agents.map((agent) => (
-            <button key={idOf(agent)} type="button" className={`integration-row ${idOf(agent) === selectedSlug ? 'active' : ''}`} onClick={() => setSelectedSlug(idOf(agent))}>
-              <AnimatedSidekick persona="custom" color={typeof agent.color === 'string' ? agent.color : '#00e5ff'} mini label={titleOf(agent)} />
-              <span>{titleOf(agent)}</span>
-              <small>{idOf(agent)} {currentAgentId === idOf(agent) ? t('agentPanels.active') : ''}</small>
+        )}
+        {tab === 'activity' && <AssistantActivity scope={scope} controller={controller} sessions={sessions}
+          onSelectSession={onSelectSession} onOpenTask={onOpenTask} />}
+        {tab === 'manage' && (
+          <section className="native-work-card">
+            <h2>{copy.profile}</h2>
+            <button type="button" disabled={!browserProfileId} onClick={() => setDraft({ id: crypto.randomUUID(), name: '', instructions: '' })}>
+              <Plus size={14} />{copy.add}
             </button>
-          ))}
-          {!agents.length && <EmptyState icon={<Bot size={22} />} label={ready ? t('agentPanels.emptyAgents') : t('agentPanels.noSkillsStarting')} />}
-        </aside>
-        <main className={`agent-main-grid ${section.toLowerCase().replace(/\s+/g, '-')}`}>
-          <ErrorLine error={agentsState.error || statsState.error || activitiesState.error || profilesState.error || workspacesState.error || error} />
-          {(section === 'Dashboard' || section === 'Agents' || section === 'Create agent') && (
-            <section className="native-work-card agent-detail-card">
-            <header>
-              <h2>{selectedAgent ? titleOf(selectedAgent) : t('agentPanels.noAgentSelected')}</h2>
-              <button type="button" onClick={() => void saveSelectedProfile()} disabled={!ready || !selectedSlug}><Save size={13} />{t('agentPanels.profile')}</button>
-            </header>
-            <div className="agent-stat-strip">
-              {Object.entries(statsState.data || {}).slice(0, 4).map(([key, value]) => <span key={key}><strong>{String(value)}</strong>{key}</span>)}
-            </div>
-            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
-              {[
-                { label: t('agentPanels.selectedAgent'), value: selectedAgent ? titleOf(selectedAgent) : t('agentPanels.none') },
-                { label: t('agentPanels.selectedSession'), value: selectedSession ? titleOf(selectedSession, selectedSessionId) : t('agentPanels.noSession') },
-                { label: t('memory.title'), value: text(agentMemory.status || agentMemory.summary || t('agentPanels.available')) },
-                { label: t('agentPanels.soul'), value: text(agentSoul.status || agentSoul.summary || t('agentPanels.available')) }
-              ].map((card) => (
-                <article key={card.label} className="metric-card">
-                  <span>{card.label}</span>
-                  <strong>{card.value}</strong>
-                </article>
+            <ul className="assistants-list">
+              {assistants.map((assistant) => (
+                <li key={assistant.id}>
+                  <button type="button" onClick={() => setDraft(assistant)}>{assistant.name}</button>
+                  <button type="button" aria-label={copy.remove.replace('{name}', () => assistant.name)} onClick={() => removeAssistant(assistant)}>
+                    <Trash2 size={14} />
+                  </button>
+                </li>
               ))}
-            </div>
-            <div className="compact-list">
-              {activityItems.slice(0, 5).map((activity) => <article key={idOf(activity)}><strong>{titleOf(activity, t('agentPanels.activity'))}</strong><span>{text(activity.message || activity.detail || activity.type)}</span></article>)}
-            </div>
-            </section>
-          )}
-          {(section === 'Dashboard' || section === 'Chat sessions') && (
-            <section className="native-work-card agent-chat-card">
-            <header><strong>{t('agentPanels.agentChat')}</strong><button type="button" onClick={() => void refreshAgentSessions()} disabled={!ready}><RefreshCw size={13} /></button></header>
-            <select value={selectedSessionId} onChange={(event) => setSelectedSessionId(event.target.value)}>
-              {sessions.map((session) => <option key={idOf(session)} value={idOf(session)}>{titleOf(session, idOf(session))}</option>)}
-            </select>
-            <form onSubmit={(event) => void sendAgentChat(event)} className="inline-form">
-              <input value={chatText} onChange={(event) => setChatText(event.target.value)} placeholder={t('agentPanels.messageAgentPlaceholder')} />
-              <button type="submit" disabled={!ready || !selectedSlug || !chatText.trim() || !mayRun}><Send size={14} /></button>
-            </form>
-            <div className="agent-session-list">
-              {sessions.map((session) => <button key={idOf(session)} type="button" onClick={() => setSelectedSessionId(idOf(session))}>{titleOf(session, idOf(session))}</button>)}
-            </div>
-            <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))' }}>
-              {[
-                { label: t('agentPanels.profiles'), value: formatCompactNumber(profileItems.length) },
-                { label: t('agentPanels.workspaces'), value: formatCompactNumber(workspaceItems.length) },
-                { label: t('agentPanels.selectedSession'), value: selectedSession ? titleOf(selectedSession, selectedSessionId) : t('agentPanels.noSession') }
-              ].map((card) => (
-                <article key={card.label} className="metric-card">
-                  <span>{card.label}</span>
-                  <strong>{card.value}</strong>
-                </article>
-              ))}
-            </div>
+            </ul>
+            {draft && (
+              <form className="assistants-editor" onSubmit={saveAssistant}>
+                <label>{t('agentPanels.agentNamePrompt')}
+                  <input value={draft.name} required maxLength={novaAssistantNameLimit}
+                    onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+                </label>
+                <label>{copy.instructions}
+                  <textarea value={draft.instructions} rows={6} maxLength={novaAssistantInstructionsLimit}
+                    onChange={(event) => setDraft({ ...draft, instructions: event.target.value })} />
+                </label>
+                <div className="native-card-actions">
+                  <button type="submit" disabled={!draft.name.trim()}>{t('common.save')}</button>
+                  <button type="button" onClick={() => setDraft(null)}>{t('common.cancel')}</button>
+                </div>
+              </form>
+            )}
           </section>
-          )}
-          {(section === 'Dashboard' || section === 'Workspace terminal') && (
-            <section className="native-work-card agent-terminal">
-            <header>
-              <strong>{t('agentPanels.terminalTitle')}</strong>
-              <div className="native-card-actions">
-                <button type="button" onClick={() => void startWorkspace()} disabled={!ready || !selectedSessionId || !mayRun}><Terminal size={13} /><span>{t('agentPanels.startTerminal')}</span></button>
-                <button type="button" onClick={() => selectedSessionId && api.stopAgentWorkspace({ sessionId: selectedSessionId })} disabled={!ready || !selectedSessionId}><Trash2 size={13} /><span>{t('agentPanels.stopTerminal')}</span></button>
-              </div>
-            </header>
-            <form onSubmit={(event) => void sendCommand(event)} className="inline-form">
-              <input value={command} onChange={(event) => setCommand(event.target.value)} placeholder={t('agentPanels.commandPlaceholder')} />
-              <button type="submit" disabled={!ready || !selectedSessionId || !command.trim() || !mayRun}><Send size={14} /></button>
-            </form>
-            <pre>{events.length ? events.join('\n') : t('agentPanels.terminalEventsPlaceholder')}</pre>
-          </section>
-          )}
-        </main>
+        )}
       </div>
     </section>
   );

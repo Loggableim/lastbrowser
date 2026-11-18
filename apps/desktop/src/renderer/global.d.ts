@@ -295,6 +295,8 @@ declare global {
           modelProvider?: string | null;
           providerAccountEmail?: string | null;
           profile?: string;
+          backendProfileName?: string;
+          assistant?: { id: string; name: string; instructions: string };
         }) => Promise<{ session?: DesktopSessionSummary & Record<string, unknown> }>;
         getSession: (request: string | { sessionId: string; messages?: boolean; msgLimit?: number; profile?: string; workspacePath?: string }) => Promise<{ session?: DesktopSessionDetail }>;
         renameSession: (request: { sessionId: string; title: string; profile?: string; workspacePath?: string }) => Promise<{ session?: DesktopSessionDetail; [key: string]: unknown }>;

@@ -27,6 +27,11 @@ export class ChatDraftSubmissionGate {
   }
 }
 
+export async function prepareChatForDraft(createChat: () => Promise<boolean>, getDraftRevision: () => number): Promise<boolean> {
+  const submittedRevision = getDraftRevision();
+  return await createChat() && submittedRevision === getDraftRevision();
+}
+
 export function isDefiniteChatStartRejection(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   // A timeout can occur after the backend accepted the turn. Never turn an

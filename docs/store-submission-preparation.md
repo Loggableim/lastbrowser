@@ -6,9 +6,9 @@ Der Nutzer hat angeordnet: „Die erste Version kommt aber erst in den Store wen
 
 Abhängiger Chat: **Multiagent Umsetzung**, `01a10335-2b6b-7cf3-ac38-5cd8f1705c2f` (lokal). Store-Vorbereitung: `01a103b3-7107-7212-9abd-18174a44e0fa`.
 
-Der abhängige Chat wurde um einen Abschlussbericht mit Quellstand, Änderungen, ausgeführten Prüfungen und verbleibenden Blockern gebeten. Ein inaktiver Chat oder das Ende eines Turns beweist keinen vollständigen Abschluss. Vor dem bestätigten Abschluss dürfen weder eine Store-Submission zur Zertifizierung noch eine Store-Veröffentlichung ausgelöst werden.
+Der Nutzer hat bestätigt, dass aus dem ursprünglichen Chat kein Abschlussbericht vorliegt, und die Übernahme der Arbeit beauftragt. Der neue Bericht dokumentiert die sechs bestätigten Anforderungen für die Assistenten-Oberfläche, die Prüfungen und die verbleibenden Grenzen. Vor der Store-Einreichung und Veröffentlichung muss die übernommene Arbeit im integrierten Freigabepaket geprüft sein. [Abnahmebericht zur Assistenten-Umsetzung](multiagent-assistants-completion.md)
 
-GitHub bestätigt den Merge von PR #384 in `lastbrowser/tagesbeta-0.1.60` als `56ff22a674a74329295b51c1af4cccb249e90ab9`. Der Quellbaum entspricht der lokalen Basis `bdcf159` des Store-Arbeitszweigs. Der Abschlussbericht aus „Multiagent Umsetzung“ bleibt separat zu prüfen. [PR #384](https://github.com/Loggableim/lastbrowser/pull/384)
+GitHub bestätigt den Merge von PR #384 in `lastbrowser/tagesbeta-0.1.60` als `56ff22a674a74329295b51c1af4cccb249e90ab9`. Der Quellbaum entspricht der lokalen Basis `bdcf159` des Store-Arbeitszweigs. [PR #384](https://github.com/Loggableim/lastbrowser/pull/384)
 
 ## Dokumentierter EXE/MSI-Entwurf vom Oktober 2026
 
@@ -198,6 +198,12 @@ Der Desktop-Build und alle 2.673 Tests in 297 Dateien bestanden. Der Store-Vorab
 - `scripts/verify-store-readiness.ps1` prüfte das neue MSIX, `app` in der Extraktion und den Aufnahmebericht. Ergebnis waren 37 bestandene Prüfungen ohne Warnungen oder Fehler. WACK, die Aktivierung als Standardbrowser und die Installation der von Microsoft signierten Fassung bleiben separate Prüfungen. [Aufnahme und Verifikation](store-screenshot-capture.md#registriertes-msix-aufnehmen)
 
 Im anschließenden Quellstand folgen die Unterzeile, die Hauptnavigation und deren zugänglicher Name auf der Startseite der aktiven Sprache. Der Electron-Test `node apps/desktop/tests/workplace-onboarding-dom.cjs` reproduzierte zunächst den englischen Fallback auf Japanisch und bestand anschließend mit 14 Prüfgruppen. Er prüft die Navigation und den Aufruf der Widget-Anpassung auf Japanisch, Französisch und brasilianischem Portugiesisch. Der Desktop-Build, 2.691 Tests in 297 Dateien und die Syntaxprüfung aller 1.162 erfassten Python-Dateien bestanden. Das oben zugeordnete Beta-MSIX und seine Aufnahmen stammen aus `bf12b97`.
+
+### WACK im separaten Windows-Testkonto
+
+- WACK `10.0.19041.5609` lief am 18. November 2026 im neu eingerichteten lokalen Konto `LastBrowserTest` auf Windows 10 22H2 x64. `appcert.exe reset` und `appcert.exe test -packagefullname CIDAPPS.LastBrowserBeta_1.1.61.0_x64__n224gf38v00v6 -reportoutputpath <Bericht.xml>` endeten mit Code 0. Die Testregistrierung verwendete den entpackten Inhalt von `LastBrowser-Beta-0.1.61-bf12b97.msix` mit dem oben dokumentierten SHA-256-Wert.
+- Der XML-Bericht `WackReport-20261118-194224-988.xml` meldet `OVERALL_RESULT=PASS` und `PARTIAL_RUN=FALSE`. SHA-256 `5eb489296188fd0583572d3193c80eb45fa79dc7afb0ce8e2df3aa457b6747d8`. Die Einzelresultate umfassen 22-mal `PASS` und zweimal `FAIL` in als optional markierten Paketintegritätsprüfungen.
+- „Nutzung von Archivdateien“ nennt `dateutil-zoneinfo.tar.gz`. Die Inhaltsprüfung im MSIX fand 353 Zeitzonendateien mit `TZif`-Header und eine JSON-Metadatendatei. „Blockierte ausführbare Dateien“ meldet 59 statische Verweise auf Prozessstart-APIs und 537 Namensfundstellen. Der integrierte Freigabebuild braucht seinen eigenen Pakettest und die offizielle Store-Zertifizierung.
 
 ### Abgleich des Aufnahmeberichts mit dem MSIX
 

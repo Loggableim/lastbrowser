@@ -191,6 +191,7 @@ export type ComposerDraft = {
 };
 
 export type DesktopSessionDetail = DesktopSessionSummary & {
+  assistant?: Pick<NovaAssistant, 'id' | 'name'>;
   space_scope?: NativeSpaceScope | null;
   native_controls?: Record<string, unknown> | null;
   grill_state?: Record<string, unknown> | null;
@@ -233,6 +234,12 @@ export type SpaceSummary = {
   color?: string;
 };
 
+type NovaAssistant = Readonly<{
+  id: string;
+  name: string;
+  instructions: string;
+}>;
+
 export type CreateSessionRequest = {
   workspace?: string;
   scopeGoalsToWorkspace?: boolean;
@@ -241,6 +248,7 @@ export type CreateSessionRequest = {
   profile?: string;
   spaceScope?: NativeSpaceScope;
   nativeBridgeNonce?: string;
+  assistant?: NovaAssistant;
 };
 
 export type WorkspaceRequest = {
@@ -1131,6 +1139,10 @@ export function createSidekickSession(
   if (request.modelProvider !== undefined) body.model_provider = request.modelProvider;
   if (request.profile?.trim()) body.profile = request.profile.trim();
   if (request.spaceScope) body.space_scope = request.spaceScope;
+  if (request.assistant !== undefined) {
+    if (!request.spaceScope || !request.nativeBridgeNonce) throw new Error('An assistant chat needs a resolved native Space.');
+    body.assistant = request.assistant;
+  }
 
   return jsonRequest(webuiUrl, '/api/session/new', {
     method: 'POST',

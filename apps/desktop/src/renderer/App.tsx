@@ -224,7 +224,6 @@ import { AdvancedWebUiTools } from './panels/AdvancedWebUiTools.js';
 import { NativeBrowserStartPage } from './panels/NativeBrowserStartPage.js';
 import { NativeAiBrowserMain } from './panels/NativeAiBrowserMain.js';
 import {
-  NativeAgentsMain,
   NativeAppstoreMain,
   NativeDiscordMain,
   NativeInsightsMain,
@@ -304,6 +303,11 @@ import { mergeSpaceAudioTabs, subscribeToWebviewMediaState, type SpaceAudioKeepa
 import { isCurrentSpaceDirectorySnapshot, resolveCanonicalSpacePath, resolveExistingSpaceBackendProfile, resolveRefreshedActiveSpacePath } from './space-paths.js';
 import { mergeSessionListSnapshot, resolveSessionBackendProfile, resolveSessionListSelection, sessionListResponseMatchesScope, sessionDeletionFailureMessage, sessionDeletionSucceeded, sameSessionListScope, type SessionDeleteOutcome, type SessionListScope } from './session-list-scope.js';
 import { createAndLoadScopedSession } from './scoped-session-creation.js';
+import { novaAssistantsCopy } from './i18n/nova-assistants-copy.js';
+import {
+  clearNovaAssistantsForProfile, decideNovaAssistantSwitch, findNovaAssistant, readNovaAssistantForSpace,
+  selectNovaAssistantForSpace, type NovaAssistantProfile,
+} from './nova-assistant-profiles.js';
 import { usePanelStore, type SidebarMode } from './stores/usePanelStore.js';
 import { useChatStore } from './stores/useChatStore.js';
 import { completedChatProviderEvidence, recordCompletedChatEvidence, setProviderChatEvidenceRuntime } from './provider-chat-evidence.js';
@@ -317,7 +321,7 @@ import { chooseQuickchatModel } from './quickchat-automatic.js';
 import { readQuickchatFavorite, readQuickchatFavoriteState, setQuickchatFavorite, QUICKCHAT_FAVORITE_CHANGED_EVENT } from './quickchat-preferences.js';
 import { AI_ORCHESTRATION_ENABLED } from './orchestration-feature.js';
 import { prepareGuardedNativeChatStart, startGuardedNativeChat } from './guarded-native-chat-start.js';
-import { ChatDraftSubmissionGate, isDefiniteChatStartRejection, type ChatDraftSubmission } from './chat-draft-submission.js';
+import { ChatDraftSubmissionGate, isDefiniteChatStartRejection, prepareChatForDraft, type ChatDraftSubmission } from './chat-draft-submission.js';
 import { resolveQuickChatStopTarget } from './quick-chat-stop.js';
 import { selectNativeSession as selectNativeChatSession } from './native-session-selection.js';
 import { createQuickChatScopeKey, selectScopedQuickChatValue, updateScopedQuickChatState } from './quick-chat-view-state.js';
@@ -1204,6 +1208,7 @@ function AppContent(): JSX.Element {
   const [composerText, setComposerTextState] = useState('');
   const composerTextRef = useRef('');
   const composerRevisionRef = useRef(0);
+  const draftPreservedForSessionRef = useRef<string | null>(null);
   const nativeChatSubmissionGateRef = useRef(new ChatDraftSubmissionGate());
   const activeNativeSubmissionRef = useRef<ChatDraftSubmission | null>(null);
   const preflightStopRequestedSubmissionRef = useRef<ChatDraftSubmission | null>(null);
@@ -2635,6 +2640,7 @@ function AppContent(): JSX.Element {
 
   useEffect(() => {
     if (!activeSessionId) {
+      draftPreservedForSessionRef.current = null;
       setActiveSession(null);
       setChatMessages([]);
       setComposerText('');
@@ -2643,7 +2649,9 @@ function AppContent(): JSX.Element {
       return undefined;
     }
 
-    void loadActiveSession(activeSessionId, { loadDraft: true, showLoading: true });
+    const preserveDraft = draftPreservedForSessionRef.current === activeSessionId;
+    if (!preserveDraft) draftPreservedForSessionRef.current = null;
+    void loadActiveSession(activeSessionId, { loadDraft: !preserveDraft, showLoading: true });
     return undefined;
   }, [activeSessionId, activeBackendProfileName, loadActiveSession]);
 
@@ -3284,6 +3292,9 @@ function AppContent(): JSX.Element {
       return next;
     });
     removeProfileTabs(profileId, window.localStorage);
+    if (profileId !== 'default' && profiles.some((profile) => profile.id === profileId)) {
+      clearNovaAssistantsForProfile(window.localStorage, profileId);
+    }
     // Let React detach the deleted profile's webviews before clearing their
     // persistent Electron sessions. Only this profile's known Space partitions
     // are sent to the main process, which independently validates the profile.
@@ -3667,19 +3678,28 @@ function AppContent(): JSX.Element {
     };
   }, [automaticProviderDiscovery, sidekickApiReady, copilotOpen, quickChatMode, activeProfileId, activeSpacePath, activeBackendProfileName, status?.runtimeGeneration, status?.webuiUrl]);
 
-  async function createNativeSession(): Promise<void> {
-    setQuickChatMode(false);
+  async function createNativeSession(assistantOverride?: NovaAssistantProfile | null, keepDraft = false): Promise<boolean> {
+    const changesAssistant = assistantOverride !== undefined;
     const requestId = ++createSessionRequestRef.current;
-    // A new session starts with a clean, unbound composer. Do not leave a
-    // previous session's draft visible while the scoped create/load is pending.
-    activeSessionIdRef.current = null;
-    setActiveSessionId(null);
-    setActiveSession(null);
-    setChatMessages([]);
-    setMessages([]);
-    setComposerText('');
-    setChatError('');
-    setActivePanel('chat');
+    const clearPreviousSession = () => {
+      setQuickChatMode(false);
+      activeSessionIdRef.current = null;
+      setActiveSessionId(null);
+      setActiveSession(null);
+      setChatMessages([]);
+      setMessages([]);
+      if (!keepDraft) setComposerText('');
+      chatUiOwnershipRef.current.releaseUiOwner();
+      setSidekickBusy(false);
+      updateActiveStreamId(null);
+      setChatRunState('idle');
+      setChatError('');
+    };
+    if (!changesAssistant && !keepDraft) {
+      // The normal New Chat action opens a clean composer immediately.
+      clearPreviousSession();
+      setActivePanel('chat');
+    }
     const requestedScope: SessionListScope = { profile: activeProfileIdRef.current, workspacePath: activeSpacePathRef.current, backendProfileName: activeBackendProfileNameRef.current };
     const selectionRevision = activeSpaceSelectionRevisionRef.current;
     let boundScope: SessionListScope | null = null;
@@ -3696,7 +3716,7 @@ function AppContent(): JSX.Element {
     if (status?.sidekick !== 'ready') {
       setSessionError('Sidekick is still starting.');
       isCreatingSessionRef.current = false;
-      return;
+      return false;
     }
 
     try {
@@ -3705,20 +3725,29 @@ function AppContent(): JSX.Element {
         workspacePath: requestedScope.workspacePath || null
       }, requestedScope.backendProfileName);
       if (!resolved.ok) throw new Error(resolved.error.message);
-      if (!isSelectionCurrent()) return;
+      if (!isSelectionCurrent()) return false;
 
       boundScope = { ...requestedScope, backendProfileName: resolved.value.backendProfileName ?? requestedScope.backendProfileName };
       activeBackendProfileNameRef.current = boundScope.backendProfileName;
       setAssistantSelectionRequestScope(boundScope);
       setAssistantSelection(resolved.value);
 
+      let assistant = changesAssistant
+        ? assistantOverride ?? undefined
+        : readNovaAssistantForSpace(window.localStorage, resolved.value.scope, locale);
+      if (assistant && !changesAssistant) {
+        const policy = await window.lastbrowser.sidekick.getMemoryPolicy({ profile: boundScope.backendProfileName || 'default' });
+        if (!isCurrent()) return false;
+        if (policy.assistants_enabled !== true) assistant = undefined;
+      }
       const result = await createAndLoadScopedSession(
         boundScope,
         isCurrent,
         (scope) => window.lastbrowser.sidekick.createSession({
           ...(scope.workspacePath ? { workspace: scope.workspacePath, scopeGoalsToWorkspace: true } : {}),
           profile: scope.profile,
-          ...(scope.backendProfileName ? { backendProfileName: scope.backendProfileName } : {})
+          ...(scope.backendProfileName ? { backendProfileName: scope.backendProfileName } : {}),
+          ...(assistant ? { assistant } : {}),
         }),
         (sessionId, scope) => window.lastbrowser.sidekick.getSession({
           sessionId,
@@ -3732,6 +3761,14 @@ function AppContent(): JSX.Element {
         if (!isIndependentScope(session.space_scope) || !sameAssistantScope(session.space_scope, resolved.value.scope)) {
           throw new Error('The new chat belongs to a different Space and was not opened.');
         }
+        if ((session.assistant?.id ?? null) !== (assistant?.id ?? null)) {
+          throw new Error('The new chat did not accept the selected assistant.');
+        }
+        if (changesAssistant) {
+          selectNovaAssistantForSpace(window.localStorage, resolved.value.scope, assistant?.id ?? null);
+          clearPreviousSession();
+        }
+        if (keepDraft) draftPreservedForSessionRef.current = session.session_id;
         activeSessionIdRef.current = session.session_id;
         setActiveSession(session);
         setChatMessages(normalizeChatMessages(session.messages));
@@ -3742,12 +3779,45 @@ function AppContent(): JSX.Element {
         setActiveSessionId(session.session_id);
         setActivePanel('chat');
         setSessionError('');
+        return true;
       }
     } catch (error) {
       if (isCurrent()) setSessionError(error instanceof Error ? error.message : String(error));
     } finally {
       if (requestId === createSessionRequestRef.current) isCreatingSessionRef.current = false;
     }
+    return false;
+  }
+
+  async function openNovaAssistant(assistantId: string | null): Promise<'opened' | 'cancelled' | 'failed'> {
+    const scope = currentNovaAssistantScope();
+    if (!scope || isCreatingSessionRef.current) return 'failed';
+    const assistant = assistantId
+      ? findNovaAssistant(window.localStorage, scope.browserProfileId, assistantId, locale)
+      : null;
+    if (assistantId && !assistant) return 'failed';
+    const sessionId = activeSessionIdRef.current;
+    const currentAssistantId = activeSession?.session_id === sessionId ? activeSession.assistant?.id ?? null : undefined;
+    const decision = decideNovaAssistantSwitch(sessionId, currentAssistantId, assistantId, () =>
+      window.confirm(novaAssistantsCopy[locale].switchChat.replace('{name}', () => assistant?.name ?? 'Nova')));
+    if (decision === 'cancelled') return decision;
+    if (decision === 'reuse') {
+      selectNovaAssistantForSpace(window.localStorage, scope, assistantId);
+      setQuickChatMode(false);
+      setActivePanel('chat');
+      return 'opened';
+    }
+    return await createNativeSession(assistant ?? null) ? 'opened' : 'failed';
+  }
+
+  function currentNovaAssistantScope(): IndependentScope | undefined {
+    const requested = assistantSelectionRequestScopeRef.current;
+    const selection = assistantSelection;
+    const profile = activeProfileIdRef.current;
+    if (!requested || selection?.scope.browserProfileId !== profile || !sessionListResponseMatchesScope(requested, {
+      profile, workspacePath: activeSpacePathRef.current, backendProfileName: activeBackendProfileNameRef.current,
+    })) return undefined;
+    return selection.scope;
   }
 
   function handleNewChat(): void {
@@ -4328,6 +4398,13 @@ function AppContent(): JSX.Element {
       || chatRunState === 'cancelling') return false;
     if (activeSession?.session_id === activeSessionIdRef.current && isIndependentWriterProtected(activeSession)) {
       setChatError(t('spaceAssistant.writerProtected')); return false;
+    }
+    if (!activeSessionIdRef.current) {
+      const savedAssistantScope = currentNovaAssistantScope();
+      const savedAssistant = savedAssistantScope && readNovaAssistantForSpace(window.localStorage, savedAssistantScope, locale);
+      if (savedAssistant && (isCreatingSessionRef.current || !await prepareChatForDraft(
+        () => createNativeSession(undefined, true), () => composerRevisionRef.current,
+      ))) return false;
     }
     const contextKey = (): string => JSON.stringify([activeSessionIdRef.current,
       activeProfileIdRef.current, activeSpacePathRef.current, activeBackendProfileNameRef.current]);
@@ -5766,6 +5843,23 @@ function AppContent(): JSX.Element {
     return detectPageCategory(activeTab.url, activeTab.title);
   }, [activeTab.url, activeTab.title]);
 
+  const novaAssistantScope = currentNovaAssistantScope();
+  const novaAssistantSessions = novaAssistantScope && appliedSessionListScopeRef.current && sessionListResponseMatchesScope(
+    appliedSessionListScopeRef.current, { profile: activeProfileId, workspacePath: activeSpacePath, backendProfileName: activeBackendProfileName },
+  ) ? sessions : undefined;
+  const openNovaActivitySession = (sessionId: string) => {
+    const currentScope = currentNovaAssistantScope();
+    if (novaAssistantScope && currentScope && sameAssistantScope(novaAssistantScope, currentScope)) selectNativeSession(sessionId);
+  };
+  const novaAssistantsPanel = {
+    scope: novaAssistantScope,
+    sessions: novaAssistantSessions,
+    selectedAssistantId: novaAssistantScope ? readNovaAssistantForSpace(window.localStorage, novaAssistantScope)?.id : undefined,
+    onOpenAssistant: openNovaAssistant,
+    onSelectSession: openNovaActivitySession,
+    onOpenTask: openNovaActivitySession,
+  };
+
   const quickActions = useMemo(() => {
     if (!activeTab.url || activeTab.url.startsWith('lastbrowser://') || activeTab.url.startsWith('about:') || activeTab.url.startsWith('chrome://')) {
       return [];
@@ -6309,6 +6403,7 @@ function AppContent(): JSX.Element {
                   activeBackendProfileName={activeBackendProfileName}
                   activityScope={assistantSelection?.scope}
                   activityController={assistantController}
+                  novaAssistantsPanel={novaAssistantsPanel}
                   onSelectProfile={switchProfile}
                   onCreateProfile={createProfileEntry}
                   onRenameProfile={renameProfileEntry}
@@ -6641,6 +6736,7 @@ function AppContent(): JSX.Element {
               activeBackendProfileName={activeBackendProfileName}
               activityScope={assistantSelection?.scope}
               activityController={assistantController}
+              novaAssistantsPanel={novaAssistantsPanel}
               onSelectProfile={switchProfile}
               onCreateProfile={createProfileEntry}
               onRenameProfile={renameProfileEntry}
@@ -6891,6 +6987,7 @@ function BrowserMain({
   activeBackendProfileName,
   activityScope,
   activityController,
+  novaAssistantsPanel,
   onSelectProfile,
   onCreateProfile,
   onRenameProfile,
@@ -6987,6 +7084,7 @@ function BrowserMain({
   activeBackendProfileName?: string;
   activityScope?: IndependentScope;
   activityController?: IndependentAssistantController;
+  novaAssistantsPanel: Omit<React.ComponentProps<typeof NativeAssistantsMain>, 'browserProfileId' | 'activeContextItem' | 'serviceStatus' | 'controller'>;
   onSelectProfile: (profileId: string) => void;
   onCreateProfile: (name: string) => void;
   onRenameProfile: (profileId: string, name: string) => void;
@@ -7887,9 +7985,12 @@ function BrowserMain({
       case 'skills':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSkillsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'agents':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeAssistantsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={`${activePanel}:${activeProfileId}:${novaAssistantsPanel.scope?.spaceId ?? ''}:${novaAssistantsPanel.scope?.backendProfileId ?? ''}`}>
+          <NativeAssistantsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} browserProfileId={activeProfileId}
+            controller={activityController} {...novaAssistantsPanel} />
+        </PanelErrorBoundary>;
       case 'profiles':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeAssistantsMain activeContextItem="Profiles" serviceStatus={serviceStatus} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeProfilesMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'memory':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeMemoryMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} /></PanelErrorBoundary>;
       case 'insights':

@@ -424,3 +424,44 @@ def test_actual_prompt_mode_and_tool_dispatch_gate(tmp_path, mode, tool, denial,
         server.close()
         if handle: handle.terminate(grace_seconds=0, hard_seconds=1)
         store.close()
+
+
+@pytest.mark.parametrize("consent", [True, False])
+def test_native_worker_uses_custom_assistant_with_current_consent(tmp_path, monkeypatch, consent):
+    from uuid import uuid4
+    from runtime.memory_policy import update_policy
+
+    monkeypatch.setenv("LASTBROWSER_CHAT_PERSISTENT_WORKER", "0")
+    server = ControlledServer(text_only=True)
+    context, store = fixture_context(tmp_path, "a", server.port)
+    peer = None
+    try:
+        path = Path(context.sessions_dir) / (context.session_id + ".json")
+        raw = json.loads(path.read_text("utf-8"))
+        assistant = {"id": str(uuid4()), "name": "Editor", "instructions": "Lead with the clearest revision."}
+        raw["_nova_assistant"] = assistant
+        path.write_text(json.dumps(raw), "utf-8")
+        update_policy({"assistants_enabled": consent}, Path(context.profile_home))
+
+        peer = BoundNativePeer(context, store, monkeypatch)
+        events = drain(peer, timeout=45)
+        if not consent:
+            assert not server.all_requests
+            assert any(event.get("event") == "apperror" for event in events)
+            return
+
+        assert server.requests
+        assert all(body["model"] == "controlled-model" for _, body in server.requests)
+        instructions = [message["content"] for _, body in server.requests for message in body["messages"]
+                        if message["role"] in {"system", "developer"}]
+        assert any(assistant["instructions"] in content for content in instructions)
+        assert any(event.get("event") == "done" for event in events)
+        assert assistant["instructions"] not in json.dumps(events)
+        final = json.loads(path.read_text("utf-8"))
+        response = next(message for message in final["messages"] if message["role"] == "assistant")
+        assert response["companion"] == {"personality": "nova", "botName": assistant["name"]}
+    finally:
+        server.close()
+        if peer:
+            peer.terminate(grace_seconds=0, hard_seconds=1)
+        store.close()

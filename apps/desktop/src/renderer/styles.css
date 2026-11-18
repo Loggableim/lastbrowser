@@ -3622,6 +3622,42 @@ html.theme-light select optgroup {
 }
 
 .native-rest-split,
+.assistants-main {
+  overflow: auto;
+}
+
+.assistants-main [role="tabpanel"],
+.assistants-editor,
+.assistants-editor label,
+.assistants-list {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.assistants-main .native-card-actions button small {
+  color: var(--muted, currentColor);
+  overflow-wrap: anywhere;
+}
+
+.assistants-list {
+  list-style: none;
+  padding: 0;
+}
+
+.assistants-list > li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.assistants-editor :is(input, textarea) {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
 .agent-dashboard {
   min-height: 0;
   display: grid;

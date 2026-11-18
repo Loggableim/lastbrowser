@@ -7217,14 +7217,23 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             return bad(handler, f"Failed to save worktree settings: {exc}", 500)
 
     if parsed.path == "/api/session/new":
+        nova_assistant = None
         try:
             workspace = str(resolve_trusted_workspace(body.get("workspace"))) if body.get("workspace") else None
             from runtime.independent.chat_binding import capture_chat_profile, require_native_scope_header
             from web.api.profiles import get_active_profile_name
             require_native_scope_header(handler, body.get("space_scope"))
-            captured_space_profile = capture_chat_profile(raw_scope=body.get("space_scope"), actor=str(get_active_profile_name() or "default"), workspace=workspace or "")
+            actor = str(get_active_profile_name() or "default")
+            captured_space_profile = capture_chat_profile(raw_scope=body.get("space_scope"), actor=actor, workspace=workspace or "")
             if captured_space_profile is not None:
                 workspace = captured_space_profile.workspace
+            if "assistant" in body:
+                from runtime.independent.nova_assistant import normalize_nova_assistant, require_assistant_scope
+
+                nova_assistant = normalize_nova_assistant(body["assistant"])
+                if body.get("agent"):
+                    raise ValueError("invalid_assistant_with_legacy_agent")
+                require_assistant_scope(captured_space_profile, actor)
         except (TypeError, ValueError) as e:
             return bad(handler, str(e))
         except PermissionError as e:
@@ -7284,6 +7293,7 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             title=body.get("title") or None,
             space_scope=captured_space_profile.scope.model_dump(mode="json", by_alias=True) if captured_space_profile is not None else None,
             space_profile_snapshot={"profileId": captured_space_profile.snapshot_id, "revision": captured_space_profile.snapshot_revision} if captured_space_profile is not None else None,
+            nova_assistant=nova_assistant,
         )
         if body.get("title"):
             s.title = str(body["title"]).strip()
@@ -7292,9 +7302,9 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             s.space_scope = captured_space_profile.scope.model_dump(mode="json", by_alias=True)
             s.space_profile_snapshot = {"profileId": captured_space_profile.snapshot_id, "revision": captured_space_profile.snapshot_revision}
             # The persona is chosen when the conversation starts and stays with it.
-            from runtime.independent.companion import start_conversation_companion
-            s.companion = start_conversation_companion(native_store, native_resolver, captured_space_profile.scope,
-                str(get_active_profile_name() or "default"))
+            if nova_assistant is None:
+                from runtime.independent.companion import start_conversation_companion
+                s.companion = start_conversation_companion(native_store, native_resolver, captured_space_profile.scope, actor)
             s.save()
         try:
             from web.api.state_sync import sync_session_start, sync_session_usage
@@ -7349,6 +7359,9 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
                 personality=session.personality,
                 # A copy continues the same conversation, so it keeps its persona.
                 companion=copy.deepcopy(getattr(session, "companion", None)),
+                _nova_assistant=getattr(session, "_nova_assistant", None),
+                space_scope=getattr(session, "space_scope", None) if getattr(session, "_nova_assistant", None) else None,
+                space_profile_snapshot=getattr(session, "space_profile_snapshot", None) if getattr(session, "_nova_assistant", None) else None,
                 enabled_toolsets=getattr(session, "enabled_toolsets", None),
                 context_length=getattr(session, "context_length", None),
                 threshold_tokens=getattr(session, "threshold_tokens", None),
@@ -7999,6 +8012,9 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             session_source="fork",
             # A fork continues the same conversation, so it keeps its persona.
             companion=copy.deepcopy(getattr(source, "companion", None)),
+            _nova_assistant=getattr(source, "_nova_assistant", None),
+            space_scope=getattr(source, "space_scope", None) if getattr(source, "_nova_assistant", None) else None,
+            space_profile_snapshot=getattr(source, "space_profile_snapshot", None) if getattr(source, "_nova_assistant", None) else None,
             # Inherit workspace metadata so the fork appears in the same
             # workspace sidebar. Without workspace_slug, a forked session
             # is invisible when the sidebar filters by workspace (#465 fix).
@@ -12466,6 +12482,13 @@ def _start_chat_stream_for_session(
                     "error_code": "space_profile_changed", "_status": 409}
     except (StoreError, PermissionError, ValueError) as exc:
         return {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied"), "_status": 409}
+    if getattr(s, "_nova_assistant", None) is not None:
+        from runtime.independent.nova_assistant import require_assistant_scope
+
+        try:
+            require_assistant_scope(captured_space_profile, str(get_active_profile_name() or "default"))
+        except (StoreError, PermissionError, ValueError) as exc:
+            return {"error": str(exc), "error_code": getattr(exc, "code", "assistants_disabled"), "_status": 403}
     # Prevent duplicate runs in the same session while a stream is still active.
     # This commonly happens after page refresh/reconnect races and can produce
     # duplicated clarify cards for what appears to be a single user request.

@@ -1,0 +1,30 @@
+# Abnahmebericht zur Assistenten-Umsetzung
+
+Die Arbeit basiert auf dem lokalen Store-Zweig `codex/store-readiness-0.1.61` ab `7a36ced`. Maßstab sind die sechs bestätigten Entscheidungen für die Assistenten-Oberfläche. Für den früheren Chat „Multiagent Umsetzung“ gibt es laut Herausgeber keinen Abschlussbericht. Der ältere [Abnahmeüberblick zum Gesamtprodukt](root-acceptance-ledger.md) beschreibt einen umfassenderen Auftrag. Dieser Bericht dokumentiert die hier übernommene Assistenten-Umsetzung.
+
+| Anforderung | Umsetzung und Nachweis |
+| --- | --- |
+| **Assistenten, Aktivität, Verwalten** | Der reguläre Einstieg `agents` öffnet die drei Reiter. Die Navigation unterstützt die Pfeiltasten. In den Render-Tests wurden Englisch, Deutsch und Japanisch geprüft. Die zehn bisherigen gebündelten Rollen sind über einen schreibgeschützten Katalog verfügbar. |
+| **Assistent im vorhandenen Nova-Chat** | Die Auswahl erstellt eine normale, an Browserprofil und Space gebundene Nova-Sitzung. Der Chat zeigt die gespeicherte Identität. Die vorhandene Nova-Pipeline berücksichtigt die begrenzten Antwortanweisungen des Assistenten. Provider, Werkzeuge und Berechtigungen werden weiterhin von den Regeln der Nova-Sitzung bestimmt. Öffentliche Sitzungs- und Nachrichtenprojektionen enthalten die Identität ohne die privaten Anweisungen. |
+| **Aktivität und Sitzungen** | Zuerst erscheinen laufende, danach wartende Aufgaben aus der bestehenden Aktivitätenquelle des Space. Darunter stehen aktuelle, nicht archivierte Nova-Sitzungen des gebundenen Profils und Space. Die Ansicht kennzeichnet veraltete oder fehlende Aktivität. Jede Aufgabenzeile lässt sich aufklappen. Die Detailansicht zeigt Zeitangaben und öffnet bei aktuellen, zugeordneten Aufgaben den zugehörigen Chat. |
+| **Workspace-Terminal bei einer zugehörigen Aufgabe** | Der allgemeine Workspace-Terminalbereich wurde aus der Assistenten-Oberfläche entfernt. Die geprüften aktuellen Aufgabenmodelle verweisen auf einen Chat und führen keine Zuordnung zu einem persistenten, bedienbaren Terminal. Die alten Workspace-Endpunkte erzeugen separate Workspace-Sitzungen. Das eigenständige Desktop-Terminal verwaltet PTYs außerhalb dieser Aufgabendaten. Die Aufgabendetails zeigen deshalb aktuell kein Terminal. Eine spätere Anzeige setzt eine vom Backend bestätigte Zuordnung zur konkreten Aufgabe und ihrem Scope voraus. |
+| **Verwaltung je Browserprofil, Auswahl je Space** | Eigene Assistenten lassen sich im aktiven Browserprofil erstellen, ändern und löschen. Die Auswahl wird je Browserprofil, Space und gebundenem Backendprofil gespeichert. Beim Löschen eines Browserprofils werden die dazu gespeicherten Assistenten und Auswahlen aus dem Browser entfernt. Eigene Einträge aus der früheren gemeinsamen Agenten-Datenbank bleiben dort erhalten. Ihre historische Profilzuordnung ist anhand der gespeicherten Daten nicht belegbar. |
+| **Bestätigung bei jedem Wechsel im bestehenden Chat** | Jede neue Assistentenidentität erfordert eine Bestätigung, auch die Rückkehr zu Nova. Abbrechen lässt den aktuellen Chat und die Auswahl bestehen. Nach Bestätigung öffnet sich eine neue Unterhaltung. Über „Letzte Sitzungen“ geöffnete bestehende Chats behalten ihre beim Erstellen gespeicherte Identität. Ein verspäteter Sitzungsstart kann einen inzwischen bearbeiteten Entwurf nicht leeren oder automatisch absenden. |
+
+## Prüfungen
+
+Der UI-Regressionstest reproduzierte zuerst die alte Oberfläche mit zwei Reitern. Der kombinierte Lauf bestand mit **124 Tests in sieben Dateien**. Er prüfte Navigation, Profil- und Space-Trennung, die zehn Rollenvorlagen, Bestätigung und Abbruch, Aufgabendetails, IPC und die verzögerte Entwurfsvorbereitung. Aus `apps/desktop` liefen folgende Befehle.
+
+```powershell
+node.exe ../../node_modules/vitest/vitest.mjs run tests/nova-assistants-panel.test.ts tests/nova-assistant-templates.test.ts tests/assistant-activity.test.ts tests/browser-layout.test.ts tests/agent-panels-i18n.test.ts tests/chat-draft-submission.test.ts tests/sidekick-api.test.ts --maxWorkers=1 --configLoader runner
+node.exe ../../node_modules/typescript/bin/tsc --noEmit -p tsconfig.renderer.json
+node.exe ../../node_modules/typescript/bin/tsc --noEmit -p tsconfig.main.json
+```
+
+Beide Typechecks endeten mit Code 0. Die Backend-Tests `test_native_session_storage_regression.py` und `test_conversation_persona.py` bestanden mit 16 Tests. Mit dem gebündelten Python und einem Offline-Pytest-Overlay bestanden zwei weitere `custom_assistant`-Tests in `test_native_chat_process.py`. Ein tatsächlicher isolierter Nova-Worker verwendete den konfigurierten Loopback-Testanbieter und lieferte die gespeicherte Assistentenanweisung im Modellkontext. Nach Widerruf der Freigabe erreichte den Anbieter keine weitere Anfrage. Diese Workerprüfungen liefen mit Einzelprozessen (`LASTBROWSER_CHAT_PERSISTENT_WORKER=0`). [Isoliertes Python-Testsetup](root-python-test-environment.md)
+
+Der integrierte Desktop-Build bestand. Im ersten Gesamtlauf schlugen drei Prüfungen fehl, die noch die alte Zahl der Navigationsaufrufe oder die alte Funktionssignatur voraussetzten. Die aktualisierten Tests prüfen die vorhandenen Seitenleisten, den neuen Aktivitätseinstieg, den Entwurfsschutz und die Scope-Prüfung vor der Aktivierung. Im Wiederholungslauf mit `npm --workspace apps/desktop run test:run -- --maxWorkers=2 --testTimeout=30000` bestanden alle 2.705 Tests in 300 Dateien. Die Syntaxprüfung bestand für sämtliche 1.163 erfassten Python-Dateien. Der Store-Vorabcheck verwendete das vorhandene Beta-MSIX samt Aufnahmebericht als Paketreferenz und meldete 37 bestandene Prüfungen ohne Warnungen oder Fehler.
+
+## Grenzen
+
+Die Prüfungen gelten für den Quellstand. Das zuvor verifizierte Beta-MSIX enthält diese Umsetzung noch nicht. Ein Pakettest des kombinierten Quellstands, eine bediente Windows-Oberflächenabnahme und die Freigabe im Microsoft Store bleiben getrennte Schritte. Die historische Abnahme des Gesamtprodukts folgt ihrem eigenen Maßstab. [Store-Vorbereitung](store-submission-preparation.md)

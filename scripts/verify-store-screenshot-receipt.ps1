@@ -1,29 +1,76 @@
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
     [string]$PackageDirectory,
     [Parameter(Mandatory = $true)]
-    [string]$ScreenshotReportPath
+    [string]$ScreenshotReportPath,
+    [string]$MsixPath
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
 
-function Read-Sha256([string]$FilePath) {
-    $stream = [IO.File]::OpenRead($FilePath)
+if (-not $PackageDirectory -and -not $MsixPath) {
+    throw 'Provide the captured PackageDirectory or MsixPath.'
+}
+
+function Read-StreamSha256([IO.Stream]$Stream) {
     $sha = [Security.Cryptography.SHA256]::Create()
     try {
-        [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '')
+        [BitConverter]::ToString($sha.ComputeHash($Stream)).Replace('-', '')
     } finally {
         $sha.Dispose()
+    }
+}
+
+function Read-Sha256([string]$FilePath) {
+    $stream = [IO.File]::OpenRead($FilePath)
+    try {
+        Read-StreamSha256 $stream
+    } finally {
         $stream.Dispose()
     }
 }
 
-$packageRoot = (Resolve-Path -LiteralPath $PackageDirectory).Path
+function Get-UniqueMsixEntry($Archive, [string]$EntryPath) {
+    $entries = @($Archive.Entries | Where-Object FullName -ieq $EntryPath)
+    if ($entries.Count -ne 1) { throw "MSIX must contain exactly one $EntryPath." }
+    $entries[0]
+}
+
+function Read-MsixExecutablePath($Archive) {
+    $entry = Get-UniqueMsixEntry $Archive 'AppxManifest.xml'
+    $settings = [System.Xml.XmlReaderSettings]::new()
+    $settings.DtdProcessing = [System.Xml.DtdProcessing]::Prohibit
+    $settings.CloseInput = $true
+    $reader = [System.Xml.XmlReader]::Create($entry.Open(), $settings)
+    try {
+        $manifest = [System.Xml.XmlDocument]::new()
+        $manifest.Load($reader)
+    } finally {
+        $reader.Dispose()
+    }
+    $application = $manifest.DocumentElement.SelectSingleNode("*[local-name()='Applications']/*[local-name()='Application']")
+    if (-not $application) { throw 'The MSIX manifest must declare the LastBrowser application.' }
+    $executablePath = $application.GetAttribute('Executable').Replace('\', '/')
+    if ($executablePath -notmatch 'Lastbrowser\.exe$') { throw 'The MSIX manifest must declare the LastBrowser executable.' }
+    $executablePath
+}
+
+function Assert-MsixEntryHash($Archive, [string]$EntryPath, [string]$ExpectedHash) {
+    $entry = Get-UniqueMsixEntry $Archive $EntryPath
+    $stream = $entry.Open()
+    try {
+        if ((Read-StreamSha256 $stream) -ne $ExpectedHash) {
+            throw "MSIX entry $EntryPath differs from the captured Windows build."
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 $reportFile = (Resolve-Path -LiteralPath $ScreenshotReportPath).Path
 $imageRoot = Split-Path -Parent $reportFile
-$receipt = Get-Content -LiteralPath $reportFile -Raw | ConvertFrom-Json
+$receipt = Get-Content -LiteralPath $reportFile -Raw -Encoding UTF8 | ConvertFrom-Json
 $started = [DateTimeOffset]::MinValue
 $finished = [DateTimeOffset]::MinValue
 if ($receipt.schemaVersion -ne 1 -or $receipt.complete -ne $true -or $null -eq $receipt.exitCode -or $receipt.exitCode -ne 0 -or
@@ -32,11 +79,40 @@ if ($receipt.schemaVersion -ne 1 -or $receipt.complete -ne $true -or $null -eq $
     $finished -lt $started -or $finished -gt [DateTimeOffset]::UtcNow) {
     throw 'Screenshot receipt must describe a completed capture with valid start and finish times.'
 }
-if ((Read-Sha256 (Join-Path $packageRoot 'Lastbrowser.exe')) -ne $receipt.executableSha256) {
-    throw 'Lastbrowser.exe differs from the captured Windows build.'
+if ($MsixPath) {
+    $expectedArchiveHash = [string]$receipt.msixSha256
+    if ([string]$receipt.captureMethod -cne 'registered-msix' -or $expectedArchiveHash -cnotmatch '\A[0-9a-fA-F]{64}\z') {
+        throw 'The receipt must describe a registered-msix capture and give its MSIX SHA-256.'
+    }
+    Add-Type -AssemblyName System.IO.Compression
+    $archiveStream = [IO.File]::OpenRead((Resolve-Path -LiteralPath $MsixPath).Path)
+    try {
+        if ((Read-StreamSha256 $archiveStream) -ne $expectedArchiveHash) {
+            throw 'The MSIX SHA-256 differs from the package used for the screenshot capture.'
+        }
+        $archiveStream.Position = 0
+        $archive = [IO.Compression.ZipArchive]::new($archiveStream, [IO.Compression.ZipArchiveMode]::Read, $true)
+        try {
+            $executablePath = Read-MsixExecutablePath $archive
+            $appDirectory = $executablePath.Substring(0, $executablePath.LastIndexOf('/') + 1)
+            Assert-MsixEntryHash $archive $executablePath $receipt.executableSha256
+            Assert-MsixEntryHash $archive "${appDirectory}resources/app.asar" $receipt.asarSha256
+        } finally {
+            $archive.Dispose()
+        }
+    } finally {
+        $archiveStream.Dispose()
+    }
 }
-if ((Read-Sha256 (Join-Path $packageRoot 'resources/app.asar')) -ne $receipt.asarSha256) {
-    throw 'app.asar differs from the captured Windows build.'
+
+if ($PackageDirectory) {
+    $packageRoot = (Resolve-Path -LiteralPath $PackageDirectory).Path
+    if ((Read-Sha256 (Join-Path $packageRoot 'Lastbrowser.exe')) -ne $receipt.executableSha256) {
+        throw 'Lastbrowser.exe differs from the captured Windows build.'
+    }
+    if ((Read-Sha256 (Join-Path $packageRoot 'resources/app.asar')) -ne $receipt.asarSha256) {
+        throw 'app.asar differs from the captured Windows build.'
+    }
 }
 
 $locales = @('en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja')
@@ -73,4 +149,5 @@ foreach ($locale in $locales) {
         throw "Provide between one and ten screenshots for $locale."
     }
 }
-"$($captureKeys.Count) PNGs across $($locales.Count) locales match the packaged EXE and app.asar."
+$verifiedTarget = if ($MsixPath) { 'the exact MSIX and its packaged EXE and app.asar' } else { 'the packaged EXE and app.asar' }
+"$($captureKeys.Count) PNGs across $($locales.Count) locales match $verifiedTarget."

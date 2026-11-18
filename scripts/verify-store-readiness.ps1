@@ -125,7 +125,7 @@ foreach ($candidate in (Get-ChildItem -LiteralPath $storeAssetDir -Filter '*.png
 }
 if ($validStoreMainLogos.Count -gt 0) {
     Report-Pass "Store main box art" ($validStoreMainLogos -join ', ')
-} elseif ($PackageDirectory) {
+} elseif ($PackageDirectory -or ($MsixPath -and $ScreenshotReportPath)) {
     Report-Fail "Store main box art" "Final submission needs a PNG main logo at 1080x1080 or 2160x2160, below 50 MB"
 } else {
     Report-Warn "Store main box art" "Prepared 512/1024 icons do not meet the current 1080/2160 square listing requirement"
@@ -133,8 +133,10 @@ if ($validStoreMainLogos.Count -gt 0) {
 $captureReportPath = Join-Path $storeAssetDir 'screenshots\capture-report.json'
 if ($ScreenshotReportPath) {
     try {
-        if (-not $PackageDirectory) { throw 'ScreenshotReportPath requires the captured PackageDirectory' }
-        $evidence = & (Join-Path $PSScriptRoot 'verify-store-screenshot-receipt.ps1') -PackageDirectory $PackageDirectory -ScreenshotReportPath $ScreenshotReportPath
+        $receiptParameters = @{ ScreenshotReportPath = $ScreenshotReportPath }
+        if ($PackageDirectory) { $receiptParameters.PackageDirectory = $PackageDirectory }
+        if ($MsixPath) { $receiptParameters.MsixPath = $MsixPath }
+        $evidence = & (Join-Path $PSScriptRoot 'verify-store-screenshot-receipt.ps1') @receiptParameters
         Report-Pass "Store screenshot content" $evidence
     } catch { Report-Fail "Store screenshot content" $_.Exception.Message }
 } elseif (Test-Path -LiteralPath $captureReportPath) {

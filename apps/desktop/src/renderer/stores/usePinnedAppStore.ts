@@ -217,13 +217,13 @@ function loadInitialPinnedApps(): PinnedApp[] {
       const rawV2 = window.localStorage.getItem(PINNED_APPS_STORAGE_KEY_V2);
       if (rawV2) {
         const parsed = JSON.parse(rawV2);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
       // Check v1 migration
       const rawV1 = window.localStorage.getItem(PINNED_APPS_STORAGE_KEY_V1);
       if (rawV1) {
         const parsed = JSON.parse(rawV1);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           const migrated: PinnedApp[] = parsed.map((app: any) => ({
             ...app,
             domain: app.domain || extractAppDomain(app.url),
@@ -235,9 +235,9 @@ function loadInitialPinnedApps(): PinnedApp[] {
       }
     }
   } catch {
-    // Ignore and return defaults
+    // Ignore unusable storage and start with no pins.
   }
-  return DEFAULT_PINNED_APPS;
+  return [];
 }
 
 function savePinnedAppsToStorage(apps: PinnedApp[]): void {

@@ -146,6 +146,14 @@ Der erneute Desktop-Build, die Python-Syntaxprüfung und der fokussierte Test de
 - Die Sichtprüfung umfasste alle acht Browser-Aufnahmen und Stichproben aus den anderen Ansichten. Im Beta-Paket sind weiterhin acht Dock-Apps vorausgewählt. Die Änderung für leere neue Profile und gespeicherte leere Dock-Listen liegt bereits in `d09853a` auf `codex/portable-06160-review`. In mehreren nichtenglischen Startseiten stehen noch „Notes“ und „Focus timer“. Im japanischen Einstellungsbild erscheint der Abschnitt für Startanimation und Ton auf Englisch. Zu Beginn war auch nach der Auswahl „ohne KI“ der Hinweis zur Modellprüfung sichtbar.
 - Die Aufnahmen dokumentieren den geprüften Beta-Stand. Die Store-Bilder folgen aus dem integrierten Freigabestand nach Abgleich der Dock-Auswahl und Sprachtexte.
 
+### Dock-Vorauswahl im Store-Quellzweig
+
+Der Store-Zweig übernimmt die Dock-Korrektur aus `d09853a`. Ein neues Profil startet mit leerem Dock. Leere gespeicherte Listen werden auch bei der Übernahme älterer Profile erhalten. Der Einrichtungsassistent übernimmt vorhandene Pins und ändert nur die angeklickte App. Der ausdrückliche Reset stellt weiterhin die bisherigen Standard-Pins bereit.
+
+Die Regressionstests reproduzierten vor der Korrektur drei Fehler beim Laden des Dock-Zustands. Der Electron-Test zeigte sieben ausgewählte Kacheln im Einrichtungsassistenten. Nach der Korrektur bestanden `npm --workspace apps/desktop run test:run -- tests/pinned-apps.test.ts` (26 Tests) und `node apps/desktop/tests/workplace-onboarding-dom.cjs --first-run-only` (sechs Prüfgruppen), einschließlich Anheften, Entfernen und Speichern der leeren Liste. Das zuvor geprüfte Beta-MSIX und seine Screenshots stammen aus dem vorherigen Quellstand.
+
+Der Desktop-Build und alle 2.671 Tests in 297 Dateien (`npm --workspace apps/desktop run test:run -- --maxWorkers=2 --testTimeout=30000`) bestanden. Alle 1.162 erfassten Python-Dateien bestanden die Syntaxprüfung im Speicher. Der Store-Vorabcheck mit dem vorhandenen Beta-MSIX als Paketreferenz meldete 37 bestandene Prüfungen, 0 Fehler und eine Warnung zum Screenshot-Abgleich des Freigabestands.
+
 ## Historische Prüfergebnisse vor der MSIX-Umstellung
 
 - Fünf betroffene Desktop-Testsuiten: **61/61 Tests bestanden**, einschließlich sieben Tests des neuen Signaturchecks. Diese prüfen rekursiv erfasste Abhängigkeiten, fehlende und fehlerhafte Signaturen, fehlende Zeitstempel, fremde native Formate und einen unsignierten Installer. Die Signaturantworten in den Testfällen sind kontrollierte Testdaten; sie sind kein Nachweis einer neuen signierten Release-Datei.

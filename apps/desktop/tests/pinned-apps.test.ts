@@ -2,7 +2,7 @@
  * Tests for usePinnedAppStore (Pinned Apps Revamp)
  *
  * Covers:
- *  - Store initialisation with default presets
+ *  - Store initialisation, persistence, and legacy migration
  *  - addApp / updateApp / removeApp CRUD
  *  - setActiveAppId
  *  - findMatchingApp domain matching (exact, subdomain, no-match)
@@ -11,7 +11,7 @@
  *  - Preset validation (all presets have required fields)
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Minimal electron mock so the store can load
@@ -32,26 +32,26 @@ const localStorageMock = {
   removeItem: (k: string) => { delete _ls[k]; },
   clear: () => { Object.keys(_ls).forEach(k => delete _ls[k]); },
 };
-Object.defineProperty(global, 'localStorage', { value: localStorageMock, writable: true });
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-type Store = Awaited<ReturnType<typeof import('../src/renderer/stores/usePinnedAppStore.js')>['usePinnedAppStore']>;
-let store: typeof import('../src/renderer/stores/usePinnedAppStore.js')['usePinnedAppStore'];
+type StoreModule = typeof import('../src/renderer/stores/usePinnedAppStore.js');
+let store: StoreModule['usePinnedAppStore'];
+
+async function reloadStore(): Promise<StoreModule> {
+  vi.resetModules();
+  const module = await import('../src/renderer/stores/usePinnedAppStore.js');
+  store = module.usePinnedAppStore;
+  return module;
+}
 
 beforeEach(async () => {
-  // Clear localStorage so tests are isolated
-  _ls['lastbrowser.pinnedApps.v2'] = '';
-  _ls['lastbrowser.pinnedApps.v1'] = '';
-
-  // Re-import the module fresh for each test suite but share within a describe
-  vi.resetModules();
-  const mod = await import('../src/renderer/stores/usePinnedAppStore.js');
-  store = mod.usePinnedAppStore;
-  // Reset to defaults
-  store.getState().resetToDefaults();
+  localStorageMock.clear();
+  vi.stubGlobal('window', { localStorage: localStorageMock });
+  await reloadStore();
 });
+
+afterEach(() => vi.unstubAllGlobals());
 
 // Helper: add a simple app
 function addSimple(name: string, url: string) {
@@ -68,12 +68,70 @@ function addSimple(name: string, url: string) {
 // Tests
 // ---------------------------------------------------------------------------
 describe('usePinnedAppStore – initialisation', () => {
-  it('starts with a non-empty apps list (default presets)', () => {
-    expect(store.getState().apps.length).toBeGreaterThan(0);
+  it('starts without pinned apps on a fresh profile', () => {
+    expect(store.getState().apps).toEqual([]);
   });
 
-  it('every preset has id, name, color, and bg', () => {
-    store.getState().apps.forEach((app) => {
+  it('keeps the saved selection, including custom and Space pins, on reload', async () => {
+    const { PRESET_PINNED_APPS } = await reloadStore();
+    const custom = store.getState().addApp({
+      name: 'Research',
+      url: 'https://research.example',
+      color: '#fff',
+      bg: '',
+      spacePath: 'spaces/research',
+    });
+    const selected = [custom, PRESET_PINNED_APPS[0]];
+    store.getState().setApps(selected);
+
+    await reloadStore();
+
+    expect(store.getState().apps).toEqual(selected);
+  });
+
+  it('keeps an explicitly empty selection on reload over legacy pins', async () => {
+    const { PINNED_APPS_STORAGE_KEY_V1, PRESET_PINNED_APPS } = await reloadStore();
+    localStorageMock.setItem(PINNED_APPS_STORAGE_KEY_V1, JSON.stringify([PRESET_PINNED_APPS[0]]));
+    store.getState().setApps([]);
+
+    await reloadStore();
+
+    expect(store.getState().apps).toEqual([]);
+  });
+
+  it('migrates legacy pins when no new selection has been saved', async () => {
+    const { PINNED_APPS_STORAGE_KEY_V1, PINNED_APPS_STORAGE_KEY_V2, PRESET_PINNED_APPS } = await reloadStore();
+    const legacy = PRESET_PINNED_APPS[0];
+    localStorageMock.setItem(PINNED_APPS_STORAGE_KEY_V1, JSON.stringify([legacy]));
+
+    await reloadStore();
+
+    expect(store.getState().apps).toEqual([expect.objectContaining({ id: legacy.id, name: legacy.name })]);
+    expect(JSON.parse(localStorageMock.getItem(PINNED_APPS_STORAGE_KEY_V2)!)).toEqual(store.getState().apps);
+  });
+
+  it('keeps an empty legacy selection during migration', async () => {
+    const { PINNED_APPS_STORAGE_KEY_V1, PINNED_APPS_STORAGE_KEY_V2 } = await reloadStore();
+    localStorageMock.setItem(PINNED_APPS_STORAGE_KEY_V1, '[]');
+
+    await reloadStore();
+
+    expect(store.getState().apps).toEqual([]);
+    expect(localStorageMock.getItem(PINNED_APPS_STORAGE_KEY_V2)).toBe('[]');
+  });
+
+  it('still restores defaults on explicit reset and persists them', async () => {
+    const { DEFAULT_PINNED_APPS } = await reloadStore();
+    store.getState().resetToDefaults();
+
+    await reloadStore();
+
+    expect(store.getState().apps).toEqual(DEFAULT_PINNED_APPS);
+  });
+
+  it('every preset has id, name, color, and bg', async () => {
+    const { PRESET_PINNED_APPS } = await reloadStore();
+    PRESET_PINNED_APPS.forEach((app) => {
       expect(typeof app.id).toBe('string');
       expect(app.id.length).toBeGreaterThan(0);
       expect(typeof app.name).toBe('string');
@@ -117,21 +175,22 @@ describe('usePinnedAppStore – CRUD', () => {
   });
 
   it('setActiveAppId sets activeAppId correctly', () => {
-    const first = store.getState().apps[0];
+    const first = addSimple('First', 'https://first.example');
     store.getState().setActiveAppId(first.id);
     expect(store.getState().activeAppId).toBe(first.id);
   });
 
   it('setActiveAppId can be cleared to null', () => {
-    const first = store.getState().apps[0];
+    const first = addSimple('First', 'https://first.example');
     store.getState().setActiveAppId(first.id);
     store.getState().setActiveAppId(null);
     expect(store.getState().activeAppId).toBeNull();
   });
 
   it('reorderApps moves an app from one position to another', () => {
+    addSimple('First', 'https://first.example');
+    addSimple('Second', 'https://second.example');
     const before = [...store.getState().apps];
-    if (before.length < 2) return; // skip if only one app
     store.getState().reorderApps(0, 1);
     const after = store.getState().apps;
     expect(after[0].id).toBe(before[1].id);

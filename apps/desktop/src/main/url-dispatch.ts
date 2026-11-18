@@ -1,4 +1,4 @@
-import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 /**
  * Extracts a target web URL or local HTML file path from command line arguments.
@@ -25,8 +25,7 @@ export function extractUrlFromArgs(args: string[]): string | null {
     // Local HTML files
     if (/\.(html?|shtml|xhtml)$/i.test(raw)) {
       try {
-        const resolved = path.resolve(raw);
-        return `file:///${resolved.replace(/\\/g, '/')}`;
+        return pathToFileURL(raw).href;
       } catch {
         return raw;
       }

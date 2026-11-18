@@ -12,6 +12,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Minimal electron mock
 vi.mock('electron', () => ({
@@ -92,6 +93,15 @@ describe('Single-Instance URL Dispatcher (extractUrlFromArgs)', () => {
     expect(extracted).not.toBeNull();
     expect(extracted?.startsWith('file:///')).toBe(true);
     expect(extracted?.endsWith(filename)).toBe(true);
+  });
+
+  it.each(['Report #1.html', 'Progress 100%.htm'])('keeps the literal filename when opening %s', filename => {
+    const file = path.resolve('Store QA', filename);
+    const extracted = extractUrlFromArgs(['Lastbrowser.exe', file]);
+    expect(extracted).not.toBeNull();
+    const url = new URL(extracted!);
+    expect(url.hash).toBe('');
+    expect(fileURLToPath(url)).toBe(file);
   });
 
   it('extracts URL when provided as a single standalone argument', () => {

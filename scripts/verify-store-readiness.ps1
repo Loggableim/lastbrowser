@@ -447,7 +447,9 @@ $requiredSpaceFiles = @(
     'jFUSE-LICENSE.txt'
     'jFUSE-GPL-3.0.txt'
     'Auth0-java-jwt-LICENSE.txt'
-    'Logback-LICENSE-NOTICE.txt'
+    'Logback-LICENSE-NOTICE.txt',
+    'Apache-2.0-LICENSE.txt',
+    'Cryptomator-Java-Apache-NOTICE.txt'
 )
 $requiredSpaceModules = @('cryptomator-cli-*.jar', 'cryptofs-*.jar', 'cryptolib-*.jar')
 if ($MsixPath) {

@@ -84,7 +84,9 @@ async function stage() {
       copyFile(path.join(notices, 'jfuse-0.7.3.txt'), path.join(staged, 'jFUSE-LICENSE.txt')),
       copyFile(path.join(repository, 'LICENSE'), path.join(staged, 'jFUSE-GPL-3.0.txt')),
       copyFile(path.join(notices, 'auth0-java-jwt-4.4.0.txt'), path.join(staged, 'Auth0-java-jwt-LICENSE.txt')),
-      copyFile(path.join(notices, 'logback-1.5.18.txt'), path.join(staged, 'Logback-LICENSE-NOTICE.txt'))
+      copyFile(path.join(notices, 'logback-1.5.18.txt'), path.join(staged, 'Logback-LICENSE-NOTICE.txt')),
+      copyFile(path.join(notices, 'apache-2.0.txt'), path.join(staged, 'Apache-2.0-LICENSE.txt')),
+      copyFile(path.join(notices, 'cryptomator-cli-0.6.2-java-apache.txt'), path.join(staged, 'Cryptomator-Java-Apache-NOTICE.txt'))
     ]);
     await copyFile(path.join(scripts, 'InitializeSpaceVault.java'), path.join(staged, 'InitializeSpaceVault.java'));
     run(path.join(system, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'), [

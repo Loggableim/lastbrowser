@@ -206,7 +206,7 @@ import { hardenWebViewAttachment } from './webview-security.js';
 import { IndependentController, independentIpcRequest } from './independent-controller.js';
 import { installSessionRequestPolicy } from './session-request-policy.js';
 import { independentApiRequest } from './sidekick-api.js';
-import { captureTrustedShellSender } from './ipc-sender.js';
+import { assertTrustedShellSender, captureTrustedShellSender } from './ipc-sender.js';
 import { requestScopedWebui } from './scoped-webui-request.js';
 import { isReservedAgentPartition } from './agent-execution-partition.js';
 import { capturePageDataUrl, normalizeCapturePageRect } from './capture-page.js';
@@ -474,15 +474,23 @@ function createWindow(): BrowserWindow {
   });
   window.webContents.on('render-process-gone', (_event, details) => {
     logRendererLifecycle('render-process-gone', { reason: details.reason, exitCode: details.exitCode });
+    openUrlLifecycle.onWindowNavigating(window);
   });
   window.webContents.on('unresponsive', () => logRendererLifecycle('unresponsive'));
   window.webContents.on('responsive', () => logRendererLifecycle('responsive'));
   window.once('ready-to-show', () => logRendererLifecycle('ready-to-show'));
 
-  window.webContents.on('did-start-loading', () => openUrlLifecycle.onWindowLoading(window));
-  window.webContents.on('did-finish-load', () => {
-    // Let preload, React, and the browser tab event subscription mount first.
-    setTimeout(() => openUrlLifecycle.onWindowReady(window), 350);
+  window.webContents.on('did-start-navigation', ({ isMainFrame, isSameDocument }) => {
+    if (isMainFrame && !isSameDocument) openUrlLifecycle.onWindowNavigating(window);
+  });
+  window.webContents.on('ipc-message', (event, channel) => {
+    if (channel !== 'lastbrowser:browser:openTabReady') return;
+    try {
+      assertTrustedShellSender(event, contents => contents === window.webContents);
+    } catch {
+      return;
+    }
+    openUrlLifecycle.onWindowReady(window);
   });
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;

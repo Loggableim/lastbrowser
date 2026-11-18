@@ -60,6 +60,7 @@ if (process.isMainFrame && isTrustedPreloadDocumentUrl(window.location.href)) co
     onOpenTab: (callback: (url: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);
       ipcRenderer.on('lastbrowser:browser:openTab', listener);
+      ipcRenderer.send('lastbrowser:browser:openTabReady');
       return () => ipcRenderer.removeListener('lastbrowser:browser:openTab', listener);
     },
     onOpenIncognitoTab: (callback: (url: string) => void) => {

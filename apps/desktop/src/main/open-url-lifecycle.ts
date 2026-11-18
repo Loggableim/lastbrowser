@@ -8,7 +8,6 @@ export type OpenUrlWindow = {
   show(): void;
   focus(): void;
   webContents: {
-    isLoading(): boolean;
     send(channel: string, url: string): void;
   };
 };
@@ -46,8 +45,7 @@ export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
   }
 
   function flushPending(window: TWindow): void {
-    if (!isLive(window) || options.getMainWindow() !== window
-      || !readyWindows.has(window) || window.webContents.isLoading()) return;
+    if (!isLive(window) || options.getMainWindow() !== window || !readyWindows.has(window)) return;
 
     while (pendingUrls.length > 0) {
       const url = pendingUrls[0];
@@ -73,7 +71,7 @@ export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
     }
 
     reveal(window);
-    if (!readyWindows.has(window) || window.webContents.isLoading()) {
+    if (!readyWindows.has(window)) {
       pendingUrls.push(url);
       return true;
     }
@@ -102,11 +100,11 @@ export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
       }
       return url;
     },
-    onWindowLoading(window: TWindow): void {
+    onWindowNavigating(window: TWindow): void {
       readyWindows.delete(window);
     },
     onWindowReady(window: TWindow): void {
-      if (!isLive(window) || options.getMainWindow() !== window || window.webContents.isLoading()) return;
+      if (!isLive(window) || options.getMainWindow() !== window) return;
       readyWindows.add(window);
       flushPending(window);
     },

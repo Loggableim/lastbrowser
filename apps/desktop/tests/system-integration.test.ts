@@ -110,13 +110,16 @@ describe('Single-Instance URL Dispatcher (extractUrlFromArgs)', () => {
 
   it('wires macOS open-url and cold-start links through the queued window lifecycle', () => {
     const main = readFileSync(path.resolve(__dirname, '../src/main/main.ts'), 'utf8');
+    const preload = readFileSync(path.resolve(__dirname, '../src/main/preload.ts'), 'utf8');
     expect(main).toContain("app.on('open-url', (event, url) => {");
     expect(main).toContain('openUrlLifecycle.handleOpenUrl(event, url)');
     expect(main).toContain('openUrlLifecycle.handleSecondInstance(commandLine)');
     expect(main).toContain('dispatchOpenUrl(initialUrl)');
-    expect(main).toContain("window.webContents.on('did-finish-load', () => {");
+    expect(main).toContain("if (channel !== 'lastbrowser:browser:openTabReady') return");
+    expect(main).toContain('assertTrustedShellSender(event, contents => contents === window.webContents)');
     expect(main).toContain('openUrlLifecycle.onWindowReady(window)');
     expect(main).toContain('if (mainWindow === window) mainWindow = null');
+    expect(preload).toMatch(/ipcRenderer\.on\('lastbrowser:browser:openTab', listener\);\s+ipcRenderer\.send\('lastbrowser:browser:openTabReady'\);/);
   });
 });
 

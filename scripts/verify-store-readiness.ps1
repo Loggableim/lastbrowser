@@ -14,7 +14,8 @@ param(
     [string]$MsixPath,
     [string]$ExpectedStoreIdentityName,
     [string]$ExpectedStorePublisher,
-    [string]$ExpectedStorePublisherDisplayName
+    [string]$ExpectedStorePublisherDisplayName,
+    [ValidateNotNullOrEmpty()][string]$ExpectedProductDisplayName = 'LastBrowser'
 )
 
 $ErrorActionPreference = "Stop"
@@ -482,9 +483,9 @@ if ($MsixPath) {
         }
         $productDisplayName = $manifest.DocumentElement.SelectSingleNode("*[local-name()='Properties']/*[local-name()='DisplayName']")
         $visualElements = $application.SelectSingleNode("*[local-name()='VisualElements']")
-        if ($productDisplayName.InnerText -cne 'LastBrowser' -or -not $visualElements -or
-            $visualElements.GetAttribute('DisplayName') -cne 'LastBrowser') {
-            throw 'The MSIX product and application display names must be LastBrowser'
+        if ($productDisplayName.InnerText -cne $ExpectedProductDisplayName -or -not $visualElements -or
+            $visualElements.GetAttribute('DisplayName') -cne $ExpectedProductDisplayName) {
+            throw "The MSIX product and application display names must be $ExpectedProductDisplayName"
         }
         $displayNameNode = $manifest.DocumentElement.SelectSingleNode("*[local-name()='Properties']/*[local-name()='PublisherDisplayName']")
         if (-not $displayNameNode -or ($ExpectedStorePublisherDisplayName -and $displayNameNode.InnerText -cne $ExpectedStorePublisherDisplayName)) {

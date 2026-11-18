@@ -6,12 +6,14 @@ param(
     [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9.-]{3,50}$')][string]$IdentityName,
     [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$Publisher,
     [Parameter(Mandatory)][ValidateNotNullOrEmpty()][string]$PublisherDisplayName,
-    [string]$MakeAppxPath
+    [string]$MakeAppxPath,
+    [ValidateNotNullOrEmpty()][string]$ProductDisplayName = 'LastBrowser'
 )
 
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'The Store MSIX must be packaged on Windows.' }
 if ([string]::IsNullOrWhiteSpace($PublisherDisplayName)) { throw 'Supply the Partner Center publisher display name.' }
+if ([string]::IsNullOrWhiteSpace($ProductDisplayName)) { throw 'Supply the reserved Partner Center product display name.' }
 $null = [Security.Cryptography.X509Certificates.X500DistinguishedName]::new($Publisher)
 if ($Publisher -match 'OID\.2\.25\.311729368913984317654407730594956997722\s*=') {
     throw 'Use the Partner Center publisher without the unsigned sideloading marker.'
@@ -134,6 +136,7 @@ $extensions = @(
     }
 ) -join [Environment]::NewLine
 
+$displayName = [Security.SecurityElement]::Escape($ProductDisplayName)
 $manifest = @"
 <?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -144,7 +147,7 @@ $manifest = @"
          IgnorableNamespaces="uap uap2 uap3 rescap">
   <Identity Name="$IdentityName" Publisher="$([Security.SecurityElement]::Escape($Publisher))" Version="$version" ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>LastBrowser</DisplayName>
+    <DisplayName>$displayName</DisplayName>
     <PublisherDisplayName>$([Security.SecurityElement]::Escape($PublisherDisplayName))</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -163,7 +166,7 @@ $manifest = @"
   </Dependencies>
   <Applications>
     <Application Id="LastBrowser" Executable="app\Lastbrowser.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="LastBrowser" Description="LastBrowser"
+      <uap:VisualElements DisplayName="$displayName" Description="$displayName"
                           Square150x150Logo="Assets\Square150x150Logo.png"
                           Square44x44Logo="Assets\Square44x44Logo.png" BackgroundColor="transparent" />
       <Extensions>

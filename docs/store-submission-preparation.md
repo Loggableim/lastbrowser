@@ -24,15 +24,17 @@ Microsoft übernimmt die Paketsignatur für die Windows-Store-Fassung. Unter Lin
 
 Für zukünftige Store-Versionen wird LastBrowser als MSIX eingereicht. Microsoft signiert das Paket nach der Zertifizierung im Veröffentlichungsprozess ohne separate Gebühr für die Paketsignatur. Für diesen Vertrieb ist kein gekauftes Codesignatur-Zertifikat erforderlich. Ein lokaler Installationstest braucht einen dafür vorgesehenen Entwicklungsweg, beispielsweise ein separat signiertes Testpaket mit einem auf diesem Testgerät vertrauenswürdigen Entwicklungszertifikat. [MSIX-Paketanforderungen](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-package-requirements) · [MSIX-Bereitschaftscheck](https://learn.microsoft.com/en-us/windows/apps/publish/store-readiness-checklist)
 
-Im November 2026 erhielt der EXE/MSI-Entwurf den Übergangsnamen **Lastbrowser EXE Draft**. Die acht gespeicherten Spracheinträge sind weiterhin Teil dieses Entwurfs. Im Partner Center wurde die bisherige Reservierung **Lastbrowser** freigegeben. Die MSIX-Namensprüfung meldete danach für **LastBrowser** und **Lastbrowser** weiterhin, dass der Name nicht verfügbar sei. Der vorgesehene Produktname im MSIX-Manifest und in den acht lokalen Store-Texten lautet **LastBrowser**. Der MSIX-Entwurf und seine Paketidentität stehen noch aus. Nach der Reservierung die gespeicherten Inhalte anhand der MSIX-Felder abgleichen. [Microsoft zur Namensfreigabe](https://learn.microsoft.com/en-us/windows/apps/publish/partner-center/msi/manage-app-name-reservations) · [MSIX-Namensreservierung](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/reserve-your-apps-name)
+Im November 2026 erhielt der EXE/MSI-Entwurf den Übergangsnamen **Lastbrowser EXE Draft**. Die acht gespeicherten Spracheinträge sind weiterhin Teil dieses Entwurfs. Im Partner Center wurde die bisherige Reservierung **Lastbrowser** freigegeben. Die MSIX-Namensprüfung meldete danach für **LastBrowser** und **Lastbrowser** weiterhin, dass der Name nicht verfügbar sei. Der Herausgeber reservierte anschließend **LastBrowser Beta**. Am 18. November waren der MSIX-Produktentwurf und seine zugewiesene Paketidentität im Partner Center sichtbar. Der endgültig vorgesehene Name lautet **LastBrowser**. Die Übernahme der acht Spracheinträge in den MSIX-Entwurf steht aus. [Beta-Produktentwurf](https://partner.microsoft.com/de-de/dashboard/products/9NJX1T2KXDM3/overview) · [MSIX-Namensreservierung](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/reserve-your-apps-name)
 
 Unter **Produktverwaltung → Produktidentität** die Werte `Package/Identity/Name`, `Package/Identity/Publisher` und `Package/Properties/PublisherDisplayName` exakt einschließlich Großschreibung und Satzzeichen übernehmen. Der Anzeigename im Manifest muss zur Namensreservierung passen. Paketversion und Architektur gehören ebenfalls ins Manifest. Der Package Family Name (PFN) dient zur Verifikation der Windows-Paketfamilie. [Produktidentität](https://learn.microsoft.com/en-us/windows/apps/publish/view-app-identity-details) · [Manifest für Win32-MSIX](https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-manual-conversion)
+
+Die erste Produktübermittlung für **LastBrowser Beta** ist als Entwurf angelegt. Der Bereich **Eigenschaften** zeigt **Vollständig** mit Kategorie **Produktivität**, Datenschutz-, Website- und Support-URL sowie der Angabe zu generativer KI. Preise und Verfügbarkeit, Altersfreigaben, Pakete und Store-Einträge stehen in diesem MSIX-Entwurf aus. [Beta-Entwurf im Partner Center](https://partner.microsoft.com/de-de/dashboard/products/9NJX1T2KXDM3/overview)
 
 Die Signatur durch den Store betrifft das MSIX-Paket. Für geschützte Medien bleibt die Widevine-VMP-Funktion des konkreten Builds separat zu prüfen. Für das Website-Setup gelten die bisherigen Authenticode-Anforderungen. [Lokaler Signierablauf für EXE](local-signed-release.md)
 
 Die acht Einträge anhand des endgültigen Pakets aktualisieren und echte Aufnahmen dieses Builds verwenden. Live-KI in den Metadaten und in Partner Center angeben. Den Meldeweg für problematische KI-Ausgaben prüfen, ohne reale Nutzerdaten zu versenden. Die Altersfreigabe anhand des tatsächlichen Funktionsumfangs ermitteln. [Store-Einträge](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/add-and-edit-store-listing-info) · [Altersfreigaben](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/age-ratings) · [Store-Richtlinien 10.5 und 11.16](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies)
 
-Die öffentliche deutsche Datenschutzseite, die englische Datenschutzseite und der deutsche Support lieferten am 15. November 2026 HTTP 200 und die erwarteten Seitentitel. Beide öffentlich erreichbaren Datenschutzseiten erklärten Ollama und externe Anbieter. Die im Repository dokumentierte Widevine-Verbindung war in den abgerufenen Fassungen noch nicht beschrieben. Vor der Einreichung muss die öffentliche Fassung mit dem geprüften Verhalten übereinstimmen. [Datenschutz](https://lastbrowser.com/privacy/) · [Englischer Datenschutz](https://lastbrowser.com/en/privacy/) · [Support](https://lastbrowser.com/support/)
+Die öffentlichen deutschen und englischen Datenschutz- und Supportseiten lieferten am 18. November 2026 HTTP 200. In beiden Datenschutzseiten fehlten die Hinweise zu Widevine und zur MSIX-Datenspeicherung. Beide öffentlichen Supportseiten beschrieben Profilverschlüsselung pauschal und enthielten keine Anleitung zum Melden von KI-Antworten. Die überarbeiteten Texte liegen im Repository. Die öffentlichen Downloadseiten zeigten 0.1.60 Beta, die lokalen statischen Seiten 0.1.56. Vor der Einreichung die gezielt aktualisierten öffentlichen Seiten mit dem geprüften Paket abgleichen. [DE Datenschutz](https://lastbrowser.com/privacy/) · [EN Datenschutz](https://lastbrowser.com/en/privacy/) · [DE Support](https://lastbrowser.com/support/) · [EN Support](https://lastbrowser.com/en/support/)
 
 ## Historische EXE/MSI-Prüfung zu PR #384
 
@@ -46,7 +48,7 @@ Auf dem Windows-Testhost waren im November 2026 keine nutzbare Codesignatur-Iden
 
 ## MSIX aus dem Windows-Build erstellen
 
-Das fertige x64-Verzeichnis `win-unpacked` mit Electron, Python, Sidekick, Vault-Laufzeiten und Lizenzen ist die Eingabe. Das Skript erstellt ein MSIX mit dem Windows-SDK-Werkzeug `MakeAppx.exe`. Es übernimmt die drei bestätigten Partner-Center-Werte über die Kommandozeile. Die Paketversion für LastBrowser 0.1.61 lautet `1.1.61.0`.
+Das fertige x64-Verzeichnis `win-unpacked` mit Electron, Python, Sidekick, Vault-Laufzeiten und Lizenzen ist die Eingabe. Das Skript erstellt ein MSIX mit dem Windows-SDK-Werkzeug `MakeAppx.exe`. Es übernimmt die drei bestätigten Partner-Center-Werte über die Kommandozeile. `$productDisplayName` muss dem reservierten Anzeigenamen entsprechen. Für den aktuellen Entwurf lautet er `LastBrowser Beta`. Ohne Vorgabe verwenden Paketierung und Prüfung `LastBrowser`. Die Paketversion für LastBrowser 0.1.61 lautet `1.1.61.0`.
 
 Im Repository-Stammverzeichnis die absoluten Ausgabepfade und die echten Manifestwerte in den folgenden Variablen setzen. `$payloadDirectory` muss ein neuer Ordner sein und `$outputPath` ein neuer Dateiname mit der Endung `.msix`. Die npm-Abhängigkeiten und die gepinnten Build-Eingaben für Python und verschlüsselte Spaces müssen auf dem Windows-Buildsystem verfügbar sein. [Laufzeiten vorbereiten](local-signed-release.md#provision-offline-python-inputs)
 
@@ -56,10 +58,10 @@ $appDirectory = Join-Path $payloadDirectory 'win-unpacked'
 npm --workspace apps/desktop run package:store:msix -- `
   -AppDirectory $appDirectory -OutputPath $outputPath `
   -IdentityName $identityName -Publisher $publisher `
-  -PublisherDisplayName $publisherDisplayName
+  -PublisherDisplayName $publisherDisplayName -ProductDisplayName $productDisplayName
 .\scripts\verify-store-readiness.ps1 -MsixPath $outputPath `
   -ExpectedStoreIdentityName $identityName -ExpectedStorePublisher $publisher `
-  -ExpectedStorePublisherDisplayName $publisherDisplayName
+  -ExpectedStorePublisherDisplayName $publisherDisplayName -ExpectedProductDisplayName $productDisplayName
 Get-FileHash -Algorithm SHA256 -LiteralPath $outputPath
 ```
 
@@ -96,7 +98,14 @@ Nach der Prüfung des endgültigen paketierten Builds den getesteten Mindest-Win
 - Unter Windows 10 22H2 war der Entwicklermodus bereits aktiv. Das entpackte MSIX wurde temporär über sein Manifest registriert und über die Windows-Paketaktivierung mit einem neuen Testprofil gestartet. Paketidentität des laufenden Prozesses, Browserfenster und Initialisierung des Testprofils wurden geprüft. Anschließend wurde die Testregistrierung entfernt.
 - Der separate WinFsp-Test schrieb synthetische Chromium- und Sidekick-Daten, öffnete das Profil nach dem Aushängen erneut und suchte in 107 Dateien des darunterliegenden verschlüsselten Speichers nach den Testmarkern. Es gab keinen Klartexttreffer. Das Testlaufwerk wurde ausgehängt.
 
-Für den Store-Kandidaten stehen die Prüfung der echten Partner-Center-Identität, die Installation und Deinstallation der fertigen Store-Fassung, die Standardbrowser-Aktivierung, WACK und die abschließende Prüfung der öffentlichen Datenschutz- und Support-URLs aus.
+## Lokaler Test des Beta-MSIX vom 18. November 2026
+
+- MakeAppx erstellte das unsignierte x64-MSIX `1.1.61.0` mit der verifizierten Partner-Center-Identität von **LastBrowser Beta**. SHA-256: `d518dab4d83bd1d2f1c0d2a9ad0eaf68bc72dd9ca56371f8de0a89a55168df7d`.
+- Die SHA-256-Blocklisten aller 12.262 Laufzeitdateien stimmen mit dem lokal getesteten MSIX vom 17. November überein.
+- Auf Windows 10 22H2 wurde das entpackte Beta-MSIX im aktiven Entwicklermodus temporär registriert. Die Windows-Paketaktivierung startete ein Browserfenster und initialisierte ein neues Testprofil. Die Identität des aktiven Prozesses entsprach dem registrierten Beta-Paket. Anschließend wurde die Registrierung entfernt.
+- Der Desktop-Build und `python -m compileall -q services/sidekick` bestanden. Nach Zeitlimits bei parallelen Builds und Tests bestand der erneute Vitest-Lauf mit `--maxWorkers=1 --testTimeout=30000` alle 2.662 Tests in 297 Dateien.
+- Der vollständige Store-Vorabcheck mit der Beta-Identität meldete im erneuten Lauf ohne parallele Jobs 37 bestandene Prüfungen und 0 Fehler. Offen blieb eine Warnung zum Screenshot-Abgleich. Mit dem erwarteten Namen `LastBrowser` lehnte der Vorabcheck das Beta-Paket wie vorgesehen ab.
+- Für die Freigabe stehen die Installation der von Microsoft signierten Fassung, die Prüfung als Standardbrowser, WACK sowie der Abgleich der öffentlichen Datenschutz- und Support-URLs und der Store-Screenshots mit dem endgültigen Paket aus.
 
 ## Historische Prüfergebnisse vor der MSIX-Umstellung
 

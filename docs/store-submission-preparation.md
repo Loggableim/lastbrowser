@@ -193,6 +193,10 @@ Der Vorabcheck mit `-MsixPath` und `-ScreenshotReportPath` prüft jetzt die SHA-
 
 Für das lokalisierte Beta-MSIX mit SHA-256 `0f4b89d33d32bdc6eb1330f0113be8da757025a3a891d9013e159fa6577c5af0` und seinen 32 Aufnahmen meldete der Vorabcheck ohne entpackten Ordner 37 bestandene Prüfungen, 0 Warnungen und 0 Fehler. Der Bericht stammt aus dem lokalen Windows-Lauf `smoke-beta-msix-localized.ps1`. Derselbe Bericht mit dem früheren Beta-MSIX `5072e0b4c0b947100c7ddb1c23d3640cb72e376bb38554398f1d554ca4e420be` wird wegen abweichender Paket-SHA-256 abgelehnt. Elf PowerShell-Tests prüfen den EXE- und MSIX-Pfad einschließlich abweichender Archivdateien, einer falschen Aufnahmemethode und alternativer Anwendungspfade im Manifest. Der Desktop-Build, die Syntaxprüfung für 1.162 versionierte Python-Dateien und 2.684 Desktop-Tests in 297 Dateien bestanden.
 
+### Wiederholbarer Aufnahmelauf aus dem Repository
+
+`scripts/capture-store-msix.ps1` erzeugt den registrierten MSIX-Aufnahmebericht mit den versionierten Skripten. Ein Windows-Lauf mit dem oben genannten Beta-MSIX prüfte die Blockliste der Extraktion, startete die App über ihre Paketkennung, erzeugte alle 32 Bilder und beendete die App. Der Treiber entfernte die Testregistrierung und prüfte die Browser-Standardzuordnungen vor und nach dem Lauf. Eine absichtlich abweichende erwartete Paket-SHA-256 wurde vor dem Anlegen des Testprofils abgelehnt. Mit dem neuen Bericht bestand der Vorabcheck 37 Prüfungen ohne Warnungen oder Fehler. Desktop-Build, Python-Syntaxprüfung und 2.684 Desktop-Tests bestanden. [Aufnahmeanleitung](store-screenshot-capture.md#registriertes-msix-aufnehmen)
+
 ## Historische Prüfergebnisse vor der MSIX-Umstellung
 
 - Fünf betroffene Desktop-Testsuiten: **61/61 Tests bestanden**, einschließlich sieben Tests des neuen Signaturchecks. Diese prüfen rekursiv erfasste Abhängigkeiten, fehlende und fehlerhafte Signaturen, fehlende Zeitstempel, fremde native Formate und einen unsignierten Installer. Die Signaturantworten in den Testfällen sind kontrollierte Testdaten; sie sind kein Nachweis einer neuen signierten Release-Datei.

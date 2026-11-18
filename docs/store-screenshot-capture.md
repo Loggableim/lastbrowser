@@ -43,6 +43,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-store-screens
 
 Für den Vorabcheck einer entpackten EXE-Fassung übergeben Sie denselben Aufnahmebericht an `scripts/verify-store-readiness.ps1` mit `-ScreenshotReportPath` und `-PackageDirectory`. Der Bericht enthält Laufzeiten, den Abschlussstatus, EXE- und ASAR-Hashes sowie Locale, Ansicht, Pfad und Hash je Bild. Die Prüfung akzeptiert je Sprache ein bis zehn echte 1920×1080-PNGs.
 
-Der Windows-Paketlauf startet die registrierte App über ihre Paketkennung. Nach vollständigem Beenden trägt der Lauf `captureMethod: registered-msix` und `msixSha256` für das getestete Archiv in den Aufnahmebericht ein. Übergeben Sie das Archiv und diesen Bericht für den MSIX-Vorabcheck an `scripts/verify-store-readiness.ps1` mit `-MsixPath` und `-ScreenshotReportPath`. Der Prüfer gleicht die SHA-256 des Archivs, die EXE und ASAR im Archiv und jede Bilddatei mit dem Bericht ab. Eine über `-PackageDirectory` zusätzlich angegebene Extraktion wird ebenfalls geprüft. [Dokumentierter Windows-Paketlauf](store-submission-preparation.md#lokalisierte-oberfläche-im-windows-beta-paket)
+### Registriertes MSIX aufnehmen
+
+Verwenden Sie Windows PowerShell 5.1, Node.js 22 oder neuer und einen isolierten Windows-Testhost mit aktivierter Entwicklerregistrierung. Entpacken Sie das unsignierte Store-MSIX mit `MakeAppx unpack` in einen frischen Ordner. Übernehmen Sie die erwartete SHA-256 aus dem Build- oder Übergabeprotokoll. `$fixturePath` und `$capturePath` müssen zwei neue Pfade mit vorhandenen Elternordnern außerhalb der Extraktion sein.
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/capture-store-msix.ps1 `
+  -MsixPath $msixPath -ExpectedSha256 $expectedSha256 -PackageRoot $unpackedPath `
+  -FixtureRoot $fixturePath -OutputDirectory $capturePath
+```
+
+Der Treiber prüft die Blockliste, registriert die entpackte App temporär und startet sie über ihre Windows-Paketkennung. Die App verwendet ein frisches Browserprofil und einen lokalen Proxy für Chromium-Verbindungen. Der Test prüft die Eigentümer der Debugging-Ports und die Store-Updateverwaltung. Nach regulärem Beenden und Entfernen der Testregistrierung verifiziert und speichert er den Aufnahmebericht mit `captureMethod: registered-msix` und `msixSha256`. Die Testprofildaten liegen unter `$fixturePath`.
+
+Übergeben Sie das Archiv und `capture-report.json` für den MSIX-Vorabcheck an `scripts/verify-store-readiness.ps1` mit `-MsixPath` und `-ScreenshotReportPath`. Der Prüfer gleicht die SHA-256 des Archivs, die EXE und ASAR im Archiv und jede Bilddatei mit dem Bericht ab. Eine über `-PackageDirectory` zusätzlich angegebene Extraktion wird ebenfalls geprüft. [Dokumentierter Windows-Paketlauf](store-submission-preparation.md#lokalisierte-oberfläche-im-windows-beta-paket)
 
 Die Store-Vorschau braucht weiterhin eine Sichtprüfung. Eine Authenticode-Signatur der EXE oder eine Signatur des MSIX ändert die Prüfsumme der jeweils signierten Datei. Verwenden Sie den Aufnahmebericht des Artefakts, das Sie prüfen.

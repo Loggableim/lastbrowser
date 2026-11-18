@@ -3638,7 +3638,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   const sectionList = visibleSettingsSections();
   const sectionCopy = (key: SettingsSectionId) => key === 'codex-cli'
-    ? { title: 'Codex CLI', description: shellText(locale, 'Starte die installierte Codex CLI im aktuellen Space.', SETTINGS_SECTIONS[key].description) }
+    ? { title: SETTINGS_SECTIONS[key].title, description: t('settings.sectionDescriptions.codexCli') }
     : { title: t(SETTINGS_SECTION_COPY[key].title), description: t(SETTINGS_SECTION_COPY[key].description) };
   const updateAvailable = updateState === 'available';
 

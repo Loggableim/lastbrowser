@@ -2,6 +2,15 @@ import type { DesktopCatalog, LegacyDesktopLocaleId as DesktopLocaleId, DesktopT
 
 type Values = Record<DesktopLocaleId, string>;
 const rows: Partial<Record<DesktopTranslationKey, Values>> = {
+  'settings.sectionDescriptions.codexCli': {
+    en: 'Launch the installed Codex CLI in this Space.',
+    de: 'Starte die installierte Codex CLI im aktuellen Space.',
+    it: 'Avvia il Codex CLI installato in questo spazio.',
+    es: 'Ejecuta el Codex CLI instalado en este espacio.',
+    fr: 'Lancez le Codex CLI installé dans cet espace.',
+    'pt-BR': 'Inicie o Codex CLI instalado neste espaço.',
+    ru: 'Запустите установленный Codex CLI в этом пространстве.',
+  },
   'settings.sections.advanced': { en: 'Advanced', de: 'Erweitert', it: 'Avanzate', es: 'Avanzado', fr: 'Avancé', 'pt-BR': 'Avançado', ru: 'Дополнительно' },
   'settings.sectionDescriptions.advanced': { en: 'Automatic model selection and usage policy for the active chat and Space.', de: 'Automatische Modellauswahl und Nutzungsrichtlinie für den aktiven Chat und Space.', it: 'Selezione automatica del modello e criteri d’uso per la chat e lo Space attivi.', es: 'Selección automática del modelo y política de uso para el chat y el Space activos.', fr: 'Sélection automatique du modèle et règles d’utilisation pour le chat et le Space actifs.', 'pt-BR': 'Seleção automática de modelo e política de uso para o chat e o Space ativos.', ru: 'Автоматический выбор модели и правила использования для активного чата и Space.' },
   'access.lock.checking': { en: 'Checking the secure session…', de: 'Sichere Sitzung wird geprüft…', it: 'Verifica della sessione sicura…', es: 'Comprobando la sesión segura…', fr: 'Vérification de la session sécurisée…', 'pt-BR': 'Verificando a sessão segura…', ru: 'Проверка защищённого сеанса…' },

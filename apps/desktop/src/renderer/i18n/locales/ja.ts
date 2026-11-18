@@ -92,6 +92,7 @@ export const desktopJaOverrides = {
     plugins: 'プラグイン', preferences: '環境設定', providers: 'プロバイダー', reset: 'リセット', save: '保存', showThinking: '思考過程を表示', sound: 'サウンド', system: 'システム', theme: 'テーマ', title: '設定',
   }),
   ...group('settings.sectionDescriptions', {
+    codexCli: 'このスペースで、インストール済みの Codex CLI を起動します。',
     advanced: '現在のチャットとSpaceに適用するモデルの自動選択と使用ポリシー。', appearance: 'テーマ、スキン、文字サイズ、メッセージのレイアウト。', conversation: '既定のモデル、送信キー、アシスタントの名前や役割。', extensions: 'Chrome拡張機能、Manifest V3アドオン、コンテンツスクリプト。', googleAccounts: 'Google CLI / Antigravity OAuthアカウントとトークンの切り替え。', localAi: 'このテスト版では同梱のローカルモデルストアと推論は利用できません。外部プロバイダーは「AI・ローカルモデル」から設定できます。', plugins: 'インストール済みのアプリ連携とプラグイン一覧。', preferences: '言語、通知、チャットの動作。', providers: 'AIプロバイダー、スペース別のローカルモデル、モデルの振り分け設定。', system: 'アクセス制御、認証、更新、診断。', teamwork: '複数エージェントによるTeamwork、Smart Track、利用可能なモデル。',
   }),
   ...group('settings.sections', {

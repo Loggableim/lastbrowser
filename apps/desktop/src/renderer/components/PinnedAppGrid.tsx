@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useId, useRef } from 'react';
 import {
   Code,
   FileText,
@@ -26,6 +26,7 @@ import { useDesktopI18n } from '../i18n.js';
 import type { BrowserTab } from '../tabs.js';
 import { canAcceptPinnedTabDrag, canPinBrowserTab, resolvePinnedTabDrop } from '../pinned-tab-drop.js';
 import './pinned-tab-drop.css';
+import type { DesktopLocaleId } from '../i18n/keys.js';
 import { shellText } from '../i18n/shell-text.js';
 import {
   type PinnedApp,
@@ -35,6 +36,17 @@ import {
   getFaviconUrl,
   usePinnedAppStore
 } from '../stores/usePinnedAppStore.js';
+
+const pinnedAppsHeading: Record<DesktopLocaleId, string> = {
+  en: 'PINNED APPS',
+  de: 'Angeheftete Apps',
+  it: 'App fissate',
+  es: 'Apps fijadas',
+  fr: 'Applications épinglées',
+  'pt-BR': 'Apps fixados',
+  ru: 'Закреплённые приложения',
+  ja: 'ピン留めアプリ',
+};
 
 // Backward compatibility exports
 export type { PinnedApp };
@@ -172,6 +184,7 @@ export function PinnedAppGrid({
   onPinTabAsApp
 }: PinnedAppGridProps): React.JSX.Element {
   const { t, locale } = useDesktopI18n();
+  const headingId = useId();
   const store = usePinnedAppStore();
   const apps = propsApps || (spacePath
     ? store.apps.filter((app) => !app.spacePath || app.spacePath === spacePath)
@@ -316,7 +329,7 @@ export function PinnedAppGrid({
 
   // Grid layout (Zen compact raster)
   return (
-    <div className={`pinned-zen-grid ${tabDropActive ? 'is-tab-drop-target' : ''}`} role="region" aria-label="Favorite Apps Grid"
+    <div className={`pinned-zen-grid ${tabDropActive ? 'is-tab-drop-target' : ''}`} role="region" aria-labelledby={headingId}
       onDragOver={event => {
         const tab = tabs.find(item => item.id === draggedTabId);
         if (!onPinTabAsApp || !tab || !canPinBrowserTab(tab) || !canAcceptPinnedTabDrag(event.dataTransfer, draggedTabId)) return;
@@ -338,7 +351,7 @@ export function PinnedAppGrid({
       }}>
       {tabDropActive && <div className="pinned-tab-drop-hint" role="status"><Plus size={12} />{t('sidebar.pinnedApps.add')}</div>}
       <div className="pinned-grid-header">
-        <span className="pinned-grid-title">PINNED APPS</span>
+        <span id={headingId} className="pinned-grid-title">{pinnedAppsHeading[locale]}</span>
         {onAddApp && (
           <button
             type="button"

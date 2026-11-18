@@ -579,6 +579,7 @@ export const desktopTranslationKeys = [
   'settings.sections.googleAccounts',
   'settings.sections.extensions',
   'settings.sectionDescriptions.conversation',
+  'settings.sectionDescriptions.codexCli',
   'settings.sectionDescriptions.advanced',
   'settings.sectionDescriptions.appearance',
   'settings.sectionDescriptions.preferences',

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { DesktopI18nProvider, desktopLocaleStorageKey } from '../src/renderer/i18n.js';
+import { DesktopI18nProvider, desktopLocaleStorageKey, useDesktopI18n } from '../src/renderer/i18n.js';
 import { NativeBrowserStartPage } from '../src/renderer/panels/NativeBrowserStartPage.js';
 import { FirstRunSetupPane } from '../src/renderer/components/FirstRunSetupPane.js';
 import '../src/renderer/styles.css';
@@ -19,18 +19,18 @@ Object.assign(window, { lastbrowser: {
       groups: [{ provider: 'ChatGPT', provider_id: 'openai-codex', configured: true, models: [{ id: 'fixture-model', label: 'Fixture Model', supportsIndependent: true }] }] } }) }
 } });
 function Fixture() {
+  const { setLocale } = useDesktopI18n();
   const [view, setView] = useState<'home'|'wizard'>('home');
   const [profile, setProfile] = useState('fixture');
   const [space, setSpace] = useState('space-a');
   const [revision, setRevision] = useState(0);
   const [aiChoice, setAiChoice] = useState<'enabled'|'disabled'|null>(null);
-  Object.assign(window, { __workplaceProbe: { state, setScope: (nextProfile: string, nextSpace: string) => { setProfile(nextProfile); setSpace(nextSpace); },
+  Object.assign(window, { __workplaceProbe: { state, setLocale, setScope: (nextProfile: string, nextSpace: string) => { setProfile(nextProfile); setSpace(nextSpace); },
     show: (next: 'home'|'wizard', found=false) => { state.found=found;setView(next);setRevision(previous=>previous+1);setAiChoice(null); } } });
-  return <DesktopI18nProvider>{view === 'home'
+  return view === 'home'
     ? <NativeBrowserStartPage activeProfileId={profile} activeSpacePath={space} bookmarks={[{ id: 'bookmark', title: 'Actual fixture bookmark', url: 'https://example.com' }]} visits={[]} onNavigate={()=>{}} spaces={[{ path: space, name: space }]} />
     : <FirstRunSetupPane key={revision} browserProfileId="fixture" backendProfileName="default" workspacePath="" initialSpaceName="Home" aiChoice={aiChoice}
       status={{ sidekick: 'ready', webuiHealth: 'ready', webuiUrl: 'http://fixture.invalid' } as any} onboardingStatus={{system:{chat_ready:true,current_provider:'openai-codex'},setup:{providers:[{id:'openai-codex',label:'ChatGPT',oauth_provider:'openai-codex'}]}}} setupLoading={false} error="" saving={false}
-      onChooseAi={async choice=>{setAiChoice(choice);return true;}} onCompleteBrowserSetup={async name=>{state.completed.push(name);return true;}} onSubmit={async form=>{state.submitted.push(form);}} onDismiss={()=>{throw new Error('Unexpected setup dismissal');}} onRefreshOnboarding={async()=>{}} />}
-  </DesktopI18nProvider>;
+      onChooseAi={async choice=>{setAiChoice(choice);return true;}} onCompleteBrowserSetup={async name=>{state.completed.push(name);return true;}} onSubmit={async form=>{state.submitted.push(form);}} onDismiss={()=>{throw new Error('Unexpected setup dismissal');}} onRefreshOnboarding={async()=>{}} />;
 }
-createRoot(document.getElementById('root')!).render(<Fixture/>);
+createRoot(document.getElementById('root')!).render(<DesktopI18nProvider><Fixture /></DesktopI18nProvider>);

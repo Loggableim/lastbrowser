@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react';
 import { STARTUP_AUDIO_CLOCK_EVENT, type StartupAudioClock } from './sound-opening.js';
 export const startupAnimations = [
-  { id: 'awakening', label: 'Sanftes Erwachen', duration: 550 },
-  { id: 'companion', label: 'Sidekick zieht ein', duration: 650 },
-  { id: 'glass', label: 'Glas löst sich auf', duration: 450 },
-  { id: 'light', label: 'Licht öffnet den Raum', duration: 600 }
+  { id: 'awakening', duration: 550 },
+  { id: 'companion', duration: 650 },
+  { id: 'glass', duration: 450 },
+  { id: 'light', duration: 600 }
 ] as const;
 export type StartupAnimation = typeof startupAnimations[number]['id'];
 export const startupRainbowStyles = ['classic', 'aurora', 'orbit'] as const;

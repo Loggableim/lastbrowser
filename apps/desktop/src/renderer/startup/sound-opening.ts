@@ -24,18 +24,10 @@ export function getSoundOpeningTheme(soundId?: string): SoundOpeningTheme | null
     ? soundOpeningThemes[soundId as keyof typeof soundOpeningThemes] : null;
 }
 
-const themeLabels: Record<SoundOpeningTheme, [string, string]> = {
-  'welcome-aurora': ['Aurora', 'Aurora'],
-  'tones-rise': ['Drei Lichtstufen', 'Three light steps'],
-  'first-light': ['Erstes Licht', 'First light'],
-  'spring-orbit': ['Frühlingsorbit', 'Spring orbit'],
-  'unlock-ripple': ['Lichtimpuls', 'Unlock ripple']
-};
-
 export function getSoundOpening(soundId?: string) {
   const animation = getSoundOpeningTheme(soundId);
   return animation ? {
-    animation, labelDe: themeLabels[animation][0], labelEn: themeLabels[animation][1],
+    animation,
     beatSynced: animation === 'tones-rise' || animation === 'spring-orbit' || animation === 'unlock-ripple'
   } : null;
 }

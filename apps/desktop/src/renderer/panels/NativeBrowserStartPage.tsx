@@ -28,6 +28,7 @@ import { spaceDisplayName, type SpaceSummary } from '../shell-state.js';
 import { useDesktopI18n } from '../i18n.js';
 import type { DesktopTranslationKey } from '../i18n/keys.js';
 import { browserStartSpaceCopy, browserStartHistoryCopy, browserStartWallpaperCopy, browserStartActionCopy } from '../i18n/browser-start-space-copy.js';
+import { workplaceWidgetCopy } from '../i18n/workplace-widget-copy.js';
 import { DEFAULT_WALLPAPER_PREFERENCE, START_PAGE_WALLPAPERS, parseStartPageWallpaperPreference,
   startPageWallpaperStorageKey, type StartPageWallpaperPreference } from './startpage-wallpaper.js';
 import type { IndependentScope, GlobalActivitySpace } from '../independent-contracts.js';
@@ -213,6 +214,7 @@ export function NativeBrowserStartPage({
   const spaceCopy = browserStartSpaceCopy[locale];
   const historyCopy = browserStartHistoryCopy[locale];
   const wallpaperCopy = browserStartWallpaperCopy[locale];
+  const widgetCopy = workplaceWidgetCopy[locale];
   const [query, setQuery] = useState('');
   const [workplacePage, setWorkplacePage] = useState<'overview' | 'widgets' | 'plugins'>('overview');
   const workplaceKey = `lastbrowser.workplace.v1:${JSON.stringify([activeProfileId, activityScope?.backendProfileId || '', activeSpacePath])}`;
@@ -223,7 +225,7 @@ export function NativeBrowserStartPage({
   const widgetLabels: Record<WorkplaceWidgetId, string> = {
     search: german ? 'Suche' : 'Search', spaces: t('sidebar.space.spaces'),
     recent: historyCopy.recentSites, bookmarks: t('browser.chrome.bookmarks'), speedDial: t('browser.startPage.quickLaunch'),
-    quickActions: t('browser.startPage.quickActions'), notes: german ? 'Notizen' : 'Notes', tasks: german ? 'Aufgaben' : 'Tasks', focus: german ? 'Fokuszeit' : 'Focus timer'
+    quickActions: t('browser.startPage.quickActions'), notes: widgetCopy.notes.title, tasks: widgetCopy.tasks.title, focus: widgetCopy.focus.title
   };
   useEffect(() => { setWorkplacePage('overview'); }, [workplaceKey]);
   const [currentTime, setCurrentTime] = useState(() => new Date());
@@ -712,9 +714,9 @@ export function NativeBrowserStartPage({
             )}
           </div>
         </section></> : null,
-        notes: workplace.enabled.notes ? <WorkplaceUtilityWidgets state={workplace} update={updateWorkplace} now={currentTime.getTime()} german={german} only="notes"/> : null,
-        focus: workplace.enabled.focus ? <WorkplaceUtilityWidgets state={workplace} update={updateWorkplace} now={currentTime.getTime()} german={german} only="focus"/> : null,
-        tasks: tasksEnabled && workplace.enabled.tasks ? <WorkplaceUtilityWidgets state={workplace} update={updateWorkplace} now={currentTime.getTime()} german={german} only="tasks"/> : null
+        notes: workplace.enabled.notes ? <WorkplaceUtilityWidgets state={workplace} update={updateWorkplace} now={currentTime.getTime()} only="notes"/> : null,
+        focus: workplace.enabled.focus ? <WorkplaceUtilityWidgets state={workplace} update={updateWorkplace} now={currentTime.getTime()} only="focus"/> : null,
+        tasks: tasksEnabled && workplace.enabled.tasks ? <WorkplaceUtilityWidgets state={workplace} update={updateWorkplace} now={currentTime.getTime()} only="tasks"/> : null
       }}/>}
       {workplacePage === 'widgets' && <section className="workplace-widget-settings"><h2>{german ? 'Dein Arbeitsplatz, deine Widgets' : 'Your workspace, your widgets'}</h2><p>{german ? 'Wähle, was in der Übersicht erscheint. Einstellungen, Notizen und Aufgaben bleiben lokal in diesem Profil und Space.' : 'Choose what appears in Overview. Preferences, notes and tasks stay local to this profile and Space.'}</p>
         <div className="workplace-grid">{(Object.keys(widgetLabels) as WorkplaceWidgetId[]).map((id, index) => <label key={id} className="workplace-widget-toggle" data-tone={['cyan', 'purple', 'orange', 'green'][index % 4]}><input type="checkbox" checked={workplace.enabled[id]} disabled={id === 'tasks' && !tasksEnabled} onChange={event => updateWorkplace(previous => ({ ...previous, enabled: { ...previous.enabled, [id]: event.target.checked } }))} /><strong>{widgetLabels[id]}</strong></label>)}</div>

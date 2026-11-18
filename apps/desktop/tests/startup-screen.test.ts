@@ -104,6 +104,23 @@ describe('startup screen copy and motion rules', () => {
       for (const style of ['Klassischer Rainbow-Flow', 'Sanfter Aurora-Flow', 'Umlaufendes Lichtband']) expect(german).toContain(style);
     } finally { vi.unstubAllGlobals(); }
   });
+  it.each([
+    ['ja-JP', '起動アニメーションとサウンド', '穏やかな目覚め', '虹色が枠に沿って均等に流れます。', '起動アニメーションとサウンドを設定'],
+    ['fr-FR', 'Animation et son au démarrage', 'Réveil en douceur', 'Les couleurs de l’arc-en-ciel défilent uniformément autour du cadre.', 'Configurer l’animation et le son au démarrage'],
+  ])('renders localized startup preferences and compact controls for %s', (language, title, animation, borderDescription, gearLabel) => {
+    try {
+      vi.stubGlobal('navigator', { language });
+      vi.stubGlobal('localStorage', { getItem: () => null });
+      const inline = renderWithI18n(createElement(StartupPreferencesPanel));
+      expect(inline).toContain(`aria-label="${title}"`);
+      expect(inline).toContain(animation);
+      expect(inline).toContain(`aria-label="${borderDescription}"`);
+      expect(inline).toContain('Welcome In');
+      const compact = renderWithI18n(createElement(StartupPreferencesPanel, { compact: true }));
+      expect(compact).toContain(`aria-label="${gearLabel}"`);
+      expect(compact).toContain(`title="${title}"`);
+    } finally { vi.unstubAllGlobals(); }
+  });
   it('keeps the compact startup popover closed until the gear is used', () => {
     try {
       vi.stubGlobal('navigator', { language: 'en' });

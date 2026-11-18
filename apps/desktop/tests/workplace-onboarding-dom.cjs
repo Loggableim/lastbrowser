@@ -35,6 +35,26 @@ async function child(){
     const input=(selector,value)=>run(`(()=>{const element=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,${JSON.stringify(value)});element.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await window.loadFile(path.join(output,'index.html'));await wait("document.querySelector('[data-widget=notes]')");
     if (!firstRunOnly) {
+    for (const [locale, notes, focus, remaining] of [
+      ['ja', 'メモ', '集中タイマー', '集中時間の残り'],
+      ['fr', 'Notes', 'Minuteur de concentration', 'Temps de concentration restant'],
+      ['pt-BR', 'Anotações', 'Tempo de foco', 'Tempo de foco restante'],
+    ]) {
+      await run(`window.__workplaceProbe.setLocale(${JSON.stringify(locale)})`);
+      await wait(`document.documentElement.lang === ${JSON.stringify(locale)}`);
+      assert.equal(await run("document.querySelector('[data-widget=notes] h2').textContent"), notes);
+      assert.equal(await run("document.querySelector('[data-widget=focus] h2').textContent"), focus);
+      assert.equal(await run("document.querySelector('[data-widget=focus] output').getAttribute('aria-label')"), remaining);
+      await click('Widgets');
+      await wait("document.querySelector('.workplace-widget-toggle')");
+      const configurable = await run("[...document.querySelectorAll('.workplace-widget-toggle strong')].map(item => item.textContent)");
+      assert(configurable.includes(notes) && configurable.includes(focus), `Localized widget settings for ${locale}`);
+      await run("document.querySelector('.workplace-pages button:first-child').click()");
+      await wait("document.querySelector('[data-widget=notes]')");
+    }
+    await run("window.__workplaceProbe.setLocale('de')");
+    await wait("document.documentElement.lang === 'de'");
+    checks.push('Home widget headings, timer accessibility and settings follow the active locale');
     assert.equal(await run("document.querySelector('[data-widget=tasks]')===null"),true);
     await capture('home-initial-1280x720');
     await run("window.__dragData=new DataTransfer();document.querySelector('[data-widget=recent] .workplace-drag-handle').dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:window.__dragData}))");await wait("document.querySelector('.workplace-dock-layout.is-dragging')");

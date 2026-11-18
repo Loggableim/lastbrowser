@@ -170,6 +170,13 @@ Der Desktop-Build und alle 2.673 Tests in 297 Dateien bestanden. Der Store-Vorab
 - Das gebündelte Python stellte das lokale Sidekick-Backend bereit. Der reguläre Aufruf von `app.quit()` beendete das Paket und alle beobachteten Kindprozesse mit geschlossenen lokalen Listenern. Die temporäre Registrierung wurde entfernt. Die Standardzuordnungen blieben erhalten.
 - Der Test erzeugte 32 Aufnahmen in acht Sprachen. `verify-store-readiness.ps1` prüfte sie über den Screenshot-Bericht gegen EXE und ASAR des Pakets. Der erneute Lauf mit Zugriff auf die lokale Vitest-Konfiguration ergab 37 bestandene Prüfungen, 0 Warnungen und 0 Fehler. Die Aufnahmen und der Lauf gehören zum lokalen Testpaket. Die Microsoft-signierte Installation auf einem sauberen System und WACK stehen aus.
 
+### Übersetzungsprüfung der Startseite und Startoptionen
+
+- Die Texte für Notizen, Aufgaben und Fokuszeit auf der Startseite verwenden die aktive UI-Sprache einschließlich Hinweisen und zugänglichen Beschriftungen. Kacheln und Anpassungsdialog nutzen dieselben Namen. Der Electron-Test `node apps/desktop/tests/workplace-onboarding-dom.cjs` reproduzierte zunächst „Notes“ in der japanischen Ansicht. Nach der Korrektur prüfte er die Kacheln und ihre Anpassung auf Japanisch, Französisch und brasilianischem Portugiesisch.
+- Die Einstellungen für Startanimation und Ton haben Texte in allen acht Desktop-Sprachen. Das umfasst Vorschau, Statusmeldungen und das kompakte Einstellungsmenü. Gerenderte Tests prüften die japanische und französische Fassung. Die Tonspurnamen bleiben erhalten.
+- Der Desktop-Build sowie 2.675 Tests in 297 Dateien bestanden. Die Syntaxprüfung erfasste alle 1.162 versionierten Python-Dateien.
+- Der lokale Store-Vorabcheck verwendete das zuvor getestete Beta-MSIX als Paketreferenz und meldete 37 bestandene Prüfungen, 0 Fehler und eine Warnung zum fehlenden Screenshot-Abgleich des neuen Quellstands. Die Übersetzungen müssen in den integrierten Freigabebuild und seine Store-Aufnahmen übernommen werden.
+
 ## Historische Prüfergebnisse vor der MSIX-Umstellung
 
 - Fünf betroffene Desktop-Testsuiten: **61/61 Tests bestanden**, einschließlich sieben Tests des neuen Signaturchecks. Diese prüfen rekursiv erfasste Abhängigkeiten, fehlende und fehlerhafte Signaturen, fehlende Zeitstempel, fremde native Formate und einen unsignierten Installer. Die Signaturantworten in den Testfällen sind kontrollierte Testdaten; sie sind kein Nachweis einer neuen signierten Release-Datei.

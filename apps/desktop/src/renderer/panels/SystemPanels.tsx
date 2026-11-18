@@ -2,6 +2,7 @@ import { NativeTerminalMain } from './NativeTerminalMain.js';
 import { MailPluginSettings } from './MailPluginSettings.js';
 import { PasswordVaultPanel } from '../components/PasswordVaultPanel.js';
 import { StartupPreferencesPanel } from '../startup/StartupPreferencesPanel.js';
+import { startupPreferencesCopy } from '../startup/startup-preferences-copy.js';
 import { OptionalAiProfileContext } from '../optional-ai-policy.js';
 import { ProfileResolutionPending } from '../profile-resolution.js';
 import { isRetiredProvider } from '../retired-providers.js';
@@ -4349,8 +4350,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'preferences' && (
               <>
                 <SettingsCard
-                  title={locale === 'de' ? 'Startanimation & Sound' : 'Opening animation & sound'}
-                  description={locale === 'de' ? 'Übergang nach dem Entsperren, optionaler Startklang und Rainbow-Rahmen.' : 'Unlock transition, optional opening sound and rainbow border.'}
+                  title={startupPreferencesCopy[locale].cardTitle}
+                  description={startupPreferencesCopy[locale].cardDescription}
                 >
                   <StartupPreferencesPanel />
                 </SettingsCard>

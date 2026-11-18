@@ -3,6 +3,8 @@ import type { SoundOpeningTheme } from './sound-opening.js';
 import type { StartupAnimation, StartupRainbowStyle } from './startup-preferences.js';
 
 type StartupPreferencesCopy = {
+  cardTitle: string;
+  cardDescription: string;
   title: string;
   gearLabel: string;
   heading: string;
@@ -41,6 +43,8 @@ type StartupPreferencesCopy = {
 
 export const startupPreferencesCopy: Record<DesktopLocaleId, StartupPreferencesCopy> = {
   en: {
+    cardTitle: 'Opening animation & sound',
+    cardDescription: 'Unlock transition, optional opening sound and rainbow border.',
     title: 'Startup animation and sound',
     gearLabel: 'Configure startup animation and sound',
     heading: 'Startup animation & sound',
@@ -81,6 +85,8 @@ export const startupPreferencesCopy: Record<DesktopLocaleId, StartupPreferencesC
     soundThemes: { 'welcome-aurora': 'Aurora', 'tones-rise': 'Three light steps', 'first-light': 'First light', 'spring-orbit': 'Spring orbit', 'unlock-ripple': 'Unlock ripple' },
   },
   de: {
+    cardTitle: 'Startanimation & Sound',
+    cardDescription: 'Übergang nach dem Entsperren, optionaler Startklang und Rainbow-Rahmen.',
     title: 'Startanimation und Sound',
     gearLabel: 'Startanimation und Sound einstellen',
     heading: 'Startanimation & Sound',
@@ -121,6 +127,8 @@ export const startupPreferencesCopy: Record<DesktopLocaleId, StartupPreferencesC
     soundThemes: { 'welcome-aurora': 'Aurora', 'tones-rise': 'Drei Lichtstufen', 'first-light': 'Erstes Licht', 'spring-orbit': 'Frühlingsorbit', 'unlock-ripple': 'Lichtimpuls' },
   },
   it: {
+    cardTitle: 'Animazione e suono di avvio',
+    cardDescription: 'Transizione dopo lo sblocco, suono di avvio facoltativo e bordo arcobaleno.',
     title: 'Animazione e suono di avvio',
     gearLabel: 'Configura animazione e suono di avvio',
     heading: 'Animazione e suono di avvio',
@@ -161,6 +169,8 @@ export const startupPreferencesCopy: Record<DesktopLocaleId, StartupPreferencesC
     soundThemes: { 'welcome-aurora': 'Aurora', 'tones-rise': 'Tre gradini di luce', 'first-light': 'Prima luce', 'spring-orbit': 'Orbita di primavera', 'unlock-ripple': 'Onda luminosa' },
   },
   es: {
+    cardTitle: 'Animación y sonido de inicio',
+    cardDescription: 'Transición tras el desbloqueo, sonido de inicio opcional y borde de arcoíris.',
     title: 'Animación y sonido de inicio',
     gearLabel: 'Configurar la animación y el sonido de inicio',
     heading: 'Animación y sonido de inicio',
@@ -201,6 +211,8 @@ export const startupPreferencesCopy: Record<DesktopLocaleId, StartupPreferencesC
     soundThemes: { 'welcome-aurora': 'Aurora', 'tones-rise': 'Tres escalones de luz', 'first-light': 'Primera luz', 'spring-orbit': 'Órbita de primavera', 'unlock-ripple': 'Onda luminosa' },
   },
   fr: {
+    cardTitle: 'Animation et son au démarrage',
+    cardDescription: 'Transition après le déverrouillage, son de démarrage facultatif et bordure arc-en-ciel.',
     title: 'Animation et son au démarrage',
     gearLabel: 'Configurer l’animation et le son au démarrage',
     heading: 'Animation et son au démarrage',
@@ -241,6 +253,8 @@ export const startupPreferencesCopy: Record<DesktopLocaleId, StartupPreferencesC
     soundThemes: { 'welcome-aurora': 'Aurore', 'tones-rise': 'Trois paliers de lumière', 'first-light': 'Première lumière', 'spring-orbit': 'Orbite printanière', 'unlock-ripple': 'Onde lumineuse' },
   },
   'pt-BR': {
+    cardTitle: 'Animação e som de inicialização',
+    cardDescription: 'Transição após o desbloqueio, som de inicialização opcional e borda em arco-íris.',
     title: 'Animação e som de inicialização',
     gearLabel: 'Configurar animação e som de inicialização',
     heading: 'Animação e som de inicialização',
@@ -281,6 +295,8 @@ export const startupPreferencesCopy: Record<DesktopLocaleId, StartupPreferencesC
     soundThemes: { 'welcome-aurora': 'Aurora', 'tones-rise': 'Três degraus de luz', 'first-light': 'Primeira luz', 'spring-orbit': 'Órbita de primavera', 'unlock-ripple': 'Onda luminosa' },
   },
   ru: {
+    cardTitle: 'Анимация и звук при запуске',
+    cardDescription: 'Переход после разблокировки, необязательный звук при запуске и радужная рамка.',
     title: 'Анимация и звук при запуске',
     gearLabel: 'Настроить анимацию и звук при запуске',
     heading: 'Анимация и звук при запуске',
@@ -321,6 +337,8 @@ export const startupPreferencesCopy: Record<DesktopLocaleId, StartupPreferencesC
     soundThemes: { 'welcome-aurora': 'Сияние', 'tones-rise': 'Три ступени света', 'first-light': 'Первый свет', 'spring-orbit': 'Весенняя орбита', 'unlock-ripple': 'Световая волна' },
   },
   ja: {
+    cardTitle: '起動アニメーションとサウンド',
+    cardDescription: 'ロック解除後の切り替え、起動音のオン・オフ、虹色の枠を設定します。',
     title: '起動アニメーションとサウンド',
     gearLabel: '起動アニメーションとサウンドを設定',
     heading: '起動アニメーションとサウンド',

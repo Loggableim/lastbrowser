@@ -177,6 +177,14 @@ Der Desktop-Build und alle 2.673 Tests in 297 Dateien bestanden. Der Store-Vorab
 - Der Desktop-Build sowie 2.675 Tests in 297 Dateien bestanden. Die Syntaxprüfung erfasste alle 1.162 versionierten Python-Dateien.
 - Der lokale Store-Vorabcheck verwendete das zuvor getestete Beta-MSIX als Paketreferenz und meldete 37 bestandene Prüfungen, 0 Fehler und eine Warnung zum fehlenden Screenshot-Abgleich des neuen Quellstands. Die Übersetzungen müssen in den integrierten Freigabebuild und seine Store-Aufnahmen übernommen werden.
 
+### Lokalisierte Oberfläche im Windows-Beta-Paket
+
+- Für den lokalen Pakettest wurde der Renderer des Commits `00b8da5` in das verifizierte Beta-MSIX übernommen. Der Vergleich der 12.270 Blocklisten-Einträge zeigte nur eine Änderung in `app/resources/app.asar`. SHA-256 `0f4b89d33d32bdc6eb1330f0113be8da757025a3a891d9013e159fa6577c5af0`.
+- Unter Windows 10 22H2 prüfte der Lauf nach Start über die Paketkennung Notizen und Fokuszeit auf der Startseite sowie das innere Einstellungsfeld für Startanimation und Ton unter „Präferenzen“. In acht Sprachen stimmten Überschriften, zugängliche Beschriftungen sowie die geprüften Animations- und Rahmenangaben. Der Lauf erstellte 32 Aufnahmen und bestätigte das vollständige Beenden, die Entfernung der Testregistrierung und unveränderte Standardzuordnungen.
+- `verify-store-readiness.ps1` mit `-MsixPath`, `-PackageDirectory` und `-ScreenshotReportPath` meldete für dieses Paket 37 bestandene Prüfungen, 0 Warnungen und 0 Fehler. Die Windows-Tests und Bilder verwenden ein neues lokales Profil. Die Microsoft-signierte Fassung und der integrierte Freigabestand brauchen weiterhin eigene Prüfungen.
+- Der äußere Kartentitel und seine Beschreibung in „Präferenzen“ verwendeten in diesem Paket weiterhin den englischen Fallback. Diese Texte sind im Quellzweig für alle acht Sprachen ergänzt. Zwei Tests des gerenderten Einstellungsreiters reproduzierten den Fehler auf Japanisch und Französisch und prüfen die Korrektur. Der Desktop-Build und 2.677 Tests in 297 Dateien bestanden. Die Ergänzung kommt mit dem nächsten Paket-Build.
+- In der japanischen Aufnahme stehen außerhalb der geprüften Startoptionen weiterhin „Refresh“, „Online“, „Pinned Apps“ und die Beschreibung des Codex-CLI-Reiters auf Englisch. Diese Texte gehören zur Sprachprüfung des integrierten Freigabestands.
+
 ## Historische Prüfergebnisse vor der MSIX-Umstellung
 
 - Fünf betroffene Desktop-Testsuiten: **61/61 Tests bestanden**, einschließlich sieben Tests des neuen Signaturchecks. Diese prüfen rekursiv erfasste Abhängigkeiten, fehlende und fehlerhafte Signaturen, fehlende Zeitstempel, fremde native Formate und einen unsignierten Installer. Die Signaturantworten in den Testfällen sind kontrollierte Testdaten; sie sind kein Nachweis einer neuen signierten Release-Datei.

@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
 import { DesktopI18nProvider } from '../src/renderer/i18n.js';
+import { NativeSettingsMain } from '../src/renderer/panels/SystemPanels.js';
 import { StartupScreen } from '../src/renderer/startup/StartupScreen.js';
 import { StartupPreferencesPanel } from '../src/renderer/startup/StartupPreferencesPanel.js';
 import { reduceStartupOpeningState } from '../src/renderer/startup/startup-opening-state.js';
@@ -119,6 +120,33 @@ describe('startup screen copy and motion rules', () => {
       const compact = renderWithI18n(createElement(StartupPreferencesPanel, { compact: true }));
       expect(compact).toContain(`aria-label="${gearLabel}"`);
       expect(compact).toContain(`title="${title}"`);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it.each([
+    ['ja-JP', '起動アニメーションとサウンド', 'ロック解除後の切り替え、起動音のオン・オフ、虹色の枠を設定します。'],
+    ['fr-FR', 'Animation et son au démarrage', 'Transition après le déverrouillage, son de démarrage facultatif et bordure arc-en-ciel.'],
+  ])('renders the localized outer startup card in Preferences for %s', (language, title, description) => {
+    try {
+      vi.stubGlobal('navigator', { language });
+      vi.stubGlobal('localStorage', { getItem: () => null });
+      const markup = renderWithI18n(createElement(NativeSettingsMain, {
+        serviceStatus: null,
+        activeContextItem: 'preferences',
+        onboardingStatus: null,
+        onReopenSetup: () => {},
+        searchEngineId: 'google',
+        onSearchEngineChange: () => {},
+        profiles: [],
+        activeProfileId: 'fixture',
+        onSelectProfile: () => {},
+        onCreateProfile: () => {},
+        onRenameProfile: () => {},
+        onDeleteProfile: () => {},
+      }));
+      const panelStart = markup.indexOf('<div class="startup-preferences-inline">');
+      expect(panelStart).toBeGreaterThan(-1);
+      const cardHeader = markup.slice(markup.lastIndexOf('<header class="settings-card-header">', panelStart), panelStart);
+      expect(cardHeader).toContain(`<strong>${title}</strong><p>${description}</p>`);
     } finally { vi.unstubAllGlobals(); }
   });
   it('keeps the compact startup popover closed until the gear is used', () => {

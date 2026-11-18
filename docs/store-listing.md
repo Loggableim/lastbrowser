@@ -189,7 +189,7 @@ Die sechs vorbereiteten Bilder haben jeweils 1920×1080 Pixel. Vor dem Upload m�
 Der Fragebogen der **International Age Rating Coalition (IARC)** wird anhand der endgültigen Anwendung beantwortet. Die folgenden Hinweise sind eine Vorbereitung; die Einstufung ergibt sich aus den tatsächlichen Antworten im Partner Center:
 
 1. **App-Kategorie:**
-   - Wählen: *Dienstprogramme, Produktivität, Kommunikation oder andere* &rarr; *Web-Browser*.
+   - Im Beta-MSIX-Entwurf *Alle anderen App-Typen* wählen und die Folgefrage zum Webbrowser mit **Ja** beantworten.
 2. **Uneingeschränkter Internetzugriff:**
    - Frage: *Ermöglicht die Anwendung Nutzern den Zugriff auf das gesamte World Wide Web?*
    - Antwort: **Ja**, sofern die endgültige Anwendung allgemeinen Webzugriff bereitstellt.
@@ -199,7 +199,7 @@ Der Fragebogen der **International Age Rating Coalition (IARC)** wird anhand der
    - Frage: *Enthält die generative KI Sicherheitsfilter oder Guardrails gegen schädliche Inhalte?*
    - Antwort anhand der geprüften Inhaltsfilter des jeweiligen Anbieters und der tatsächlichen Produktfunktionen festlegen. Prompt-Injection-Abwehr allein belegt keine Filterung schädlicher KI-Inhalte.
 4. **Weitergabe von Standortdaten:**
-   - Antwort: **Nein** *(Standortabfragen durch Webseiten unterliegen der expliziten Nutzerzustimmung via Chromium Permission-Prompt).*
+   - LastBrowser verweigert Webseiten den Zugriff auf die Geolokalisierungs-API. Bei der Antwort auf den konkreten Fragetext auch berücksichtigen, ob dieser von Nutzern eingegebene Standortangaben auf externen Websites umfasst.
 5. **Kauf digitaler Güter:**
    - Nach den Kaufmöglichkeiten in der endgültigen App beantworten. Kosten externer KI-Anbieter stehen in den Store-Texten.
 
@@ -242,7 +242,7 @@ Der MSIX-Entwurf folgt den Paketprüfungen und der Freigabereihenfolge in der [S
 ### Schritt 4: Altersfreigabe (IARC Rating Questionnaire)
 1. Den Online-Fragebogen starten.
 2. Antworten gemäß **Abschnitt 5** dieses Dokuments ausfüllen:
-   - Kategorie: Web-Browser.
+   - Kategorie im Beta-MSIX-Entwurf: *Alle anderen App-Typen*. Die Folgefrage zum Webbrowser mit **Ja** beantworten.
    - Uneingeschränkter Internetzugriff: **Ja**.
    - Generative KI: **Ja**; Fragen zu Inhaltsfiltern anhand der tatsächlich geprüften Funktionen beantworten.
    - Standortweitergabe und In-App-Käufe anhand des endgültigen Funktionsumfangs beantworten.

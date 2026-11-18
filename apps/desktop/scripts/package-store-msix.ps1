@@ -144,7 +144,7 @@ $manifest = @"
          IgnorableNamespaces="uap uap2 uap3 rescap">
   <Identity Name="$IdentityName" Publisher="$([Security.SecurityElement]::Escape($Publisher))" Version="$version" ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>Lastbrowser</DisplayName>
+    <DisplayName>LastBrowser</DisplayName>
     <PublisherDisplayName>$([Security.SecurityElement]::Escape($PublisherDisplayName))</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
   </Properties>
@@ -163,7 +163,7 @@ $manifest = @"
   </Dependencies>
   <Applications>
     <Application Id="LastBrowser" Executable="app\Lastbrowser.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="Lastbrowser" Description="Lastbrowser"
+      <uap:VisualElements DisplayName="LastBrowser" Description="LastBrowser"
                           Square150x150Logo="Assets\Square150x150Logo.png"
                           Square44x44Logo="Assets\Square44x44Logo.png" BackgroundColor="transparent" />
       <Extensions>

@@ -480,6 +480,12 @@ if ($MsixPath) {
         if ($ExpectedStoreIdentityName -and ($identityName -cne $ExpectedStoreIdentityName -or $publisher -cne $ExpectedStorePublisher)) {
             throw 'The manifest identity differs from Partner Center'
         }
+        $productDisplayName = $manifest.DocumentElement.SelectSingleNode("*[local-name()='Properties']/*[local-name()='DisplayName']")
+        $visualElements = $application.SelectSingleNode("*[local-name()='VisualElements']")
+        if ($productDisplayName.InnerText -cne 'LastBrowser' -or -not $visualElements -or
+            $visualElements.GetAttribute('DisplayName') -cne 'LastBrowser') {
+            throw 'The MSIX product and application display names must be LastBrowser'
+        }
         $displayNameNode = $manifest.DocumentElement.SelectSingleNode("*[local-name()='Properties']/*[local-name()='PublisherDisplayName']")
         if (-not $displayNameNode -or ($ExpectedStorePublisherDisplayName -and $displayNameNode.InnerText -cne $ExpectedStorePublisherDisplayName)) {
             throw 'The manifest publisher display name is missing or differs from Partner Center'

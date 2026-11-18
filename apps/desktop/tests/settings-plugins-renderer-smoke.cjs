@@ -42,6 +42,7 @@ window.lastbrowser = {
     getFallbackModel: async () => ({fallback_model:null}),
     saveSettings: async () => ({ok:true}),
     requestWebui: async ({path}) => {
+      if (path === '/api/models' || path === '/api/providers') window.__settingsProbe.providerRequests.push(path);
       if (path === '/api/plugins') return mode === 'null' ? null : mode === 'valid'
         ? {plugins:[{id:'controlled-backend-plugin',name:'Controlled Backend Plugin',enabled:false,hooks:[]}]}
         : {plugins:null};
@@ -68,9 +69,11 @@ const props = {
   onSelectProfile:()=>{}, onCreateProfile:()=>{}, onRenameProfile:()=>{}, onDeleteProfile:()=>{}
 };
 const root = createRoot(document.getElementById('root'));
-window.__settingsProbe = {boundary:[],terminalCalls:[],mode:'null',remount(next) {
+window.__settingsProbe = {boundary:[],terminalCalls:[],providerRequests:[],mode:'null',remount(next, section = 'plugins', automaticProviderDiscovery = true) {
   mode = next; this.mode = next; this.boundary = [];
-  root.render(<Boundary key={next}><DesktopI18nProvider><NativeSettingsMain key={next} {...props}/></DesktopI18nProvider></Boundary>);
+  this.providerRequests = [];
+  const key = [next, section, automaticProviderDiscovery].join(':');
+  root.render(<Boundary key={key}><DesktopI18nProvider><NativeSettingsMain {...props} activeContextItem={section} automaticProviderDiscovery={automaticProviderDiscovery}/></DesktopI18nProvider></Boundary>);
 }};
 window.__settingsProbe.remount('null');
 `;
@@ -152,6 +155,20 @@ async function child(temp) {
     await run("document.querySelector('.terminal-toolbar button:last-child').click()");
     await until("window.__settingsProbe.terminalCalls.includes('codex-fixture') && !!document.querySelector('.terminal-start-form')", 'Codex stops and can start again');
     process.stdout.write('settings-codex-cli:passed\n');
+
+    await run("window.__settingsProbe.remount('null', 'preferences', false)");
+    await until("!!document.querySelector('.settings-section-button[aria-current=page] .lucide-gauge')", 'browser-only preferences are visible');
+    assert.deepEqual(await run('window.__settingsProbe.providerRequests'), []);
+    const openedProviderSettings = await run(`(() => {
+      const button = document.querySelector('.settings-section-button:has(.lucide-brain)');
+      if (!button) return false;
+      button.click();
+      return true;
+    })()`);
+    assert.equal(openedProviderSettings, true, 'The AI and local models section can be opened');
+    await until("window.__settingsProbe.providerRequests.includes('/api/providers') && window.__settingsProbe.providerRequests.includes('/api/models')", 'opened AI settings query models and providers');
+    assert.equal(await run('window.__settingsProbe.boundary.length'), 0);
+    process.stdout.write('settings-passive-provider-discovery:passed\n');
     await app.exit(0);
   } catch(error) { console.error(error); await app.exit(1); }
   finally { if(win&&!win.isDestroyed())win.destroy(); }

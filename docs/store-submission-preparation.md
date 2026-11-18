@@ -154,6 +154,14 @@ Die Regressionstests reproduzierten vor der Korrektur drei Fehler beim Laden des
 
 Der Desktop-Build und alle 2.671 Tests in 297 Dateien (`npm --workspace apps/desktop run test:run -- --maxWorkers=2 --testTimeout=30000`) bestanden. Alle 1.162 erfassten Python-Dateien bestanden die Syntaxprüfung im Speicher. Der Store-Vorabcheck mit dem vorhandenen Beta-MSIX als Paketreferenz meldete 37 bestandene Prüfungen, 0 Fehler und eine Warnung zum Screenshot-Abgleich des Freigabestands.
 
+### Modellprüfungen beim Browser-Start
+
+Das geprüfte Beta-MSIX zeigte nach der Auswahl „ohne KI“ vorübergehend die Modellprüfung. Der erste Aufruf führt zum lokalen Sidekick über Loopback. Die Kataloglogik kann bei vorhandener Anbieter-Konfiguration weitere Modelllisten abrufen. Der Bildschirmbefund belegt den sichtbaren Status. Die tatsächlichen Verbindungen eines frischen Profils waren in diesem Lauf außerhalb der Prüfung.
+
+Der Store-Quellzweig übernimmt die gespeicherte KI-Auswahl, bevor er die automatischen Onboarding- und Katalogabfragen beim Start, den Hintergrundabruf oder die QuickChat-Vorbereitung ausführt. Ein früher eingerichtetes KI-Profil wird weiterhin als aktiviert erkannt. Der bewusst geöffnete QuickChat-Modellwähler und der Reiter „KI & lokale Modelle“ können ihren Katalog laden. Der isolierte Electron-Test der Einstellungen prüfte die beiden Aufrufpfade mit simuliertem Backend. Er erfasste in den allgemeinen Einstellungen 0 Anfragen an `/api/models` und `/api/providers` und beide Abfragen nach Öffnen des KI-Reiters.
+
+Der Desktop-Build und alle 2.673 Tests in 297 Dateien bestanden. Der Store-Vorabcheck nutzte das vorhandene Beta-MSIX als Paketreferenz und meldete 37 bestandene Prüfungen, 0 Fehler und eine Warnung zum Screenshot-Abgleich. Die geänderte Startlogik wurde im Quellzweig und im Einstellungs-Test geprüft.
+
 ## Historische Prüfergebnisse vor der MSIX-Umstellung
 
 - Fünf betroffene Desktop-Testsuiten: **61/61 Tests bestanden**, einschließlich sieben Tests des neuen Signaturchecks. Diese prüfen rekursiv erfasste Abhängigkeiten, fehlende und fehlerhafte Signaturen, fehlende Zeitstempel, fremde native Formate und einen unsignierten Installer. Die Signaturantworten in den Testfällen sind kontrollierte Testdaten; sie sind kein Nachweis einer neuen signierten Release-Datei.

@@ -1097,6 +1097,7 @@ function AppContent(): JSX.Element {
   const startupModelDiscoverySettledRef = useRef(false);
   const startupModelRequestRevisionRef = useRef(0);
   const [setupLoading, setSetupLoading] = useState(true);
+  const automaticProviderDiscovery = !setupLoading && firstRunAiChoiceForSetup(setupState) === 'enabled';
   const [setupError, setSetupError] = useState('');
   const [setupSaving, setSetupSaving] = useState(false);
   const [whatsNewCandidate, setWhatsNewCandidate] = useState<UpdateNoticeCandidate | null>(null);
@@ -1536,7 +1537,7 @@ function AppContent(): JSX.Element {
   const canPresentWhatsNew = canShowWhatsNewModal({
     setupLoading,
     setupRequired,
-    onboardingStatusChecked,
+    onboardingStatusChecked: !automaticProviderDiscovery || onboardingStatusChecked,
     accessAuthChecked,
     accessAuthRequired
   });
@@ -1568,8 +1569,8 @@ function AppContent(): JSX.Element {
         : status.sidekick === 'ready' ? 'complete' : 'pending',
     profile: startupProfileState,
     spaces: startupSpacesState,
-    connections: startupOnboardingState,
-    models: startupModelDiscoveryState,
+    connections: automaticProviderDiscovery ? startupOnboardingState : 'complete',
+    models: automaticProviderDiscovery ? startupModelDiscoveryState : 'complete',
     sidekick: sidekickTransportReady
       ? 'complete'
       : status?.webuiHealth === 'unreachable' || status?.sidekick === 'error' || status?.sidekick === 'missing'
@@ -1984,7 +1985,7 @@ function AppContent(): JSX.Element {
     void window.lastbrowser?.browser?.setSearchEngine?.(searchEngineId);
   }, [searchEngineId]);
   useEffect(() => {
-    if (!sidekickApiReady) return undefined;
+    if (!automaticProviderDiscovery || !sidekickApiReady) return undefined;
     const viewKey = JSON.stringify([activeProfileId, activeSpacePath || null, activeBackendProfileName || null]);
     return watchModelCatalogPrefetch(guard => prefetchModelCatalog({
       viewKey,
@@ -1992,7 +1993,7 @@ function AppContent(): JSX.Element {
       workspacePath: activeSpacePath || null,
       backendProfileName: activeBackendProfileName || undefined
     }, guard));
-  }, [sidekickApiReady, activeProfileId, activeSpacePath, activeBackendProfileName]);
+  }, [automaticProviderDiscovery, sidekickApiReady, activeProfileId, activeSpacePath, activeBackendProfileName]);
 
   /** Drop a single entry from the history panel. */
   async function removeHistoryEntry(url: string): Promise<void> {
@@ -2307,8 +2308,10 @@ function AppContent(): JSX.Element {
     startupModelDiscoverySettledRef.current = false;
     setStartupOnboardingState('pending');
     setStartupModelDiscoveryState('pending');
+    setOnboardingStatusChecked(false);
+    if (!automaticProviderDiscovery) setOnboardingStatus(null);
+    if (!automaticProviderDiscovery || !sidekickApiReady) return undefined;
     const refresh = async () => {
-      if (!sidekickApiReady) return;
       const onboarding = await window.lastbrowser.sidekick.onboardingStatus().catch(() => null);
       if (!alive) return;
       if (onboarding) {
@@ -2329,14 +2332,14 @@ function AppContent(): JSX.Element {
       // a later chat_ready=false response will close the same presentation gate.
       setOnboardingStatusChecked(true);
     };
-    if (sidekickApiReady) void refresh();
+    void refresh();
     const timer = window.setInterval(refresh, 2000);
     return () => {
       alive = false;
       if (startupModelRequestRevisionRef.current === modelRequestRevision) startupModelRequestRevisionRef.current += 1;
       window.clearInterval(timer);
     };
-  }, [status?.webuiUrl, status?.runtimeGeneration, sidekickApiReady, refreshStartupModelDiscovery]);
+  }, [automaticProviderDiscovery, status?.webuiUrl, status?.runtimeGeneration, sidekickApiReady, refreshStartupModelDiscovery]);
 
   useEffect(() => {
     let alive = true;
@@ -2351,17 +2354,20 @@ function AppContent(): JSX.Element {
   }, []);
 
   const refreshOnboardingStatus = useCallback(async (): Promise<void> => {
+    if (!automaticProviderDiscovery) return;
+    const requestRevision = startupModelRequestRevisionRef.current;
     const onboarding = await window.lastbrowser.sidekick.onboardingStatus().catch(() => null);
+    if (requestRevision !== startupModelRequestRevisionRef.current) return;
     if (onboarding) {
       setOnboardingStatus(onboarding as OnboardingStatus);
       startupOnboardingSettledRef.current = true;
       setStartupOnboardingState('complete');
-      await refreshStartupModelDiscovery();
+      await refreshStartupModelDiscovery(requestRevision);
     } else if (!startupOnboardingSettledRef.current) {
       startupOnboardingSettledRef.current = true;
       setStartupOnboardingState('error');
     }
-  }, [refreshStartupModelDiscovery]);
+  }, [automaticProviderDiscovery, refreshStartupModelDiscovery]);
 
   const loadSessionList = useCallback(async (): Promise<void> => {
     if (!sidekickApiReady) return;
@@ -3635,7 +3641,7 @@ function AppContent(): JSX.Element {
     quickChatPreparationEpochRef.current++;
     quickChatPreparedRef.current = null;
     setQuickChatPrepared(null);
-    if (!sidekickApiReady || !copilotOpen || !activeBackendProfileName) return;
+    if (!automaticProviderDiscovery || !sidekickApiReady || !copilotOpen || !activeBackendProfileName) return;
     const prepare = () => {
       if (document.visibilityState === 'hidden') return;
       void prepareQuickChatModelSelection(true).catch(() => { /* Send retains the actionable error and draft. */ });
@@ -3659,7 +3665,7 @@ function AppContent(): JSX.Element {
       window.removeEventListener('focus', prepare);
       document.removeEventListener('visibilitychange', prepare);
     };
-  }, [sidekickApiReady, copilotOpen, quickChatMode, activeProfileId, activeSpacePath, activeBackendProfileName, status?.runtimeGeneration, status?.webuiUrl]);
+  }, [automaticProviderDiscovery, sidekickApiReady, copilotOpen, quickChatMode, activeProfileId, activeSpacePath, activeBackendProfileName, status?.runtimeGeneration, status?.webuiUrl]);
 
   async function createNativeSession(): Promise<void> {
     setQuickChatMode(false);
@@ -6317,6 +6323,7 @@ function AppContent(): JSX.Element {
                   onTransferredWebviewReady={handleTransferredWebviewReady}
                   pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
                   onboardingStatus={onboardingStatus}
+                  automaticProviderDiscovery={automaticProviderDiscovery}
                   tabs={tabs}
                   audioKeepalive={audioKeepalive}
                   splitTabIds={splitTabIds}
@@ -6388,12 +6395,13 @@ function AppContent(): JSX.Element {
 
               {copilotOpen && <CopilotSplitView
                 isOpen
+                automaticProviderDiscovery={automaticProviderDiscovery}
                 onClose={() => setCopilotOpen(false)}
                 botName={setupState.botName || 'Nova'}
                 modelName={copilotModelSelection.model || setupState.model || 'AI'}
                 modelProvider={copilotModelSelection.provider}
                 preparedModelSelection={currentQuickChatPrepared?.selection}
-                preparedModelSelectionScopeKey={quickChatPreparedScopeKey}
+                preparedModelSelectionScopeKey={automaticProviderDiscovery ? quickChatPreparedScopeKey : undefined}
                 onRetryModelCatalog={() => { void prepareQuickChatModelSelection(true).catch(() => {}); }}
                 messages={selectScopedQuickChatValue(quickChatMessages, quickChatTranscriptScopeKeyRef.current,
                   createQuickChatScopeKey(activeProfileId, activeSpacePath, activeBackendProfileName), [])}
@@ -6647,6 +6655,7 @@ function AppContent(): JSX.Element {
               onTransferredWebviewReady={handleTransferredWebviewReady}
               pendingTransferredTabId={pendingDetachedTransfer?.tabId ?? null}
               onboardingStatus={onboardingStatus}
+              automaticProviderDiscovery={automaticProviderDiscovery}
               tabs={tabs}
               audioKeepalive={audioKeepalive}
               splitTabIds={splitTabIds}
@@ -6890,6 +6899,7 @@ function BrowserMain({
   onTransferredWebviewReady = () => undefined,
   pendingTransferredTabId = null,
   onboardingStatus,
+  automaticProviderDiscovery,
   onReopenSetup,
   busy,
   chatError,
@@ -6985,6 +6995,7 @@ function BrowserMain({
   onTransferredWebviewReady?: (tabId: string, guestWebContentsId: number) => void;
   pendingTransferredTabId?: string | null;
   onboardingStatus: OnboardingStatus | null;
+  automaticProviderDiscovery: boolean;
   onReopenSetup: () => void;
   busy: boolean;
   chatError: string;
@@ -7901,7 +7912,7 @@ function BrowserMain({
           </PanelErrorBoundary>
         );
       case 'settings':
-        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} activeSpacePath={activeSpacePath} activeBackendProfileName={activeBackendProfileName || activeSession?.profile || null} activeSessionId={activeSessionId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} onSectionChange={usePanelStore.getState().setActiveContextItem} onClose={() => usePanelStore.getState().setActivePanel('browser')} /></PanelErrorBoundary>;
+        return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus} onboardingStatus={onboardingStatus} automaticProviderDiscovery={automaticProviderDiscovery} onReopenSetup={onReopenSetup} searchEngineId={searchEngineId} onSearchEngineChange={onSearchEngineChange} desktopSettings={desktopSettings} profiles={profiles} activeProfileId={activeProfileId} activeSpacePath={activeSpacePath} activeBackendProfileName={activeBackendProfileName || activeSession?.profile || null} activeSessionId={activeSessionId} onSelectProfile={onSelectProfile} onCreateProfile={onCreateProfile} onRenameProfile={onRenameProfile} onDeleteProfile={onDeleteProfile} onSectionChange={usePanelStore.getState().setActiveContextItem} onClose={() => usePanelStore.getState().setActivePanel('browser')} /></PanelErrorBoundary>;
       case 'terminal':
         return <PanelErrorBoundary panel={activePanel} key={activePanel}><NativeTerminalMain serviceStatus={serviceStatus} activeSessionId={activeSessionId} workspacePath={activeSpacePath} /></PanelErrorBoundary>;
       default:

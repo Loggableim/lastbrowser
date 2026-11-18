@@ -2447,11 +2447,19 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
   </SettingsCard>;
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose, onSectionChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void; onSectionChange?: (section: SettingsSectionId) => void }): JSX.Element {
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, automaticProviderDiscovery = true, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose, onSectionChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; automaticProviderDiscovery?: boolean; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void; onSectionChange?: (section: SettingsSectionId) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const ready = isReady(serviceStatus);
+  const [localSection, setLocalSection] = useState<SettingsSectionId>(() => normalizeSettingsSectionId(activeContextItem) ?? 'preferences');
+  const section = onSectionChange ? normalizeSettingsSectionId(activeContextItem) ?? 'preferences' : localSection;
+  const setSection = onSectionChange ?? setLocalSection;
+  useEffect(() => {
+    const target = normalizeSettingsSectionId(activeContextItem);
+    if (!onSectionChange && target) setLocalSection(target);
+  }, [activeContextItem, onSectionChange]);
+  const providerDiscoveryReady = ready && (automaticProviderDiscovery || section === 'providers');
   const activeProviderScope = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null,
     ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {}) };
   const activeProviderScopeRef = useRef(activeProviderScope);
@@ -2460,14 +2468,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     isProviderSettingsScopeCurrent(scope, activeProviderScopeRef.current, 0, 0);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models', scopeSelection: activeProviderScope }),
-    [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
+    [providerDiscoveryReady, activeProfileId, activeSpacePath, activeBackendProfileName], providerDiscoveryReady);
   const [catalogState, setCatalogState] = useState<{ key: string; selection: import('../independent-contracts.js').ScopedModelSelection | null; loading: boolean; error: string }>({ key: '', selection: null, loading: false, error: '' });
   const providerCatalogKey = JSON.stringify([activeProfileId, activeSpacePath || null, activeBackendProfileName || null]);
   useEffect(() => {
     let active = true;
-    setCatalogState({ key: providerCatalogKey, selection: null, loading: ready, error: '' });
-    if (!ready || !activeBackendProfileName) {
-      if (ready) setCatalogState({ key: providerCatalogKey, selection: null, loading: false, error: 'provider_catalog_scope_unavailable' });
+    setCatalogState({ key: providerCatalogKey, selection: null, loading: providerDiscoveryReady, error: '' });
+    if (!providerDiscoveryReady || !activeBackendProfileName) {
+      if (providerDiscoveryReady) setCatalogState({ key: providerCatalogKey, selection: null, loading: false, error: 'provider_catalog_scope_unavailable' });
       return () => { active = false; };
     }
     void (async () => {
@@ -2488,9 +2496,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       }
     })();
     return () => { active = false; };
-  }, [ready, activeProfileId, activeSpacePath, activeBackendProfileName, providerCatalogKey]);
+  }, [providerDiscoveryReady, activeProfileId, activeSpacePath, activeBackendProfileName, providerCatalogKey]);
   const providerAuthState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection: activeProviderScope }),
-    [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
+    [providerDiscoveryReady, activeProfileId, activeSpacePath, activeBackendProfileName], providerDiscoveryReady);
   const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null);
@@ -2519,13 +2527,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     });
     return () => { active = false; };
   }, []);
-  const [localSection, setLocalSection] = useState<SettingsSectionId>(() => normalizeSettingsSectionId(activeContextItem) ?? 'preferences');
-  const section = onSectionChange ? normalizeSettingsSectionId(activeContextItem) ?? 'preferences' : localSection;
-  const setSection = onSectionChange ?? setLocalSection;
-  useEffect(() => {
-    const target = normalizeSettingsSectionId(activeContextItem);
-    if (!onSectionChange && target) setLocalSection(target);
-  }, [activeContextItem, onSectionChange]);
   const [providerPage, setProviderPage] = useState<'working' | 'beta' | 'local'>('working');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});

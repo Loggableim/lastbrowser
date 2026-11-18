@@ -35,17 +35,23 @@ async function child(){
     const input=(selector,value)=>run(`(()=>{const element=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,${JSON.stringify(value)});element.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await window.loadFile(path.join(output,'index.html'));await wait("document.querySelector('[data-widget=notes]')");
     if (!firstRunOnly) {
-    for (const [locale, notes, focus, remaining] of [
-      ['ja', 'メモ', '集中タイマー', '集中時間の残り'],
-      ['fr', 'Notes', 'Minuteur de concentration', 'Temps de concentration restant'],
-      ['pt-BR', 'Anotações', 'Tempo de foco', 'Tempo de foco restante'],
+    for (const [locale, notes, focus, remaining, workspace, pages, navigation] of [
+      ['ja', 'メモ', '集中タイマー', '集中時間の残り', 'あなたのワークスペース', 'ワークスペースのページ',
+        ['概要', 'ウィジェット', 'プラグイン', 'カスタマイズ']],
+      ['fr', 'Notes', 'Minuteur de concentration', 'Temps de concentration restant', 'Votre espace de travail', 'Pages de l’espace de travail',
+        ['Vue d’ensemble', 'Widgets', 'Extensions', 'Personnaliser']],
+      ['pt-BR', 'Anotações', 'Tempo de foco', 'Tempo de foco restante', 'Seu espaço de trabalho', 'Páginas do espaço de trabalho',
+        ['Visão geral', 'Widgets', 'Plugins', 'Personalizar']],
     ]) {
       await run(`window.__workplaceProbe.setLocale(${JSON.stringify(locale)})`);
       await wait(`document.documentElement.lang === ${JSON.stringify(locale)}`);
+      assert((await run("document.querySelector('.workplace-heading p').textContent")).endsWith(workspace), `Localized workspace heading for ${locale}`);
+      assert.equal(await run("document.querySelector('.workplace-pages').getAttribute('aria-label')"), pages);
+      assert.deepEqual(await run("[...document.querySelectorAll('.workplace-pages button')].map(button => button.textContent.trim())"), navigation);
       assert.equal(await run("document.querySelector('[data-widget=notes] h2').textContent"), notes);
       assert.equal(await run("document.querySelector('[data-widget=focus] h2').textContent"), focus);
       assert.equal(await run("document.querySelector('[data-widget=focus] output').getAttribute('aria-label')"), remaining);
-      await click('Widgets');
+      await click(navigation[3]);
       await wait("document.querySelector('.workplace-widget-toggle')");
       const configurable = await run("[...document.querySelectorAll('.workplace-widget-toggle strong')].map(item => item.textContent)");
       assert(configurable.includes(notes) && configurable.includes(focus), `Localized widget settings for ${locale}`);
@@ -54,7 +60,7 @@ async function child(){
     }
     await run("window.__workplaceProbe.setLocale('de')");
     await wait("document.documentElement.lang === 'de'");
-    checks.push('Home widget headings, timer accessibility and settings follow the active locale');
+    checks.push('Home navigation, widget headings, timer accessibility and settings follow the active locale');
     assert.equal(await run("document.querySelector('[data-widget=tasks]')===null"),true);
     await capture('home-initial-1280x720');
     await run("window.__dragData=new DataTransfer();document.querySelector('[data-widget=recent] .workplace-drag-handle').dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:window.__dragData}))");await wait("document.querySelector('.workplace-dock-layout.is-dragging')");

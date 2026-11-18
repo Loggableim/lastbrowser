@@ -215,6 +215,7 @@ export function NativeBrowserStartPage({
   const historyCopy = browserStartHistoryCopy[locale];
   const wallpaperCopy = browserStartWallpaperCopy[locale];
   const widgetCopy = workplaceWidgetCopy[locale];
+  const navigation = widgetCopy.navigation;
   const [query, setQuery] = useState('');
   const [workplacePage, setWorkplacePage] = useState<'overview' | 'widgets' | 'plugins'>('overview');
   const workplaceKey = `lastbrowser.workplace.v1:${JSON.stringify([activeProfileId, activityScope?.backendProfileId || '', activeSpacePath])}`;
@@ -437,7 +438,7 @@ export function NativeBrowserStartPage({
       '--launchpad-light-dim': Math.min(.95, .4 + wallpaperPreference.dim / 100 * .6)
     } as React.CSSProperties}>
       <header className="workplace-header">
-        <div className="workplace-heading"><img src={brandAssets.logo} alt="" /><div><h1>{headingSpaceName}</h1><p>{t(greeting.greetingKey)} · {german ? 'Dein Arbeitsplatz' : 'Your workspace'}</p></div></div>
+        <div className="workplace-heading"><img src={brandAssets.logo} alt="" /><div><h1>{headingSpaceName}</h1><p>{t(greeting.greetingKey)} · {navigation.workspace}</p></div></div>
         <div className="workplace-header-actions"><time title={dateString}>{timeString}<small>{dateString}</small></time>
           <div className="startpage-wallpaper-toolbar" role="group" aria-label={wallpaperCopy.settings}>
             <button type="button" onClick={() => stepWallpaper(-1)} aria-label={wallpaperCopy.previous} title={wallpaperCopy.previous}><ChevronLeft size={15} /></button>
@@ -447,11 +448,11 @@ export function NativeBrowserStartPage({
         <button type="button" className="workplace-command" title={t('browser.startPage.openCommandPalette')} onClick={() => handleQuickAction(DASHBOARD_QUICK_ACTIONS[4])}><Command size={15} /><span>Ctrl K</span></button>
         </div>
       </header>
-      <nav className="workplace-pages" aria-label={german ? 'Arbeitsplatzseiten' : 'Workspace pages'}>
-        <button type="button" aria-pressed={workplacePage === 'overview'} onClick={() => setWorkplacePage('overview')}><Layers size={15} />{german ? 'Übersicht' : 'Overview'}</button>
-        <button type="button" aria-pressed={workplacePage === 'widgets'} onClick={() => setWorkplacePage('widgets')}><Compass size={15} />Widgets</button>
-        <button type="button" aria-pressed={workplacePage === 'plugins'} onClick={() => setWorkplacePage('plugins')}><Wand2 size={15} />Plugins</button>
-        <button type="button" className="workplace-customize" onClick={() => setWorkplacePage('widgets')}>{german ? 'Anpassen' : 'Customize'}</button>
+      <nav className="workplace-pages" aria-label={navigation.pages}>
+        <button type="button" aria-pressed={workplacePage === 'overview'} onClick={() => setWorkplacePage('overview')}><Layers size={15} />{navigation.overview}</button>
+        <button type="button" aria-pressed={workplacePage === 'widgets'} onClick={() => setWorkplacePage('widgets')}><Compass size={15} />{navigation.widgets}</button>
+        <button type="button" aria-pressed={workplacePage === 'plugins'} onClick={() => setWorkplacePage('plugins')}><Wand2 size={15} />{navigation.plugins}</button>
+        <button type="button" className="workplace-customize" onClick={() => setWorkplacePage('widgets')}>{navigation.customize}</button>
       </nav>
       {workplaceStorageError && <p role="status">{german ? 'Änderungen können gerade nicht lokal gespeichert werden.' : 'Changes cannot be saved locally right now.'}</p>}
       {workplacePage === 'overview' && <WorkplaceDockGrid key={workplaceKey} state={workplace} update={updateWorkplace} labels={widgetLabels} german={german} widgets={{

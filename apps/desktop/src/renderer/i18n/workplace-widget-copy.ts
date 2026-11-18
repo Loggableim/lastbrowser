@@ -1,6 +1,7 @@
 import type { DesktopLocaleId } from './keys.js';
 
 type WorkplaceWidgetCopy = {
+  navigation: { workspace: string; pages: string; overview: string; widgets: string; plugins: string; customize: string };
   notes: { title: string; label: string; placeholder: string; scope: string };
   tasks: { title: string; remove: string; empty: string; newTask: string; add: string; limit: string };
   focus: {
@@ -11,6 +12,10 @@ type WorkplaceWidgetCopy = {
 
 export const workplaceWidgetCopy: Record<DesktopLocaleId, WorkplaceWidgetCopy> = {
   en: {
+    navigation: {
+      workspace: 'Your workspace', pages: 'Workspace pages',
+      overview: 'Overview', widgets: 'Widgets', plugins: 'Plugins', customize: 'Customize',
+    },
     notes: { title: 'Notes', label: 'Local Space notes', placeholder: 'Thoughts for this workspace …', scope: 'Local · only in this profile and Space' },
     tasks: {
       title: 'Tasks', remove: 'Delete task', empty: 'What would you like to finish?', newTask: 'New task', add: 'Add',
@@ -23,6 +28,10 @@ export const workplaceWidgetCopy: Record<DesktopLocaleId, WorkplaceWidgetCopy> =
     },
   },
   de: {
+    navigation: {
+      workspace: 'Dein Arbeitsplatz', pages: 'Arbeitsplatzseiten',
+      overview: 'Übersicht', widgets: 'Widgets', plugins: 'Plugins', customize: 'Anpassen',
+    },
     notes: { title: 'Notizen', label: 'Lokale Space-Notizen', placeholder: 'Gedanken für diesen Arbeitsplatz …', scope: 'Lokal · nur in diesem Profil und Space' },
     tasks: {
       title: 'Aufgaben', remove: 'Aufgabe löschen', empty: 'Was möchtest du erledigen?', newTask: 'Neue Aufgabe', add: 'Hinzufügen',
@@ -35,6 +44,10 @@ export const workplaceWidgetCopy: Record<DesktopLocaleId, WorkplaceWidgetCopy> =
     },
   },
   it: {
+    navigation: {
+      workspace: 'Il tuo spazio di lavoro', pages: 'Pagine dello spazio di lavoro',
+      overview: 'Panoramica', widgets: 'Widget', plugins: 'Plugin', customize: 'Personalizza',
+    },
     notes: { title: 'Note', label: 'Note locali dello spazio', placeholder: 'Appunti per questo spazio …', scope: 'In locale · solo in questo profilo e in questo spazio' },
     tasks: {
       title: 'Attività', remove: 'Elimina attività', empty: 'Cosa vuoi portare a termine?', newTask: 'Nuova attività', add: 'Aggiungi',
@@ -47,6 +60,10 @@ export const workplaceWidgetCopy: Record<DesktopLocaleId, WorkplaceWidgetCopy> =
     },
   },
   es: {
+    navigation: {
+      workspace: 'Tu espacio de trabajo', pages: 'Páginas del espacio de trabajo',
+      overview: 'Vista general', widgets: 'Widgets', plugins: 'Complementos', customize: 'Personalizar',
+    },
     notes: { title: 'Notas', label: 'Notas locales del espacio', placeholder: 'Ideas para este espacio …', scope: 'En local · solo en este perfil y espacio' },
     tasks: {
       title: 'Tareas', remove: 'Eliminar tarea', empty: '¿Qué te gustaría terminar?', newTask: 'Nueva tarea', add: 'Añadir',
@@ -59,6 +76,10 @@ export const workplaceWidgetCopy: Record<DesktopLocaleId, WorkplaceWidgetCopy> =
     },
   },
   fr: {
+    navigation: {
+      workspace: 'Votre espace de travail', pages: 'Pages de l’espace de travail',
+      overview: 'Vue d’ensemble', widgets: 'Widgets', plugins: 'Extensions', customize: 'Personnaliser',
+    },
     notes: { title: 'Notes', label: 'Notes locales de l’espace', placeholder: 'Idées pour cet espace …', scope: 'En local · uniquement dans ce profil et cet espace' },
     tasks: {
       title: 'Tâches', remove: 'Supprimer la tâche', empty: 'Que souhaitez-vous terminer ?', newTask: 'Nouvelle tâche', add: 'Ajouter',
@@ -71,6 +92,10 @@ export const workplaceWidgetCopy: Record<DesktopLocaleId, WorkplaceWidgetCopy> =
     },
   },
   'pt-BR': {
+    navigation: {
+      workspace: 'Seu espaço de trabalho', pages: 'Páginas do espaço de trabalho',
+      overview: 'Visão geral', widgets: 'Widgets', plugins: 'Plugins', customize: 'Personalizar',
+    },
     notes: { title: 'Anotações', label: 'Anotações locais do espaço', placeholder: 'Ideias para este espaço …', scope: 'Local · somente neste perfil e espaço' },
     tasks: {
       title: 'Tarefas', remove: 'Excluir tarefa', empty: 'O que você gostaria de concluir?', newTask: 'Nova tarefa', add: 'Adicionar',
@@ -83,6 +108,10 @@ export const workplaceWidgetCopy: Record<DesktopLocaleId, WorkplaceWidgetCopy> =
     },
   },
   ru: {
+    navigation: {
+      workspace: 'Ваше рабочее пространство', pages: 'Страницы рабочего пространства',
+      overview: 'Обзор', widgets: 'Виджеты', plugins: 'Плагины', customize: 'Настроить',
+    },
     notes: { title: 'Заметки', label: 'Локальные заметки пространства', placeholder: 'Мысли для этого пространства …', scope: 'Локально · только в этом профиле и пространстве' },
     tasks: {
       title: 'Задачи', remove: 'Удалить задачу', empty: 'Что вы хотите сделать?', newTask: 'Новая задача', add: 'Добавить',
@@ -95,6 +124,10 @@ export const workplaceWidgetCopy: Record<DesktopLocaleId, WorkplaceWidgetCopy> =
     },
   },
   ja: {
+    navigation: {
+      workspace: 'あなたのワークスペース', pages: 'ワークスペースのページ',
+      overview: '概要', widgets: 'ウィジェット', plugins: 'プラグイン', customize: 'カスタマイズ',
+    },
     notes: { title: 'メモ', label: 'スペースのローカルメモ', placeholder: 'このスペース用のメモ …', scope: 'ローカル保存 · このプロフィールとスペースのみ' },
     tasks: {
       title: 'タスク', remove: 'タスクを削除', empty: '何を終わらせたいですか？', newTask: '新しいタスク', add: '追加',

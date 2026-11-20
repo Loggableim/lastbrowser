@@ -1,7 +1,40 @@
 import { spawn } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { realpathSync, writeSync } from 'node:fs';
 import { lstat, mkdir } from 'node:fs/promises';
+import { Socket } from 'node:net';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
+import type { Readable, Writable } from 'node:stream';
+
+export const protectedSpaceLinksSwitch = 'lastbrowser-protected-links';
+export const protectedSpaceLinkAck = 'LASTBROWSER-LINK-ACK';
+
+/** Electron GUI processes on Windows receive the inherited pipe at fd 0. */
+export function readProtectedSpaceLinks(
+  openUrl: (url: string, onDelivered: () => void) => void,
+  input?: Readable,
+  acknowledge = () => {
+    try { writeSync(1, protectedSpaceLinkAck + '\n'); } catch { /* The launcher may have closed. */ }
+  }
+): () => void {
+  try {
+    input ??= new Socket({ fd: 0, readable: true, writable: false });
+  } catch {
+    return () => {};
+  }
+  const relay = createInterface({ input, crlfDelay: Infinity });
+  const stop = () => {
+    relay.close();
+    input.destroy();
+  };
+  relay.on('error', stop);
+  relay.on('line', line => {
+    let value: unknown;
+    try { value = JSON.parse(line); } catch { return; }
+    if (typeof value === 'string' && /^https?:\/\//i.test(value)) openUrl(value, acknowledge);
+  });
+  return stop;
+}
 
 export type MountedSpace = {
   root: string;
@@ -13,7 +46,8 @@ export type MountedSpace = {
 
 /** Run one browser for a mount owned by the trusted storage provider. */
 export async function runProtectedSpaceProcess(
-  executable: string, args: readonly string[], mount: () => Promise<MountedSpace>, onMounted?: () => void
+  executable: string, args: readonly string[], mount: () => Promise<MountedSpace>, onMounted?: () => void,
+  onBrowserStarted?: (input: Writable, acknowledgements: Readable) => void
 ): Promise<number> {
   if (!path.isAbsolute(executable) || args.some(arg => arg === '--'
     || /^--(?:user-data-dir|lastbrowser-protected-profile|remote-debugging-(?:port|pipe|address))(?:=|$)/i.test(arg))) {
@@ -36,13 +70,25 @@ export async function runProtectedSpaceProcess(
     }
 
     onMounted?.();
-    const child = spawn(executable, [
-      ...args, `--user-data-dir=${root}`, `--lastbrowser-protected-profile=${root}`
-    ], { env, stdio: 'ignore', windowsHide: true });
+    const launchArgs = [...args, `--user-data-dir=${root}`, `--lastbrowser-protected-profile=${root}`];
+    if (onBrowserStarted) launchArgs.push(`--${protectedSpaceLinksSwitch}`);
+    const child = spawn(executable, launchArgs, {
+      env, stdio: [onBrowserStarted ? 'pipe' : 'ignore', onBrowserStarted ? 'pipe' : 'ignore', 'ignore'], windowsHide: true
+    });
     const finished = new Promise<{ code: number | null; error?: Error }>(resolve => {
       child.once('error', error => resolve({ code: null, error }));
       child.once('close', code => resolve({ code }));
     });
+    if (child.stdin && child.stdout && onBrowserStarted) {
+      child.stdin.on('error', () => {});
+      try {
+        onBrowserStarted(child.stdin, child.stdout);
+      } catch (error) {
+        child.kill();
+        await finished;
+        throw error;
+      }
+    }
     const outcome = await Promise.race([
       finished,
       volume.closed.then(() => null, () => null)

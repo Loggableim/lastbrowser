@@ -22,7 +22,7 @@ export type OpenUrlLifecycleOptions<TWindow extends OpenUrlWindow> = {
 export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
   options: OpenUrlLifecycleOptions<TWindow>
 ) {
-  const pendingUrls: string[] = [];
+  const pendingUrls: { url: string; onDelivered?: () => void }[] = [];
   const readyWindows = new WeakSet<object>();
 
   const isLive = (window: TWindow | null): window is TWindow =>
@@ -48,41 +48,43 @@ export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
     if (!isLive(window) || options.getMainWindow() !== window || !readyWindows.has(window)) return;
 
     while (pendingUrls.length > 0) {
-      const url = pendingUrls[0];
+      const { url, onDelivered } = pendingUrls[0];
       try {
         window.webContents.send('lastbrowser:browser:openTab', url);
-        pendingUrls.shift();
       } catch {
         // Preserve this URL and the remaining queue if the renderer is closing.
         return;
       }
+      pendingUrls.shift();
+      onDelivered?.();
     }
   }
 
-  function dispatchOpenUrl(rawUrl: string): boolean {
+  function dispatchOpenUrl(rawUrl: string, onDelivered?: () => void): boolean {
     const url = extractUrlFromArgs([String(rawUrl || '').trim()]);
     if (!url) return false;
 
     const window = options.getMainWindow();
     if (!isLive(window)) {
-      pendingUrls.push(url);
+      pendingUrls.push({ url, onDelivered });
       ensureMainWindow();
       return true;
     }
 
     reveal(window);
     if (!readyWindows.has(window)) {
-      pendingUrls.push(url);
+      pendingUrls.push({ url, onDelivered });
       return true;
     }
 
     try {
       window.webContents.send('lastbrowser:browser:openTab', url);
-      return true;
     } catch {
-      pendingUrls.push(url);
+      pendingUrls.push({ url, onDelivered });
       return true;
     }
+    onDelivered?.();
+    return true;
   }
 
   return {

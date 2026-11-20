@@ -1,6 +1,6 @@
 {
   "name": "@lastbrowser/desktop",
-  "version": "0.1.61",
+  "version": "0.1.62",
   "private": true,
   "type": "module",
   "description": "LastBrowser Electron desktop shell.",
@@ -31,7 +31,7 @@
     "package:win:publish": "npm run prepare:python && npm run prepare:space-runtime && npm run build:installer-assets && npm run build && electron-builder --win nsis portable --publish never",
     "package:store:payload": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/build-store-payload.ps1",
     "package:store:msix": "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File scripts/package-store-msix.ps1",
-    "package:linux": "node scripts/linux-release-checksums.mjs --check-key && npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/linux-release-checksums.mjs release"
+    "package:linux": "node scripts/linux-release-checksums.mjs --check-key && npm run prepare:python && node scripts/stage-opencode-client.mjs && npm run build && electron-builder --linux tar.gz AppImage --config.electronVersion=45.2.1+wvcus --config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/ && node scripts/fix-linux-apprun.mjs && node scripts/stage-linux-fuse-launcher.mjs && node scripts/linux-release-checksums.mjs release"
   },
   "dependencies": {
     "@ghostery/adblocker-electron": "^2.18.2",
@@ -55,7 +55,7 @@
     "@types/node": "^22.10.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "electron": "github:castlabs/electron-releases#059d79860d288044df48e8839d9c621dee4a17e1",
+    "electron": "github:castlabs/electron-releases#ab2120c6a5d49d412bcb2b7e3f9c9c3e74cb0243",
     "electron-builder": "^26.0.0",
     "esbuild": "^0.27.7",
     "typescript": "^5.7.0",
@@ -66,7 +66,7 @@
     "productName": "LastBrowser",
     "executableName": "Lastbrowser",
     "npmRebuild": false,
-    "electronVersion": "45.0.0-alpha.14+wvcus",
+    "electronVersion": "45.2.1+wvcus",
     "electronDownload": {
       "mirror": "https://github.com/castlabs/electron-releases/releases/download/v"
     },

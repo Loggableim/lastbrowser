@@ -196,7 +196,7 @@ describe('sidecar service layout', () => {
     mkdirSync(path.dirname(sidekickEntry), { recursive: true });
     writeFileSync(sidekickEntry, '');
     const layout = resolveServiceLayout(resourcesRoot);
-    const spawned: Array<{ command: string; args: string[]; env?: NodeJS.ProcessEnv }> = [];
+    const spawned: Array<{ command: string; args: string[]; env?: NodeJS.ProcessEnv; detached?: boolean }> = [];
     const fakeProcess = new EventEmitter() as EventEmitter & { kill: () => void };
     fakeProcess.kill = () => undefined;
 
@@ -204,7 +204,7 @@ describe('sidecar service layout', () => {
       layout,
       8787,
       ((command, args, options) => {
-        spawned.push({ command, args: args as string[], env: options?.env });
+        spawned.push({ command, args: args as string[], env: options?.env, detached: options?.detached });
         queueMicrotask(() => fakeProcess.emit('spawn'));
         return fakeProcess as never;
       }) as never,
@@ -219,6 +219,8 @@ describe('sidecar service layout', () => {
       expect(spawned[0].env?.LASTBROWSER_RUNTIME_GENERATION).toBe(started.runtimeGeneration);
       expect(spawned[0].env?.LASTBROWSER_WEBUI_PORT).toBe('8788');
       expect(spawned[0].env?.HERMES_WEBUI_PORT).toBe('8788');
+      expect(spawned[0].env?.LASTBROWSER_ELECTRON_PID).toBe(String(process.pid));
+      expect(spawned[0].detached ?? false).toBe(process.platform === 'win32');
     } finally {
       service.stop();
       expect(service.getStatus().runtimeGeneration).toBeNull();

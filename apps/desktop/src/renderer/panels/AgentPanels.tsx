@@ -20,7 +20,7 @@ import type { IndependentScope } from '../independent-contracts.js';
 import type { IndependentAssistantController } from '../independent-assistant-controller.js';
 import type { DesktopSessionSummary } from '../shell-state.js';
 import {
-  deleteNovaAssistantProfile, novaAssistantInstructionsLimit, novaAssistantNameLimit,
+  deleteNovaAssistantProfile, InvalidNovaAssistantProfileError, novaAssistantInstructionsLimit, novaAssistantNameLimit,
   readNovaAssistantProfiles, saveNovaAssistantProfile, type NovaAssistantProfile,
 } from '../nova-assistant-profiles.js';
 import { AssistantActivity } from './AssistantActivity.js';
@@ -279,7 +279,7 @@ export function NativeAssistantsMain({
       setDraft(null);
       setError('');
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
+      setError(reason instanceof InvalidNovaAssistantProfileError ? copy.invalidProfile : copy.unableToSave);
     }
   }
 

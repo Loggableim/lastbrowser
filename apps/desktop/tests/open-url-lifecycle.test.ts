@@ -49,13 +49,20 @@ describe('external URL window lifecycle', () => {
       isAppReady: () => true
     });
 
-    expect(lifecycle.dispatchOpenUrl('https://example.com/queued')).toBe(true);
+    const delivered = vi.fn();
+    expect(lifecycle.dispatchOpenUrl('https://example.com/queued', delivered)).toBe(true);
     expect(lifecycle.pendingCount()).toBe(1);
     expect(fake.send).not.toHaveBeenCalled();
+    expect(delivered).not.toHaveBeenCalled();
 
+    fake.send.mockImplementationOnce(() => { throw new Error('Renderer exited'); });
+    lifecycle.onWindowReady(fake.window);
+    expect(lifecycle.pendingCount()).toBe(1);
+    expect(delivered).not.toHaveBeenCalled();
     lifecycle.onWindowReady(fake.window);
     expect(lifecycle.pendingCount()).toBe(0);
     expect(fake.send).toHaveBeenCalledWith('lastbrowser:browser:openTab', 'https://example.com/queued');
+    expect(delivered).toHaveBeenCalledOnce();
   });
 
   it('delivers cold and warm URLs after the renderer subscribes even if resources are still loading', () => {

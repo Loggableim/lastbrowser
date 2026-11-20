@@ -64,6 +64,22 @@ describe('Nova Assistants panel', () => {
     expect(readNovaAssistantProfiles(storage, anotherBrowser.browserProfileId)).toEqual([second]);
   });
 
+  it.each(['Use\u0000examples.', 'Use\u007fexamples.', 'Use \ud800.'])(
+    'rejects instructions that Sidekick cannot store without replacing the last saved draft (%j)', (instructions) => {
+      const storage = storageFixture();
+      saveNovaAssistantProfile(storage, activeSpace.browserProfileId, first);
+      expect(() => saveNovaAssistantProfile(storage, activeSpace.browserProfileId, { ...first, instructions })).toThrow();
+      expect(readNovaAssistantProfiles(storage, activeSpace.browserProfileId)).toEqual([first]);
+    },
+  );
+
+  it('accepts multiline instructions with tabs and Unicode characters', () => {
+    const storage = storageFixture();
+    const assistant = { ...first, instructions: 'Examples 📝\n\tUse headings.' };
+    saveNovaAssistantProfile(storage, activeSpace.browserProfileId, assistant);
+    expect(readNovaAssistantProfiles(storage, activeSpace.browserProfileId)).toEqual([assistant]);
+  });
+
   it('keeps the other profile after deleting a profile and clears selections for removed assistants', () => {
     const storage = storageFixture();
     saveNovaAssistantProfile(storage, 'profile-a', first);

@@ -1,13 +1,38 @@
 import { readFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   browserShortcutChannel,
   matchBrowserShortcut,
+  registerBrowserNavigationCommands,
   registerBrowserShortcuts
 } from '../src/main/shortcuts.js';
 
 describe('shortcuts system', () => {
+  it('sends native back and forward commands only to the window that received them', () => {
+    const createWindow = () => Object.assign(new EventEmitter(), {
+      isDestroyed: () => false,
+      webContents: { send: vi.fn() }
+    });
+    const primary = createWindow();
+    const detached = createWindow();
+    registerBrowserNavigationCommands(primary);
+    registerBrowserNavigationCommands(detached);
+
+    const event = { preventDefault: vi.fn() };
+    detached.emit('app-command', event, 'browser-backward');
+    detached.emit('app-command', event, 'browser-forward');
+    detached.emit('app-command', event, 'media-play-pause');
+
+    expect(detached.webContents.send.mock.calls).toEqual([
+      [browserShortcutChannel, { action: 'history-back' }],
+      [browserShortcutChannel, { action: 'history-forward' }]
+    ]);
+    expect(primary.webContents.send).not.toHaveBeenCalled();
+    expect(event.preventDefault).toHaveBeenCalledTimes(2);
+  });
+
   it('exposes the correct IPC channel name', () => {
     expect(browserShortcutChannel).toBe('lastbrowser:browser:shortcut');
   });

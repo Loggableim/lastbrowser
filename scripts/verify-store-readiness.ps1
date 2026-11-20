@@ -439,6 +439,8 @@ $requiredLicenses = @(
     'docs/legal/license-audit.md'
     'docs/legal/drafts/third-party-inventory-20261011.json'
     'docs/legal/windows-protected-spaces-runtime.md'
+    'docs/legal/notices/hermes-webui-mit.txt'
+    'docs/legal/notices/neutts-jo-apache-2.0.txt'
 )
 $requiredSpaceFiles = @(
     'space-tpm-nv.exe'
@@ -450,6 +452,15 @@ $requiredSpaceFiles = @(
     'jFUSE-GPL-3.0.txt'
     'Auth0-java-jwt-LICENSE.txt'
     'Logback-LICENSE-NOTICE.txt',
+    'SIV-Mode-LICENSE.txt',
+    'Bouncy-Castle-LICENSE.html',
+    'Logback-EPL-1.0.txt',
+    'Logback-LGPL-2.1.txt',
+    'Gson-2.10.1-LICENSE.txt',
+    'JSR305-Reference-BSD-3-Clause.txt',
+    'CC-BY-2.5.txt',
+    'Cryptomator-CLI-0.6.2-JAR-ATTRIBUTIONS.txt',
+    'cryptomator-cli/LICENSE.txt',
     'Apache-2.0-LICENSE.txt',
     'Cryptomator-Java-Apache-NOTICE.txt'
 )
@@ -516,6 +527,10 @@ if ($MsixPath) {
             -not $entry -or $entry.Length -eq 0
         })
         $entryNames = @($package.Entries | ForEach-Object { $_.FullName })
+        $cryptomatorRoot = "${resources}protected-spaces/cryptomator-cli/"
+        if ($package.GetEntry("${cryptomatorRoot}cryptomator-cli.exe") -or ($entryNames -like "${cryptomatorRoot}runtime/*")) {
+            throw 'Remove the unused Cryptomator launcher and embedded Java from the Store package'
+        }
         $missingModules = @($requiredSpaceModules | Where-Object {
             -not ($entryNames -like "${resources}protected-spaces/cryptomator-cli/app/mods/$_")
         })

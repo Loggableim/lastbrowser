@@ -32,7 +32,7 @@ Lizenzfelder aus npm- oder Python-Paketmetadaten sind Hinweise des jeweiligen Di
 
 Für Sidekick/Hermes sind Ursprungsrepository, übernommene Dateien, Lizenzhinweise und etwaige Rechteübertragungen vor einer abschließenden Aussage zu dokumentieren. Die vorhandene MIT-Datei ist als Herkunftshinweis relevant, schließt diese Lücke aber nicht.
 
-Die im früheren Audit als „permissiv“ bezeichnete Audiodatei `services/sidekick/tools/neutts_samples/jo.wav` bleibt bis zu einem belastbaren Beleg **unbekannt**. Gleiches gilt für das vom Review gemeldete MCP-Paket, solange es keinem ausgelieferten Abhängigkeitsweg zugeordnet ist.
+Für das Seeding von Hermes Web UI, die Sprachreferenz `services/sidekick/tools/neutts_samples/jo.wav` und das Python-Paket `mcp==1.26.0` liegen inzwischen konkretere Nachweise zum Windows-QA-MSIX vor. Das [aktualisierte Drittanbieterinventar](../../THIRD-PARTY-LICENSES.md) hält diese Nachweise mit den jeweiligen offenen Punkten fest. Die Angaben in der obigen Tabelle beschreiben den Stand vom 11. Oktober.
 
 ## Entwürfe und offene Entscheidungen
 

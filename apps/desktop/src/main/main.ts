@@ -219,7 +219,7 @@ import { createMainWindowOptions, installBrowserChrome } from './window-chrome.j
 import { appendWindowsFirstPaintSwitches, installWindowsFirstPaintNudge } from './windows-presentation.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { defaultSearchEngineId, searchEngineById } from './browser-search.js';
-import { registerBrowserShortcuts } from './shortcuts.js';
+import { registerBrowserNavigationCommands, registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 import { configureProfileDirectory, defaultBrowserProfileDirectory } from './profile-directory.js';
@@ -228,6 +228,7 @@ import { resolveSpaceMigrationLayout } from './space-migration-layout.js';
 import { spaceMigrationPrerequisite } from './windows-space-runtime.js';
 import { encodeWindowsSpaceMigrationRequest } from './windows-space-migration-request.js';
 import { launchWindowsSpaceMigration } from './windows-space-migration-launch.js';
+import { protectedSpaceLinksSwitch, readProtectedSpaceLinks } from './protected-space-process.js';
 
 const protectedProfileStartup = configureProfileDirectory(app);
 
@@ -442,12 +443,13 @@ const extensionManager = new ExtensionManager(app.getPath('userData'), () => Arr
 import { extractUrlFromArgs } from './url-dispatch.js';
 export { extractUrlFromArgs };
 
-export function dispatchOpenUrl(targetUrl: string): void {
-  openUrlLifecycle.dispatchOpenUrl(targetUrl);
+export function dispatchOpenUrl(targetUrl: string, onDelivered?: () => void): void {
+  openUrlLifecycle.dispatchOpenUrl(targetUrl, onDelivered);
 }
 
 function createWindow(): BrowserWindow {
-  const window = new BrowserWindow(createMainWindowOptions(mainDir));
+  const window = new BrowserWindow(createMainWindowOptions(mainDir, screen.getPrimaryDisplay().workAreaSize));
+  registerBrowserNavigationCommands(window);
   installWindowsFirstPaintNudge(window);
   mainWindow = window;
 
@@ -522,7 +524,7 @@ function createWindow(): BrowserWindow {
   });
 
   setupMinimizeToTray(window, () => {
-    if (isQuitting || process.platform === 'darwin' || !appTray?.tray || appTray.tray.isDestroyed()) return false;
+    if (protectedProfileStartup || isQuitting || process.platform === 'darwin' || !appTray?.tray || appTray.tray.isDestroyed()) return false;
     return true;
   });
 
@@ -1396,6 +1398,7 @@ function registerIpc(): void {
           height
         });
         newWin = detachedWindow;
+        registerBrowserNavigationCommands(detachedWindow);
 
         secondaryWindows.add(detachedWindow);
         detachedWindowWebContents.add(detachedWindow.webContents.id);
@@ -1444,7 +1447,7 @@ function registerIpc(): void {
         });
 
         setupMinimizeToTray(detachedWindow, () => {
-          if (isQuitting || process.platform === 'darwin' || !appTray?.tray || appTray.tray.isDestroyed()) return false;
+          if (protectedProfileStartup || isQuitting || process.platform === 'darwin' || !appTray?.tray || appTray.tray.isDestroyed()) return false;
           return true;
         });
 
@@ -1748,6 +1751,9 @@ if (gotSingleInstanceLock && typeof app?.on === 'function') {
   app.on('second-instance', (_event, commandLine) => {
     openUrlLifecycle.handleSecondInstance(commandLine);
   });
+  if (protectedProfileStartup && app.commandLine.hasSwitch(protectedSpaceLinksSwitch)) {
+    app.once('will-quit', readProtectedSpaceLinks(dispatchOpenUrl));
+  }
 }
 
 // Auto-detect and register system Widevine CDM before app is ready (Ansatz 3)
@@ -1853,6 +1859,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     getWindows: () => BrowserWindow.getAllWindows(),
     getServices: () => services,
     getLocale: () => currentLocale,
+    protectedSpace: protectedProfileStartup,
     resourcesDir: appResourcesDir(),
     onQuit: () => {
       isQuitting = true;

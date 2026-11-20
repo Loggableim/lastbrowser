@@ -1268,6 +1268,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     app,
     Menu,
     clipboard,
+    dialog,
     shell,
     getWindow: () => mainWindow,
     getAssistantName: () => currentAssistantName,

@@ -3,6 +3,7 @@ import type {
   BrowserWindow,
   Clipboard,
   ContextMenuParams,
+  Dialog,
   MenuItemConstructorOptions,
   Shell,
   WebContents
@@ -11,6 +12,7 @@ import { BrowserWindow as ElectronBrowserWindow } from 'electron';
 import { isOAuthUrl, openAuthConnectWindow, openExternalUrl } from './auth-window.js';
 
 import { searchEngineById, searchUrlFor } from './search-engines.js';
+import { captureHandoffTarget, createSidekickTabHandoff } from './sidekick-tab-handoff.js';
 
 export const browserOpenTabChannel = 'lastbrowser:browser:openTab';
 export const browserOpenIncognitoTabChannel = 'lastbrowser:browser:openIncognitoTab';
@@ -297,6 +299,7 @@ export function registerBrowserContextMenu({
   app,
   Menu,
   clipboard,
+  dialog,
   shell,
   getWindow,
   getAssistantName,
@@ -306,18 +309,23 @@ export function registerBrowserContextMenu({
   app: App;
   Menu: MenuLike;
   clipboard: Clipboard;
+  dialog?: Dialog;
   shell: Shell;
   getWindow: () => BrowserWindow | null;
   getAssistantName?: () => string;
   getLocale?: () => string;
   getSearchEngineId?: () => string;
 }): void {
+  const handoff = createSidekickTabHandoff();
   app.on('web-contents-created', (_event, contents) => {
     installWindowOpenBridge(contents, getWindow, shell);
     contents.on('dom-ready', () => {
       void contents.executeJavaScript(preserveContextMenuSelectionScript).catch(() => { /* document navigated */ });
     });
     contents.on('context-menu', async (_contextEvent, params) => {
+      const target = dialog && captureHandoffTarget(contents);
+      const host = target && contents.hostWebContents;
+      const tabWindow = host && !host.isDestroyed() && ElectronBrowserWindow.fromWebContents(host);
       // Chromium can omit selectionText after a right-click outside the range,
       // even when the DOM selection is preserved. Read the originating document.
       if (!params.selectionText) {
@@ -347,9 +355,61 @@ export function registerBrowserContextMenu({
         locale: getLocale?.(),
         searchEngineId: getSearchEngineId?.()
       });
-      Menu.buildFromTemplate(template).popup({ window: getWindow() ?? undefined });
+      if (dialog && target && tabWindow && !tabWindow.isDestroyed()) {
+        template.push({ type: 'separator' }, ...buildSidekickHandoffItems({
+          clipboard, dialog, handoff, target, tabWindow, locale: getLocale?.()
+        }));
+      }
+      Menu.buildFromTemplate(template).popup({ window: tabWindow || getWindow() || undefined });
     });
   });
+}
+
+function buildSidekickHandoffItems({ clipboard, dialog, handoff, target, tabWindow, locale }: {
+  clipboard: Clipboard;
+  dialog: Dialog;
+  handoff: ReturnType<typeof createSidekickTabHandoff>;
+  target: NonNullable<ReturnType<typeof captureHandoffTarget>>;
+  tabWindow: BrowserWindow;
+  locale?: string;
+}): MenuItemConstructorOptions[] {
+  const german = locale?.toLowerCase().startsWith('de');
+  const text = (english: string, deutsch: string) => german ? deutsch : english;
+  const title = text('Sidekick tab handback', 'Tab-Übergabe an Sidekick');
+  const pairLabel = text('Pair this tab with Sidekick…', 'Tab mit Sidekick verbinden…');
+  const returnLabel = text('Return this tab to Sidekick…', 'An Sidekick zurückgeben…');
+  const confirm = async (returning: boolean) => {
+    if (tabWindow.isDestroyed()) return false;
+    const result = await dialog.showMessageBox(tabWindow, {
+      type: 'question', title, message: returning ? returnLabel : pairLabel,
+      detail: target.origin,
+      buttons: [text('Cancel', 'Abbrechen'), returning ? text('Return tab', 'Tab zurückgeben') : text('Pair tab', 'Tab koppeln')],
+      defaultId: 0, cancelId: 0, noLink: true
+    });
+    return result.response === 1;
+  };
+  const run = async (returning: boolean) => {
+    const result = await (returning
+      ? handoff.returnTab(target, () => confirm(true))
+      : handoff.pair(target, clipboard.readText(), () => confirm(false)));
+    if (result === 'cancelled' || tabWindow.isDestroyed()) return;
+    const messages = {
+      paired: text('Tab paired. You can now submit the request in Sidekick.', 'Tab gekoppelt. Du kannst die Anfrage jetzt in Sidekick senden.'),
+      returned: text('Sidekick received the tab handback.', 'Sidekick hat die Tab-Übergabe erhalten.'),
+      unavailable: text('Return to the paired tab and website after the page finishes loading.', 'Kehre zum gekoppelten Tab und zur Website zurück, sobald die Seite geladen ist.'),
+      'invalid-invitation': text('Copy a fresh tab invitation from Sidekick settings.', 'Kopiere eine neue Tab-Einladung aus den Sidekick-Einstellungen.'),
+      busy: text('A Sidekick action is already in progress for this tab.', 'Für diesen Tab läuft bereits eine Sidekick-Aktion.'),
+      'no-pending': text('Sidekick has no pending approval for this tab.', 'Für diesen Tab wartet keine Freigabe in Sidekick.'),
+      stale: text('The pending Sidekick approval changed or was canceled.', 'Die Sidekick-Freigabe wurde geändert oder abgebrochen.'),
+      failed: text('Sidekick could not confirm the tab handoff.', 'Sidekick konnte die Tab-Übergabe nicht bestätigen.')
+    };
+    await dialog.showMessageBox(tabWindow, {
+      type: result === 'paired' || result === 'returned' ? 'info' : 'warning', title, message: messages[result]
+    });
+  };
+  const items = [{ label: pairLabel, click: () => void run(false).catch(() => {}) }];
+  if (handoff.canReturn(target)) items.push({ label: returnLabel, click: () => void run(true).catch(() => {}) });
+  return items;
 }
 
 export function installWindowOpenBridge(

@@ -384,8 +384,8 @@ function buildSidekickHandoffItems({ clipboard, dialog, handoff, target, tabWind
     const result = await dialog.showMessageBox(tabWindow, {
       type: 'question', title, message: returning ? returnLabel : pairLabel,
       detail: returning ? `${target.origin}\n\n${text(
-        'While this tab stays selected, the same Sidekick run can read one limited excerpt of visible page text.',
-        'Solange dieser Tab ausgewählt bleibt, kann derselbe Sidekick-Lauf einen begrenzten Ausschnitt des sichtbaren Seitentexts lesen.'
+        'While this tab stays selected, Sidekick can send one excerpt of visible page text to the model configured for this run.',
+        'Solange dieser Tab ausgewählt bleibt, kann Sidekick einen Ausschnitt des sichtbaren Seitentexts an das Modell dieses Auftrags senden.'
       )}` : target.origin,
       buttons: [text('Cancel', 'Abbrechen'), returning ? text('Return tab', 'Tab zurückgeben') : text('Pair tab', 'Tab koppeln')],
       defaultId: 0, cancelId: 0, noLink: true

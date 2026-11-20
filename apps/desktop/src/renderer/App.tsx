@@ -1,4 +1,5 @@
 import React, { FormEvent, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { appendNavigationStep, MAX_NAVIGATION_DEMO_STEPS, navigationStep, serializeNavigationDemo, type NavigationRecording } from './navigation-demo';
 import {
   BarChart3,
   Bot,
@@ -4833,6 +4834,29 @@ function BrowserMain({
   // has been laid out — that second mount is the one that sticks.
   const [webviewReady, setWebviewReady] = useState(false);
   const [webviewMountKey, setWebviewMountKey] = useState(0);
+  const [navigationRecording, setNavigationRecording] = useState<NavigationRecording | null>(null);
+  const navigationRecordingRef = useRef<NavigationRecording | null>(null);
+  const [navigationDemo, setNavigationDemo] = useState<string | null>(null);
+  const [navigationDemoNotice, setNavigationDemoNotice] = useState('');
+  const navigationCopyEpoch = useRef(0);
+  const recordingScope = JSON.stringify([activeProfile.id, activeSpacePath, activeTab.id]);
+  useLayoutEffect(() => {
+    navigationRecordingRef.current = null;
+    navigationCopyEpoch.current++;
+    setNavigationRecording(null);
+    setNavigationDemo(null);
+    setNavigationDemoNotice('');
+  }, [recordingScope, activePanel, activeTab.incognito]);
+
+  function stopNavigationDemo(): void {
+    const current = navigationRecordingRef.current;
+    if (current?.scope !== recordingScope) return;
+    const { steps } = current;
+    navigationRecordingRef.current = null;
+    setNavigationRecording(null);
+    setNavigationDemo(steps.length > 0 ? serializeNavigationDemo(steps) : null);
+    setNavigationDemoNotice(steps.length === 0 ? 'No browser navigations were recorded.' : '');
+  }
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
   const webviewNavigationCleanupRefs = useRef<Record<string, () => void>>({});
   const smartInvertActive = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.smartInvertWebview);
@@ -5091,8 +5115,17 @@ function BrowserMain({
     let attempts = 0;
 
     const onNavigate = (event: Event) => {
-      const url = (event as unknown as { url?: string }).url;
+      const navigation = event as Event & { url?: string; isMainFrame?: boolean };
+      const { url } = navigation;
       if (typeof url === 'string' && url) onWebviewNavigate(activeTab.id, url);
+      const current = navigationRecordingRef.current;
+      if (activePanel !== 'browser' || activeTab.incognito || current?.scope !== recordingScope) return;
+      const step = navigationStep(navigation);
+      if (step !== null) {
+        const next = appendNavigationStep(current, recordingScope, step);
+        navigationRecordingRef.current = next;
+        setNavigationRecording(next);
+      }
     };
     const onTitle = (event: Event) => {
       const title = (event as unknown as { title?: string }).title;
@@ -5153,7 +5186,7 @@ function BrowserMain({
         }
       }
     };
-  }, [activeTab.id, webviewMountKey, webviewReady, onWebviewNavigate, onWebviewTitle, onWebviewFavicon, onWebviewLoading, onWebviewMediaPlaying, onSetBrowserError]);
+  }, [activePanel, activeTab.id, activeTab.incognito, recordingScope, webviewMountKey, webviewReady, onWebviewNavigate, onWebviewTitle, onWebviewFavicon, onWebviewLoading, onWebviewMediaPlaying, onSetBrowserError]);
 
   // Split panes are independently interactive. Keep their tab metadata in sync
   // even when that pane is not the active tab (the active guest is handled above).
@@ -5571,6 +5604,24 @@ function BrowserMain({
 
       {!isHomeOrSearch && (
         <div className="browser-page-corner-actions">
+          {navigationRecording === null ? (
+            <button type="button" className="secondary-action compact" disabled={!webviewReady || activeTab.incognito}
+              title="Record navigation types only for this tab. URLs and page contents are excluded."
+              onClick={() => {
+                navigationCopyEpoch.current++;
+                setNavigationDemo(null);
+                setNavigationDemoNotice('');
+                const recording: NavigationRecording = { scope: recordingScope, steps: [] };
+                navigationRecordingRef.current = recording;
+                setNavigationRecording(recording);
+              }}>
+              Record navigation
+            </button>
+          ) : (
+            <button type="button" className="secondary-action compact" aria-pressed="true" onClick={stopNavigationDemo}>
+              Stop recording ({navigationRecording.steps.length}/{MAX_NAVIGATION_DEMO_STEPS})
+            </button>
+          )}
           <button
             type="button"
             className={`devtools-trigger ${devToolsOpen ? 'active' : ''}`}
@@ -5591,6 +5642,31 @@ function BrowserMain({
           </button>
         </div>
       )}
+      {isHomeOrSearch && navigationRecording !== null && (
+        <button type="button" className="secondary-action compact" onClick={stopNavigationDemo}>Stop recording</button>
+      )}
+      {navigationDemo !== null && (
+        <div className="navigation-demo-export">
+          <label>Paste these steps into Sidekick → Skills → Import Lastbrowser demo.
+            <textarea readOnly rows={3} value={navigationDemo} onFocus={event => event.currentTarget.select()} />
+          </label>
+          <button type="button" className="secondary-action compact" onClick={async () => {
+            const epoch = ++navigationCopyEpoch.current;
+            try {
+              await navigator.clipboard.writeText(navigationDemo);
+              if (epoch === navigationCopyEpoch.current) setNavigationDemoNotice('Navigation steps copied.');
+            } catch {
+              if (epoch === navigationCopyEpoch.current) setNavigationDemoNotice('Clipboard unavailable. Select and copy the steps manually.');
+            }
+          }}>Copy navigation steps</button>
+          <button type="button" className="secondary-action compact" onClick={() => {
+            navigationCopyEpoch.current++;
+            setNavigationDemo(null);
+            setNavigationDemoNotice('');
+          }}>Close</button>
+        </div>
+      )}
+      {navigationDemoNotice && <p className="navigation-demo-notice" role="status">{navigationDemoNotice}</p>}
       <div className="browser-webview-frame" ref={browserFrameRef}>
         <LiveAutomationBanner webview={webviewRef.current} />
         {findOpen && (

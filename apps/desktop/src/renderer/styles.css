@@ -15885,6 +15885,25 @@ html.theme-light .titlebar-research-flyout .flyout-close-btn:hover {
   gap: 6px;
 }
 
+.navigation-demo-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.navigation-demo-export label,
+.navigation-demo-export textarea {
+  display: block;
+  flex: 1 1 300px;
+  width: 100%;
+}
+
+.navigation-demo-notice {
+  margin: 4px 12px;
+}
+
 /* Copilot Model Picker */
 .copilot-model-pill {
   cursor: pointer;

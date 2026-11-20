@@ -37,6 +37,7 @@ if (isTrustedPreloadDocumentUrl(window.location.href)) contextBridge.exposeInMai
     setLocale: (locale: string) => ipcRenderer.invoke('lastbrowser:i18n:setLocale', locale)
   },
   browser: {
+    selectHandoffGuest: (guestId: number | null) => ipcRenderer.send('lastbrowser:browser:selectHandoffGuest', guestId),
     setSearchEngine: (id: string) => ipcRenderer.invoke('lastbrowser:browser:setSearchEngine', id),
     onOpenTab: (callback: (url: string) => void) => {
       const listener = (_event: Electron.IpcRendererEvent, url: string) => callback(url);

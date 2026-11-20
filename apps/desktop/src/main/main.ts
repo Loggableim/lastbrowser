@@ -180,6 +180,8 @@ import { startTerminal, writeTerminal, resizeTerminal, closeTerminal, getTermina
 import { createAppTray, setupMinimizeToTray, type TrayController } from './tray.js';
 import { createMainWindowOptions, installBrowserChrome } from './window-chrome.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
+import { createSidekickTabHandoff } from './sidekick-tab-handoff.js';
+import { isTrustedPreloadDocumentUrl } from './preload-origin.js';
 import { registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, cleanOAuthUserAgent, sanitizeSecChUa, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
@@ -201,6 +203,8 @@ const mainDir = moduleDirname(import.meta.url);
 const cdpPreference = loadCdpPreference(app.getPath('userData'));
 setPersistedCdpEnabled(cdpPreference.enabled);
 let mainWindow: BrowserWindow | null = null;
+const sidekickTabHandoff = createSidekickTabHandoff();
+let focusedHandoffHost: Electron.WebContents | undefined;
 let appReady = false;
 const secondaryWindows = new Set<BrowserWindow>();
 type DetachedTabTransfer = {
@@ -340,9 +344,27 @@ export function dispatchOpenUrl(targetUrl: string): void {
   openUrlLifecycle.dispatchOpenUrl(targetUrl);
 }
 
+function trackHandoffWindow(window: BrowserWindow): void {
+  const host = window.webContents;
+  const deselect = () => sidekickTabHandoff.setSelectedGuest(host, null);
+  window.on('focus', () => {
+    if (focusedHandoffHost && focusedHandoffHost !== host) {
+      sidekickTabHandoff.setSelectedGuest(focusedHandoffHost, null);
+    }
+    focusedHandoffHost = host;
+  });
+  window.on('hide', deselect);
+  window.on('minimize', deselect);
+  window.on('closed', () => {
+    deselect();
+    if (focusedHandoffHost === host) focusedHandoffHost = undefined;
+  });
+}
+
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow(createMainWindowOptions(mainDir));
   mainWindow = window;
+  trackHandoffWindow(window);
 
   window.webContents.on('did-start-loading', () => openUrlLifecycle.onWindowLoading(window));
   window.webContents.on('did-finish-load', () => {
@@ -413,6 +435,14 @@ function broadcastAccessAuthLocked(): void {
 
 function registerIpc(): void {
   setAccessAuthRequiredHandler(broadcastAccessAuthLocked);
+  ipcMain.on('lastbrowser:browser:selectHandoffGuest', (event, id: unknown) => {
+    const host = event.sender;
+    const frame = event.senderFrame;
+    if (host.isDestroyed() || (host !== mainWindow?.webContents && !detachedWindowWebContents.has(host.id))
+      || !frame || frame !== host.mainFrame || !isTrustedPreloadDocumentUrl(frame.url)) return;
+    const guest = typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? webContents.fromId(id) : null;
+    sidekickTabHandoff.setSelectedGuest(host, guest?.hostWebContents === host ? guest : null);
+  });
   ipcMain.handle('lastbrowser:system:getCursorPosition', (event) => {
     const window = BrowserWindow.fromWebContents(event.sender);
     if (!window || window.isDestroyed()) return null;
@@ -918,6 +948,7 @@ function registerIpc(): void {
         });
         newWin = detachedWindow;
 
+        trackHandoffWindow(detachedWindow);
         secondaryWindows.add(detachedWindow);
         detachedWindowWebContents.add(detachedWindow.webContents.id);
         let resolveTransfer!: (acknowledged: boolean) => void;
@@ -1269,6 +1300,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     Menu,
     clipboard,
     dialog,
+    handoff: sidekickTabHandoff,
     shell,
     getWindow: () => mainWindow,
     getAssistantName: () => currentAssistantName,

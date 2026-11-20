@@ -4858,6 +4858,26 @@ function BrowserMain({
     setNavigationDemoNotice(steps.length === 0 ? 'No browser navigations were recorded.' : '');
   }
   const allWebviewRefs = useRef<Record<string, Electron.WebviewTag>>({});
+  const handoffGuestVisible = activePanel === 'browser' && browserMode === 'web'
+    && !isAiBrowserHomeUrl(activeTab.url) && webviewReady && webviewStartupReady;
+  useLayoutEffect(() => {
+    const selectGuest = window.lastbrowser?.browser?.selectHandoffGuest;
+    if (!selectGuest) return;
+    const guest = handoffGuestVisible ? allWebviewRefs.current[activeTab.id] : undefined;
+    const report = () => {
+      let id: number | null = null;
+      try { id = guest?.getWebContentsId() ?? null; } catch { /* guest is still attaching */ }
+      selectGuest(id);
+    };
+    report();
+    guest?.addEventListener('dom-ready', report);
+    window.addEventListener('focus', report);
+    return () => {
+      guest?.removeEventListener('dom-ready', report);
+      window.removeEventListener('focus', report);
+      selectGuest(null);
+    };
+  }, [recordingScope, handoffGuestVisible, activeTab.id, webviewMountKey]);
   const webviewNavigationCleanupRefs = useRef<Record<string, () => void>>({});
   const smartInvertActive = usePanelStore((s) => s.visionImpaired.enabled && s.visionImpaired.smartInvertWebview);
   const transferredTabBootstrapIds = useRef(new Set<string>());

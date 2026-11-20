@@ -204,6 +204,7 @@ declare global {
         save: (state: LastbrowserSetupState) => Promise<LastbrowserSetupState>;
       };
       browser: {
+        selectHandoffGuest: (guestId: number | null) => void;
         setSearchEngine?: (id: string) => Promise<boolean>;
         onOpenTab: (callback: (url: string) => void) => () => void;
         onOpenIncognitoTab: (callback: (url: string) => void) => () => void;

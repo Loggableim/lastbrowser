@@ -12,12 +12,18 @@ const token = 'b2'.repeat(32);
 const originalOrigin = 'https://signin.example';
 const pending = { runId: 'run-one', approvalId: 'approval-one' };
 
+class Host extends EventEmitter {
+  owner = { isDestroyed: () => false };
+  isDestroyed() { return false; }
+}
+
 class Guest extends EventEmitter {
   url = `${originalOrigin}/login?private=value#form`;
   type = 'webview';
   destroyed = false;
   loading = false;
-  hostWebContents = { isDestroyed: () => false, owner: { isDestroyed: () => false } };
+  hostWebContents = new Host();
+  executeJavaScriptInIsolatedWorld = vi.fn(async () => 'Authorized visible fixture');
 
   constructor(public session: object) { super(); }
   setWindowOpenHandler() {}
@@ -34,15 +40,20 @@ class Guest extends EventEmitter {
   }
 }
 
+function select(handoff: ReturnType<typeof createSidekickTabHandoff>, guest: Guest, host = guest.hostWebContents) {
+  handoff.setSelectedGuest(host as unknown as WebContents, guest as unknown as WebContents);
+}
+
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
   await Promise.all(cleanups.splice(0).map(close => close()));
 });
 
-async function listener() {
+async function listener(read = false) {
   const requests: Array<{ path: string; headers: IncomingHttpHeaders; body: unknown }> = [];
   let current: typeof pending | null = pending;
   let redirect = false;
+  let active = true;
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
     for await (const chunk of req) chunks.push(chunk);
@@ -55,8 +66,13 @@ async function listener() {
       res.end(JSON.stringify({ session: token }));
     } else if (path.endsWith('/pending')) {
       res.end(JSON.stringify({ pending: current }));
+    } else if (path.endsWith('/return')) {
+      res.end(JSON.stringify({ returned: true, ...(read && { read }) }));
+    } else if (path.endsWith('/read')) {
+      res.end(JSON.stringify(active ? { active, requestId: 'read-one' } : { active }));
     } else {
-      res.end(JSON.stringify({ returned: true }));
+      active = false;
+      res.end(JSON.stringify({ accepted: true }));
     }
   });
   server.listen(0, '127.0.0.1');
@@ -83,6 +99,7 @@ describe('native Sidekick tab handoff', () => {
     const otherProfile = new Guest({});
 
     await expect(handoff.pair(paired.target()!, server.invitation, approve)).resolves.toBe('paired');
+    select(handoff, paired);
     for (const guest of [otherTab, otherProfile]) {
       expect(handoff.canReturn(guest.target()!)).toBe(false);
       await expect(handoff.returnTab(guest.target()!, approve)).resolves.toBe('unavailable');
@@ -111,6 +128,7 @@ describe('native Sidekick tab handoff', () => {
     const server = await listener();
     const handoff = createSidekickTabHandoff();
     const guest = new Guest({});
+    select(handoff, guest);
     guest.loading = true;
     expect(guest.target()).toBeUndefined();
     guest.loading = false;
@@ -136,6 +154,7 @@ describe('native Sidekick tab handoff', () => {
       const server = await listener();
       const handoff = createSidekickTabHandoff();
       const guest = new Guest({});
+      select(handoff, guest);
       await handoff.pair(guest.target()!, server.invitation, approve);
       await expect(handoff.returnTab(guest.target()!, async () => {
         server.setPending(next);
@@ -148,6 +167,7 @@ describe('native Sidekick tab handoff', () => {
     const server = await listener();
     const handoff = createSidekickTabHandoff();
     const guest = new Guest({});
+    select(handoff, guest);
     await handoff.pair(guest.target()!, server.invitation, approve);
     const returning = handoff.returnTab(guest.target()!, async () => {
       await expect(handoff.returnTab(guest.target()!, approve)).resolves.toBe('busy');
@@ -183,6 +203,8 @@ describe('native Sidekick tab handoff', () => {
     const app = new EventEmitter();
     const guest = new Guest({});
     const neighbor = new Guest(guest.session);
+    const handoff = createSidekickTabHandoff();
+    select(handoff, guest);
     const readText = vi.fn(() => server.invitation);
     const showMessageBox = vi.fn(async () => ({ response: 1 }));
     const popup = vi.fn();
@@ -192,6 +214,7 @@ describe('native Sidekick tab handoff', () => {
       Menu: { buildFromTemplate: template => { items = template; return { popup }; } },
       clipboard: { readText } as never,
       dialog: { showMessageBox } as never,
+      handoff,
       shell: {} as never,
       getWindow: () => null,
       getLocale: () => 'de-DE'
@@ -219,8 +242,54 @@ describe('native Sidekick tab handoff', () => {
     expect(await openMenu(guest)).toContain(returnLabel);
     click(returnLabel);
     await vi.waitFor(() => expect(showMessageBox).toHaveBeenCalledTimes(4));
+    expect(showMessageBox).toHaveBeenNthCalledWith(3, guest.hostWebContents.owner, expect.objectContaining({
+      detail: expect.stringContaining('einen begrenzten Ausschnitt des sichtbaren Seitentexts')
+    }));
     expect(await openMenu(guest)).not.toContain(returnLabel);
     expect(readText).toHaveBeenCalledOnce();
     expect(server.requests.at(-1)?.body).toEqual({ version: 1, ...pending, origin: originalOrigin });
+  });
+
+  it('gives one fixed-world visible-text response for the handed-back run', async () => {
+    const server = await listener(true);
+    const handoff = createSidekickTabHandoff();
+    const guest = new Guest({});
+    select(handoff, guest);
+    await handoff.pair(guest.target()!, server.invitation, approve);
+    await expect(handoff.returnTab(guest.target()!, approve)).resolves.toBe('returned');
+    await vi.waitFor(() => expect(server.requests.find(req => req.path.endsWith('/result'))?.body).toEqual({
+      version: 1, runId: pending.runId, requestId: 'read-one', text: 'Authorized visible fixture'
+    }));
+    await vi.waitFor(() => expect(server.requests.at(-1)?.path).toBe('/lastbrowser/v1/handoff/read'));
+    expect(guest.executeJavaScriptInIsolatedWorld).toHaveBeenCalledOnce();
+    expect(guest.executeJavaScriptInIsolatedWorld).toHaveBeenCalledWith(1102, [{ code: expect.any(String) }], false);
+  });
+
+  it.each(['tab switch', 'profile switch', 'redirect out and back', 'destruction'])('revokes a pending snapshot on %s', async event => {
+    const server = await listener(true);
+    const handoff = createSidekickTabHandoff();
+    const guest = new Guest({});
+    const second = new Guest(event === 'profile switch' ? {} : guest.session);
+    second.hostWebContents = guest.hostWebContents;
+    select(handoff, guest);
+    let finish!: (text: string) => void;
+    guest.executeJavaScriptInIsolatedWorld.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    await handoff.pair(guest.target()!, server.invitation, approve);
+    await handoff.returnTab(guest.target()!, approve);
+    await vi.waitFor(() => expect(guest.executeJavaScriptInIsolatedWorld).toHaveBeenCalledOnce());
+    if (event === 'tab switch' || event === 'profile switch') {
+      select(handoff, second);
+      select(handoff, guest);
+    } else if (event === 'destruction') {
+      guest.emit('destroyed');
+    } else {
+      guest.emit('did-redirect-navigation', { isMainFrame: true, url: 'https://other.example' });
+      guest.emit('did-redirect-navigation', { isMainFrame: true, url: originalOrigin });
+    }
+    finish('Stale fixture text');
+    await vi.waitFor(() => expect(server.requests.at(-1)?.path).toBe('/lastbrowser/v1/handoff/revoke'));
+    expect(server.requests.at(-1)?.body).toEqual({ version: 1, runId: pending.runId });
+    expect(server.requests.some(req => req.path.endsWith('/result'))).toBe(false);
+    expect(second.executeJavaScriptInIsolatedWorld).not.toHaveBeenCalled();
   });
 });

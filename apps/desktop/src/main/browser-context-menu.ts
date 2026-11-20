@@ -300,6 +300,7 @@ export function registerBrowserContextMenu({
   Menu,
   clipboard,
   dialog,
+  handoff = createSidekickTabHandoff(),
   shell,
   getWindow,
   getAssistantName,
@@ -310,13 +311,13 @@ export function registerBrowserContextMenu({
   Menu: MenuLike;
   clipboard: Clipboard;
   dialog?: Dialog;
+  handoff?: ReturnType<typeof createSidekickTabHandoff>;
   shell: Shell;
   getWindow: () => BrowserWindow | null;
   getAssistantName?: () => string;
   getLocale?: () => string;
   getSearchEngineId?: () => string;
 }): void {
-  const handoff = createSidekickTabHandoff();
   app.on('web-contents-created', (_event, contents) => {
     installWindowOpenBridge(contents, getWindow, shell);
     contents.on('dom-ready', () => {
@@ -382,7 +383,10 @@ function buildSidekickHandoffItems({ clipboard, dialog, handoff, target, tabWind
     if (tabWindow.isDestroyed()) return false;
     const result = await dialog.showMessageBox(tabWindow, {
       type: 'question', title, message: returning ? returnLabel : pairLabel,
-      detail: target.origin,
+      detail: returning ? `${target.origin}\n\n${text(
+        'While this tab stays selected, the same Sidekick run can read one limited excerpt of visible page text.',
+        'Solange dieser Tab ausgewählt bleibt, kann derselbe Sidekick-Lauf einen begrenzten Ausschnitt des sichtbaren Seitentexts lesen.'
+      )}` : target.origin,
       buttons: [text('Cancel', 'Abbrechen'), returning ? text('Return tab', 'Tab zurückgeben') : text('Pair tab', 'Tab koppeln')],
       defaultId: 0, cancelId: 0, noLink: true
     });

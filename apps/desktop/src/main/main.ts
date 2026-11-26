@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, powerMonitor, screen, shell, session, webContents, type MessageBoxOptions, type Session } from 'electron';
 import { getChatCompletionNotification, shouldNotifyChatCompletion } from './chat-notifications.js';
-import { detachRequestKey, ensureDetachedPageReady, isGuestOwnedByRenderer, normalizeRestoredNavigationHistory, parseDetachTabPayload, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
+import { detachRequestKey, ensureDetachedPageReady, isGuestOwnedByRenderer, normalizeRestoredNavigationHistory, parseDetachTabPayload, prepareDetachedWebviewSource, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
 import { clearDeletedProfilePartitions } from './profile-partition-cleanup.js';
 import { registerBrowserDataCleanupIpc } from './browser-data-cleanup.js';
 import { createDownloadOriginTracker } from './download-origin.js';
@@ -448,7 +448,7 @@ export function dispatchOpenUrl(targetUrl: string, onDelivered?: () => void): vo
 }
 
 function createWindow(): BrowserWindow {
-  const window = new BrowserWindow(createMainWindowOptions(mainDir));
+  const window = new BrowserWindow(createMainWindowOptions(mainDir, screen.getPrimaryDisplay().workAreaSize));
   registerBrowserNavigationCommands(window);
   installWindowsFirstPaintNudge(window);
   mainWindow = window;
@@ -1418,12 +1418,7 @@ function registerIpc(): void {
         });
         detachedWindow.webContents.on('will-attach-webview', (_event, _webPreferences, params) => {
           const transfer = detachedTabTransfers.get(contentsId);
-          if (transfer?.payload.navigationHistory && params.src === transfer.payload.tab.url) {
-            // Give the guest a valid attachment without committing its first
-            // navigation. did-attach-webview restores the snapshot before the
-            // transferred page creates its first history entry.
-            params.src = 'about:blank';
-          }
+          if (transfer) prepareDetachedWebviewSource(params, transfer.payload.tab.url, Boolean(transfer.payload.navigationHistory));
         });
         detachedWindow.webContents.on('did-attach-webview', (_event, guest) => {
           const transfer = detachedTabTransfers.get(contentsId);

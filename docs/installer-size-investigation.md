@@ -1,9 +1,14 @@
 # Windows package size investigation
 
 Issue #322 compares the compressed 0.1.58 installer (reported as 640 MB)
-with the 0.1.56 installer (reported as 277 MB). Neither original installer was
-measured in this investigation, so the cause of that historical increase is not
-established by the figures below.
+with the 0.1.56 installer (reported as 277 MB). Public GitHub release metadata
+retrieved on 2026-11-27 lists the 0.1.56 setup at 277,629,344 bytes and the
+0.1.58 setup at 640,207,744 bytes: an increase of 362,578,400 bytes, or about
+130.6%. The corresponding portable assets are 277,265,952 and 639,845,984
+bytes. These are asset sizes from the [0.1.56](https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.56)
+and [0.1.58](https://github.com/Loggableim/lastbrowser/releases/tag/v0.1.58)
+release metadata, not independently downloaded or inspected files. The cause
+of the historical increase is not established by those figures.
 
 ## Existing work on 0.1.58
 

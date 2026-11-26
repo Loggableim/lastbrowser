@@ -9,6 +9,8 @@ type AssistantSpace = Pick<IndependentScope, 'browserProfileId' | 'spaceId' | 'b
 export const novaAssistantNameLimit = 80;
 export const novaAssistantInstructionsLimit = 8000;
 
+export class InvalidNovaAssistantProfileError extends Error {}
+
 const profileKey = (browserProfileId: string) => `lastbrowser.novaAssistants.v1:${JSON.stringify(browserProfileId)}`;
 const spaceKeyPrefix = (browserProfileId: string) => `lastbrowser.novaAssistantSelection.v1:${JSON.stringify(browserProfileId)}:`;
 const spaceKey = ({ browserProfileId, spaceId, backendProfileId }: AssistantSpace) =>
@@ -39,8 +41,11 @@ export function findNovaAssistant(
 
 export function saveNovaAssistantProfile(storage: AssistantStorage, browserProfileId: string, assistant: NovaAssistantProfile): NovaAssistantProfile[] {
   const record = { id: assistant.id, name: assistant.name.trim(), instructions: assistant.instructions.trim() };
-  if (!isNovaAssistant(record) || bundledNovaAssistants('en').some((profile) => profile.id === record.id)) {
-    throw new Error('Invalid assistant profile');
+  // Match Sidekick's text validation on save, while keeping older drafts editable.
+  if (!isNovaAssistant(record) || /[\ud800-\udfff]/u.test(record.name) ||
+      /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f\ud800-\udfff]/u.test(record.instructions) ||
+      bundledNovaAssistants('en').some((profile) => profile.id === record.id)) {
+    throw new InvalidNovaAssistantProfileError('Invalid assistant profile');
   }
   const current = readNovaAssistantProfiles(storage, browserProfileId);
   const existing = current.findIndex((entry) => entry.id === record.id);

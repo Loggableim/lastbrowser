@@ -27,6 +27,12 @@ describe('offline versioned release notes', () => {
 
   it('shows notes for the confirmed target when the original version is unknown', () => {
     expect(releaseNotesBetween({ fromVersion: null, toVersion: '0.1.46' }, 'de')).toHaveLength(1);
+    expect(releaseNotesBetween({ fromVersion: null, toVersion: '0.1.53' }, 'de').map(entry => entry.version))
+      .toEqual(['0.1.53']);
+    expect(releaseNotesBetween({ fromVersion: null, toVersion: '0.1.54' }, 'de')).toEqual([{
+      version: '0.1.54',
+      changes: ['Lastbrowser wurde auf Version 0.1.54 aktualisiert.']
+    }]);
   });
 
   it('shows the published release notes for the 0.1.53 upgrade seen in P-003', () => {

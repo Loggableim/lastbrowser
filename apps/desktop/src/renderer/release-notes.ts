@@ -416,7 +416,9 @@ export function releaseNotesBetween(
       && (!isVersion(candidate.fromVersion) || compareVersions(candidate.toVersion, candidate.fromVersion) <= 0))) return [];
   const notes = releaseNotes
     .filter((entry) => isVersion(entry.version)
-      && (candidate.fromVersion === null || compareVersions(entry.version, candidate.fromVersion) > 0)
+      && (candidate.fromVersion === null
+        ? compareVersions(entry.version, candidate.toVersion) === 0
+        : compareVersions(entry.version, candidate.fromVersion) > 0)
       && compareVersions(entry.version, candidate.toVersion) <= 0)
     .sort((a, b) => compareVersions(a.version, b.version))
     .map((entry) => ({ version: entry.version, changes: entry.changes[locale] || entry.changes.en }));

@@ -7,6 +7,10 @@ import {
 } from '../src/renderer/chat-live-stream.js';
 
 describe('native chat stream errors', () => {
+  it('uses translated copy for the structured OpenCode free limit', () => {
+    expect(readNativeChatStreamError({ code: 'opencode_free_limit', error: 'raw' }, () => 'Limit erreicht')).toBe('Limit erreicht');
+    expect(readNativeChatStreamError({ code: 'other', error: 'raw' }, () => 'Limit erreicht')).toBe('raw');
+  });
   it('extracts provider messages from supported SSE error payloads', () => {
     expect(readNativeChatStreamError({ error: 'Ollama Cloud quota exhausted' })).toBe('Ollama Cloud quota exhausted');
     expect(readNativeChatStreamError({ detail: { message: 'Provider unavailable' } })).toBe('Provider unavailable');

@@ -3033,7 +3033,7 @@ def _run_agent_streaming(
                     put('stream_end', {'session_id': session_id})
             return
 
-        from runtime.opencode_free_chat import deliver_free_turn, is_free_official_chat
+        from runtime.opencode_free_chat import deliver_free_turn, free_chat_error_payload, is_free_official_chat
         if is_free_official_chat(provider_context, model):
             _metering_stop.set()
             try:
@@ -3062,7 +3062,7 @@ def _run_agent_streaming(
                         s.save()
                     except Exception:
                         logger.warning("Could not save failed free chat turn")
-                put("error", {"error": str(exc)[:500], "session_id": session_id})
+                put("error", free_chat_error_payload(exc, session_id))
                 put("stream_end", {"session_id": session_id, "processExited": True})
             return
 

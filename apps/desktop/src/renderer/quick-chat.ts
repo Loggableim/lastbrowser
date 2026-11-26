@@ -118,7 +118,7 @@ export class QuickChat {
       if (isNativeChatProgressEvent(event.event)) lastProgressAt = Date.now();
       if (event.event === 'error' || event.event === 'apperror') {
         this.latencyRun?.noteRealToken();
-        const error = readNativeChatStreamError(event.data);
+        const error = readNativeChatStreamError(event.data, t);
         failed = ended = true;
         this.update({ error, messages: finishLiveChatMessageWithError(this.state.messages, error) });
       } else if (event.event === 'stream_end' || event.event === 'cancel') {

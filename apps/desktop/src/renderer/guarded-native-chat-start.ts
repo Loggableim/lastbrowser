@@ -79,6 +79,12 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
   }
 
   const pair = { model: input.selection.model ?? '', provider: input.selection.provider ?? '' };
+  const parsedPair = parseProviderModelId(pair.model, pair.provider);
+  if (pair.provider.trim() && parsedPair.provider && pair.provider.trim().toLowerCase() !== parsedPair.provider.trim().toLowerCase()) {
+    return { ok: false, reason: 'model_unavailable' };
+  }
+  pair.model = parsedPair.model;
+  pair.provider = parsedPair.provider ?? pair.provider;
   let inactiveModelFallback = false;
   const multiAgent = isMultiAgentModelSelection(pair);
   if (multiAgent && (!AI_ORCHESTRATION_ENABLED || !input.allowUntestedBetas)) return { ok: false, reason: 'multi_agent_beta_required' };
@@ -92,8 +98,10 @@ export function prepareGuardedNativeChatStart(input: GuardedNativeChatStartInput
     const selectedIsActive = active.some(candidate => candidate.provider === pair.provider && candidate.model === pair.model);
     if (!selectedIsActive) {
       if (isModelActive(input.storage, scope, pair.provider, pair.model)) return { ok: false, reason: 'model_unavailable' };
-      pair.provider = active[0].provider;
-      pair.model = active[0].model;
+      const fallback = pair.provider.trim() ? active.find(candidate => candidate.provider === pair.provider) : active[0];
+      if (!fallback) return { ok: false, reason: 'no_active_models' };
+      pair.provider = fallback.provider;
+      pair.model = fallback.model;
       inactiveModelFallback = Boolean((input.selection.model ?? '').trim());
     }
   } else if (!multiAgent && !input.allowUntestedBetas

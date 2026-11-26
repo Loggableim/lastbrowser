@@ -315,7 +315,7 @@ export function NativeChatMain({
           if (!migrated.ok) throw new Error(migrated.error.message);
           data = migrated.value;
           selectionForView = data;
-          setStatusMessage(t('settings.panels.providers.activeModelFallback'));
+          if (activeChoice.changed) setStatusMessage(t('settings.panels.providers.activeModelFallback'));
         } else if (!(AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection(selectionForView)) && !activeChoice.choice) {
           selectionForView = { ...selectionForView, model: '', provider: '', configured: false };
         }

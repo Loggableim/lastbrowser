@@ -26,6 +26,7 @@ export const desktopJaOverrides = {
   'whatsNew.versionOnly': 'バージョン {toVersion}',
   'whatsNew.close': '閉じる',
   'spaceAssistant.switchToQuickChat': 'Quickchat',
+  'chat.openCodeFreeLimit': '無料の OpenCode モデルの使用上限に達しました。後でもう一度試すか、別のモデルを選択してください。',
   ...group('access.lock', {
     checking: '安全なセッションを確認中…', description: 'ブラウザーを開くにはアクセスパスワードを入力してください。', password: 'アクセスパスワード', retry: '再試行', title: 'ブラウザーはロックされています', unlock: 'ロックを解除', unlocking: 'ロックを解除中…'
   }),
@@ -243,7 +244,7 @@ export const desktopJaOverrides = {
   'settings.panels.providers.noScannedModels': '利用可能なモデルを検出するにはプロバイダーを接続してください。',
   'settings.panels.providers.activeModelsSaveFailed': '有効なモデルの選択を保存できませんでした。',
   'settings.panels.providers.activeModelFallback': '以前のモデルは無効か利用できません。有効なモデルに切り替えました。',
-  'settings.panels.providers.noActiveModels': '有効なモデルがありません。AI とローカルモデルの設定で検出済みモデルを有効にしてください。',
+  'settings.panels.providers.noActiveModels': '有効なモデルがありません。設定で AI プロバイダーを設定するか、モデルを有効にしてください。',
   'settings.panels.providers.openActiveModels': 'モデル設定を開く',
   'settings.panels.providers.betaCatalogToggle': '未検証のベータ版プロバイダーとモデルをこのセッションで表示して有効にする',
   'settings.panels.providers.betaCatalogDescription': 'このセッションのみ有効です。未検証のプロバイダー／モデルとマルチエージェントの選択肢を表示します。プロフィール、アカウント、ランタイム、ハードウェア、ライセンス、スコープ、停止の各制御は引き続き適用されます。',

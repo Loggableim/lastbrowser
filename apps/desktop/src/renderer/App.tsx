@@ -906,6 +906,8 @@ function AppContent(): JSX.Element {
   const [pendingStartSearchFocus, setPendingStartSearchFocus] = useState<{ tabId: string; expiresAt: number } | null>(null);
   const selectedChatModel = useChatStore((state) => state.selectedModel);
   const selectedChatModelProvider = useChatStore((state) => state.selectedModelProvider);
+  const translateRef = useRef(t);
+  translateRef.current = t;
   const quickChatActiveModelRevision = useActiveModelRevision();
   const quickChatShowBetas = useShowUntestedProviderBetas();
   const [quickChatFavoriteRevision, setQuickChatFavoriteRevision] = useState(0);
@@ -1474,7 +1476,7 @@ function AppContent(): JSX.Element {
     if (event.event === 'error' || event.event === 'apperror') {
       quickLatencyRunRef.current?.cancel();
       quickChatTimingsRef.current.delete(event.streamId);
-      const message = readNativeChatStreamError(event.data);
+      const message = readNativeChatStreamError(event.data, translateRef.current);
       const scopeKey = quickChatBindingScopeKeyRef.current ?? quickChatTranscriptScopeKeyRef.current;
       if (scopeKey) {
         setQuickChatErrorForScope(scopeKey, message);
@@ -3937,7 +3939,7 @@ function AppContent(): JSX.Element {
       const streamMatches = event.streamId === streamId;
       const ownsContext = isOwningContextCurrent();
       const eventError = event.event === 'error' || event.event === 'apperror'
-        ? nativeGoalHumanAuthorizationErrorCopy(locale,event.data)??readNativeChatStreamError(event.data)
+        ? nativeGoalHumanAuthorizationErrorCopy(locale,event.data)??readNativeChatStreamError(event.data, t)
         : null;
       traceRendererChat('event', {
         event: event.event ?? 'unknown',

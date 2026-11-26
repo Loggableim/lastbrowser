@@ -379,6 +379,7 @@ export const desktopTranslationKeys = [
   'chat.turnUsage',
   'chat.inputTokens',
   'chat.latencyPlaceholder.01',
+  'chat.openCodeFreeLimit',
   'chat.latencyPlaceholder.02',
   'chat.latencyPlaceholder.03',
   'chat.latencyPlaceholder.04',

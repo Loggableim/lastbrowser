@@ -19,6 +19,8 @@ describe('startup animation integration', () => {
     const feed = { clip: 'Welcome', time: '0 ms', cue: 'start', fps: '60 fps', drift: '0 ms', last: 'init' };
     const html = renderToStaticMarkup(createElement(StartupEventFeed, { locale, feed }));
     for (const label of [time, cue, last]) expect(html).toContain(label);
+    expect(html).toContain('aria-live="off"');
+    expect(html).not.toContain('role="status"');
   });
 
   it('reads duration and onset marks from timing json', () => {

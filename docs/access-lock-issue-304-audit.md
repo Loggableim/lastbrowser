@@ -1,0 +1,9 @@
+# Issue #304: Zugriffspasswort und Barrierefreiheit
+
+Stand: 26. November 2026. Für dasselbe Issue bestehen die offenen PRs #347 und #349; diese Prüfung übernimmt keinen der PRs pauschal. Im hiesigen Arbeitsstand sind unter anderem ein separates Passwortformular, lokalisierte Fehlerkategorien, ein beschrifteter Sichtbarkeitsschalter, `aria-busy`, sichtbare Fokusregeln sowie ein ruhiger Platzhalter während der Sitzungsprüfung vorhanden. Die Quellen für den Startbildschirm blenden rotierende Texte während der Sperre aus. Das Settings-Feld trägt `autocomplete="new-password"`.
+
+Im Verzeichnis `apps/desktop` bestanden am 26. November `node ../../node_modules/vitest/vitest.mjs run tests/access-password-input.test.ts tests/access-lock-errors.test.ts tests/access-password-lock.test.ts tests/startup-auth-placeholder.test.ts tests/startup-screen.test.ts`: fünf Dateien, 36 Tests. Vite meldete fehlende Sourcemaps der vendorten xterm-Dateien; der Testlauf endete trotzdem mit Code 0. Die Prüfungen decken nicht sämtliche Screenreader- und Kontrastkombinationen ab.
+
+Der in #347/#349 genannte Hinweis, wo das Passwort nach dem Entsperren geändert wird, wurde im hiesigen Formular ergänzt. Offen für die Abnahme sind reale Screenreader-Prüfung, Fokusführung unter Windows und ein wiederholter End-to-End-Test des Fehler- und Wiederholungswegs in der endgültigen Store-Fassung. Der reine Zugriffsschutz ist nicht mit einer Prüfung der Profilverschlüsselung gleichzusetzen. Das Issue bleibt offen.
+
+Am 26. November wurde der aktualisierte Desktop-Quellstand unter Windows zusätzlich mit `tsc -p tsconfig.main.json`, den Preload-/Staging-Skripten, `tsc --noEmit -p tsconfig.renderer.json` und `vite build` gebaut. Alle Schritte endeten mit Code 0; Vite meldete große JavaScript-Chunks. Dies ist ein lokaler Build, kein neues Store-Paket oder Sichtprüfung des Passwortbildschirms.

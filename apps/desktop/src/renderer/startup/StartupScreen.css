@@ -200,6 +200,16 @@
   gap: 10px;
 }
 
+.startup-screen__auth > .startup-screen__auth-hint {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.startup-screen__auth-password { display: flex; gap: 8px; }
+.startup-screen__auth-password input { flex: 1; min-width: 0; }
+.startup-screen__auth-password button { display: grid; place-items: center; padding: 0 12px; }
+
 .startup-screen__auth input {
   min-height: 42px;
   padding: 0 12px;
@@ -222,6 +232,12 @@
 }
 
 .startup-screen__auth button:disabled { opacity: 0.55; cursor: default; }
+
+.startup-screen__auth input:focus-visible,
+.startup-screen__auth button:focus-visible {
+  outline: 2px solid #70d5ff;
+  outline-offset: 3px;
+}
 
 .startup-background-status {
   position: fixed;

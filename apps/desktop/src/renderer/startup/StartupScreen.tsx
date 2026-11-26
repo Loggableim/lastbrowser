@@ -20,6 +20,8 @@ export type StartupScreenProps = {
   /** Must be selected once for the application launch and provided by its launch-lifetime owner. */
   launchIcon: StartupIconId | null;
   phase: StartupPhaseId | null;
+  locked?: boolean;
+  checkingMessage?: string;
   error?: string | null;
   onRetry?: () => void;
   retryContent?: ReactNode;
@@ -39,7 +41,7 @@ export function readReducedMotionPreference(): boolean {
     : false;
 }
 
-export function StartupScreen({ locale, launchIcon, phase, error = null, onRetry, retryContent, reducedMotion, random, opening = false, openingDurationMs, openingSoundId, onOpeningComplete }: StartupScreenProps) {
+export function StartupScreen({ locale, launchIcon, phase, locked = false, checkingMessage, error = null, onRetry, retryContent, reducedMotion, random, opening = false, openingDurationMs, openingSoundId, onOpeningComplete }: StartupScreenProps) {
   const preferences = useStartupPreferences();
   const copy = startupScreenCopy[resolveStartupLocale(locale)];
   const screenRef = useRef<HTMLElement>(null);
@@ -138,10 +140,10 @@ export function StartupScreen({ locale, launchIcon, phase, error = null, onRetry
   }, [motionIsReduced, opening, preferences.animation, soundTheme]);
 
   useEffect(() => {
-    if (error || motionIsReduced || opening) return undefined;
+    if (error || locked || checkingMessage || motionIsReduced || opening) return undefined;
     const timer = window.setInterval(() => setQuoteIndex((current) => nextStartupQuoteIndex(current, copy.quotes.length)), 4_000);
     return () => window.clearInterval(timer);
-  }, [copy.quotes.length, error, motionIsReduced, opening]);
+  }, [copy.quotes.length, error, locked, checkingMessage, motionIsReduced, opening]);
 
   return (
     <main
@@ -167,7 +169,7 @@ export function StartupScreen({ locale, launchIcon, phase, error = null, onRetry
           {launchIcon && <img className="startup-screen__icon" src={iconSources[launchIcon]} alt="" />}
         </div>
         <p className="startup-screen__brand">LastBrowser</p>
-        {!error && (
+        {!error && !locked && !checkingMessage && (
           <p className="startup-screen__quote" aria-live="polite" aria-atomic="true" key={quoteIndex}>
             {copy.quotes[quoteIndex]}
           </p>
@@ -180,7 +182,8 @@ export function StartupScreen({ locale, launchIcon, phase, error = null, onRetry
           </section>
         ) : (
           <>
-            {phase && <p className="startup-screen__phase" aria-live="polite">{copy.phases[phase]}</p>}
+            {checkingMessage && <p className="startup-screen__phase" role="status">{checkingMessage}</p>}
+            {!checkingMessage && !locked && phase && <p className="startup-screen__phase" aria-live="polite">{copy.phases[phase]}</p>}
             {retryContent}
           </>
         )}

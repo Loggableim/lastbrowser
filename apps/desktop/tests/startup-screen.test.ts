@@ -90,6 +90,15 @@ describe('startup screen launch state', () => {
 });
 
 describe('startup screen copy and motion rules', () => {
+  it('announces the session check without a competing quote or phase', () => {
+    const markup = renderWithI18n(createElement(StartupScreen, {
+      locale: 'de', launchIcon: null, phase: 'session', checkingMessage: 'Sichere Sitzung wird geprüft…'
+    }));
+    expect(markup).toContain('Sichere Sitzung wird geprüft…');
+    expect(markup).toContain('role="status"');
+    expect(markup).not.toContain('startup-screen__quote');
+    expect(markup).not.toContain(startupScreenCopy.de.phases.session);
+  });
   it('exposes three distinct border styles and all five supplied sounds in the existing settings', () => {
     try {
       vi.stubGlobal('navigator', { language: 'en' });
@@ -203,7 +212,7 @@ describe('startup screen copy and motion rules', () => {
     expect(component).toContain('window.setInterval');
     expect(component).toContain('4_000');
     expect(component).toContain('window.clearInterval(timer)');
-    expect(component).toContain('if (error || motionIsReduced || opening) return undefined;');
+    expect(component).toContain('if (error || locked || checkingMessage || motionIsReduced || opening) return undefined;');
   });
 
   it('renders the selected launch icon, localized phase, and retryable error state', () => {
@@ -231,6 +240,19 @@ describe('startup screen copy and motion rules', () => {
     expect(error).toContain('Erneut versuchen');
     expect(error).not.toContain('Hamster beim vortrainieren');
     expect(error).not.toContain('Lokale Engine startet');
+  });
+
+  it('keeps rotating quotes and startup phases out of the locked screen', () => {
+    const screen = renderWithI18n(createElement(StartupScreen, {
+      locale: 'de', launchIcon: 'sidekick-03', phase: 'engine', locked: true, reducedMotion: true,
+      retryContent: createElement('form', { 'aria-label': 'Unlock' })
+    }));
+    expect(screen).toContain('aria-label="Unlock"');
+    expect(screen).not.toContain('startup-screen__quote');
+    expect(screen).not.toContain('startup-screen__phase');
+    const styles = readFileSync(path.join(sourceRoot, 'StartupScreen.css'), 'utf8');
+    expect(styles).toContain('.startup-screen__auth input:focus-visible');
+    expect(styles).toContain('.startup-screen__auth button:focus-visible');
   });
 
   it('keeps a still presentation for reduced motion and uses proportional responsive icon sizing', () => {

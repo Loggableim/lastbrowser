@@ -90,7 +90,7 @@ type EventFeed = { clip: string; time: string; cue: string; fps: string; drift: 
 
 export function StartupEventFeed({ locale, feed }: { locale: string; feed: EventFeed }) {
   return (
-    <div role="status" aria-live="polite" style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 2, minWidth: 240, padding: '8px 10px', borderRadius: 8, background: 'rgba(6,16,26,.82)', color: '#d7e7f7', font: '12px/1.45 ui-monospace, Consolas, monospace' }}>
+    <div aria-live="off" style={{ position: 'absolute', left: 12, bottom: 12, zIndex: 2, minWidth: 240, padding: '8px 10px', borderRadius: 8, background: 'rgba(6,16,26,.82)', color: '#d7e7f7', font: '12px/1.45 ui-monospace, Consolas, monospace' }}>
       <div>{shellText(locale, 'Clip / Thema', 'Clip / Theme')}: {feed.clip}</div>
       <div>{shellText(locale, 'Audiozeit', 'Audio time')}: {feed.time}</div>
       <div>{shellText(locale, 'Nächster Cue', 'Next cue')}: {feed.cue}</div>

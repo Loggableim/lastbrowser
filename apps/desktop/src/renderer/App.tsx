@@ -63,6 +63,8 @@ import { subscribeDevToolsState, toggleWebviewDevTools } from './devtools-state.
 import { bindWebviewReadiness, isWebviewReady } from './webview-readiness.js';
 import { canRenderBrowserForAccessAuth } from './access-auth.js';
 import { createAccessAuthGateConsumer, isVerifiedAccessAuthLogin } from './access-auth-gate.js';
+import { accessLockErrorKey } from './access-lock-errors.js';
+import { AccessPasswordInput } from './components/AccessPasswordInput.js';
 import { fetchAccessAuthStatusWithRetry } from './access-auth-status.js';
 import { createOnceChatCompletionNotifier, isChatCompletionConfirmed } from './chat-completion.js';
 import { applyLiveChatDelta, applyLiveChatProgress, claimRestoredChatStream, finishLiveChatMessage, finishStoppedLiveChatMessage, finishLiveChatMessageWithError, finishOrphanedChatTurn, isLocalChatTurnForSession, isMatchingLocalChatStreamSnapshot, preserveInFlightChatMessages, readLiveChatDelta, readNativeChatStreamError, readRestoredChatStream, readRestoredChatTurnState, restorePendingChatTurn } from './chat-live-stream.js';
@@ -214,6 +216,7 @@ import { canCallSidekickApi } from './runtime-readiness.js';
 import { deriveStartupPhase, getStartupBackgroundPhase, getStartupFailureStage, isValidStartupModelCatalog, type StartupAuthPolicy, type StartupIconId, type StartupReadinessSignals, type StartupSignalState } from './startup/startup-screen-state.js';
 import { startupScreenCopy, resolveStartupLocale } from './startup/startup-screen-copy.js';
 import { StartupScreen } from './startup/StartupScreen.js';
+import { StartupAuthPlaceholder, shouldShowStartupAuthPlaceholder } from './startup/StartupAuthPlaceholder.js';
 import { StartupPreferencesPanel } from './startup/StartupPreferencesPanel.js';
 import { StartupAnimationLayer } from './startup/StartupAnimationLayer.js';
 import { FirstLaunchCompletion } from './startup/FirstLaunchCompletion.js';
@@ -903,11 +906,11 @@ export function App(): JSX.Element {
 
 function AppContent(): JSX.Element {
   const { t,locale } = useDesktopI18n();
+  const translateRef = useRef(t);
+  translateRef.current = t;
   const [pendingStartSearchFocus, setPendingStartSearchFocus] = useState<{ tabId: string; expiresAt: number } | null>(null);
   const selectedChatModel = useChatStore((state) => state.selectedModel);
   const selectedChatModelProvider = useChatStore((state) => state.selectedModelProvider);
-  const translateRef = useRef(t);
-  translateRef.current = t;
   const quickChatActiveModelRevision = useActiveModelRevision();
   const quickChatShowBetas = useShowUntestedProviderBetas();
   const [quickChatFavoriteRevision, setQuickChatFavoriteRevision] = useState(0);
@@ -1080,6 +1083,7 @@ function AppContent(): JSX.Element {
   const [accessAuthRequired, setAccessAuthRequired] = useState(false);
   const [accessPassword, setAccessPassword] = useState('');
   const [accessAuthError, setAccessAuthError] = useState('');
+  const [accessAuthErrorContext, setAccessAuthErrorContext] = useState<'login' | 'status'>('status');
   const [accessAuthBusy, setAccessAuthBusy] = useState(false);
   const [setupState, setSetupState] = useState<SetupState>(defaultSetupState);
   const [firstLaunchOpening, setFirstLaunchOpening] = useState(false);
@@ -1744,6 +1748,7 @@ function AppContent(): JSX.Element {
         const state = accessAuthGateRef.current!.dispatch({
           type: 'status-error', generation, error: error instanceof Error ? error.message : String(error)
         });
+        if (state.generation === generation) setAccessAuthErrorContext('status');
         setAccessAuthError(state.error);
         // A failed auth-status check (including a 401 after the sidecar
         // session token changes) must never leave an already-unlocked shell
@@ -1819,6 +1824,7 @@ function AppContent(): JSX.Element {
         type: 'status-error', generation: loginGeneration,
         error: error instanceof Error ? error.message : String(error)
       });
+      if (state.generation === loginGeneration) setAccessAuthErrorContext('login');
       setAccessAuthError(state.error);
       setAccessAuthChecked(state.checked);
     } finally {
@@ -1841,6 +1847,7 @@ function AppContent(): JSX.Element {
       const state = accessAuthGateRef.current!.dispatch({
         type: 'status-error', generation, error: error instanceof Error ? error.message : String(error)
       });
+      if (state.generation === generation) setAccessAuthErrorContext('status');
       setAccessAuthChecked(state.checked);
       setAccessAuthError(state.error);
     }
@@ -5915,19 +5922,21 @@ function AppContent(): JSX.Element {
   const startupCopy = startupScreenCopy[resolveStartupLocale(locale)];
   const startupError = startupFailureStage
     ? startupFailureStage === 'session' && !accessAuthRequired && accessAuthError
-      ? accessAuthError
+      ? t(accessLockErrorKey(accessAuthError, 'status'))
       : startupCopy.errorDescription
     : null;
   const accessAuthForm = accessAuthRequired && !startupFailureStage ? (
     <section className="startup-screen__auth" data-startup-auth="" aria-labelledby="startup-auth-title">
       <h1 id="startup-auth-title">{t('access.lock.title')}</h1>
       <p>{t('access.lock.description')}</p>
-      <form onSubmit={(event) => void unlockBrowser(event)}>
+      <form onSubmit={(event) => void unlockBrowser(event)} aria-busy={accessAuthBusy}>
         <label htmlFor="access-lock-password">{t('access.lock.password')}</label>
-        <input id="access-lock-password" autoFocus type="password" autoComplete="current-password" value={accessPassword} onChange={(event) => setAccessPassword(event.target.value)} />
-        {accessAuthError && <div className="access-lock-error" role="alert">{accessAuthError}</div>}
+        <AccessPasswordInput value={accessPassword} onChange={setAccessPassword} resetKey={accessAuthGateRef.current!.state.generation}
+          showLabel={t('access.lock.showPassword')} hideLabel={t('access.lock.hidePassword')} />
+        {accessAuthError && <div className="access-lock-error" role="alert">{t(accessLockErrorKey(accessAuthError, accessAuthErrorContext))}</div>}
         <button type="submit" disabled={!accessPassword || accessAuthBusy}>{accessAuthBusy ? t('access.lock.unlocking') : t('access.lock.unlock')}</button>
       </form>
+      <p className="startup-screen__auth-hint">{t('access.lock.settingsHint')}</p>
     </section>
   ) : null;
   const completeStartupOpening = useCallback(() => {
@@ -5981,11 +5990,15 @@ function AppContent(): JSX.Element {
   return (
     <>
     {startupGate ? (
-      showStartupEngine ? null : (
+      showStartupEngine ? null : shouldShowStartupAuthPlaceholder({ checked: accessAuthChecked, required: accessAuthRequired, error: accessAuthError, failure: Boolean(startupFailureStage) }) ? (
+      <StartupAuthPlaceholder message={t('access.lock.checking')} />
+      ) : (
       <StartupScreen
         locale={locale}
         launchIcon={startupLaunchIcon}
         phase={startupPhase}
+        locked={accessAuthRequired}
+        checkingMessage={sidekickTransportReady && !accessAuthChecked && !startupFailureStage ? t('access.lock.checking') : undefined}
         error={startupError}
         onRetry={startupFailureStage === 'session' ? retryAccessAuthStatus : retryStartupChecks}
         retryContent={accessAuthForm}

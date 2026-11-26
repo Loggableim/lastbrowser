@@ -26,6 +26,14 @@ export const desktopJaOverrides = {
   'whatsNew.versionOnly': 'バージョン {toVersion}',
   'whatsNew.close': '閉じる',
   'spaceAssistant.switchToQuickChat': 'Quickchat',
+  'access.lock.error.generic': 'ブラウザーのロックを解除できませんでした。もう一度お試しください。',
+  'access.lock.error.invalid': 'パスワードが正しくありません。もう一度お試しください。',
+  'access.lock.error.rateLimited': '試行回数が多すぎます。1分待ってからもう一度お試しください。',
+  'access.lock.error.session': '安全なセッションを確認できませんでした。もう一度お試しください。',
+  'access.lock.error.unreachable': 'ローカルサービスに接続できません。まだ起動中の可能性があります。',
+  'access.lock.hidePassword': 'パスワードを非表示',
+  'access.lock.showPassword': 'パスワードを表示',
+  'access.lock.settingsHint': 'ロック解除後、設定 → システム → アクセスと更新でパスワードを変更できます。',
   'chat.openCodeFreeLimit': '無料の OpenCode モデルの使用上限に達しました。後でもう一度試すか、別のモデルを選択してください。',
   ...group('access.lock', {
     checking: '安全なセッションを確認中…', description: 'ブラウザーを開くにはアクセスパスワードを入力してください。', password: 'アクセスパスワード', retry: '再試行', title: 'ブラウザーはロックされています', unlock: 'ロックを解除', unlocking: 'ロックを解除中…'

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import * as electronRuntime from 'electron';
 
 export interface WidevineCdmInfo {
   cdmPath: string;
@@ -215,13 +216,8 @@ export function findSystemWidevine(
 /**
  * Detect whether Castlabs Electron with native components support is active.
  */
-export function isCastlabsElectron(electronModule?: unknown): boolean {
-  try {
-    const mod = electronModule || require('electron');
-    return Boolean(mod && typeof (mod as { components?: unknown }).components === 'object');
-  } catch {
-    return false;
-  }
+export function isCastlabsElectron(electronModule: unknown = electronRuntime): boolean {
+  return Boolean(electronModule && typeof (electronModule as { components?: unknown }).components === 'object');
 }
 
 /**
@@ -245,7 +241,7 @@ export async function initializeCastlabsWidevine(
   }
   let deadline: ReturnType<typeof setTimeout> | undefined;
   try {
-    const mod = electronModule || (await import('electron'));
+    const mod = electronModule || electronRuntime;
     const components = (mod as unknown as { components?: { whenReady?: () => Promise<void>; status?: () => unknown } }).components;
     if (components && typeof components.whenReady === 'function') {
       notify({ status: 'pending', reason: 'initializing' });

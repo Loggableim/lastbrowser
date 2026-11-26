@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { initializeCastlabsWidevine, type WidevineReadiness } from '../src/main/drm.js';
+import { configureDrmWidevine, initializeCastlabsWidevine, type WidevineReadiness } from '../src/main/drm.js';
 import { startPrimaryInstanceStartup } from '../src/main/app-startup.js';
+
+vi.mock('electron', () => ({ components: { whenReady: async () => undefined } }));
 
 describe('Widevine startup', () => {
   beforeEach(() => {
@@ -9,6 +11,16 @@ describe('Widevine startup', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
   });
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+
+  it('uses the Electron module loaded by the ESM startup without probing for system CDMs', () => {
+    const appendSwitch = vi.fn();
+    const existsSync = vi.fn(() => false);
+    const fileSystem = { existsSync, readdirSync: vi.fn(() => []), readFileSync: vi.fn(() => '') };
+
+    expect(configureDrmWidevine({ commandLine: { appendSwitch } }, undefined, fileSystem)).toBe(true);
+    expect(existsSync).not.toHaveBeenCalled();
+    expect(appendSwitch).not.toHaveBeenCalled();
+  });
 
   it('creates the shell while the component is still pending', async () => {
     const statuses: WidevineReadiness[] = [];

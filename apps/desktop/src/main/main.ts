@@ -219,7 +219,7 @@ import { createMainWindowOptions, installBrowserChrome } from './window-chrome.j
 import { appendWindowsFirstPaintSwitches, installWindowsFirstPaintNudge } from './windows-presentation.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { defaultSearchEngineId, searchEngineById } from './browser-search.js';
-import { registerBrowserShortcuts } from './shortcuts.js';
+import { registerBrowserNavigationCommands, registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 import { configureProfileDirectory, defaultBrowserProfileDirectory } from './profile-directory.js';
@@ -448,6 +448,7 @@ export function dispatchOpenUrl(targetUrl: string): void {
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow(createMainWindowOptions(mainDir));
+  registerBrowserNavigationCommands(window);
   installWindowsFirstPaintNudge(window);
   mainWindow = window;
 
@@ -1396,6 +1397,7 @@ function registerIpc(): void {
           height
         });
         newWin = detachedWindow;
+        registerBrowserNavigationCommands(detachedWindow);
 
         secondaryWindows.add(detachedWindow);
         detachedWindowWebContents.add(detachedWindow.webContents.id);

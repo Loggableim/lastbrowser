@@ -51,24 +51,25 @@ describe('system tray and background operation', () => {
   });
 
   it.each([
-    ['missing tray controller', false, 'win32', null, false],
-    ['missing native tray', false, 'win32', { tray: null }, false],
-    ['destroyed native tray', false, 'win32', { tray: { isDestroyed: () => true } }, false],
-    ['confirmed quit', true, 'win32', { tray: { isDestroyed: () => false } }, false],
-    ['macOS close behavior', false, 'darwin', { tray: { isDestroyed: () => false } }, false],
-    ['healthy Windows tray', false, 'win32', { tray: { isDestroyed: () => false } }, true],
-    ['healthy Linux tray', false, 'linux', { tray: { isDestroyed: () => false } }, true]
-  ])('Main and detached close guards preserve window reachability: %s', (_name, quitting, platform, tray, shouldHide) => {
+    ['missing tray controller', false, 'win32', null, false, false],
+    ['missing native tray', false, 'win32', { tray: null }, false, false],
+    ['destroyed native tray', false, 'win32', { tray: { isDestroyed: () => true } }, false, false],
+    ['confirmed quit', true, 'win32', { tray: { isDestroyed: () => false } }, false, false],
+    ['macOS close behavior', false, 'darwin', { tray: { isDestroyed: () => false } }, false, false],
+    ['healthy Windows tray', false, 'win32', { tray: { isDestroyed: () => false } }, false, true],
+    ['healthy Linux tray', false, 'linux', { tray: { isDestroyed: () => false } }, false, true],
+    ['protected Windows Space', false, 'win32', { tray: { isDestroyed: () => false } }, true, false]
+  ])('Main and detached close guards preserve window reachability: %s', (_name, quitting, platform, tray, protectedProfile, shouldHide) => {
     const source = readFileSync(path.resolve(__dirname, '../src/main/main.ts'), 'utf8');
     // Evaluate the actual callbacks wired in Main, without importing its
     // app-startup side effects or duplicating the production guard expression.
     const callbacks = [...source.matchAll(/setupMinimizeToTray\((window|detachedWindow), \(\) => \{([\s\S]*?)\n\s*\}\)/g)];
     expect(callbacks.map(match => match[1])).toEqual(['window', 'detachedWindow']);
     for (const callback of callbacks) {
-      const guard = new Function('isQuitting', 'process', 'appTray', callback[2]);
+      const guard = new Function('isQuitting', 'process', 'appTray', 'protectedProfileStartup', callback[2]);
       const win = Object.assign(new EventEmitter(), { hide: vi.fn() });
       const close = { preventDefault: vi.fn() };
-      const dispose = setupMinimizeToTray(win as any, () => guard(quitting, { platform }, tray));
+      const dispose = setupMinimizeToTray(win as any, () => guard(quitting, { platform }, tray, protectedProfile));
       win.emit('close', close);
       expect(close.preventDefault).toHaveBeenCalledTimes(shouldHide ? 1 : 0);
       expect(win.hide).toHaveBeenCalledTimes(shouldHide ? 1 : 0);
@@ -76,6 +77,22 @@ describe('system tray and background operation', () => {
       win.emit('close', close);
       expect(win.hide).toHaveBeenCalledTimes(shouldHide ? 1 : 0);
     }
+  });
+  it.each([
+    ['de-DE', 'Space sperren und LastBrowser beenden'],
+    ['en-US', 'Lock Space and quit LastBrowser']
+  ])('offers a clearly named quit action for the protected Space in %s', (locale, label) => {
+    const quit = vi.fn();
+    const menu = buildTrayContextMenu({
+      getMainWindow: () => null, getServices: () => null, getLocale: () => locale, protectedSpace: true
+    }, {
+      showWindow: vi.fn(), toggleGateway: vi.fn(), restartGateway: vi.fn(), quit
+    }) as unknown as { template: Array<{ label?: string; click?: () => void }> };
+
+    const lock = menu.template.find(item => item.label === label);
+    expect(lock).toBeDefined();
+    lock?.click?.();
+    expect(quit).toHaveBeenCalledOnce();
   });
   it('restores detached windows from the tray and focuses the main window', () => {
     const main = {

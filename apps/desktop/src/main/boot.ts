@@ -3,7 +3,7 @@ import Module from 'node:module';
 import { write } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { findWindowsProtectedPair } from './active-space-config.js';
+import { findWindowsProtectedPair, ProtectedSpaceMigrationPendingError } from './active-space-config.js';
 import { defaultBrowserProfileDirectory, startupBrowserProfileDirectory } from './profile-directory.js';
 import { rendererStoreWorkerSwitch } from './renderer-store-worker-client.js';
 import { migrationWorkerSwitch } from './windows-space-migration-request.js';
@@ -28,10 +28,14 @@ async function launchProtectedProfile(): Promise<boolean> {
     if (!pair) return false;
     const { startWindowsProtectedSpace } = await import('./windows-protected-space-startup.js');
     await startWindowsProtectedSpace(pair);
-  } catch {
-    dialog.showErrorBox('LastBrowser', app.getLocale().startsWith('de')
-      ? 'Der geschützte Space konnte nicht gestartet werden.'
-      : 'The protected Space could not start.');
+  } catch (error) {
+    const german = app.getLocale().startsWith('de');
+    const message = error instanceof ProtectedSpaceMigrationPendingError
+      ? (german
+        ? 'Die Einrichtung der geschützten Spaces läuft noch oder wurde unterbrochen. Warte, bis sie abgeschlossen ist, und starte LastBrowser erneut. Falls die Einrichtung abgebrochen wurde, lass die Space-Dateien unverändert und wende dich an support@lastbrowser.com.'
+        : 'Protected Space setup is still running or was interrupted. Wait for it to finish, then reopen LastBrowser. If setup was interrupted, leave the Space files in place and contact support@lastbrowser.com.')
+      : (german ? 'Der geschützte Space konnte nicht gestartet werden.' : 'The protected Space could not start.');
+    dialog.showErrorBox('LastBrowser', message);
     app.exit(1);
   }
   return true;

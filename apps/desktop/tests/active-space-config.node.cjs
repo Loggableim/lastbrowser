@@ -32,6 +32,29 @@ test('startup finds the one installed pair and blocks incomplete or ambiguous mi
   await assert.rejects(findWindowsProtectedPair(profile), /redirected/);
 });
 
+test('startup opens a committed protected pair after an interrupted reservation cleanup', async t => {
+  const { findWindowsProtectedPair, ProtectedSpaceMigrationPendingError } = await import('../src/main/active-space-config.ts');
+  const profile = await mkdtemp(path.join(tmpdir(), 'lastbrowser-protected-commit-'));
+  t.after(() => rm(profile, { recursive: true, force: true }));
+  const lock = path.join(profile, '.protected-space-setup.lock');
+  const pair = path.join(profile, 'protected-spaces', 'space-pair-first');
+  await mkdir(pair, { recursive: true });
+  await writeFile(lock, '');
+  await writeFile(path.join(pair, 'prepared-vaults.json'), '{}');
+  await assert.rejects(findWindowsProtectedPair(profile), ProtectedSpaceMigrationPendingError);
+
+  const active = path.join(pair, 'active-vaults.json');
+  await writeFile(active, '{"state":"active"}');
+  assert.equal(await findWindowsProtectedPair(profile), pair);
+  assert.equal(await readFile(active, 'utf8'), '{"state":"active"}');
+  assert.equal(await readFile(lock, 'utf8'), '');
+
+  const second = path.join(profile, 'protected-spaces', 'space-pair-second');
+  await mkdir(second);
+  await writeFile(path.join(second, 'prepared-vaults.json'), '{}');
+  await assert.rejects(findWindowsProtectedPair(profile), ProtectedSpaceMigrationPendingError);
+});
+
 test('active configuration uses only vault paths inside the selected pair', async t => {
   const { loadActiveSpaceConfiguration, removeRevokedPrimaryVault } = await import('../src/main/active-space-config.ts');
   const pair = await mkdtemp(path.join(tmpdir(), 'lastbrowser-active-pair-'));

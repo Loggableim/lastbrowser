@@ -16,6 +16,12 @@ export type SpaceKeyConfiguration = {
   decoy: ActiveVault & { wrappedPlatformSecret: string };
 };
 
+export class ProtectedSpaceMigrationPendingError extends Error {
+  constructor() {
+    super('Protected Space migration is in progress or was interrupted');
+  }
+}
+
 async function entry(directory: string) {
   try {
     return await lstat(directory);
@@ -53,11 +59,12 @@ export function protectedSpaceStore(profile: string): string {
 /** Locate the active pair before initializing the ordinary browser profile. */
 export async function findWindowsProtectedPair(profile: string): Promise<string | null> {
   const store = protectedSpaceStore(profile);
-  if (await entry(path.join(profile, '.protected-space-setup.lock'))) {
-    throw new Error('Protected Space migration is in progress');
-  }
+  const lock = path.join(profile, '.protected-space-setup.lock');
   const storeEntry = await entry(store);
-  if (!storeEntry) return null;
+  if (!storeEntry) {
+    if (await entry(lock)) throw new ProtectedSpaceMigrationPendingError();
+    return null;
+  }
   const canonicalProfile = await realpath(profile);
   if (!storeEntry.isDirectory() || path.relative(protectedSpaceStore(canonicalProfile), await realpath(store))) {
     throw new Error('The protected Space store is redirected');
@@ -74,9 +81,12 @@ export async function findWindowsProtectedPair(profile: string): Promise<string 
       if (active) throw new Error('Multiple active protected Space pairs were found');
       active = directory;
     } else if (await entry(path.join(directory, 'prepared-vaults.json'))) {
-      throw new Error('Protected Space migration is in progress');
+      throw new ProtectedSpaceMigrationPendingError();
     }
   }
+  // The active receipt is published after adoption. A remaining reservation
+  // must still block opening the ordinary profile if no pair was committed.
+  if (!active && await entry(lock)) throw new ProtectedSpaceMigrationPendingError();
   return active;
 }
 

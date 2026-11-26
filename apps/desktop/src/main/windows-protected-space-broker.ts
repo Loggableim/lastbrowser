@@ -1,5 +1,6 @@
 import { realpathSync } from 'node:fs';
 import path from 'node:path';
+import type { Readable, Writable } from 'node:stream';
 import { removeRevokedPrimaryVault, type SpaceKeyConfiguration } from './active-space-config.js';
 import { createSpaceUnlock } from './space-emergency-unlock.js';
 import { unwrapSpaceKey } from './space-key-envelope.js';
@@ -15,6 +16,7 @@ type BrokerOptions = WindowsVaultRuntime & SpaceKeyConfiguration & {
   nvKeyHelper: string;
   lockPrimary: () => Promise<void>;
   onMounted?: () => void;
+  onBrowserStarted?: (input: Writable, acknowledgements: Readable) => void;
 };
 
 /**
@@ -63,7 +65,7 @@ export function createWindowsProtectedSpaceBroker(options: BrokerOptions) {
           } finally {
             key.fill(0);
           }
-        }, options.onMounted);
+        }, options.onMounted, options.onBrowserStarted);
         if (exit !== 0) throw new Error('The protected browser stopped unexpectedly');
       } finally {
         if (id === decoy.id) await primaryCleanup;

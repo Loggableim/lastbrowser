@@ -99,6 +99,16 @@ was opened read-only as a ZIP: its `app/resources/services/sidekick/` and
 evidence about that rc2 MSIX only, not the later r6 payload or the old NSIS
 installers.
 
+On 2026-11-27 a post-smoke r7 unpacked payload contained approximately
+5.4 MiB under Python's `site-packages/pip`, 3.5 MiB under `pythonwin`,
+2.6 MiB under `setuptools`, and a 2.5 MiB `PyWin32.chm`. These are
+uncompressed, rounded directory/file totals that may include generated caches;
+they are not a clean-package or compressed-size measurement. A source search
+found Sidekick commands and diagnostics that suggest installing optional
+dependencies with pip. It did not establish which flows are reachable in the
+packaged product, so removal of pip or related files requires an explicit
+runtime/dependency and user-flow audit rather than a name-based exclusion.
+
 ## JDK module archive experiment
 
 On 2026-11-26 the JDK from the separate r6 Windows test payload was copied to a

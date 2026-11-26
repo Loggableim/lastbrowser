@@ -1,17 +1,6 @@
 const RELEASE_TAG = 'v0.1.56';
+const WINDOWS_STORE_URL = 'https://apps.microsoft.com/detail/9NJX1T2KXDM3';
 const ASSETS = {
-  'setup.exe': {
-    upstream: `https://github.com/Loggableim/lastbrowser/releases/download/${RELEASE_TAG}/Lastbrowser-0.1.56-x64-setup.exe`,
-    filename: 'Lastbrowser-0.1.56-x64-setup.exe',
-    contentType: 'application/octet-stream',
-    disposition: 'attachment; filename="Lastbrowser-0.1.56-x64-setup.exe"',
-  },
-  'portable.exe': {
-    upstream: `https://github.com/Loggableim/lastbrowser/releases/download/${RELEASE_TAG}/Lastbrowser-0.1.56-x64-portable.exe`,
-    filename: 'Lastbrowser-0.1.56-x64-portable.exe',
-    contentType: 'application/octet-stream',
-    disposition: 'attachment; filename="Lastbrowser-0.1.56-x64-portable.exe"',
-  },
   'latest.yml': {
     upstream: `https://github.com/Loggableim/lastbrowser/releases/download/${RELEASE_TAG}/latest.yml`,
     filename: 'latest.yml',
@@ -22,6 +11,9 @@ const ASSETS = {
 
 export async function onRequestGet(context) {
   const file = context.params.file;
+  if (file === 'setup.exe' || file === 'portable.exe') {
+    return Response.redirect(WINDOWS_STORE_URL, 302);
+  }
   const asset = ASSETS[file];
 
   if (!asset) {

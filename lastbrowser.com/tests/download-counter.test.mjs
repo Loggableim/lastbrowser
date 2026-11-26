@@ -218,13 +218,17 @@ test('same-origin unavailable or network failure without cache remains unavailab
   assert.deepEqual(urls, ['/api/download-count', '/api/download-count']);
 });
 
-test('all fourteen landing/download pages mount localized counter and same-origin assets', () => {
-  for (const locale of ['de', 'en', 'es', 'fr', 'it', 'pt', 'ja']) for (const page of ['index.html', 'download/index.html']) {
-    const file = new URL(`../${locale === 'de' ? '' : locale + '/'}${page}`, import.meta.url);
+test('landing pages mount the historical download counter; Windows download pages link to the Store', () => {
+  for (const locale of ['de', 'en', 'es', 'fr', 'it', 'pt', 'ja']) {
+    const root = locale === 'de' ? '' : locale + '/';
+    const file = new URL(`../${root}index.html`, import.meta.url);
     const html = readFileSync(file, 'utf8');
     assert.equal((html.match(/data-download-counter/g) || []).length, 1);
     assert.ok(html.includes(`data-locale="${locale}"`));
     assert.ok(html.includes('/assets/js/download-counter.js'));
     assert.ok(html.includes('/assets/css/download-counter.css'));
+    const downloads = readFileSync(new URL(`../${root}download/index.html`, import.meta.url), 'utf8');
+    assert.match(downloads, /id="hero-win-download" href="https:\/\/apps\.microsoft\.com\/detail\/9NJX1T2KXDM3"/);
+    assert.doesNotMatch(downloads, /data-download-counter/);
   }
 });

@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lastbrowserのダウンロード – 公式Windowsインストーラー (v0.1.56)</title>
-<meta name="description" content="Windows 10 &amp; 11 (64-Bit)向けLastbrowserのダウンロード。バージョン0.1.56：NSISインストーラーおよびポータブル版。100%ローカルファースト、GDPR準拠。">
-<meta property="og:title" content="Lastbrowserのダウンロード – 公式Windowsビルド (v0.1.56)">
-<meta property="og:description" content="Nova AI、隔離Spaces、Castlabs Widevine DRMを搭載した高速・高プライバシーChromiumブラウザ。Windows版を直接ダウンロード。">
+<title>LastBrowserをダウンロード | LastBrowser</title>
+<meta name="description" content="Windows版LastBrowserはMicrosoft Storeから、Linux版はこのページからダウンロードできます。">
+<meta property="og:title" content="LastBrowserをダウンロード">
+<meta property="og:description" content="Windows版LastBrowserはMicrosoft Storeから、Linux版はこのページからダウンロードできます。">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lastbrowser.com/ja/download/">
 <meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
@@ -34,10 +34,10 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Lastbrowser",
-  "operatingSystem": "Windows 10, Windows 11 (x64), Linux x64",
+  "operatingSystem": "Windows 10, Windows 11 (x64)",
   "applicationCategory": "BrowserApplication",
-  "softwareVersion": "0.1.56",
-  "downloadUrl": "https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe",
+
+  "downloadUrl": "https://apps.microsoft.com/detail/9NJX1T2KXDM3",
   "offers": {
     "@type": "Offer",
     "price": "0.00",
@@ -54,7 +54,7 @@
   <div class="container inner">
     <a href="/ja/" class="logo">
       <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
-      <div><strong>Lastbrowser</strong><span>ダウンロード · v0.1.56</span></div>
+      <div><strong>Lastbrowser</strong><span>ダウンロード</span></div>
     </a>
     <div class="nav-links">
       <a href="/ja/features/">機能</a>
@@ -99,31 +99,13 @@
 <main id="main">
   <section class="hero">
     <div class="container">
-      <div class="pill-badge">Windows公式ビルド · v0.1.56</div>
+      <div class="pill-badge">Microsoft Store · Windows</div>
       <h1>Windows向け <span class="grad">AIネイティブブラウザを入手</span></h1>
       <p class="lead">Lastbrowserは、Chromiumの高速性能にNova AI、ConPTYターミナル、Widevine DRM L3、隔離Spacesを融合。お使いのPC上で100%ローカル稼働します。</p>
-      
-      <div class="download-counter" data-download-counter data-locale="ja" role="status">現在、ダウンロード数を取得できません。</div>
       <div class="cta-group">
-        <a id="main-download-btn" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-lg">
-          ⬇️ インストーラー版をダウンロード (.exe)
-        </a>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-portable.exe" class="btn btn-ghost btn-lg">
-          📦 ポータブル版 (.exe)
-        </a>
+        <a id="hero-win-download" href="https://apps.microsoft.com/detail/9NJX1T2KXDM3" class="btn btn-primary btn-lg">Microsoft Storeで開く</a>
       </div>
-      
-      <div style="margin-top:16px;display:flex;gap:16px;justify-content:center;align-items:center;flex-wrap:wrap;">
-        <span class="sub-cta-note">Windows 10 &amp; 11 (x64) · 個人利用完全無料 · オープンソース · テレメトリゼロ</span>
-        <button onclick="openSmartScreenModal()" class="btn btn-ghost btn-sm" style="font-size:12px;padding:4px 10px;border-radius:20px;">🛡️ Windows SmartScreenの警告について</button>
-      </div>
-
-      <!-- Trust Badges -->
-      <div style="display:flex;gap:20px;justify-content:center;margin-top:28px;flex-wrap:wrap;">
-        <div class="badge badge-green">✓ デジタル署名を検証済み</div>
-        <div class="badge badge-cyan">✓ Windows DPAPI ローカル暗号化</div>
-        <div class="badge badge-purple">✓ 会員登録・アカウント不要</div>
-      </div>
+      <p class="sub-cta-note">Windows 10・11 · 64ビット</p>
     </div>
   </section>
 
@@ -149,46 +131,6 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
     </details>
   </div>
 </section>
-  <!-- Setup vs Portable Comparison -->
-  <section class="container" style="padding: 40px 0 60px;">
-    <div class="section-header">
-      <h2>用途に合わせてインストール形式を選択</h2>
-      <p>どちらのエディションも完全なChromiumエンジン、Nova AI、ConPTYターミナルを搭載しています。</p>
-    </div>
-
-    <div class="grid-2">
-      <div class="feature-card" style="border:1px solid var(--accent);background:linear-gradient(180deg, rgba(0,229,255,0.04) 0%, transparent 100%);">
-        <div class="badge badge-cyan" style="margin-bottom:12px;">一般ユーザーにおすすめ</div>
-        <h3>通常インストーラー版 (Setup .exe)</h3>
-        <p>Windows 10 &amp; 11環境へシームレスに統合されるNSISインストーラー。</p>
-        <ul class="docs-checklist" style="margin:20px 0;">
-          <li>✓ 1クリックでWindows既定のブラウザに登録</li>
-          <li>✓ スタートメニューおよびデスクトップへのショートカット作成</li>
-          <li>✓ バックグラウンドでの安全な自動更新</li>
-          <li>✓ <code>/S</code>スイッチによるサイレント（無人）インストール対応</li>
-        </ul>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">
-          Lastbrowser-0.1.56-x64-setup.exe をダウンロード (264.70 MB)
-        </a>
-      </div>
-
-      <div class="feature-card">
-        <div class="badge badge-purple" style="margin-bottom:12px;">インストール不要 · レジストリ変更なし</div>
-        <h3>ポータブル版 (Portable .exe)</h3>
-        <p>Windowsレジストリを変更せず、任意のフォルダーやUSBメモリから直接実行。</p>
-        <ul class="docs-checklist" style="margin:20px 0;">
-          <li>✓ 管理者権限（UAC）が不要</li>
-          <li>✓ システムレジストリへの書き込みを行いません</li>
-          <li>✓ 実行ファイル直下または<code>%APPDATA%</code>に設定を保持</li>
-          <li>✓ 会社のPCでの試用や一時環境に最適</li>
-        </ul>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-portable.exe" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;">
-          Lastbrowser-0.1.56-x64-portable.exe をダウンロード (264.35 MB)
-        </a>
-      </div>
-    </div>
-  </section>
-
   <!-- 3-Step Onboarding Preview -->
   <section class="container" style="padding: 20px 0 60px;">
     <div class="section-header">
@@ -199,8 +141,8 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
     <div class="grid-3">
       <div class="feature-card">
         <div class="fc-icon blue">1</div>
-        <h3>インストーラーを起動</h3>
-        <p>ダウンロードしたファイルを開きます。不要な広告ソフトや同梱アプリは一切なく、数秒で導入が完了します。</p>
+        <h3>Microsoft Storeからインストール</h3>
+        <p>Microsoft Storeを開き、LastBrowserをインストールします。</p>
       </div>
       <div class="feature-card">
         <div class="fc-icon purple">2</div>
@@ -215,25 +157,6 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
     </div>
   </section>
 
-  <!-- Checksum & Verification -->
-  <section class="container" style="padding: 20px 0 60px;">
-    <div class="feature-card">
-      <h3>完全性検証（SHA-256チェックサム）</h3>
-      <p>実行前にダウンロードしたバイナリの真正性を検証できます：</p>
-      <div class="code-block" style="margin-top:14px;">
-        <button class="copy-btn" onclick="copyCode(this)">コピー</button>
-        <pre><code># Windows PowerShellでの検証コマンド:
-Get-FileHash -Algorithm SHA256 .\Lastbrowser-0.1.56-x64-setup.exe
-
-# v0.1.56 公式SHA-256ハッシュ (Setup、277629344 bytes):
-BA114390205DC4588EEC5029BE32ABF340A9439DCA8A8B36525C8D827433775F
-
-# v0.1.56 公式SHA-256ハッシュ (Portable、277265952 bytes):
-FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
-      </div>
-    </div>
-  </section>
-
   <!-- Troubleshooting FAQ -->
   <section class="container" style="padding: 20px 0 80px;">
     <div class="section-header">
@@ -243,16 +166,8 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
 
     <div class="grid-2">
       <div class="feature-card">
-        <h4>Windows SmartScreenの警告が表示されるのはなぜですか？</h4>
-        <p>リリースされたばかりのオープンソースソフトウェアであるため、Microsoftのクラウド上でダウンロード実績（評価）が蓄積途中の状態です。「詳細情報」をクリックし、「実行」を選択して問題なく続行できます。</p>
-      </div>
-      <div class="feature-card">
-        <h4>企業向けのサイレント（一括）展開は可能ですか？</h4>
-        <p>はい。インストーラーは<code>/S</code>スイッチをサポートしており、SCCM、Intune、PowerShellスクリプトによる無人展開が可能です。</p>
-      </div>
-      <div class="feature-card">
         <h4>アンインストールはどのように行いますか？</h4>
-        <p>Windowsの「設定 > インストールされているアプリ」またはプログラムフォルダー内のアンインストーラーから削除できます。<code>%APPDATA%\Lastbrowser</code>内の個人データもきれいに消去されます。</p>
+        <p>Windowsの「設定 > インストールされているアプリ」からLastbrowserをアンインストールしてください。アンインストール時に、Windowsがパッケージ内のデータを削除する場合があります。プロファイルの保存先については<a href="/privacy/">プライバシーポリシー</a>をご覧ください。</p>
       </div>
       <div class="feature-card">
         <h4>macOS版やLinux版はありますか？</h4>
@@ -266,34 +181,9 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
 <div class="floating-download-bar">
   <div class="float-info">
     <img src="/assets/app-icons/nav-icon.ico" alt="アイコン" width="28" height="28">
-    <div><strong>Lastbrowser</strong> <span>Windows 10 &amp; 11向け v0.1.56</span></div>
+    <div><strong>Lastbrowser</strong> <span>Windows 10・11 · 64ビット</span></div>
   </div>
-  <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-sm">
-    ⬇️ ダウンロード (.exe)
-  </a>
-</div>
-
-<!-- SmartScreen Modal -->
-<div class="modal-backdrop" id="smartscreen-modal" onclick="if(event.target===this)closeSmartScreenModal()">
-  <div class="modal-card">
-    <div class="modal-header">
-      <h3>Windows SmartScreen警告の解除方法</h3>
-      <button class="modal-close" onclick="closeSmartScreenModal()">✕</button>
-    </div>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">
-      大規模なクラウド追跡を持たない最新のオープンソースバイナリのため、Windows SmartScreenにより青い警告画面が表示される場合があります：
-    </p>
-    <div style="background:rgba(255,255,255,0.03);padding:16px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-      <p style="font-weight:600;margin-bottom:8px;">ステップ 1: 青いダイアログ内の <span style="text-decoration:underline;">「詳細情報」</span> をクリックします。</p>
-      <p style="font-weight:600;color:var(--accent);">ステップ 2: 右下に現れる <span style="text-decoration:underline;">「実行」</span> ボタンをクリックします。</p>
-    </div>
-    <p style="font-size:13px;color:var(--muted);">
-      ダウンロードしたファイルのSHA-256ハッシュとデジタル署名を確認できます。
-    </p>
-    <div style="margin-top:20px;text-align:right;">
-      <button class="btn btn-primary btn-sm" onclick="closeSmartScreenModal()">理解しました</button>
-    </div>
-  </div>
+  <a href="https://apps.microsoft.com/detail/9NJX1T2KXDM3" class="btn btn-primary btn-sm">Microsoft Storeで開く</a>
 </div>
 
 <!-- Non-Windows Waitlist Modal -->
@@ -384,6 +274,5 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
 </footer>
 
 <script src="/assets/js/app.js?v=linux56-20261014"></script>
-<script src="/assets/js/download-counter.js?v=56-restore1" defer></script>
 </body>
 </html>

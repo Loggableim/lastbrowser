@@ -72,22 +72,46 @@ $required = @(
     'resources\services\sidekick\pyproject.toml',
     'resources\protected-spaces\space-tpm-nv.exe',
     'resources\protected-spaces\jdk\bin\java.exe',
+    'resources\protected-spaces\cryptomator-cli\LICENSE.txt',
+    'resources\protected-spaces\SIV-Mode-LICENSE.txt',
+    'resources\protected-spaces\Bouncy-Castle-LICENSE.html',
+    'resources\protected-spaces\Logback-EPL-1.0.txt',
+    'resources\protected-spaces\Logback-LGPL-2.1.txt',
+    'resources\protected-spaces\Gson-2.10.1-LICENSE.txt',
+    'resources\protected-spaces\JSR305-Reference-BSD-3-Clause.txt',
+    'resources\protected-spaces\CC-BY-2.5.txt',
+    'resources\protected-spaces\Cryptomator-CLI-0.6.2-JAR-ATTRIBUTIONS.txt',
     'resources\licenses\LICENSE',
     'resources\licenses\LICENSE-SCOPE.md',
     'resources\licenses\NOTICE',
-    'resources\licenses\THIRD-PARTY-LICENSES.md'
+    'resources\licenses\THIRD-PARTY-LICENSES.md',
+    'resources\licenses\docs\legal\notices\hermes-webui-mit.txt',
+    'resources\licenses\docs\legal\notices\neutts-jo-apache-2.0.txt'
 )
 foreach ($relative in $required) {
     if (-not (Test-Path -LiteralPath (Join-Path $source.FullName $relative) -PathType Leaf)) {
         throw "The app payload is incomplete. Missing $relative"
     }
 }
+foreach ($unused in @('runtime', 'cryptomator-cli.exe')) {
+    if (Test-Path -LiteralPath (Join-Path $source.FullName "resources\protected-spaces\cryptomator-cli\$unused")) {
+        throw "The MSIX must use the pinned Microsoft JDK without the unused Cryptomator launcher or embedded Java: $unused"
+    }
+}
+& node (Join-Path $PSScriptRoot 'prepare-local-model-engines.mjs') --verify (Join-Path $source.FullName 'resources')
+if ($LASTEXITCODE -ne 0) { throw 'The MSIX payload has an incomplete or invalid Local AI inventory.' }
 
 $readArchiveManifest = @'
 const { createRequire } = require('node:module');
 const builderRequire = createRequire(require.resolve('app-builder-lib/package.json'));
-const { extractFile } = builderRequire('@electron/asar');
-process.stdout.write(extractFile(process.argv[1], 'package.json'));
+const { extractFile, getRawHeader } = builderRequire('@electron/asar');
+const archive = process.argv[1];
+const allowed = new Set(['dist', 'node_modules', 'package.json']);
+const unexpected = Object.keys(getRawHeader(archive).header.files).filter(name => !allowed.has(name));
+if (unexpected.length) {
+  throw new Error('Unexpected top-level app.asar entries: ' + unexpected.join(', '));
+}
+process.stdout.write(extractFile(archive, 'package.json'));
 '@
 Push-Location $desktop
 try {
@@ -137,19 +161,22 @@ $extensions = @(
 ) -join [Environment]::NewLine
 
 $displayName = [Security.SecurityElement]::Escape($ProductDisplayName)
+# Windows 11 24H2+ defers updates until restart. Older Windows can ignore uap17.
 $manifest = @"
 <?xml version="1.0" encoding="utf-8"?>
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
          xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
          xmlns:uap2="http://schemas.microsoft.com/appx/manifest/uap/windows10/2"
          xmlns:uap3="http://schemas.microsoft.com/appx/manifest/uap/windows10/3"
+         xmlns:uap17="http://schemas.microsoft.com/appx/manifest/uap/windows10/17"
          xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-         IgnorableNamespaces="uap uap2 uap3 rescap">
+         IgnorableNamespaces="uap uap2 uap3 uap17 rescap">
   <Identity Name="$IdentityName" Publisher="$([Security.SecurityElement]::Escape($Publisher))" Version="$version" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>$displayName</DisplayName>
     <PublisherDisplayName>$([Security.SecurityElement]::Escape($PublisherDisplayName))</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
+    <uap17:UpdateWhileInUse>defer</uap17:UpdateWhileInUse>
   </Properties>
   <Resources>
     <Resource Language="en-US" />

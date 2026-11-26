@@ -1,0 +1,57 @@
+LastBrowser third-party attributions
+Cryptomator CLI 0.6.2 JAR distribution for Windows
+
+Error Prone Annotations 2.26.1
+com.google.errorprone:error_prone_annotations:2.26.1
+Copyright The Error Prone Authors. Individual years appear in the preserved
+source headers. Licensed under the Apache License, Version 2.0. The full text
+is supplied as Apache-2.0-LICENSE.txt.
+Source and versioned upstream license
+https://github.com/google/error-prone/tree/b38057250a8a035d6b3856098145aeab1df1149f
+https://github.com/google/error-prone/blob/b38057250a8a035d6b3856098145aeab1df1149f/COPYING
+
+Google Gson 2.10.1
+com.google.code.gson:gson:2.10.1
+The versioned module license credits Google Inc. (2008–2011). Source notices
+also identify The Gson authors and The Android Open Source Project, including
+LinkedTreeMap.java. Licensed under the Apache License, Version 2.0. The
+versioned module text is supplied as Gson-2.10.1-LICENSE.txt.
+https://github.com/google/gson/tree/2ce6a6106c22bf0cce2e39f68b0da2f117d6e66b/gson
+https://github.com/google/gson/blob/2ce6a6106c22bf0cce2e39f68b0da2f117d6e66b/gson/LICENSE
+
+J2ObjC Annotations 3.0.0
+com.google.j2objc:j2objc-annotations:3.0.0
+Copyright 2012 Google Inc. All Rights Reserved.
+Licensed under the Apache License, Version 2.0. The full text for the
+annotations artifact is supplied as Apache-2.0-LICENSE.txt.
+https://github.com/google/j2objc/tree/cff004b845f94255bcb1863ac7cf822778357550/annotations
+https://repo.maven.apache.org/maven2/com/google/j2objc/j2objc-annotations/3.0.0/j2objc-annotations-3.0.0.pom
+
+Jansi 2.4.1 in the Cryptomator CLI Windows distribution
+org.fusesource.jansi:jansi:2.4.1
+The upstream Java and native sources retain the copyright of their original
+authors, including Taro L. Saito (2007, JansiLoader.java; 2008, OSInfo.java).
+The versioned upstream license is the Apache License, Version 2.0, supplied
+here as Apache-2.0-LICENSE.txt. The Windows distribution uses the Jansi
+variant packaged by Cryptomator, with Authenticode data on both Windows DLLs.
+https://github.com/fusesource/jansi/tree/69a3dea31f0de973e89d17a3024fa776640ef32a
+https://github.com/fusesource/jansi/blob/69a3dea31f0de973e89d17a3024fa776640ef32a/license.txt
+https://github.com/cryptomator/cli/blob/65813f5d5b6b416707ec0e9e474ec9287ecc43f2/.github/workflows/build-win.yml
+
+JSR 305 annotations
+com.google.code.findbugs:jsr305:3.0.2
+Original reference implementation copyright (c) 2007-2009, JSR305 expert
+group. Its original license text is supplied as JSR305-Reference-BSD-3-Clause.txt.
+Published 3.0.2 sources and the upstream licensing clarification
+https://repo.maven.apache.org/maven2/com/google/code/findbugs/jsr305/3.0.2/jsr305-3.0.2-sources.jar
+https://github.com/findbugsproject/findbugs/issues/128
+
+The following 3.0.2 sources retain Copyright (c) 2005 Brian Goetz and declare
+the Creative Commons Attribution 2.5 license
+  javax.annotation.concurrent.GuardedBy
+  javax.annotation.concurrent.Immutable
+  javax.annotation.concurrent.NotThreadSafe
+  javax.annotation.concurrent.ThreadSafe
+Source attribution points to http://www.jcip.net
+The CC-BY-2.5 text is supplied as CC-BY-2.5.txt.
+https://creativecommons.org/licenses/by/2.5/legalcode

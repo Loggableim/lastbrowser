@@ -12,7 +12,7 @@ $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT' -or $PSVersionTable.PSEdition -ne 'Desktop') {
     throw 'Use Windows PowerShell 5.1 for the local MSIX capture.'
 }
-$node = (Get-Command node.exe -CommandType Application).Source
+$node = (Get-Command node.exe -CommandType Application | Select-Object -First 1).Source
 $archivePath = (Resolve-Path -LiteralPath $MsixPath).Path
 if ([IO.Path]::GetExtension($archivePath) -ine '.msix') { throw 'Pass the exact .msix archive.' }
 $packageItem = Get-Item -LiteralPath $PackageRoot

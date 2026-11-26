@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { spawn } = require('node:child_process');
 const assert = require('node:assert/strict');
 
@@ -53,9 +54,10 @@ async function main() {
     require('esbuild').buildSync({
       stdin: { contents: fixture, loader: 'tsx', resolveDir: path.join(projectRoot, 'apps/desktop') },
       bundle: true, platform: 'browser', format: 'iife', target: 'chrome130',
+      define: { 'import.meta.url': JSON.stringify(pathToFileURL(path.join(temp, 'fixture.js')).href) },
       loader: { '.woff2': 'dataurl' }, outfile: path.join(temp, 'fixture.js')
     });
-    fs.writeFileSync(path.join(temp, 'index.html'), '<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:"></head><body style="margin:0"><div id="root"></div><script src="fixture.js"></script></body></html>');
+    fs.writeFileSync(path.join(temp, 'index.html'), '<html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'self\'; script-src \'self\'; style-src \'self\' \'unsafe-inline\'; img-src \'self\' data:; font-src \'self\' data:"><link rel="stylesheet" href="fixture.css"></head><body style="margin:0"><div id="root"></div><script src="fixture.js"></script></body></html>');
     const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
     const electronBinary = process.env.LASTBROWSER_ELECTRON_BINARY || require('electron');
     const child = spawn(electronBinary, [__filename, '--child', temp], { cwd: projectRoot, env, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
@@ -76,18 +78,20 @@ async function child(temp) {
   const { app, BrowserWindow } = require('electron');
   app.setPath('userData', path.join(temp, 'user-data'));
   await app.whenReady();
-  const win = new BrowserWindow({ show: true, width: 1180, height: 760, webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
+  const win = new BrowserWindow({ show: false, width: 1180, height: 760, webPreferences: { contextIsolation: true, nodeIntegration: false, backgroundThrottling: false } });
   try {
     const rendererErrors = [];
-    win.webContents.on('console-message', event => { if (event.level >= 2) rendererErrors.push(event.message); });
+    win.webContents.on('console-message', (event) => {
+      if (event.level === 'error' || event.level >= 2) rendererErrors.push(event.message);
+    });
     await win.loadFile(path.join(temp, 'index.html'));
     const until = async (check, label) => {
       const end = Date.now() + 10000;
       while (Date.now() < end) {
-        if (await win.webContents.executeJavaScript(check)) return;
+        if (await win.webContents.executeJavaScript(`Boolean(${check})`)) return;
         await new Promise(resolve => setTimeout(resolve, 30));
       }
-      throw new Error(`Timeout: ${label}`);
+      throw new Error(`Timeout: ${label}\n${rendererErrors.join('\n')}`);
     };
     await until("document.querySelector('[data-testid=\\\"dashboard-search-input\\\"]') && document.querySelector('.vertical-new-tab-btn-prominent')", 'start page and prominent New tab action mount');
     const before = await win.webContents.executeJavaScript(`(()=>{const button=document.querySelector('.vertical-new-tab-btn-prominent').getBoundingClientRect(),pinned=document.querySelector('.expanded-pinned-raster').getBoundingClientRect();return{buttonTop:button.top,pinnedTop:pinned.top,buttonLabel:document.querySelector('.vertical-new-tab-btn-prominent').innerText}})()`);

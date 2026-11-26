@@ -2929,6 +2929,9 @@ function _updateInlineApprovalUI() {
   if (!state || !state.element) return;
   const el = state.element;
   const status = state.status;
+  for (const button of el.querySelectorAll('.inline-approval-btn.session, .inline-approval-btn.always, .inline-approval-btn.yolo')) {
+    button.style.display = state.pending && state.pending.once_only === true ? 'none' : '';
+  }
   
   // Update status pill
   const statusEl = el.querySelector('.inline-approval-status');
@@ -3119,6 +3122,7 @@ function showApprovalCard(pending, pendingCount) {
     choice: null,
     timeoutTimer: null,
   };
+  _updateInlineApprovalUI();
   
   // Append to message inner
   const inner = $('msgInner');
@@ -3151,22 +3155,24 @@ async function respondApproval(choice) {
     }
   }
   
-  // Mark as resolved without hiding
-  state.status = choice === 'deny' ? 'denied' : 'approved';
-  state.choice = choice;
-  _clearApprovalTimeoutTimer();
-  _approvalSessionId = null;
-  _approvalCurrentId = null;
-  _clearApprovalPendingForSession(sid);
-  _updateInlineApprovalUI();
-  
   // Call the API
   try {
     await api('/api/approval/respond', {
       method: 'POST',
       body: JSON.stringify({ session_id: sid, choice, approval_id: approvalId })
     });
-  } catch(e) { setStatus(t('approval_responding') + ' ' + e.message); }
+    if (_inlineApprovalState !== state || _approvalCurrentId !== approvalId) return;
+    state.status = choice === 'deny' ? 'denied' : 'approved';
+    state.choice = choice;
+    _clearApprovalTimeoutTimer();
+    _approvalSessionId = null;
+    _approvalCurrentId = null;
+    _clearApprovalPendingForSession(sid);
+    _updateInlineApprovalUI();
+  } catch(e) {
+    btns.forEach(b => { b.disabled = false; b.classList.remove('loading'); });
+    setStatus(t('approval_responding') + ' ' + e.message);
+  }
 }
 
 function hideApprovalCard(force=false) {

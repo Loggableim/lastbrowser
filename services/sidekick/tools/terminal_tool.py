@@ -316,6 +316,7 @@ def _reset_cached_sudo_passwords() -> None:
 # Dangerous command detection + approval now consolidated in tools/approval.py
 from tools.approval import (
     check_all_command_guards as _check_all_guards_impl,
+    requires_non_bypassable_guard,
 )
 
 
@@ -1831,9 +1832,10 @@ def terminal_tool(
                     logger.info("%s environment ready for task %s", env_type, effective_task_id[:8])
 
         # Pre-exec security checks (tirith + dangerous command detection)
-        # Skip check if force=True (user has confirmed they want to run it)
+        # force=True can replay an ordinary approval, but never bypasses the
+        # mandatory destructive, hardline, or sudo-stdin checks.
         approval_note = None
-        if not force:
+        if not force or requires_non_bypassable_guard(command):
             approval = _check_all_guards(command, env_type)
             if not approval["approved"]:
                 # Check if this is an approval_required (gateway ask mode)

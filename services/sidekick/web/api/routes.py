@@ -2518,6 +2518,7 @@ try:
         save_permanent_allowlist,
         is_approved,
         _pending,
+        _gateway_queues,
         _lock,
         _permanent_approved,
         resolve_gateway_approval,
@@ -2532,6 +2533,7 @@ try:
         interrupt_subagent,
     )
 except ImportError:
+    _gateway_queues = {}
     _submit_pending_raw = lambda *a, **k: None
     approve_session = lambda *a, **k: None
     approve_permanent = lambda *a, **k: None
@@ -10685,20 +10687,18 @@ def _handle_file_read(handler, parsed):
         return bad(handler, _sanitize_error(e))
 
 
+def _approval_pending_locked(sid):
+    """Snapshot legacy and blocking approvals while holding the approval lock."""
+    legacy = _pending.get(sid)
+    entries = list(legacy) if isinstance(legacy, list) else ([legacy] if legacy else [])
+    entries.extend(entry.data for entry in _gateway_queues.get(sid, []) if not entry.event.is_set())
+    return (dict(entries[0]) if entries else None, len(entries))
+
+
 def _handle_approval_pending(handler, parsed):
     sid = parse_qs(parsed.query).get("session_id", [""])[0]
     with _lock:
-        queue = _pending.get(sid)
-        # Support both the new list format and a legacy single-dict value.
-        if isinstance(queue, list):
-            p = queue[0] if queue else None
-            total = len(queue)
-        elif queue:
-            p = queue
-            total = 1
-        else:
-            p = None
-            total = 0
+        p, total = _approval_pending_locked(sid)
     if p:
         return j(handler, {"pending": dict(p), "pending_count": total})
     return j(handler, {"pending": None, "pending_count": 0})
@@ -10712,15 +10712,8 @@ def _handle_approval_pending_all(handler, parsed):
     """
     result = {}
     with _lock:
-        for sid, queue in _pending.items():
-            if isinstance(queue, list):
-                p = queue[0] if queue else None
-                total = len(queue)
-            elif queue:
-                p = queue
-                total = 1
-            else:
-                continue
+        for sid in _pending.keys() | _gateway_queues.keys():
+            p, total = _approval_pending_locked(sid)
             if p:
                 result[sid] = {"pending": dict(p), "pending_count": total}
     return j(handler, {"sessions": result})
@@ -10749,13 +10742,7 @@ def _handle_approval_sse_stream(handler, parsed):
     with _lock:
         old_subs = list(_approval_sse_subscribers.get(sid) or [])
         _approval_sse_subscribers[sid] = [q]
-        q_list = _pending.get(sid)
-        if isinstance(q_list, list):
-            initial_pending = dict(q_list[0]) if q_list else None
-            initial_count = len(q_list)
-        elif q_list:
-            initial_pending = dict(q_list)
-            initial_count = 1
+        initial_pending, initial_count = _approval_pending_locked(sid)
     for old_q in old_subs:
         try:
             old_q.put_nowait(None)
@@ -15004,26 +14991,13 @@ def _handle_approval_respond(handler, body):
                     if entry.get("approval_id") == approval_id:
                         pending = queue.pop(i)
                         break
-                else:
-                    # approval_id not found -- fall back to oldest entry.
-                    pending = queue.pop(0) if queue else None
             else:
-                pending = queue.pop(0) if queue else None
+                pending = queue.pop(0) if queue and not queue[0].get("once_only") else None
             if not queue:
                 _pending.pop(sid, None)
-        elif queue:
+        elif queue and (queue.get("approval_id") == approval_id if approval_id else not queue.get("once_only")):
             # Legacy single-dict value.
             pending = _pending.pop(sid, None)
-        # Notify SSE subscribers of the new head (or empty state) so the UI
-        # surfaces any trailing approvals that were queued behind this one
-        # without waiting for the next submit_pending. Without this, a parallel
-        # tool-call scenario (#527) would leave the second approval invisible
-        # in the SSE path until the next event ever fired (the agent thread
-        # would be parked indefinitely from the user's perspective).
-        if isinstance(_pending.get(sid), list) and _pending[sid]:
-            _approval_sse_notify_locked(sid, _pending[sid][0], len(_pending[sid]))
-        else:
-            _approval_sse_notify_locked(sid, None, 0)
 
     if pending:
         keys = pending.get("pattern_keys") or [pending.get("pattern_key", "")]
@@ -15038,7 +15012,12 @@ def _handle_approval_respond(handler, body):
     # Unblock the agent thread waiting in the gateway approval queue.
     # This is the primary signal when streaming is active â€” the agent
     # thread is parked in entry.event.wait() and needs to be woken up.
-    resolve_gateway_approval(sid, choice, resolve_all=False)
+    resolved = resolve_gateway_approval(sid, choice, resolve_all=False, approval_id=approval_id or None, require_exact=True)
+    if pending is None and not resolved:
+        return j(handler, {"error": "Approval request is no longer pending"}, status=409)
+    with _lock:
+        head, count = _approval_pending_locked(sid)
+        _approval_sse_notify_locked(sid, head, count)
     return j(handler, {"ok": True, "choice": choice})
 
 

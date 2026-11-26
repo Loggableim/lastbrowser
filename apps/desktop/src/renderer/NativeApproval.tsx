@@ -10,6 +10,7 @@ type ApprovalEntry = {
   command?: string;
   description?: string;
   pattern_keys?: string[];
+  once_only?: boolean;
 };
 
 type ApprovalState = {
@@ -121,12 +122,12 @@ export function ApprovalCard({
         <button type="button" className="approval-btn approval-allow-once" onClick={() => onRespond('once')}>
           Allow once
         </button>
-        <button type="button" className="approval-btn approval-allow-session" onClick={() => onRespond('session')}>
+        {!entry.once_only && <button type="button" className="approval-btn approval-allow-session" onClick={() => onRespond('session')}>
           Allow session
-        </button>
-        <button type="button" className="approval-btn approval-allow-always" onClick={() => onRespond('always')}>
+        </button>}
+        {!entry.once_only && <button type="button" className="approval-btn approval-allow-always" onClick={() => onRespond('always')}>
           Always allow
-        </button>
+        </button>}
         <button type="button" className="approval-btn approval-deny" onClick={() => onRespond('deny')}>
           Deny
         </button>

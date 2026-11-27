@@ -25,11 +25,18 @@ On 2026-11-26 the current source was checked against the draft:
   SHA-256 `FDDEE667320490169D36F7CAD21E0EA80F3EECC209B701D62F6FC73C4BD7D7D7`,
   identical to `electron.exe` from the configured Castlabs archive. Rendering
   `apps/desktop/build/icon.ico` at 32×32 produced
-  `116EFADE7FA6902B54A4E11157524FD01D67D8E5754890AF581E440E495ADAE`.
+  `116EFADE7FAF6902B54A4E11157524FD01D67D8E5754890AF581E440E495ADAE`.
   These are hashes of PNG encodings of the extracted bitmaps, not hashes of
   the original EXE or ICO files. The temporary reference executable was removed.
   The public Widevine sample played on this unpacked payload, but that does not
   establish VMP acceptance by Spotify or other services.
+* On 2026-11-27 the separate r7 unpacked payload's associated 32×32 EXE icon
+  was checked using the same in-memory PNG/SHA-256 method. It produced
+  `FDDEE667320490169D36F7CAD21E0EA80F3EECC209B701D62F6FC73C4BD7D7D7`,
+  distinct from the current project ICO's rendered hash above. Windows
+  PowerShell `Get-AppxPackage -Name '*Lastbrowser*'` returned no installed
+  package for the current account. This does not establish the visible icon
+  in the Store package, nor does it test another Windows account.
 * The same r6 payload's `app.asar` contains both
   `dist/renderer/Lastbrowser.ico` (103,329 bytes) and
   `dist/renderer/app-icon-256.png` (65,633 bytes). Its separate resources also

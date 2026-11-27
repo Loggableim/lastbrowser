@@ -25,6 +25,14 @@ def test_engine_accepts_pinned_https_origin():
     assert _official_url('https://github.com/ggml-org/llama.cpp/releases/download/example') is None
 
 
+def test_microsoft_engine_dependency_accepts_only_the_exact_pinned_url():
+    url = store_engines._WINDOWS_CRT_ARCHIVE.source_url
+    assert _official_url(url) is None
+    for changed in (url + '?other=1', url + '#fragment', url.replace('download.visualstudio.microsoft.com', 'evil.invalid')):
+        with pytest.raises(ValueError, match='engine_download_origin_rejected'):
+            _official_url(changed)
+
+
 def test_redirects_use_the_same_origin_validation_without_network(monkeypatch):
     valid = 'https://github.com/example'
 

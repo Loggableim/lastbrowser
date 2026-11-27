@@ -74,6 +74,12 @@ class TerminalDangerousCommandTests(unittest.TestCase):
             r"git clean project -fd",
             r"git -C project clean path --force",
             r"DELETE FROM users; SELECT * FROM audit WHERE id = 1",
+            "DELETE QUICK FROM users",
+            "DELETE LOW_PRIORITY IGNORE FROM users",
+            "DELETE QUICK users FROM users JOIN audit ON users.id = audit.id",
+            "DELETE QUICK users, audit FROM users JOIN audit ON users.id = audit.id",
+            "DELETE QUICK `users`.* FROM users JOIN audit ON users.id = audit.id",
+            "DELETE /* comment */ QUICK FROM users USING (SELECT id FROM audit WHERE active = 1) AS a",
             "DELETE /* cleanup */ FROM users",
             "DELETE -- cleanup\nFROM users",
             "DELETE FROM users -- WHERE id = 1",
@@ -90,14 +96,14 @@ class TerminalDangerousCommandTests(unittest.TestCase):
                 self.assertTrue(requires_explicit_destructive_approval(command))
 
     def test_read_only_commands_are_not_flagged(self):
-        for command in ["git status", "git --git-dir=repo.git --work-tree='my project' status", "git push origin main:main", "Get-ChildItem C:\\work", "echo format report", "rm -f project", "rm -- -r", "rm project -- -rf", r"rd /q C:\work\empty", "DELETE FROM users WHERE id = 1", "DELETE /* cleanup */ FROM users WHERE id = 1", 'sqlite3 test.db "DELETE FROM users WHERE id = 1"', 'DELETE FROM users WHERE id IN (SELECT id FROM audit WHERE active = 1)']:
+        for command in ["git status", "git --git-dir=repo.git --work-tree='my project' status", "git push origin main:main", "Get-ChildItem C:\\work", "echo format report", "rm -f project", "rm -- -r", "rm project -- -rf", r"rd /q C:\work\empty", "DELETE FROM users WHERE id = 1", "DELETE QUICK FROM users WHERE id = 1", "DELETE LOW_PRIORITY IGNORE users FROM users JOIN audit ON users.id = audit.id WHERE users.id = 1", "DELETE /* cleanup */ FROM users WHERE id = 1", 'sqlite3 test.db "DELETE FROM users WHERE id = 1"', 'DELETE FROM users WHERE id IN (SELECT id FROM audit WHERE active = 1)']:
             with self.subTest(command=command):
                 self.assertFalse(detect_dangerous_command(command)[0])
 
     def test_destructive_commands_are_not_autoapproved_without_a_user(self):
         with patch.dict("os.environ", {"SIDEKICK_YOLO_MODE": "1"}, clear=True):
             with patch("tools.approval._get_approval_mode", return_value="off"):
-                for command in ("rm -rf project", "rm project -rf", "rm project --recursive", "rm -f -r project", "ri -Recurse project", r"rd /s /q C:\work\old-files", "Stop-Process -Id 1234", "DELETE /* cleanup */ FROM users", "git clean -d -f", "git clean project -fd", "git reset --quiet --hard", "git reset HEAD --hard"):
+                for command in ("rm -rf project", "rm project -rf", "rm project --recursive", "rm -f -r project", "ri -Recurse project", r"rd /s /q C:\work\old-files", "Stop-Process -Id 1234", "DELETE /* cleanup */ FROM users", "DELETE QUICK FROM users", "DELETE QUICK users FROM users JOIN audit ON users.id = audit.id", "git clean -d -f", "git clean project -fd", "git reset --quiet --hard", "git reset HEAD --hard"):
                     with self.subTest(command=command):
                         result = check_all_command_guards(command, "local")
                         self.assertFalse(result["approved"])
@@ -186,8 +192,9 @@ class TerminalDangerousCommandTests(unittest.TestCase):
                 with patch.object(terminal_tool, "_resolve_container_task_id", return_value="guard-test"):
                     with patch.object(terminal_tool, "_start_cleanup_thread"):
                         with patch.dict(terminal_tool._active_environments, {"guard-test": environment}):
-                            result = json.loads(terminal_tool.terminal_tool("rm -rf project", force=True))
-        self.assertEqual(result["status"], "blocked")
+                            for command in ("rm -rf project", "DELETE QUICK FROM users"):
+                                result = json.loads(terminal_tool.terminal_tool(command, force=True))
+                                self.assertEqual(result["status"], "blocked")
         environment.execute.assert_not_called()
 
     def test_terminal_force_cannot_bypass_unconditional_guards(self):

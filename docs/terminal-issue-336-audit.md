@@ -1,0 +1,7 @@
+# Issue 336: MySQL DELETE-Varianten im Terminalschutz
+
+Am 27. November 2026 wurde ein konkreter Erkennungsfehler im laufenden Arbeitszweig untersucht: `DELETE QUICK FROM users` und MySQL-Mehrtabellenvarianten ohne `WHERE` wurden von der Erkennung für destruktive Befehle nicht erfasst. Die [MySQL-Referenz](https://dev.mysql.com/doc/refman/8.4/en/delete.html) dokumentiert die Modifikatoren und die Mehrtabellensyntax. Der Regressionstest schlug vor der Korrektur fehl.
+
+Die Erkennung berücksichtigt jetzt die MySQL-Modifikatoren `LOW_PRIORITY`, `QUICK` und `IGNORE` sowie Zieltabellen vor `FROM`. Synthetische Tests decken einfache und mehrfache Zieltabellen, Backtick-Identifikatoren, Kommentare und verschachtelte `WHERE`-Klauseln ab. Mit deaktivierter interaktiver Freigabe werden getestete unbeschränkte Varianten abgelehnt; ein zusätzlicher Test prüft die Blockade auch bei `force=True` bis zum Terminalaufruf. Varianten mit einem `WHERE` auf oberster Ebene werden in diesen Tests nicht als unbeschränkt markiert. Es wurde keine Datenbank verändert. 43 Terminal- und Genehmigungstests bestanden; der Terminaltest wurde nach Ergänzung des `force`-Falls mit 27 bestandenen Tests wiederholt.
+
+Die Erkennung bleibt eine Heuristik und kein vollständiger SQL- oder Shellparser. Die ursprüngliche Datei `axon_handwritten_testset_50.jsonl` einschließlich Sample 041 war weiterhin nicht verfügbar; die vollständige Abnahme des Issues ist damit nicht belegt. Obfuskation, andere SQL-Dialekte und andere Ausführungspfade benötigen gesonderte Prüfung.

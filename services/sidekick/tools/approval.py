@@ -472,7 +472,13 @@ def _sql_delete_without_where(command: str) -> bool:
     This is a conservative heuristic, not a SQL parser. Examine each DELETE
     separately so a WHERE in a later statement cannot approve an earlier one.
     """
-    for match in re.finditer(r'\bdelete(?:\s|/\*.*?\*/|--[^\n]*(?:\n|$))+from\b', command, re.IGNORECASE | re.DOTALL):
+    separator = r'(?:\s|/\*.*?\*/|--[^\n]*(?:\n|$))+'
+    name = r'(?:`[^`]+`|[a-z_][\w$]*)(?:\s*\.\s*(?:`[^`]+`|[a-z_][\w$]*|\*))?'
+    targets = name + r'(?:\s*,\s*' + name + r')*'
+    delete_start = (r'\bdelete' + separator
+        + r'(?:(?:low_priority|quick|ignore)' + separator + r')*'
+        + r'(?:from\b|' + targets + separator + r'from\b)')
+    for match in re.finditer(delete_start, command, re.IGNORECASE | re.DOTALL):
         tail = command[match.end():]
         tail = re.sub(r'''/\*.*?\*/|--[^\n]*|'(?:''|[^'])*'|"(?:""|[^"])*"''', ' ', tail, flags=re.DOTALL)
         tail = tail.split(';', 1)[0].split('\n', 1)[0]

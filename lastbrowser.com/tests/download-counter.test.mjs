@@ -218,15 +218,15 @@ test('same-origin unavailable or network failure without cache remains unavailab
   assert.deepEqual(urls, ['/api/download-count', '/api/download-count']);
 });
 
-test('landing pages mount the historical download counter; Windows download pages link to the Store', () => {
+test('landing pages offer the Store and Linux without promoting historic Windows downloads', () => {
   for (const locale of ['de', 'en', 'es', 'fr', 'it', 'pt', 'ja']) {
     const root = locale === 'de' ? '' : locale + '/';
     const file = new URL(`../${root}index.html`, import.meta.url);
     const html = readFileSync(file, 'utf8');
-    assert.equal((html.match(/data-download-counter/g) || []).length, 1);
-    assert.ok(html.includes(`data-locale="${locale}"`));
-    assert.ok(html.includes('/assets/js/download-counter.js'));
-    assert.ok(html.includes('/assets/css/download-counter.css'));
+    assert.match(html, /href="https:\/\/apps\.microsoft\.com\/detail\/9NJX1T2KXDM3"[^>]*data-platform="windows"/);
+    assert.ok(html.includes(`href="/${root}download/#linux-downloads"`));
+    assert.equal((html.match(/id="linux-hero-link"/g) || []).length, 1);
+    assert.doesNotMatch(html, /data-download-counter/);
     const downloads = readFileSync(new URL(`../${root}download/index.html`, import.meta.url), 'utf8');
     assert.match(downloads, /id="hero-win-download" href="https:\/\/apps\.microsoft\.com\/detail\/9NJX1T2KXDM3"/);
     assert.doesNotMatch(downloads, /data-download-counter/);

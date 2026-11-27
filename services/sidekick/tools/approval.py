@@ -381,6 +381,7 @@ DANGEROUS_PATTERNS = [
     # Git destructive operations that can lose uncommitted work or rewrite
     # shared history. Not captured by rm/chmod/etc patterns.
     (_GIT_COMMAND_PREFIX + r'reset\s+(?:-[^\s;|&]+\s+)*--hard\b', "git reset --hard (destroys uncommitted changes)"),
+    (_GIT_COMMAND_PREFIX + r'''reset\b(?:'[^']*'|"[^"]*"|(?!\s--(?:\s|$))[^\n;&|'"])*?\s+--hard(?=\s|$)''', "git reset --hard (destroys uncommitted changes)"),
     (_GIT_COMMAND_PREFIX + r'push\b.*--force\b', "git force push (rewrites remote history)"),
     (_GIT_COMMAND_PREFIX + r'push\b.*-f\b', "git force push short flag (rewrites remote history)"),
     (_GIT_COMMAND_PREFIX + r'push\b[^\n;|&]*\s+["\']?\+[^\s;|&"\']+', "git force push refspec (rewrites remote history)"),

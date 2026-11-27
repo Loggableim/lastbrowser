@@ -59,6 +59,8 @@ class TerminalDangerousCommandTests(unittest.TestCase):
             r"rm --force -r project",
             r"git -C project reset --hard",
             r"git reset --quiet --hard",
+            r"git reset HEAD --hard",
+            r"git -C project reset HEAD --hard",
             r"git -C project push --force origin main",
             r"git -C project clean -fd",
             r"git --git-dir=repo.git reset --hard",
@@ -93,13 +95,16 @@ class TerminalDangerousCommandTests(unittest.TestCase):
     def test_destructive_commands_are_not_autoapproved_without_a_user(self):
         with patch.dict("os.environ", {"SIDEKICK_YOLO_MODE": "1"}, clear=True):
             with patch("tools.approval._get_approval_mode", return_value="off"):
-                for command in ("rm -rf project", "rm project -rf", "rm project --recursive", "rm -f -r project", "ri -Recurse project", r"rd /s /q C:\work\old-files", "Stop-Process -Id 1234", "DELETE /* cleanup */ FROM users", "git clean -d -f", "git reset --quiet --hard"):
+                for command in ("rm -rf project", "rm project -rf", "rm project --recursive", "rm -f -r project", "ri -Recurse project", r"rd /s /q C:\work\old-files", "Stop-Process -Id 1234", "DELETE /* cleanup */ FROM users", "git clean -d -f", "git reset --quiet --hard", "git reset HEAD --hard"):
                     with self.subTest(command=command):
                         result = check_all_command_guards(command, "local")
                         self.assertFalse(result["approved"])
 
     def test_rm_filename_containing_flag_text_is_not_a_recursive_option(self):
         self.assertFalse(detect_dangerous_command("rm 'project -rf'")[0])
+
+    def test_git_reset_options_end_at_double_dash(self):
+        self.assertFalse(requires_explicit_destructive_approval("git reset HEAD -- --hard"))
 
     def test_each_destructive_command_requires_a_fresh_interactive_decision(self):
         with patch.dict("os.environ", {"SIDEKICK_INTERACTIVE": "1", "SIDEKICK_YOLO_MODE": "1"}):

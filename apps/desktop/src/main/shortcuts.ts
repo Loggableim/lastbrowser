@@ -227,15 +227,15 @@ export function registerBrowserShortcuts({
   getWindow
 }: {
   app: AppLike;
-  getWindow: () => BrowserWindowLike | null;
+  getWindow: (contents: WebContentsLike) => BrowserWindowLike | null;
 }): void {
   app.on('web-contents-created', (_event, contents) => {
     contents.on('before-input-event', (event, input) => {
       const match = matchBrowserShortcut(input);
       if (match) {
-        event.preventDefault();
-        const win = getWindow();
+        const win = getWindow(contents);
         if (win && !win.isDestroyed()) {
+          event.preventDefault();
           win.webContents.send(browserShortcutChannel, match);
         }
       }

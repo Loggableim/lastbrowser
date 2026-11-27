@@ -1794,7 +1794,11 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
   });
   registerBrowserShortcuts({
     app,
-    getWindow: () => mainWindow
+    getWindow: (contents) => {
+      const source = contents as Electron.WebContents;
+      const owner = source.hostWebContents ?? source;
+      return isTrustedShell(owner) ? BrowserWindow.fromWebContents(owner) : null;
+    }
   });
   services = new SidecarServices(resolveServiceLayout(appResourcesDir(), undefined, process.env, process.platform, app.isPackaged));
   independentController = new IndependentController({

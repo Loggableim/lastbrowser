@@ -15,6 +15,8 @@ from .runtime_probe import hash_contained_file
 
 
 def _official_url(url):
+    if not isinstance(url, str) or url != url.strip() or any(ord(char) < 32 or ord(char) == 127 for char in url):
+        raise ValueError('engine_download_origin_rejected')
     parsed = urlsplit(url)
     if (parsed.scheme != 'https' or parsed.hostname not in {'github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com', 'raw.githubusercontent.com'}
             or parsed.port not in (None, 443) or parsed.username or parsed.password or parsed.fragment):

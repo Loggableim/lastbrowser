@@ -480,8 +480,14 @@ def _sql_delete_without_where(command: str) -> bool:
         + r'(?:from\b|' + targets + separator + r'from\b)')
     for match in re.finditer(delete_start, command, re.IGNORECASE | re.DOTALL):
         tail = command[match.end():]
-        tail = re.sub(r'''/\*.*?\*/|--[^\n]*|'(?:''|[^'])*'|"(?:""|[^"])*"''', ' ', tail, flags=re.DOTALL)
-        tail = tail.split(';', 1)[0].split('\n', 1)[0]
+        # Identifiers, SQL string literals and comments cannot constrain the
+        # DELETE. In particular, MySQL backticks and # comments may contain
+        # the word WHERE without introducing a predicate.
+        tail = re.sub(r'''/\*.*?\*/|--[^\n]*|\#[^\n]*|`(?:``|[^`])*`|'(?:''|[^'])*'|"(?:""|[^"])*"''', ' ', tail, flags=re.DOTALL)
+        # A subsequent shell command cannot supply this statement's WHERE.
+        # Treat ambiguous separators conservatively: extra approval is safer
+        # than attributing another command's text to this DELETE.
+        tail = re.split(r'[;\n&|]', tail, maxsplit=1)[0]
         depth = 0
         top_level = []
         for char in tail:

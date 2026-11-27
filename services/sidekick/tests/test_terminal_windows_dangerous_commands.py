@@ -11,6 +11,7 @@ from tools.approval import (
     detect_dangerous_command,
     register_gateway_notify,
     requires_explicit_destructive_approval,
+    requires_non_bypassable_guard,
     reset_current_session_key,
     resolve_gateway_approval,
     set_current_session_key,
@@ -87,6 +88,10 @@ class TerminalDangerousCommandTests(unittest.TestCase):
             "DELETE FROM users /* WHERE id = 1; */",
             "DELETE FROM users RETURNING 'WHERE'",
             'DELETE FROM "WHERE"',
+            'DELETE FROM `where`',
+            'DELETE FROM users # WHERE id = 1',
+            'mysql -e "DELETE FROM users" && echo WHERE',
+            "mysql -e 'DELETE FROM users' | cat WHERE",
             'DELETE FROM users USING (SELECT id FROM audit WHERE active = 1) AS a',
             'DELETE FROM users RETURNING (SELECT count(*) FROM audit WHERE active = 1)',
             r"Remove-Item C:\Windows\System32\example.dll",
@@ -96,7 +101,7 @@ class TerminalDangerousCommandTests(unittest.TestCase):
                 self.assertTrue(requires_explicit_destructive_approval(command))
 
     def test_read_only_commands_are_not_flagged(self):
-        for command in ["git status", "git --git-dir=repo.git --work-tree='my project' status", "git push origin main:main", "Get-ChildItem C:\\work", "echo format report", "rm -f project", "rm -- -r", "rm project -- -rf", r"rd /q C:\work\empty", "DELETE FROM users WHERE id = 1", "DELETE QUICK FROM users WHERE id = 1", "DELETE LOW_PRIORITY IGNORE users FROM users JOIN audit ON users.id = audit.id WHERE users.id = 1", "DELETE /* cleanup */ FROM users WHERE id = 1", 'sqlite3 test.db "DELETE FROM users WHERE id = 1"', 'DELETE FROM users WHERE id IN (SELECT id FROM audit WHERE active = 1)']:
+        for command in ["git status", "git --git-dir=repo.git --work-tree='my project' status", "git push origin main:main", "Get-ChildItem C:\\work", "echo format report", "rm -f project", "rm -- -r", "rm project -- -rf", r"rd /q C:\work\empty", "DELETE FROM users WHERE id = 1", "DELETE QUICK FROM users WHERE id = 1", "DELETE LOW_PRIORITY IGNORE users FROM users JOIN audit ON users.id = audit.id WHERE users.id = 1", "DELETE /* cleanup */ FROM users WHERE id = 1", 'sqlite3 test.db "DELETE FROM users WHERE id = 1"', 'DELETE FROM `where` WHERE id = 1', 'DELETE FROM users WHERE value = "a&&b"', 'DELETE FROM users WHERE id IN (SELECT id FROM audit WHERE active = 1)']:
             with self.subTest(command=command):
                 self.assertFalse(detect_dangerous_command(command)[0])
 
@@ -107,6 +112,14 @@ class TerminalDangerousCommandTests(unittest.TestCase):
                     with self.subTest(command=command):
                         result = check_all_command_guards(command, "local")
                         self.assertFalse(result["approved"])
+
+    def test_sql_where_in_shell_suffix_and_comments_does_not_bypass_forced_guard(self):
+        for command in ('DELETE FROM `where`', 'DELETE FROM users # WHERE id = 1',
+                        'mysql -e "DELETE FROM users" && echo WHERE'):
+            with self.subTest(command=command), patch.dict('os.environ', {'SIDEKICK_YOLO_MODE': '1'}, clear=True):
+                with patch('tools.approval._get_approval_mode', return_value='off'):
+                    self.assertTrue(requires_non_bypassable_guard(command))
+                    self.assertFalse(check_all_command_guards(command, 'local')['approved'])
 
     def test_rm_filename_containing_flag_text_is_not_a_recursive_option(self):
         self.assertFalse(detect_dangerous_command("rm 'project -rf'")[0])
@@ -192,7 +205,8 @@ class TerminalDangerousCommandTests(unittest.TestCase):
                 with patch.object(terminal_tool, "_resolve_container_task_id", return_value="guard-test"):
                     with patch.object(terminal_tool, "_start_cleanup_thread"):
                         with patch.dict(terminal_tool._active_environments, {"guard-test": environment}):
-                            for command in ("rm -rf project", "DELETE QUICK FROM users"):
+                            for command in ("rm -rf project", "DELETE QUICK FROM users", 'DELETE FROM `where`',
+                                            'DELETE FROM users # WHERE id = 1', 'mysql -e "DELETE FROM users" && echo WHERE'):
                                 result = json.loads(terminal_tool.terminal_tool(command, force=True))
                                 self.assertEqual(result["status"], "blocked")
         environment.execute.assert_not_called()

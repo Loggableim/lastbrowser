@@ -8,6 +8,19 @@ export type LocalReleaseNotes = { version: string; changes: readonly string[] };
 // the current UI or from an online changelog at runtime.
 const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, readonly string[]> }> = [
   {
+    version: '0.1.62',
+    changes: {
+      en: ['External web links ending in file-like extensions now open correctly.', 'On Windows, mouse Back and Forward buttons navigate the active window.', 'AI provider selection no longer silently switches away from an explicitly selected local provider.'],
+      de: ['Externe Weblinks mit dateiähnlichen Endungen werden jetzt richtig geöffnet.', 'Unter Windows navigieren die Zurück- und Vorwärts-Maustasten im aktiven Fenster.', 'Eine ausdrücklich gewählte lokale KI-Verbindung wird nicht mehr stillschweigend durch einen anderen Anbieter ersetzt.'],
+      it: ['I link web esterni con estensioni simili a file si aprono correttamente.', 'Su Windows i pulsanti Indietro e Avanti del mouse navigano nella finestra attiva.', 'Un provider IA locale scelto esplicitamente non viene più sostituito silenziosamente.'],
+      es: ['Los enlaces web externos con extensiones similares a archivos se abren correctamente.', 'En Windows, los botones Atrás y Adelante del ratón navegan en la ventana activa.', 'Un proveedor de IA local elegido explícitamente ya no se sustituye sin aviso.'],
+      fr: ['Les liens web externes avec une extension de fichier s’ouvrent correctement.', 'Sous Windows, les boutons Précédent et Suivant de la souris naviguent dans la fenêtre active.', 'Un fournisseur IA local choisi explicitement n’est plus remplacé silencieusement.'],
+      'pt-BR': ['Links externos com extensões semelhantes a arquivos abrem corretamente.', 'No Windows, os botões Voltar e Avançar do mouse navegam na janela ativa.', 'Um provedor de IA local escolhido explicitamente não é mais substituído silenciosamente.'],
+      ru: ['Внешние веб-ссылки с расширениями файлов теперь открываются правильно.', 'В Windows кнопки мыши «Назад» и «Вперёд» управляют активным окном.', 'Явно выбранный локальный провайдер ИИ больше не заменяется без уведомления.'],
+      ja: ['ファイルの拡張子で終わる外部ウェブリンクを正しく開けるようになりました。', 'Windows のマウスの「戻る」「進む」ボタンで、アクティブなウィンドウを操作できます。', '明示的に選んだローカル AI プロバイダーが別のプロバイダーに自動で切り替わらなくなりました。']
+    }
+  },
+  {
     version: '0.1.57-beta.3',
     changes: {
           "de": [

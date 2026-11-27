@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { releaseNotesBetween } from '../src/renderer/release-notes.js';
 
 describe('offline versioned release notes', () => {
+  it('provides actual 0.1.62 notes for an upgrade in every shipped language', () => {
+    const english = releaseNotesBetween({ fromVersion: '0.1.61', toVersion: '0.1.62' }, 'en')[0].changes;
+    for (const locale of ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'] as const) {
+      const notes = releaseNotesBetween({ fromVersion: '0.1.61', toVersion: '0.1.62' }, locale);
+      expect(notes).toHaveLength(1);
+      expect(notes[0].version).toBe('0.1.62');
+      expect(notes[0].changes).toHaveLength(3);
+      expect(notes[0].changes.every(change => change.trim().length > 20)).toBe(true);
+      if (locale !== 'en') expect(notes[0].changes).not.toEqual(english);
+    }
+  });
   it('includes the new beta.3 features in every UI language after beta.2', () => {
     for (const locale of ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'] as const) {
       const notes = releaseNotesBetween({ fromVersion: '0.1.57-beta.2', toVersion: '0.1.57-beta.3' }, locale);

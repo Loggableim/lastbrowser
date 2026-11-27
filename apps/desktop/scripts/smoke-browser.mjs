@@ -3391,6 +3391,51 @@ async function main() {
   check('detached tab back and forward return to the original pages',
     detachedHistoryRoundTrip.backUrl.includes('example.com') && detachedHistoryRoundTrip.forwardUrl.includes('iana.org'),
     JSON.stringify(detachedHistoryRoundTrip));
+  // Send the shortcut into the actual detached guest, not just its shell.
+  // Both tab counts are checked to catch accidental routing to the source window.
+  let detachedShortcutResult = { skipped: 'detached guest unavailable' };
+  if (process.platform === 'win32' && detachedCdp && detachedGuestVisible) {
+    let guestCdp = null;
+    try {
+      const target = (await cdpList()).find(item => item.type === 'webview' && item.url === detachedGuest.url && item.webSocketDebuggerUrl);
+      if (!target) throw new Error('detached guest CDP target unavailable');
+      guestCdp = new CDP(target.webSocketDebuggerUrl);
+      await detachedCdp.send('Page.bringToFront');
+      await detachedCdp.send('Runtime.evaluate', { expression: "document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view')?.focus()" });
+      await guestCdp.send('Runtime.evaluate', { expression: "globalThis.__lastbrowserSmokeKeyCount = 0; document.addEventListener('keydown', event => { if (event.ctrlKey && event.key.toLowerCase() === 't') globalThis.__lastbrowserSmokeKeyCount++; }, {capture:true})" });
+      // CDP Input.dispatchKeyEvent sent directly to a webview did not reach
+      // Electron's before-input-event. Guard native input by process ID so it
+      // cannot type into another application if foreground activation fails.
+      const nativeInput = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type 'using System; using System.Runtime.InteropServices; public static class SmokeForeground { [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid); }'
+        $owner = [uint32]0
+        [void][SmokeForeground]::GetWindowThreadProcessId([SmokeForeground]::GetForegroundWindow(), [ref]$owner)
+        if ($owner -ne ${child.pid}) { throw 'Test window is not foreground' }
+        [System.Windows.Forms.SendKeys]::SendWait('^t')
+      `], { encoding: 'utf8', timeout: 10000 });
+      if (nativeInput.status !== 0) throw new Error('native shortcut could not be sent to the test window');
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const detachedTabs = (await detachedCdp.send('Runtime.evaluate', { expression: "document.querySelectorAll('.vertical-tab-item').length", returnByValue: true })).result.value;
+        const sourceTabs = (await cdp.send('Runtime.evaluate', { expression: "document.querySelectorAll('.vertical-tab-item').length", returnByValue: true })).result.value;
+        detachedShortcutResult = { detachedTabs, sourceTabs };
+        if (detachedTabs === 2 || sourceTabs !== 1) break;
+        await sleep(100);
+      }
+      detachedShortcutResult.guestKeyEvents = (await guestCdp.send('Runtime.evaluate', { expression: 'globalThis.__lastbrowserSmokeKeyCount', returnByValue: true })).result.value;
+    } catch (error) {
+      detachedShortcutResult = { error: String(error) };
+    } finally {
+      guestCdp?.close();
+    }
+  }
+  if (process.platform === 'win32') {
+    check('shortcut in detached webview opens a tab only in its own window',
+      detachedShortcutResult.detachedTabs === 2 && detachedShortcutResult.sourceTabs === 1,
+      JSON.stringify(detachedShortcutResult));
+  } else {
+    skip('shortcut in detached webview opens a tab only in its own window', 'Native input probe is Windows-only.');
+  }
   detachedCdp?.close();
   // Detaching activates the new window. Resume the remaining user actions in
   // the original shell rather than a background renderer with paused frames.

@@ -5547,7 +5547,11 @@ def test_model_probe_uses_fixed_openrouter_endpoint_and_returns_models(monkeypat
         seen["timeout"] = timeout
         return Response()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    class Opener:
+        def open(self, request, timeout):
+            return fake_urlopen(request, timeout)
+
+    monkeypatch.setattr("urllib.request.build_opener", lambda *_handlers: Opener())
     body = json.dumps({"provider": "openrouter", "api_key": "test-only-key"})
 
     class Handler:
@@ -5604,7 +5608,7 @@ def test_model_probe_rejects_arbitrary_provider_without_network(monkeypatch):
     from urllib.parse import urlparse
     from web.api import routes
 
-    monkeypatch.setattr("urllib.request.urlopen", lambda *_a, **_k: pytest.fail("network must not be called"))
+    monkeypatch.setattr("urllib.request.build_opener", lambda *_a, **_k: pytest.fail("network must not be called"))
     body = json.dumps({"provider": "custom", "api_key": "test-only-key"})
 
     class Handler:

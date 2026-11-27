@@ -11157,7 +11157,10 @@ def _handle_model_probe(handler, body):
         if provider == "anthropic":
             headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "Accept": "application/json"}
         request = urllib.request.Request(endpoint, headers=headers)
-        with urllib.request.urlopen(request, timeout=12) as response:
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *_args, **_kwargs):
+                return None
+        with urllib.request.build_opener(_NoRedirect()).open(request, timeout=12) as response:
             payload = json.loads(response.read(4 * 1024 * 1024))
         data = payload.get("data", []) if isinstance(payload, dict) else []
         models = []

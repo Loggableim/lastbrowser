@@ -108,8 +108,12 @@ class ProviderProfile:
         for k, v in self.default_headers.items():
             req.add_header(k, v)
 
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *_args, **_kwargs):
+                return None
+
         try:
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with urllib.request.build_opener(NoRedirect()).open(req, timeout=timeout) as resp:
                 data = json.loads(resp.read().decode())
             items = data if isinstance(data, list) else data.get("data", [])
             return [m["id"] for m in items if isinstance(m, dict) and "id" in m]

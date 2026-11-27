@@ -315,6 +315,9 @@ DANGEROUS_PATTERNS = [
     (r'\brm\s+(-[^\s]*\s+)*/', "delete in root path"),
     (r'\brm\s+(?:-(?!-\s)[^\s;|&]+\s+)*-(?!-)[^\s;|&]*r[^\s;|&]*(?=\s|$)', "recursive delete"),
     (r'\brm\s+(?:-[^\s;|&]+\s+)*--recursive\b', "recursive delete (long flag)"),
+    # GNU rm also accepts options after operands. Do not treat anything after
+    # the explicit end-of-options marker as a flag.
+    (r'''\brm\b(?:'[^']*'|"[^"]*"|(?!\s--(?:\s|$))[^\n;&|'"])*?\s+(?:-(?!-)[^\s;|&]*r[^\s;|&]*|--recursive)(?=\s|$)''', "recursive delete"),
     (r'\b(?:del|erase|rmdir|rd)(?:\.exe)?\b[^\n;&|]*\s/s(?:\s|$)', "recursive Windows delete"),
     # PowerShell accepts unambiguous parameter prefixes, including -R and -Rec.
     (r'\b(?:remove-item|ri|del|erase|rmdir|rd|rm)\b(?:(?!\s--(?:\s|$))[^\n;&|])*\s-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?=\s|:|$)', "recursive PowerShell delete"),

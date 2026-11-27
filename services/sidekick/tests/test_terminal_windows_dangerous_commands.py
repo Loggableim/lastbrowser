@@ -40,6 +40,10 @@ class TerminalDangerousCommandTests(unittest.TestCase):
 
     def test_destructive_commands_are_detected(self):
         for command in [
+            "rm project -rf",
+            "rm project --recursive",
+            "rm 'project files' -r",
+            "rm one two -rf",
             r"del /s C:\work\old-files\*",
             r"rmdir /s /q C:\work\old-files",
             r"rd /q /s C:\work\old-files",
@@ -82,17 +86,20 @@ class TerminalDangerousCommandTests(unittest.TestCase):
                 self.assertTrue(requires_explicit_destructive_approval(command))
 
     def test_read_only_commands_are_not_flagged(self):
-        for command in ["git status", "git --git-dir=repo.git --work-tree='my project' status", "git push origin main:main", "Get-ChildItem C:\\work", "echo format report", "rm -f project", "rm -- -r", r"rd /q C:\work\empty", "DELETE FROM users WHERE id = 1", "DELETE /* cleanup */ FROM users WHERE id = 1", 'sqlite3 test.db "DELETE FROM users WHERE id = 1"', 'DELETE FROM users WHERE id IN (SELECT id FROM audit WHERE active = 1)']:
+        for command in ["git status", "git --git-dir=repo.git --work-tree='my project' status", "git push origin main:main", "Get-ChildItem C:\\work", "echo format report", "rm -f project", "rm -- -r", "rm project -- -rf", r"rd /q C:\work\empty", "DELETE FROM users WHERE id = 1", "DELETE /* cleanup */ FROM users WHERE id = 1", 'sqlite3 test.db "DELETE FROM users WHERE id = 1"', 'DELETE FROM users WHERE id IN (SELECT id FROM audit WHERE active = 1)']:
             with self.subTest(command=command):
                 self.assertFalse(detect_dangerous_command(command)[0])
 
     def test_destructive_commands_are_not_autoapproved_without_a_user(self):
         with patch.dict("os.environ", {"SIDEKICK_YOLO_MODE": "1"}, clear=True):
             with patch("tools.approval._get_approval_mode", return_value="off"):
-                for command in ("rm -rf project", "rm -f -r project", "ri -Recurse project", r"rd /s /q C:\work\old-files", "Stop-Process -Id 1234", "DELETE /* cleanup */ FROM users", "git clean -d -f", "git reset --quiet --hard"):
+                for command in ("rm -rf project", "rm project -rf", "rm project --recursive", "rm -f -r project", "ri -Recurse project", r"rd /s /q C:\work\old-files", "Stop-Process -Id 1234", "DELETE /* cleanup */ FROM users", "git clean -d -f", "git reset --quiet --hard"):
                     with self.subTest(command=command):
                         result = check_all_command_guards(command, "local")
                         self.assertFalse(result["approved"])
+
+    def test_rm_filename_containing_flag_text_is_not_a_recursive_option(self):
+        self.assertFalse(detect_dangerous_command("rm 'project -rf'")[0])
 
     def test_each_destructive_command_requires_a_fresh_interactive_decision(self):
         with patch.dict("os.environ", {"SIDEKICK_INTERACTIVE": "1", "SIDEKICK_YOLO_MODE": "1"}):

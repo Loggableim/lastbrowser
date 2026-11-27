@@ -81,6 +81,10 @@ describe('Single-Instance URL Dispatcher (extractUrlFromArgs)', () => {
     expect(extractUrlFromArgs(args)).toBe('http://localhost:3000/dashboard');
   });
 
+  it.each(['https://example.invalid/file.js', 'https://example.invalid/download.exe', 'https://example.invalid/app.mjs', 'https://example.invalid/file.bin'])('does not mistake web URL %s for a local launcher', url => {
+    expect(extractUrlFromArgs(['Lastbrowser.exe', url])).toBe(url);
+  });
+
   it('extracts file URLs', () => {
     const args = ['Lastbrowser.exe', 'file:///C:/Users/test/report.html'];
     expect(extractUrlFromArgs(args)).toBe('file:///C:/Users/test/report.html');

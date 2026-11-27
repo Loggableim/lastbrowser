@@ -10,18 +10,13 @@ export function extractUrlFromArgs(args: string[]): string | null {
     if (!raw || raw === '%1' || raw === '%L') continue;
     // Skip electron/chromium switches and flags
     if (raw.startsWith('-')) continue;
+    // Recognize explicit URLs before filtering local launcher filenames. A URL
+    // can legitimately end in .js, .exe, or another launcher-like suffix.
+    if (/^(?:https?|file):\/\//i.test(raw)) return raw;
     // Skip executable binaries
     if (/\.(exe|bin)$/i.test(raw) || /(?:^|[/\\])(?:electron|node)(?:\.exe)?$/i.test(raw)) continue;
     // Skip runner script files
     if (raw.endsWith('.js') || raw.endsWith('.mjs') || raw.endsWith('.ts')) continue;
-    // Standard web schemes
-    if (/^https?:\/\//i.test(raw)) {
-      return raw;
-    }
-    // File scheme
-    if (/^file:\/\//i.test(raw)) {
-      return raw;
-    }
     // Local HTML files
     if (/\.(html?|shtml|xhtml)$/i.test(raw)) {
       try {

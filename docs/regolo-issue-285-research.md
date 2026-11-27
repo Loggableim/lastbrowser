@@ -1,0 +1,19 @@
+# Issue #285: Regolo und DeepAgents/Brick – Recherche
+
+Stand: 27. November 2026. Das Issue verlangt vor einer Umsetzung Recherche zu API, Authentifizierung, Modellliste, Tarif und DeepAgents/Brick. Es nennt zwei ausstehende Freigaben; dieser Bericht erteilt keine davon. Es wurden weder ein Konto angelegt noch Schlüssel gesucht oder Modellanfragen gesendet. Ein Kommentar im Issue wurde nicht erstellt.
+
+## Herstellerangaben und Grenzen
+
+- Die [Regolo-Dokumentation](https://docs.regolo.ai/getting-started/first-api-call/) beschreibt Chat Completions unter `https://api.regolo.ai/v1/chat/completions` mit Bearer-API-Schlüssel. Die [Modellkatalog-Dokumentation](https://docs.regolo.ai/models/catalog/) beschreibt `GET https://api.regolo.ai/models` für IDs und einen separaten authentifizierten Endpunkt für detaillierte Modellinformationen. Vor einer Implementierung muss geprüft werden, ob der bestehende Modell-Probe-Pfad exakt diesen Katalogpfad und die erforderliche Authentifizierung unterstützt; aus einem allgemeinen OpenAI-kompatiblen Basis-URL darf der Pfad nicht ungeprüft geraten werden.
+- Die [Preisseite](https://regolo.ai/pricing/) beschreibt zum Prüfzeitpunkt einen 30-tägigen Test mit Tages- und Geschwindigkeitsgrenzen; danach beschreibt sie einen Übergang zu nutzungsabhängiger Abrechnung. Das ist keine Zusage eines dauerhaft kostenlosen Modells. Tarife und Grenzen können sich ändern und müssen vor einem Live-Test erneut beim Anbieter geprüft werden. Keine kostenpflichtigen Aufrufe ohne ausdrückliche Autorisierung.
+- Die [DeepAgents/Brick-Beschreibung des Anbieters](https://regolo.ai/deepagents-brick-a-production-agent-harness-at-a-fraction-of-the-inference-cost/) behandelt DeepAgents als Agentenlaufzeit und Brick als separaten Modellrouter. Das ist mehr als eine reine Chat-Provider-Konfiguration. Das [Brick-Repository](https://github.com/regolo-ai/brick-SR1) beschreibt einen selbst betriebenen Router und nennt für seinen Schnellstart Node und Docker. Die Angaben und Lizenzen der konkreten Versionen und ihrer Abhängigkeiten sind vor Verteilung erneut zu prüfen.
+- Der aktuelle [DeepAgents-Projektmanifest](https://github.com/langchain-ai/deepagents/blob/main/libs/deepagents/pyproject.toml) nennt Python 3.11 bis unter 4.0 und zusätzliche LangChain-Abhängigkeiten. Diese dynamische `main`-Quelle ist keine reproduzierbare Versionsfestlegung; ein tatsächlicher Versuch benötigt feste Versionen, Herkunfts- und Lizenzprüfung sowie einen eigenen isolierten Laufzeit- und Berechtigungsentwurf.
+
+## Vorschlag für spätere Umsetzung und Prüfung
+
+1. Zuerst den gewöhnlichen Regolo-Provider separat vom Agentenversuch behandeln: explizite Auswahl, benutzereigener Schlüssel, feste HTTPS-Ziele, Live-Modellliste, kein automatischer Fallback und klare, lokalisierte 401-/429-Meldungen ohne Schlüssel oder rohe Providerantwort.
+2. Modelllisten- und Streamingpfad mit lokalem synthetischem Server testen, einschließlich Abbruch, Zeitüberschreitung, fehlerhafter Daten, Profil-/Space-Bindung und ausgeschalteter Modelle. Preis- und Tarifinformationen nicht aus fehlenden Daten ableiten.
+3. DeepAgents/Brick nur nach dem im Issue geforderten Freigabe- und Versionsabgleich getrennt in isolierter Umgebung evaluieren. Werkzeugrechte, Netzwerkziele, Routing, Stopp, Aufräumen, Lizenzbestand und Kostenbegrenzung müssen nachgewiesen werden, bevor die Funktion angeboten oder gebündelt wird.
+4. Ein echter Anbieter-Test benötigt eine vom Nutzer bereitgestellte Testkonfiguration und ein vorher geprüftes, autorisiertes Kostenlimit. Ergebnisse und noch fehlende Prüfungen dokumentieren; keine Zugangsdaten protokollieren.
+
+Dieser Bericht belegt keine lauffähige Integration, keinen erfolgreichen Live-Chat und keine aktuelle Übereinstimmung von Tarifen oder Abhängigkeiten zum Zeitpunkt einer späteren Veröffentlichung.

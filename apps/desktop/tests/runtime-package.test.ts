@@ -76,6 +76,13 @@ describe('desktop runtime packaging', () => {
     );
   });
 
+  it('omits JDK development module archives from the Windows runtime package', () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
+    const resource = packageJson.build.win.extraResources.find((entry: { from: string }) => entry.from === 'runtime/protected-spaces');
+    expect(resource.to).toBe('protected-spaces');
+    expect(resource.filter).toContain('!jdk/jmods/**');
+  });
+
   it('excludes model weights from packaged resources and Python build inputs from app.asar', () => {
     const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
     const localAiResource = packageJson.build.extraResources.find((resource: { from: string }) => resource.from === 'runtime/local-ai');

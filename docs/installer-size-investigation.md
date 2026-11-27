@@ -140,3 +140,9 @@ For a rough compression check, 7-Zip `a -tzip -mx=5` compressed the r6 JDK's
 `jmods` directory by itself to 82,919,470 bytes (79.1 MiB); the temporary ZIP
 was removed. This is not a measurement of a complete MSIX or NSIS installer,
 whose compression settings and interactions may differ.
+
+## Windows payload with development archives excluded
+
+On 2026-11-27 the Windows protected-space resource filter was changed to omit `jdk/jmods/**`. The prepared source JDK contained 88,164,021 bytes in that directory (84.1 MiB). A new unsigned `electron-builder --dir --win --x64 --publish never` test payload, using the already prepared local Python and protected-space runtimes, contained `jdk/bin/java.exe`, `InitializeSpaceVault.java` and the Cryptomator CLI JAR but no `jdk/jmods` directory. A synthetic vault was created with that payload, mounted using WinFsp on an independently checked free Q: drive, written to, unmounted, reopened, and the synthetic file was read back; the test returned exit 0 and verified no plaintext marker in vault files. Q: was absent after the test and no process from the payload remained. The temporary payload was removed after verifying its exact path and the absence of reparse points.
+
+The normal `build-store-payload.ps1` attempt stopped before packaging because the offline wheelhouse was unavailable; the test package therefore reused the prepared runtime and was not a complete reproducible release build. This measures omitted uncompressed files, not the size of an installer or MSIX. It does not validate TPM, migration, recovery, upgrade, other machines, or the final signed package.

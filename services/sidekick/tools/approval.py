@@ -385,7 +385,8 @@ DANGEROUS_PATTERNS = [
     (_GIT_COMMAND_PREFIX + r'push\b.*--force\b', "git force push (rewrites remote history)"),
     (_GIT_COMMAND_PREFIX + r'push\b.*-f\b', "git force push short flag (rewrites remote history)"),
     (_GIT_COMMAND_PREFIX + r'push\b[^\n;|&]*\s+["\']?\+[^\s;|&"\']+', "git force push refspec (rewrites remote history)"),
-    (_GIT_COMMAND_PREFIX + r'clean\s+(?:-[^\s;|&]+\s+)*(?:--force\b|-[^\s;|&]*f)', "git clean with force (deletes untracked files)"),
+    (_GIT_COMMAND_PREFIX + r'clean\s+(?:-(?!-\s)[^\s;|&]+\s+)*(?:--force\b|-(?!-)[^\s;|&]*f)', "git clean with force (deletes untracked files)"),
+    (_GIT_COMMAND_PREFIX + r'''clean\b(?:'[^']*'|"[^"]*"|(?!\s--(?:\s|$))[^\n;&|'"])*?\s+(?:--force|-(?!-)[^\s;|&]*f[^\s;|&]*)(?=\s|$)''', "git clean with force (deletes untracked files)"),
     (r'\bgit\s+branch\s+-D\b', "git branch force delete"),
     # Script execution after chmod +x — catches the two-step pattern where
     # a script is first made executable then immediately run. The script

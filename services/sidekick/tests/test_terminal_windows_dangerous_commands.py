@@ -71,6 +71,8 @@ class TerminalDangerousCommandTests(unittest.TestCase):
             r"git clean --force -d",
             r"git clean -d -f",
             r"git clean -d --force",
+            r"git clean project -fd",
+            r"git -C project clean path --force",
             r"DELETE FROM users; SELECT * FROM audit WHERE id = 1",
             "DELETE /* cleanup */ FROM users",
             "DELETE -- cleanup\nFROM users",
@@ -95,7 +97,7 @@ class TerminalDangerousCommandTests(unittest.TestCase):
     def test_destructive_commands_are_not_autoapproved_without_a_user(self):
         with patch.dict("os.environ", {"SIDEKICK_YOLO_MODE": "1"}, clear=True):
             with patch("tools.approval._get_approval_mode", return_value="off"):
-                for command in ("rm -rf project", "rm project -rf", "rm project --recursive", "rm -f -r project", "ri -Recurse project", r"rd /s /q C:\work\old-files", "Stop-Process -Id 1234", "DELETE /* cleanup */ FROM users", "git clean -d -f", "git reset --quiet --hard", "git reset HEAD --hard"):
+                for command in ("rm -rf project", "rm project -rf", "rm project --recursive", "rm -f -r project", "ri -Recurse project", r"rd /s /q C:\work\old-files", "Stop-Process -Id 1234", "DELETE /* cleanup */ FROM users", "git clean -d -f", "git clean project -fd", "git reset --quiet --hard", "git reset HEAD --hard"):
                     with self.subTest(command=command):
                         result = check_all_command_guards(command, "local")
                         self.assertFalse(result["approved"])
@@ -105,6 +107,10 @@ class TerminalDangerousCommandTests(unittest.TestCase):
 
     def test_git_reset_options_end_at_double_dash(self):
         self.assertFalse(requires_explicit_destructive_approval("git reset HEAD -- --hard"))
+
+    def test_git_clean_options_end_at_double_dash(self):
+        self.assertFalse(requires_explicit_destructive_approval("git clean project -- -fd"))
+        self.assertFalse(requires_explicit_destructive_approval("git clean -- -fd"))
 
     def test_each_destructive_command_requires_a_fresh_interactive_decision(self):
         with patch.dict("os.environ", {"SIDEKICK_INTERACTIVE": "1", "SIDEKICK_YOLO_MODE": "1"}):

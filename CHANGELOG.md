@@ -9,7 +9,7 @@ The project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Features and fixes
 - Improve local Ollama setup, model discovery, and chat routing on Windows.
-- Add Codex CLI settings and chat streaming with a stop control.
+- Add a settings entry to start and stop the installed Codex CLI in the current Space's terminal. Nova and Quickchat do not use this CLI connection.
 - Add optional encryption for selected Spaces in the installed Windows app. The storage mode uses WinFsp. The hardware-backed mode also requires TPM 2.0.
 - Clarify Windows profile storage, Widevine startup connections, and voluntary AI feedback in the German and English privacy and support pages.
 

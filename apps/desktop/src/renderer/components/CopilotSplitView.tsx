@@ -477,6 +477,7 @@ export function CopilotSplitView({
 
   const visibleModelList = useMemo(() => modelList.filter((model) => {
     if (!model.providerId || !isDirectQuickchatProvider(model.providerId)) return false;
+    if (!showUntestedBetas && model.providerId.trim().toLowerCase() === 'groq') return false;
     const multiAgent = model.category === 'teamwork' || isMultiAgentModelSelection({ model: model.id, provider: model.providerId });
     if (multiAgent) {
       if (!AI_ORCHESTRATION_ENABLED) return false;

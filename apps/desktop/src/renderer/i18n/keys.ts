@@ -380,6 +380,8 @@ export const desktopTranslationKeys = [
   'chat.readOnly',
   'chat.reasoning',
   'chat.openCodeFreeLimit',
+  'chat.groqKeyInvalid',
+  'chat.groqRateLimited',
   'chat.runtimeStarting',
   'chat.retryModels',
   'chat.startOrSelect',

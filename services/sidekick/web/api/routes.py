@@ -11144,6 +11144,7 @@ def _handle_model_probe(handler, body):
         "openrouter": "https://openrouter.ai/api/v1/models",
         "openai": "https://api.openai.com/v1/models",
         "deepseek": "https://api.deepseek.com/v1/models",
+        "groq": "https://api.groq.com/openai/v1/models",
         "anthropic": "https://api.anthropic.com/v1/models",
     }
     endpoint = endpoints.get(provider)
@@ -11172,6 +11173,14 @@ def _handle_model_probe(handler, body):
                         models.append({"id": model_id, "label": str(item.get("name") or model_id).strip()})
         models.sort(key=lambda item: item["id"].lower())
         return j(handler, {"provider": provider, "models": models, "count": len(models)})
+    except urllib.error.HTTPError as exc:
+        if provider == "groq" and exc.code in (401, 429):
+            # Provider authentication is separate from the browser session.
+            # A transport-level 401 would trigger the browser lock handler.
+            code = "provider_key_invalid" if exc.code == 401 else "provider_rate_limited"
+            return j(handler, {"provider": provider, "error_code": code, "models": []})
+        logger.info("Transient model probe failed for %s (HTTP %s)", provider, exc.code)
+        return j(handler, {"error": "Could not load models. Check the key and try again.", "models": []}, status=502)
     except Exception as exc:
         # Avoid returning provider response bodies or request details that may
         # contain credential-shaped data.

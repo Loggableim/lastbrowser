@@ -396,6 +396,7 @@ _PROVIDER_ENV_VAR: dict[str, str] = {
     "zai": "GLM_API_KEY",
     "kimi-coding": "KIMI_API_KEY",
     "deepseek": "DEEPSEEK_API_KEY",
+    "groq": "GROQ_API_KEY",
     "minimax": "MINIMAX_API_KEY",
     "minimax-cn": "MINIMAX_CN_API_KEY",
     "mistralai": "MISTRAL_API_KEY",
@@ -1992,8 +1993,8 @@ def normalize_provider_model_allowlist(provider_id: str, models: Any) -> list[st
     injected through the settings endpoint.
     """
     provider = str(provider_id or "").strip().lower()
-    if provider not in {"openrouter", "alibaba"}:
-        raise ValueError("Model selection is currently supported for OpenRouter only or Alibaba Cloud.")
+    if provider not in {"openrouter", "alibaba", "groq"}:
+        raise ValueError("Model selection is not supported for this provider.")
     if not isinstance(models, list) or len(models) > 500:
         raise ValueError("models must be a list of at most 500 model IDs.")
     import re

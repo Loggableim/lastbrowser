@@ -29,6 +29,16 @@ it.each(['xiaomi', 'openai-codex', 'opencode-go'])('qualifies a real completed %
 });
 
 describe('provider chat evidence', () => {
+  it('keeps Groq behind the beta switch even after a successful chat', () => {
+    const storage = memoryStorage();
+    setProviderChatEvidenceRuntime('runtime-groq', 'build-groq');
+    const evidence = { provider_id: 'groq', model_id: 'fixture-model', successful_chat: true,
+      runtime_generation: 'runtime-groq', provider_config_generation: 'config-groq' };
+    expect(recordCompletedChatEvidence({ startAccepted: true, completed: true, browserProfileId: 'profile-a',
+      backendProfileName: 'default', runtimeGeneration: 'runtime-groq', appBuildId: 'build-groq', providerEvidence: evidence }, storage, 10)).toBe(true);
+    expect(getProviderChatEvidence('groq', 'profile-a', 'default', storage, 11)).toBeDefined();
+    expect(isProviderModelQualified('groq', 'fixture-model', 'profile-a', 'default', storage, 11)).toBe(false);
+  });
   it('records only a completed non-error response for the exact provider and model', () => {
     const storage = memoryStorage();
     setProviderChatEvidenceRuntime('runtime-a', 'build-a');

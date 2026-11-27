@@ -56,6 +56,7 @@ export function chooseQuickchatModel(selection: ScopedModelSelection, scope: Qui
   const candidates = quickchatEligibleGroups(selection).flatMap(group => group.models
     .map(model => ({ provider: group.providerId, model: parseProviderModelId(model.id, group.providerId).model, label: model.label, deployment: model.deploymentKind ?? group.deployment })))
     .filter(choice => isModelActive(storage, scope, choice.provider, choice.model)
+      && (showBetas || choice.provider.trim().toLowerCase() !== 'groq')
       && (showBetas || choice.deployment === 'local'
         || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));
   if (favorite) {

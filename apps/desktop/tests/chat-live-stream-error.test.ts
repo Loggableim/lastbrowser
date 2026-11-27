@@ -9,6 +9,8 @@ import {
 describe('native chat stream errors', () => {
   it('uses translated copy for the structured OpenCode free limit', () => {
     expect(readNativeChatStreamError({ code: 'opencode_free_limit', error: 'raw' }, () => 'Limit erreicht')).toBe('Limit erreicht');
+    expect(readNativeChatStreamError({ code: 'groq_key_invalid', error: 'raw' }, key => key)).toBe('chat.groqKeyInvalid');
+    expect(readNativeChatStreamError({ code: 'groq_rate_limited', error: 'raw' }, key => key)).toBe('chat.groqRateLimited');
     expect(readNativeChatStreamError({ code: 'other', error: 'raw' }, () => 'Limit erreicht')).toBe('raw');
   });
   it('extracts provider messages from supported SSE error payloads', () => {

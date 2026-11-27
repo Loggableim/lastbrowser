@@ -3029,7 +3029,9 @@ def _run_agent_streaming(
                             s.save()
                         except Exception:
                             logger.warning('Could not save failed Quickchat turn state')
-                    put('error', {'error': _redact_text(str(exc), _enabled=True)[:1000], 'session_id': session_id})
+                    from runtime.groq_errors import quickchat_groq_error
+                    public_error = quickchat_groq_error(provider_context, exc, session_id)
+                    put('error', public_error or {'error': _redact_text(str(exc), _enabled=True)[:1000], 'session_id': session_id})
                     put('stream_end', {'session_id': session_id})
             return
 

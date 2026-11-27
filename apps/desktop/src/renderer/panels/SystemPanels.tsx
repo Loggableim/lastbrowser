@@ -2561,7 +2561,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   useEffect(() => () => { ollamaScopeRef.current = null; }, []);
   const [openRouterModalOpen, setOpenRouterModalOpen] = useState(false);
   const [openRouterScope, setOpenRouterScope] = useState<typeof activeProviderScope | null>(null);
-  const [openRouterConfigProvider, setOpenRouterConfigProvider] = useState<'openrouter' | 'alibaba'>('openrouter');
+  const [openRouterConfigProvider, setOpenRouterConfigProvider] = useState<'openrouter' | 'alibaba' | 'groq'>('openrouter');
   const [alibabaBaseUrl, setAlibabaBaseUrl] = useState('');
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [openRouterHasSavedKey, setOpenRouterHasSavedKey] = useState(false);
@@ -3379,7 +3379,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     keyToSave = openRouterKey,
     existingKeyAvailable = openRouterHasSavedKey,
     savedSelection?: { ids: string[]; configured: boolean; defaultModel: string },
-    providerId: 'openrouter' | 'alibaba' = openRouterConfigProvider,
+    providerId: 'openrouter' | 'alibaba' | 'groq' = openRouterConfigProvider,
     baseUrl = alibabaBaseUrl,
     scopeSelection = openRouterScope ?? activeProviderScope
   ): Promise<void> {
@@ -3422,12 +3422,18 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       );
     } catch (error) {
       const code = error instanceof Error ? error.message : String(error);
-      const message = code === 'alibaba-base-url-required'
+      const message = code === 'provider_key_invalid'
+        ? (locale === 'de' ? 'Der Groq-API-Schlüssel ist ungültig.' : 'The Groq API key is invalid.')
+        : code === 'provider_rate_limited'
+          ? (locale === 'de' ? 'Groq meldet ein Nutzungs- oder Ratenlimit. Bitte später erneut versuchen.' : 'Groq reports a usage or rate limit. Try again later.')
+          : code === 'provider_catalog_empty'
+            ? (locale === 'de' ? 'Groq hat keine Modelle zurückgegeben.' : 'Groq returned no models.')
+        : code === 'alibaba-base-url-required'
         ? t('settings.panels.providers.alibabaBaseUrlRequired')
         : code === 'alibaba-https-required'
           ? t('settings.panels.providers.alibabaHttpsRequired')
           : code === 'provider-key-required'
-            ? t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')
+            ? providerId === 'groq' ? (locale === 'de' ? 'Gib einen Groq-API-Schlüssel ein.' : 'Enter a Groq API key.') : t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')
             : code;
       setOpenRouterError(message);
     } finally {
@@ -3435,7 +3441,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
   }
 
-  async function openOpenRouterSettings(providerId: 'openrouter' | 'alibaba' = 'openrouter'): Promise<void> {
+  async function openOpenRouterSettings(providerId: 'openrouter' | 'alibaba' | 'groq' = 'openrouter'): Promise<void> {
     const scopeSelection = activeProviderScope;
     setOpenRouterScope(scopeSelection);
     setOpenRouterConfigProvider(providerId);
@@ -3474,6 +3480,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   async function saveOpenRouterSettings(): Promise<void> {
     if (openRouterSaving) return;
+    if (openRouterConfigProvider === 'groq' && !showUntestedBetas) { setOpenRouterError(t('settings.panels.providers.betaCatalogEmpty')); return; }
     const scopeSelection = openRouterScope ?? activeProviderScope;
     if (!isActiveProviderScope(scopeSelection)) { setOpenRouterError('Provider scope changed. Reopen settings for the selected space.'); return; }
     const selectedModels = [...new Set(openRouterSelectedModels)];
@@ -3482,7 +3489,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       return;
     }
     if (!openRouterHasSavedKey && !openRouterKey.trim()) {
-      setOpenRouterError(t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired'));
+      setOpenRouterError(openRouterConfigProvider === 'groq' ? (locale === 'de' ? 'Gib einen Groq-API-Schlüssel ein.' : 'Enter a Groq API key.') : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired'));
       return;
     }
     if (openRouterConfigProvider === 'alibaba') {
@@ -3508,7 +3515,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         settings: {
           ...cleanSettingsPayload(settings),
           provider: openRouterConfigProvider,
-          base_url: openRouterConfigProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : alibabaBaseUrl.trim(),
+          base_url: openRouterConfigProvider === 'groq' ? 'https://api.groq.com/openai/v1' : openRouterConfigProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : alibabaBaseUrl.trim(),
           default_model: selectedDefault
         }
       });
@@ -4794,12 +4801,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                   </div>
                                 )}
                               </>
-                            ) : ['openrouter', 'alibaba'].includes(option.id) ? (
+                            ) : ['openrouter', 'alibaba', 'groq'].includes(option.id) ? (
                               <button
                                 type="button"
                                 className="secondary-action compact"
-                                onClick={() => void openOpenRouterSettings(option.id as 'openrouter' | 'alibaba')}
-                                disabled={!ready || saving}
+                                onClick={() => void openOpenRouterSettings(option.id as 'openrouter' | 'alibaba' | 'groq')}
+                                disabled={!ready || saving || (option.id === 'groq' && !showUntestedBetas)}
                               >
                                 <Settings size={14} />
                                 <span>{t('settings.panels.providers.configure')}</span>
@@ -5007,9 +5014,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 {openRouterModalOpen && (
                   <div className="settings-modal-overlay" onClick={() => setOpenRouterModalOpen(false)}>
                     <div className="settings-modal-box" onClick={(event) => event.stopPropagation()}>
-                      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>{openRouterConfigProvider === 'alibaba' ? 'Alibaba Cloud (DashScope)' : 'OpenRouter'} {t('settings.panels.providers.configure')}</h3>
+                      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>{openRouterConfigProvider === 'groq' ? 'Groq' : openRouterConfigProvider === 'alibaba' ? 'Alibaba Cloud (DashScope)' : 'OpenRouter'} {t('settings.panels.providers.configure')}</h3>
                       <p className="settings-hint" style={{ margin: '0 0 12px' }}>
-                        {t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyHint' : 'settings.panels.providers.openrouterKeyHint')}
+                        {openRouterConfigProvider === 'groq' ? (locale === 'de' ? 'Dein Schlüssel wird lokal gespeichert und für Groq-Anfragen verwendet.' : 'Your key is stored locally and used for Groq requests.') : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyHint' : 'settings.panels.providers.openrouterKeyHint')}
                       </p>
                       {openRouterConfigProvider === 'alibaba' && <>
                         <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.baseUrl')}</label>
@@ -5050,7 +5057,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       {!openRouterLoading && !openRouterError && openRouterModels.length === 0 && (
                         <p className="settings-hint">{openRouterHasSavedKey || openRouterKey.trim()
                           ? t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaNoModels' : 'settings.panels.providers.openrouterNoModels')
-                          : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')}</p>
+                          : openRouterConfigProvider === 'groq' ? (locale === 'de' ? 'Gib einen Groq-API-Schlüssel ein.' : 'Enter a Groq API key.') : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')}</p>
                       )}
                       {openRouterModels.length > 0 && (
                         <>

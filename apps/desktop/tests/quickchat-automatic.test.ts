@@ -17,6 +17,13 @@ function selection(provider: string, models: string[]): ScopedModelSelection {
 }
 
 describe('direct Quickchat automatic model selection', () => {
+  it('requires the beta switch for Groq even if a catalog claims a local deployment', () => {
+    const catalog = selection('groq', ['fixture-model']);
+    const local: ScopedModelSelection = { ...catalog, groups: [{ ...catalog.groups[0], deployment: 'local' }] };
+    const favorite = { provider: 'groq', model: 'fixture-model' };
+    expect(chooseQuickchatModel(local, scope, favorite, storage, false)).toBeNull();
+    expect(chooseQuickchatModel(local, scope, favorite, storage, true)).toEqual({ ...favorite, basis: 'favorite' });
+  });
   it('does not choose an unconfigured provider when no model is selected', () => {
     const unconfigured = selection('openrouter', ['openrouter/free']);
     const catalog: ScopedModelSelection = { ...unconfigured, model: '', provider: '', configured: false,

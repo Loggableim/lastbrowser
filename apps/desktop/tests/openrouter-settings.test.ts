@@ -4,6 +4,29 @@ import { describe, expect, it } from 'vitest';
 import { requestProviderModelCatalog } from '../src/renderer/provider-settings.js';
 
 describe('OpenRouter provider settings flow', () => {
+  it('saves Groq credentials and loads its catalog in the selected scope', async () => {
+    const scopeSelection = { browserProfileId: 'profile-b', workspacePath: 'C:/spaces/b', backendProfileName: 'backend-b' };
+    const requests: any[] = [];
+    const models = await requestProviderModelCatalog({ providerId: 'groq', apiKey: 'fixture-key', hasSavedKey: false,
+      baseUrl: '', scopeSelection }, async request => {
+      requests.push(request);
+      return request.method === 'GET' || request.path === '/api/models/probe' ? { models: [{ id: 'fixture-model' }] } : { ok: true };
+    });
+    expect(requests).toEqual([
+      { method: 'POST', path: '/api/models/probe', body: { provider: 'groq', api_key: 'fixture-key' }, scopeSelection },
+      { method: 'POST', path: '/api/providers', body: { provider: 'groq', api_key: 'fixture-key' }, scopeSelection },
+      { method: 'GET', path: '/api/models/live?provider=groq&catalog=configuration', scopeSelection }
+    ]);
+    expect(models).toEqual([{ id: 'fixture-model' }]);
+  });
+  it.each(['provider_key_invalid', 'provider_rate_limited'])('does not save Groq credentials after %s', async error_code => {
+    const requests: any[] = [];
+    await expect(requestProviderModelCatalog({ providerId: 'groq', apiKey: 'fixture-key', hasSavedKey: false, baseUrl: '' }, async request => {
+      requests.push(request);
+      return { error_code, models: [] };
+    })).rejects.toThrow(error_code);
+    expect(requests.map(request => request.path)).toEqual(['/api/models/probe']);
+  });
   it('sends provider saves and model catalog reads to the selected Space scope', async () => {
     const scopeSelection = { browserProfileId: 'profile-b', workspacePath: 'C:/spaces/b', backendProfileName: 'backend-b' };
     const requests: any[] = [];
@@ -21,8 +44,8 @@ describe('OpenRouter provider settings flow', () => {
   const source = readFileSync(path.resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx'), 'utf8').replace(/\r\n/g, '\n');
 
   it('opens configuration for OpenRouter whether active or inactive', () => {
-    expect(source).toContain("['openrouter', 'alibaba'].includes(option.id)");
-    expect(source).toContain("openOpenRouterSettings(option.id as 'openrouter' | 'alibaba')");
+    expect(source).toContain("['openrouter', 'alibaba', 'groq'].includes(option.id)");
+    expect(source).toContain("openOpenRouterSettings(option.id as 'openrouter' | 'alibaba' | 'groq')");
   });
 
   it('saves provider-scoped key and loads the live OpenRouter catalog', () => {

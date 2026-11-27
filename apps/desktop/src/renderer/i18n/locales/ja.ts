@@ -35,6 +35,8 @@ export const desktopJaOverrides = {
   'access.lock.showPassword': 'パスワードを表示',
   'access.lock.settingsHint': 'ロック解除後、設定 → システム → アクセスと更新でパスワードを変更できます。',
   'chat.openCodeFreeLimit': '無料の OpenCode モデルの使用上限に達しました。後でもう一度試すか、別のモデルを選択してください。',
+  'chat.groqKeyInvalid': 'Groq の API キーが無効です。設定で確認してください。',
+  'chat.groqRateLimited': 'Groq の使用量またはリクエスト上限に達しました。利用枠を確認し、後でもう一度お試しください。',
   ...group('access.lock', {
     checking: '安全なセッションを確認中…', description: 'ブラウザーを開くにはアクセスパスワードを入力してください。', password: 'アクセスパスワード', retry: '再試行', title: 'ブラウザーはロックされています', unlock: 'ロックを解除', unlocking: 'ロックを解除中…'
   }),

@@ -50,7 +50,7 @@ def test_openrouter_allowlist_rejects_other_providers_and_unsafe_model_ids():
     import pytest
     from web.api.providers import normalize_provider_model_allowlist
 
-    with pytest.raises(ValueError, match="OpenRouter only"):
+    with pytest.raises(ValueError, match="not supported"):
         normalize_provider_model_allowlist("anthropic", ["anthropic/claude-sonnet-4.6"])
     with pytest.raises(ValueError, match="unsupported characters"):
         normalize_provider_model_allowlist("openrouter", ["model\napi_key=secret"])

@@ -181,8 +181,8 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
       const volume=`${formatInstallMegabytes(item.downloadedBytes,locale)} / ${item.totalBytes===null?'…':formatInstallMegabytes(item.totalBytes,locale)}`;
       return <article key={item.modelId} className="local-model-install-live-item" data-install-phase={item.phase} data-model-id={item.modelId}>
         <p role={item.phase==='error'?'alert':'status'} aria-live="polite"><strong>{model?.name||item.modelId}</strong> · {label}</p>
-        {showProgress&&<><progress aria-label={label} value={item.percent??0} max={100}/>
-          <span>{item.percent===null?'0%':`${item.percent}%`} · {volume} · {formatInstallRemaining(locale,item.remainingMs)}</span></>}
+        {showProgress&&<><progress aria-label={label} value={item.percent??undefined} max={100}/>
+          <span>{item.percent===null?shellText(locale, 'Engine wird vorbereitet', 'Preparing engine'):`${item.percent}%`} · {volume}{item.percent!==null&&` · ${formatInstallRemaining(locale,item.remainingMs)}`}</span></>}
         {(item.phase==='starting'||item.phase==='downloading'||item.phase==='installing')&&<button type="button" onClick={()=>void cancelModelInstall(item.modelId)}>{shellText(locale,'Abbrechen','Cancel')}</button>}
         {item.phase==='error'&&model&&<button type="button" onClick={()=>void startModelInstall(model)}>{shellText(locale,'Erneut versuchen','Retry')}</button>}
       </article>;
@@ -322,7 +322,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
               <div><dt>{shellText(locale, "VRAM während der Nutzung", "VRAM while in use")}</dt><dd>{selected.curation?formatStoreGiBRange(selected.curation.estimatedVramGiB):bytes(selected.recommendedVramBytes)}</dd></div>
               <div><dt>{selected.curation?'RAM des gesamten PCs':'RAM empfohlen'}</dt><dd>{selected.curation?formatStoreGiBRange(selected.curation.estimatedRamGiB):bytes(selected.recommendedRamBytes)}</dd></div>
               <div><dt>{shellText(locale, "Paket / Gewichte · geschätzt", "Package / weights · estimated")}</dt><dd>{formatStoreGiBRange(selected.curation?.estimatedDownloadGiB)}</dd></div>
-              {selected.downloadBytes!==null&&<div><dt>Konkreter Download</dt><dd>{bytes(selected.downloadBytes)}</dd></div>}
+              {selected.downloadBytes!==null&&<div><dt>{shellText(locale, 'Modelldateien', 'Model files')}</dt><dd>{bytes(selected.downloadBytes)}</dd></div>}
             </dl>
             <p className="local-model-catalog-note">{selected.curation?shellText(locale, "Die RAM-Spanne enthält bereits System und Browser. ", "The RAM range already includes the system and the browser. "):''}{storeModelCategory(selected)==='text'?shellText(locale, "VRAM-Schätzung: Text, 4K Kontext, eine Anfrage.", "VRAM estimate: text, 4K context, one request."):shellText(locale, "Die Medien-Schätzung gilt für die in den Grenzen beschriebene Konfiguration.", "The media estimate applies to the configuration described by these limits.")} Für die Grafikkarte bleiben mindestens 25 % Reserve eingeplant.</p>
             <p className="local-model-fit">{storeHardwareRecommendation(selected,view?.hardware).placement==='cpu'?shellText(locale, "Prozessor und freier Speicher wurden für diese Ausführung geprüft", "CPU and free memory were checked for this run"):!hardware.scanned?shellText(locale, "Hardware noch nicht geprüft", "Hardware not scanned yet"):assessStoreGpuEstimate(selected,view?.hardware)==='outside'?shellText(locale, "Außerhalb der erfassten Speicherklasse", "Outside the measured memory class"):assessStoreGpuEstimate(selected,view?.hardware)==='within'?shellText(locale, "Speicherklasse passt zur Schätzung · Ausführung noch separat prüfen", "Memory class fits the estimate · execution still needs a separate check"):shellText(locale, "Keine ausreichenden Messwerte für eine Zuordnung", "Not enough measurements to classify this")}</p>
@@ -332,6 +332,7 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
             {!selected.installed&&!selectedActions?.download&&<p className="local-model-notice">{shellText(locale, "Zum Entdecken verfügbar. Für die Installation müssen Download, Lizenz und verfügbare Ausführung bestätigt sein.", "Available to explore. Install requires a confirmed download, license, and runnable build.")}</p>}
             {!!selectedActions?.reasons.length&&<details className="local-model-advanced"><summary>{shellText(locale, 'Was noch fehlt', 'What is still missing')}<ChevronDown size={14} aria-hidden="true"/></summary><ul>{selectedActions.reasons.map(reason=><li key={reason}>{storeReasonText(locale, reason)}</li>)}</ul></details>}
             {selectedActions?.download&&selected.licenseDigest&&<>
+              <p className="local-model-catalog-note">{shellText(locale, 'Die Modellgröße gilt nur für die Modelldateien. Falls nötig, werden zusätzlich die Engine von GitHub und Windows-Laufzeitdateien von Microsoft heruntergeladen.', 'The model size covers model files only. If needed, the engine is also downloaded from GitHub and Windows runtime files from Microsoft.')}</p>
               <label><input type="checkbox" checked={consent===storeConsentKey(selected)} onChange={event=>setConsent(event.target.checked?storeConsentKey(selected):'')}/>Herausgeber-Lizenz akzeptieren</label>
               <button className="local-model-primary" type="button" disabled={!ready||busy||running||consent!==storeConsentKey(selected)}
                 onClick={()=>void startModelInstall(selected)}>Installieren · {bytes(selected.downloadBytes)}</button>
@@ -354,8 +355,8 @@ export function LocalModelStore({scope,client,ready}:{scope:IndependentScope;cli
         </aside>
       </div>
     </section>}
-    {!!view?.jobs.length&&<section className="local-model-jobs"><h4>{shellText(locale, "Aufträge", "Jobs")}</h4>{view.jobs.map(j=><article className="local-model-job" key={j.id}><p>{models.find(model=>model.id===j.modelId)?.name??j.modelId}: {storeJobLabel(j.state)} · {j.operation==='install'?bytes(j.downloadedBytes):`${j.progress}/${j.total}`} {j.error??''}</p>
-      {active(j.state)&&<progress aria-label={`Fortschritt ${j.modelId}`} value={j.operation==='install'?(models.find(model=>model.id===j.modelId)?.downloadBytes?j.downloadedBytes:undefined):(j.total>0?j.progress:undefined)} max={j.operation==='install'?(models.find(model=>model.id===j.modelId)?.downloadBytes??undefined):(j.total>0?j.total:undefined)}/>}
+    {!!view?.jobs.length&&<section className="local-model-jobs"><h4>{shellText(locale, "Aufträge", "Jobs")}</h4>{view.jobs.map(j=><article className="local-model-job" key={j.id}><p>{models.find(model=>model.id===j.modelId)?.name??j.modelId}: {storeJobLabel(j.state)} · {j.operation==='install'?bytes(j.downloadPhase==='model'?(j.modelDownloadedBytes??0):j.downloadedBytes):`${j.progress}/${j.total}`} {j.error??''}</p>
+      {active(j.state)&&<progress aria-label={`Fortschritt ${j.modelId}`} value={j.operation==='install'?(j.downloadPhase==='engine'?undefined:models.find(model=>model.id===j.modelId)?.downloadBytes?(j.downloadPhase==='model'?j.modelDownloadedBytes:j.downloadedBytes):undefined):(j.total>0?j.progress:undefined)} max={j.operation==='install'?(models.find(model=>model.id===j.modelId)?.downloadBytes??undefined):(j.total>0?j.total:undefined)}/>}
 
       {active(j.state)&&<button type="button" onClick={()=>void request({operation:'cancel',jobId:j.id})}>{shellText(locale, "Stoppen", "Stop")}</button>}
       {!!j.result?.assets.length&&<LocalModelMediaResult key={`${scopeKey}:${j.id}`} job={j} request={request}/>}</article>)}</section>}

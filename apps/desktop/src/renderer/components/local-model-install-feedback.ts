@@ -34,6 +34,9 @@ export type InstallJobHint = {
   progress: number;
   total: number;
   downloadedBytes: number;
+  downloadPhase?: 'engine' | 'model';
+  modelDownloadedBytes?: number;
+  modelReusedBytes?: number;
   error: string | null;
 };
 
@@ -194,18 +197,20 @@ export function reconcileInstallFeedback(models: InstallModelHint[], jobs: Insta
       }
       continue;
     }
-    const totalBytes = model?.downloadBytes ?? feedback.totalBytes;
-    const percent = percentFor(job.downloadedBytes, totalBytes, job.progress, job.total);
+    const enginePhase = job.downloadPhase === 'engine';
+    const downloadedBytes = job.downloadPhase === 'model' ? (job.modelDownloadedBytes ?? 0) : job.downloadedBytes;
+    const totalBytes = enginePhase ? null : model?.downloadBytes ?? feedback.totalBytes;
+    const percent = enginePhase ? null : percentFor(downloadedBytes, totalBytes, job.progress, job.total);
     const phase = phaseFor(job, percent, model);
     memory.set(modelId, {
       ...feedback,
       phase,
       jobId: job.id,
       updatedAt: now,
-      downloadedBytes: job.downloadedBytes,
+      downloadedBytes,
       totalBytes,
       percent: phase === 'ready' ? 100 : percent,
-      remainingMs: phase === 'downloading' ? remainingMs(feedback.startedAt, percent, now) : null,
+      remainingMs: phase === 'downloading' && !job.modelReusedBytes ? remainingMs(feedback.startedAt, percent, now) : null,
       error: phase === 'error' ? (job.error || 'install_failed') : null,
     });
   }
@@ -232,7 +237,7 @@ export function formatInstallStatus(locale: string, feedback: InstallFeedback): 
   if (feedback.phase === 'starting') return shellText(locale, 'Download startet…', 'Download starting…');
   if (feedback.phase === 'downloading') return shellText(locale, 'Download läuft…', 'Downloading…');
   if (feedback.phase === 'installing') return shellText(locale, 'Installiere/Prüfe…', 'Installing/checking…');
-  if (feedback.phase === 'ready') return shellText(locale, 'Fertig, Modell aktiv', 'Ready, model active');
+  if (feedback.phase === 'ready') return shellText(locale, 'Fertig, Modell installiert', 'Ready, model installed');
   if (feedback.phase === 'cancelled') return shellText(locale, 'Abgebrochen', 'Cancelled');
   return feedback.error || shellText(locale, 'Download fehlgeschlagen', 'Download failed');
 }

@@ -101,6 +101,25 @@ def test_resume_range_mismatch_keeps_partial_unpublished(setup_env):
     assert not target(cache, plan).exists()
 
 
+@pytest.mark.parametrize('restart', [False, True])
+def test_resume_progress_reports_only_bytes_actually_reused(setup_env, restart):
+    service, scope, _, cache, _ = setup_env
+    plan = approved(service, scope)
+    file = plan.artifacts[0].files[0]
+    partial = cache / 'partial'
+    partial.write_bytes(DATA['tiny.gguf'][:5])
+    class RestartTransport(MemoryTransport):
+        @contextmanager
+        def open(self, url, offset):
+            response = io.BytesIO(DATA['tiny.gguf']); response.status = 200; response.headers = {}
+            yield response
+    installer = LocalAiInstaller(service, lambda _: cache, transport=RestartTransport() if restart else MemoryTransport())
+    reused = []; transferred = []
+    installer._download(file, partial, Event(), transferred.append, resume_progress=reused.append)
+    assert reused == [0 if restart else 5]
+    assert sum(transferred) + reused[0] == len(DATA['tiny.gguf'])
+
+
 def test_native_lock_blocks_duplicate_installer_and_releases(setup_env):
     service, scope, _, cache, _ = setup_env; plan = approved(service, scope)
     directory = cache / plan.plan_digest; directory.mkdir()

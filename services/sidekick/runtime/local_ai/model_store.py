@@ -547,6 +547,7 @@ class ModelStore:
             if any(j['state'] in _RUNNING for j in self.jobs.values()) or self.sessions: raise ValueError('model_store_busy')
             job={'id':uuid.uuid4().hex,'requestId':identity,'operation':op,'modelId':entry['id'],'mode':mode,'backend':backend,
                 'state':'pending','progress':0,'total':1 if media else 6 if mode=='quick' else 48,'downloadedBytes':0,
+                'downloadPhase':'engine','modelDownloadedBytes':0,'modelReusedBytes':0,
                 'createdAt':time.time(),'updatedAt':time.time(),'error':None,'cancel':threading.Event()}
             self.jobs[job['id']]=job
             if op=='importModel':job['sourcePath']=request['sourcePath']
@@ -582,6 +583,7 @@ class ModelStore:
             prepare_engine(self.root,self.repository,engine,job['cancel'],
                 lambda size:self._update(job,state='downloading',downloadedBytes=job['downloadedBytes']+size))
             if job['operation'] in ('install','importModel'):
+                self._update(job,downloadPhase='model')
                 with _cache_directory(self.root,('models',_model_key(entry))) as directory:
                     if shutil.disk_usage(directory).free<entry['downloadBytes']*2: raise ValueError('cache_disk_insufficient_for_staging')
                     cancel=job['cancel']; installer=LocalAiInstaller(None,None,transport=HubTransport())
@@ -590,8 +592,14 @@ class ModelStore:
                             target=parent/Path(fact.relative_path).name;partial=target.with_name(target.name+'.partial')
                             if target.exists():
                                 with _open_file(target) as stream:_verified(stream,fact,cancel)
+                                self._update(job,modelDownloadedBytes=job['modelDownloadedBytes']+fact.bytes,
+                                    modelReusedBytes=job['modelReusedBytes']+fact.bytes)
                                 continue
-                            def transferred(size):self._update(job,state='downloading',downloadedBytes=job['downloadedBytes']+size)
+                            def resumed(reused):
+                                self._update(job,modelDownloadedBytes=job['modelDownloadedBytes']+reused,
+                                    modelReusedBytes=job['modelReusedBytes']+reused)
+                            def transferred(size):self._update(job,state='downloading',downloadedBytes=job['downloadedBytes']+size,
+                                modelDownloadedBytes=job['modelDownloadedBytes']+size)
                             if job['operation']=='importModel' and role=='model':
                                 source=Path(job['sourcePath'])
                                 if source.is_symlink() or not source.is_file() or source.stat().st_size!=fact.bytes:raise ValueError('imported_model_identity_mismatch')
@@ -606,8 +614,8 @@ class ModelStore:
                             elif fact.kind=='license':
                                 from .store_notices import NoticeTransport,notice_url
                                 notices=LocalAiInstaller(None,None,transport=NoticeTransport())
-                                notices._download(fact,partial,cancel,transferred,lambda:self._update(job,state='verifying'),source_validator=notice_url)
-                            else:installer._download(fact,partial,cancel,transferred,lambda:self._update(job,state='verifying'))
+                                notices._download(fact,partial,cancel,transferred,lambda:self._update(job,state='verifying'),source_validator=notice_url,resume_progress=resumed)
+                            else:installer._download(fact,partial,cancel,transferred,lambda:self._update(job,state='verifying'),resume_progress=resumed)
                             if cancel.is_set():raise InstallCancelled()
                             self._license(entry)
                             if target.exists() or target.is_symlink():raise ValueError('cache_destination_appeared')

@@ -147,26 +147,29 @@ class LlamaCppSession:
             except BaseException:
                 self._stop_locked(2)
                 raise
-        deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline and not cancel.is_set():
-            exit_code = self.process.poll()
-            if exit_code is not None:
-                # Preserve a bounded, non-sensitive child status in the private
-                # runtime reason so bootstrap diagnostics can distinguish loader
-                # exits without exposing command arguments or model paths.
-                raise RuntimeError(f'model_loader_exited_{int(exit_code) & 0xFFFFFFFF:08x}')
-            try:
-                values = self.call('/v1/models', None, timeout=1)
-                if any(item.get('id') == self.artifact_id for item in values.get('data', ())):
-                    from urllib.error import HTTPError
-                    try: self.call('/v1/models', None, auth_token='invalid-' + uuid.uuid4().hex, timeout=1)
-                    except HTTPError as error:
-                        if error.code in (401, 403): return
-                        raise
-                    raise RuntimeError('model_private_auth_unverified')
-            except (OSError, ValueError): pass
-            time.sleep(.03)
-        raise RuntimeError('model_start_cancelled' if cancel.is_set() else 'model_health_timeout')
+        try:
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline and not cancel.is_set():
+                exit_code = self.process.poll()
+                if exit_code is not None:
+                    # Preserve a bounded, non-sensitive child status in the private
+                    # runtime reason without exposing command arguments or paths.
+                    raise RuntimeError(f'model_loader_exited_{int(exit_code) & 0xFFFFFFFF:08x}')
+                try:
+                    values = self.call('/v1/models', None, timeout=1)
+                    if any(item.get('id') == self.artifact_id for item in values.get('data', ())):
+                        from urllib.error import HTTPError
+                        try: self.call('/v1/models', None, auth_token='invalid-' + uuid.uuid4().hex, timeout=1)
+                        except HTTPError as error:
+                            if error.code in (401, 403): return
+                            raise
+                        raise RuntimeError('model_private_auth_unverified')
+                except (OSError, ValueError): pass
+                time.sleep(.03)
+            raise RuntimeError('model_start_cancelled' if cancel.is_set() else 'model_health_timeout')
+        except BaseException:
+            self.stop()
+            raise
 
     def call(self, endpoint, payload, *, auth_token=None, timeout=None):
         if endpoint not in ('/v1/models', '/tokenize', '/v1/chat/completions', '/v1/embeddings', '/embedding'):

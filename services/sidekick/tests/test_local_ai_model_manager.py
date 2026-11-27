@@ -100,16 +100,42 @@ def test_product_without_real_operation_proof_never_launches_fixture(setup_env):
 def test_native_loader_preserves_bounded_child_exit_code(monkeypatch):
     class ExitedProcess:
         def poll(self): return 0xC0000135
+        def wait(self, timeout=None): return self.poll()
 
     class Job:
         def __init__(self, **_kwargs): pass
         def assign(self, _process): pass
+        def close(self): pass
 
     monkeypatch.setattr('runtime.local_ai.model_manager.subprocess.Popen', lambda *_args, **_kwargs: ExitedProcess())
     monkeypatch.setattr('runtime.local_ai.model_manager._WindowsProbeJob', Job)
     session = LlamaCppSession(pathlib.Path(sys.executable).resolve(), (), 'model', 12345, 'ephemeral-test-token')
     with pytest.raises(RuntimeError, match='model_loader_exited_c0000135'):
         session.start(threading.Event())
+
+
+def test_native_session_timeout_stops_owned_child(monkeypatch):
+    class LiveProcess:
+        pid = 12345
+        returncode = None
+        def poll(self): return self.returncode
+        def kill(self): self.returncode = -9
+        def wait(self, timeout=None): return self.returncode
+
+    class Job:
+        def __init__(self, **_kwargs): pass
+        def assign(self, _process): pass
+        def close(self): pass
+
+    process = LiveProcess()
+    monkeypatch.setattr('runtime.local_ai.model_manager.subprocess.Popen', lambda *_args, **_kwargs: process)
+    monkeypatch.setattr('runtime.local_ai.model_manager._WindowsProbeJob', Job)
+    monkeypatch.setattr('runtime.local_ai.model_manager.os.killpg', lambda *_args: process.kill(), raising=False)
+    session = LlamaCppSession(pathlib.Path(sys.executable).resolve(), (), 'model', 1, 'synthetic-test-token')
+    monkeypatch.setattr(session, 'call', lambda *_args, **_kwargs: {'data': []})
+    with pytest.raises(RuntimeError, match='model_health_timeout'):
+        session.start(threading.Event(), timeout=.01)
+    assert process.poll() is not None
 
 
 def test_actual_health_timeout_and_cleanup(setup_env):

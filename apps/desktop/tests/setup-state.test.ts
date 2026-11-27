@@ -227,7 +227,8 @@ describe('cloud first-run setup state', () => {
       'openai',
       'anthropic',
       'gemini',
-      'deepseek'
+      'deepseek',
+      'groq'
     ]);
     expect(modelsForProvider(null, 'ollama-cloud')).toContainEqual({
       id: 'deepseek-v4.1-flash',

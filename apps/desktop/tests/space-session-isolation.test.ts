@@ -66,13 +66,21 @@ describe('Space Session & Partition Isolation', () => {
 
   it('resolves and loads a new chat in its backend profile before selecting it', () => {
     const appTsx = fs.readFileSync(path.resolve(__dirname, '../src/renderer/App.tsx'), 'utf8');
-    const createBlock = appTsx.slice(appTsx.indexOf('async function createNativeSession()'), appTsx.indexOf('function handleNewChat()'));
+    const createStart = appTsx.indexOf('async function createNativeSession(');
+    const createEnd = appTsx.indexOf('async function openNovaAssistant(', createStart);
+    expect(createStart).toBeGreaterThanOrEqual(0);
+    expect(createEnd).toBeGreaterThan(createStart);
+    const createBlock = appTsx.slice(createStart, createEnd);
     expect(createBlock.indexOf('assistantController.resolveScope')).toBeGreaterThanOrEqual(0);
     expect(createBlock.indexOf('assistantController.resolveScope')).toBeLessThan(createBlock.indexOf('createAndLoadScopedSession'));
     expect(createBlock).toContain('backendProfileName: resolved.value.backendProfileName');
+    expect(createBlock).toMatch(/const requestedScope: SessionListScope = \{\s*profile: activeProfileIdRef\.current,\s*workspacePath: activeSpacePathRef\.current,\s*backendProfileName: activeBackendProfileNameRef\.current\s*\}/);
+    expect(createBlock).toMatch(/createAndLoadScopedSession\(\s*boundScope,\s*isCurrent,\s*\(scope\) => window\.lastbrowser\.sidekick\.createSession/);
+    expect(createBlock).toMatch(/sidekick\.getSession\(\{\s*sessionId,\s*messages: true,\s*msgLimit: 80,\s*\.\.\.scope\s*\}\)/);
     expect(createBlock).toContain('activeSessionIdRef.current = session.session_id');
     expect(createBlock.indexOf('createAndLoadScopedSession')).toBeLessThan(createBlock.indexOf('activeSessionIdRef.current = session.session_id'));
     expect(createBlock).toContain('sameAssistantScope(session.space_scope, resolved.value.scope)');
+    expect(createBlock.indexOf('sameAssistantScope(session.space_scope, resolved.value.scope)')).toBeLessThan(createBlock.indexOf('activeSessionIdRef.current = session.session_id'));
   });
 
   it('guards active session loads against stale backend-profile responses', () => {

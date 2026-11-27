@@ -50,7 +50,7 @@ def test_openrouter_allowlist_rejects_other_providers_and_unsafe_model_ids():
     import pytest
     from web.api.providers import normalize_provider_model_allowlist
 
-    with pytest.raises(ValueError, match="OpenRouter only"):
+    with pytest.raises(ValueError, match="not supported"):
         normalize_provider_model_allowlist("anthropic", ["anthropic/claude-sonnet-4.6"])
     with pytest.raises(ValueError, match="unsupported characters"):
         normalize_provider_model_allowlist("openrouter", ["model\napi_key=secret"])
@@ -136,7 +136,11 @@ def test_openrouter_probe_uses_fixed_catalog_url_and_never_returns_key(monkeypat
         seen["timeout"] = timeout
         return Response()
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    class Opener:
+        def open(self, request, timeout):
+            return fake_urlopen(request, timeout)
+
+    monkeypatch.setattr("urllib.request.build_opener", lambda *_handlers: Opener())
     key = "unit-test-key"
     # Capture the actual handler response contract.
     class Handler:
@@ -175,7 +179,7 @@ def test_model_probe_rejects_unregistered_provider_without_network(monkeypatch):
     def unexpected_network(*_args, **_kwargs):
         raise AssertionError("unsupported provider must not trigger a network request")
 
-    monkeypatch.setattr("urllib.request.urlopen", unexpected_network)
+    monkeypatch.setattr("urllib.request.build_opener", unexpected_network)
 
     class Handler:
         def __init__(self):

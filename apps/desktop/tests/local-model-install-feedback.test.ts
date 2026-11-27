@@ -57,6 +57,20 @@ describe('local model install feedback', () => {
     expect(formatInstallRemaining('en', null)).toBe('Estimating time…');
   });
 
+  it('does not count engine bytes as model progress and accounts for resumed model bytes', () => {
+    vi.stubGlobal('sessionStorage', sessionStorage);
+    beginInstallFeedback(model, 'request-1', [], 1_000);
+    reconcileInstallFeedback([model], [job({downloadPhase:'engine', downloadedBytes: model.downloadBytes})], 11_000);
+    expect(readInstallFeedback(model.id)?.percent).toBeNull();
+    expect(readInstallFeedback(model.id)?.totalBytes).toBeNull();
+    expect(readInstallFeedback(model.id)?.phase).toBe('downloading');
+    reconcileInstallFeedback([model], [job({downloadPhase:'model', downloadedBytes: model.downloadBytes,
+      modelDownloadedBytes: model.downloadBytes / 2, modelReusedBytes: model.downloadBytes / 4})], 12_000);
+    expect(readInstallFeedback(model.id)?.percent).toBe(50);
+    expect(readInstallFeedback(model.id)?.downloadedBytes).toBe(model.downloadBytes / 2);
+    expect(readInstallFeedback(model.id)?.remainingMs).toBeNull();
+  });
+
   it('moves from install check to ready, and surfaces cancel plus retry', () => {
     vi.stubGlobal('sessionStorage', sessionStorage);
     beginInstallFeedback(model, 'request-1', [], 1_000);
@@ -64,8 +78,8 @@ describe('local model install feedback', () => {
     expect(formatInstallStatus('de', readInstallFeedback(model.id)!)).toBe('Installiere/Prüfe…');
     expect(formatInstallStatus('en', readInstallFeedback(model.id)!)).toBe('Installing/checking…');
     reconcileInstallFeedback([model], [job({ state: 'completed', downloadedBytes: model.downloadBytes })], 21_000);
-    expect(formatInstallStatus('de', readInstallFeedback(model.id)!)).toBe('Fertig, Modell aktiv');
-    expect(formatInstallStatus('en', readInstallFeedback(model.id)!)).toBe('Ready, model active');
+    expect(formatInstallStatus('de', readInstallFeedback(model.id)!)).toBe('Fertig, Modell installiert');
+    expect(formatInstallStatus('en', readInstallFeedback(model.id)!)).toBe('Ready, model installed');
 
     beginInstallFeedback(model, 'request-2', ['job-1'], 30_000);
     expect(markInstallCancelled(model.id)).toBeNull();

@@ -35,6 +35,32 @@ async function child(){
     const input=(selector,value)=>run(`(()=>{const element=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(element,${JSON.stringify(value)});element.dispatchEvent(new Event('input',{bubbles:true}));})()`);
     await window.loadFile(path.join(output,'index.html'));await wait("document.querySelector('[data-widget=notes]')");
     if (!firstRunOnly) {
+    for (const [locale, notes, focus, remaining, workspace, pages, navigation] of [
+      ['ja', 'メモ', '集中タイマー', '集中時間の残り', 'あなたのワークスペース', 'ワークスペースのページ',
+        ['概要', 'ウィジェット', 'プラグイン', 'カスタマイズ']],
+      ['fr', 'Notes', 'Minuteur de concentration', 'Temps de concentration restant', 'Votre espace de travail', 'Pages de l’espace de travail',
+        ['Vue d’ensemble', 'Widgets', 'Extensions', 'Personnaliser']],
+      ['pt-BR', 'Anotações', 'Tempo de foco', 'Tempo de foco restante', 'Seu espaço de trabalho', 'Páginas do espaço de trabalho',
+        ['Visão geral', 'Widgets', 'Plugins', 'Personalizar']],
+    ]) {
+      await run(`window.__workplaceProbe.setLocale(${JSON.stringify(locale)})`);
+      await wait(`document.documentElement.lang === ${JSON.stringify(locale)}`);
+      assert((await run("document.querySelector('.workplace-heading p').textContent")).endsWith(workspace), `Localized workspace heading for ${locale}`);
+      assert.equal(await run("document.querySelector('.workplace-pages').getAttribute('aria-label')"), pages);
+      assert.deepEqual(await run("[...document.querySelectorAll('.workplace-pages button')].map(button => button.textContent.trim())"), navigation);
+      assert.equal(await run("document.querySelector('[data-widget=notes] h2').textContent"), notes);
+      assert.equal(await run("document.querySelector('[data-widget=focus] h2').textContent"), focus);
+      assert.equal(await run("document.querySelector('[data-widget=focus] output').getAttribute('aria-label')"), remaining);
+      await click(navigation[3]);
+      await wait("document.querySelector('.workplace-widget-toggle')");
+      const configurable = await run("[...document.querySelectorAll('.workplace-widget-toggle strong')].map(item => item.textContent)");
+      assert(configurable.includes(notes) && configurable.includes(focus), `Localized widget settings for ${locale}`);
+      await run("document.querySelector('.workplace-pages button:first-child').click()");
+      await wait("document.querySelector('[data-widget=notes]')");
+    }
+    await run("window.__workplaceProbe.setLocale('de')");
+    await wait("document.documentElement.lang === 'de'");
+    checks.push('Home navigation, widget headings, timer accessibility and settings follow the active locale');
     assert.equal(await run("document.querySelector('[data-widget=tasks]')===null"),true);
     await capture('home-initial-1280x720');
     await run("window.__dragData=new DataTransfer();document.querySelector('[data-widget=recent] .workplace-drag-handle').dispatchEvent(new DragEvent('dragstart',{bubbles:true,dataTransfer:window.__dragData}))");await wait("document.querySelector('.workplace-dock-layout.is-dragging')");
@@ -65,7 +91,19 @@ async function child(){
     assert.equal(await run("document.activeElement === document.querySelector('.search-engine-choice')"),true);
     checks.push('Tab wraps inside the first-run dialog');
     await key('Escape');assert.equal(await run('window.__workplaceProbe.state.completed.length'),0);assert.equal(await run("document.querySelector('.search-engine-setup')!==null"),true);
-    await click('Weiter');await wait("document.querySelector('.setup-browser-import-section')");await click('Weiter');await wait("document.querySelector('.setup-pinned-grid')");await click('Weiter');await wait("document.querySelector('.first-run-ai-page')");
+    await click('Weiter');
+    await wait("document.querySelector('.setup-browser-import-section')");
+    await click('Weiter');
+    await wait("document.querySelector('.setup-pinned-grid')");
+    assert.equal(await run("document.querySelectorAll('.setup-pinned-card.active').length"), 0);
+    await run("document.querySelector('.setup-pinned-card').click()");
+    await wait("document.querySelectorAll('.setup-pinned-card[aria-pressed=true]').length === 1");
+    await run("document.querySelector('.setup-pinned-card[aria-pressed=true]').click()");
+    await wait("document.querySelectorAll('.setup-pinned-card.active').length === 0");
+    assert.deepEqual(await run("JSON.parse(localStorage.getItem('lastbrowser.pinnedApps.v2'))"), []);
+    await click('Weiter');
+    await wait("document.querySelector('.first-run-ai-page')");
+    checks.push('the Slim Dock starts empty and persists an explicit empty selection');
     await capture('onboarding-ai-1280x720');await viewport(360,540);
     assert.equal(await run("(()=>{const page=document.querySelector('.first-run-page-content'),footer=document.querySelector('.setup-action-footer').getBoundingClientRect();return page.scrollWidth <= page.clientWidth + 1 && footer.bottom <= innerHeight && footer.width <= innerWidth})()"),true);
     await capture('onboarding-ai-360x540');await viewport(1280,720);

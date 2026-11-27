@@ -9,6 +9,8 @@ const appPath = path.resolve(process.cwd(), 'src/renderer/App.tsx');
 const mainPath = path.resolve(process.cwd(), 'src/main/main.ts');
 const preloadPath = path.resolve(process.cwd(), 'src/main/preload.ts');
 const typesPath = path.resolve(process.cwd(), 'src/renderer/global.d.ts');
+const copilotPath = path.resolve(process.cwd(), 'src/renderer/components/CopilotSplitView.tsx');
+const settingsPath = path.resolve(process.cwd(), 'src/renderer/panels/SystemPanels.tsx');
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -17,6 +19,32 @@ function deferred<T>() {
 }
 
 describe('startup readiness App and Main IPC integration contract', () => {
+  it('gates background AI queries on hydrated AI opt-in and keeps the browser ready when discovery is skipped', () => {
+    const app = readFileSync(appPath, 'utf8');
+
+    expect(app).toMatch(/const automaticProviderDiscovery = !setupLoading\s*&& firstRunAiChoiceForSetup\(setupState\) === 'enabled'/);
+    expect(app).toContain('onboardingStatusChecked: !automaticProviderDiscovery || onboardingStatusChecked');
+    expect(app).toContain("connections: automaticProviderDiscovery ? startupOnboardingState : 'complete'");
+    expect(app).toContain("models: automaticProviderDiscovery ? startupModelDiscoveryState : 'complete'");
+    expect(app).toMatch(/const refreshOnboardingStatus = useCallback\(async[^\n]*\n\s*if \(!automaticProviderDiscovery\) return;/);
+    expect(app).toMatch(/if \(!automaticProviderDiscovery \|\| !sidekickApiReady\) return undefined;\s*const viewKey =[\s\S]*?return watchModelCatalogPrefetch/);
+    expect(app).toContain('if (!automaticProviderDiscovery || !sidekickApiReady || !copilotOpen || !activeBackendProfileName) return;');
+    expect(app).toMatch(/if \(!automaticProviderDiscovery \|\| !sidekickApiReady\) return undefined;\s*const refresh = async \(\) => \{\s*const onboarding/);
+  });
+
+  it('keeps model discovery available on deliberate entry into an AI control', () => {
+    const app = readFileSync(appPath, 'utf8');
+    const copilot = readFileSync(copilotPath, 'utf8');
+    const settings = readFileSync(settingsPath, 'utf8');
+
+    expect(app).toContain('automaticProviderDiscovery={automaticProviderDiscovery}');
+    expect(app).toContain('preparedModelSelectionScopeKey={automaticProviderDiscovery ? quickChatPreparedScopeKey : undefined}');
+    expect(copilot).toContain('if (!automaticProviderDiscovery && !modelPickerOpen) return;');
+    expect(settings).toContain("const providerDiscoveryReady = ready && (automaticProviderDiscovery || section === 'providers');");
+    expect(settings).toMatch(/path: '\/api\/models'[^\n]*\n\s*\[providerDiscoveryReady,[^\n]*\], providerDiscoveryReady\)/);
+    expect(settings).toMatch(/path: '\/api\/providers'[^\n]*\n\s*\[providerDiscoveryReady,[^\n]*\], providerDiscoveryReady\)/);
+  });
+
   it('binds startup model discovery to the current saved Space selection', () => {
     const app = readFileSync(appPath, 'utf8');
 

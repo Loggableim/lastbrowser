@@ -304,9 +304,16 @@ describe('update controller', () => {
     expect(updater.quitCalls).toBe(1);
   });
 
-  it('never uses the EXE updater for unsupported distribution channels', async () => {
+  it('leaves checks, downloads and installs to the Microsoft Store', async () => {
     const updater = fakeUpdater();
-    const controller = createUpdateController({ updater, isPackaged: true, currentVersion: '1.0.0', unsupportedReason: 'Updated by Microsoft Store' });
+    const controller = createUpdateController({
+      updater,
+      isPackaged: true,
+      currentVersion: '1.0.0',
+      managedByStore: true,
+      forceDevUpdates: true
+    });
+    controller.setPreferences({ automaticUpdatesEnabled: true, channel: 'beta' });
     expect(updater.autoDownload).toBe(false);
     expect(updater.autoInstallOnAppQuit).toBe(false);
     updater.emit('update-downloaded', { version: '1.1.0' });
@@ -315,7 +322,11 @@ describe('update controller', () => {
     await controller.checkForUpdates();
     await controller.downloadUpdate();
     controller.quitAndInstall();
-    expect(controller.getStatus()).toMatchObject({ state: 'disabled', message: 'Updated by Microsoft Store' });
+    expect(controller.getStatus()).toMatchObject({
+      state: 'disabled',
+      managedByStore: true,
+      message: 'Updates are managed by the Microsoft Store.'
+    });
     expect(updater.checkCalls + updater.downloadCalls + updater.quitCalls).toBe(0);
   });
 

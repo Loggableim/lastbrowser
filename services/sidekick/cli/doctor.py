@@ -41,6 +41,7 @@ _PROVIDER_CHECK_URLS = {
     "anthropic": "https://api.anthropic.com/v1/models",
     "openrouter": "https://openrouter.ai/api/v1/models",
     "deepseek": "https://api.deepseek.com/v1/models",
+    "groq": "https://api.groq.com/openai/v1/models",
     "google": "https://generativelanguage.googleapis.com/v1beta/models",
 }
 
@@ -62,6 +63,7 @@ _PROVIDER_ENV_HINTS = (
     "MINIMAX_CN_API_KEY",
     "KILOCODE_API_KEY",
     "DEEPSEEK_API_KEY",
+    "GROQ_API_KEY",
     "DASHSCOPE_API_KEY",
     "HF_TOKEN",
     "AI_GATEWAY_API_KEY",
@@ -203,7 +205,9 @@ def _integrated_provider(provider: str) -> bool:
 
 def _provider_env_file_is_optional(provider: str) -> bool:
     """Lastbrowser-managed credentials do not require a Sidekick .env file."""
-    return provider == "auto" or _integrated_provider(provider)
+    return provider == "auto" or _integrated_provider(provider) or (
+        not provider and os.environ.get("LASTBROWSER_INTEGRATED") == "1"
+    )
 
 
 def _doctor_provider_is_configured(
@@ -509,6 +513,10 @@ def _check_providers_connectivity() -> None:
                 if os.getenv("DEEPSEEK_API_KEY"):
                     provider = key
                     break
+            elif key == "groq":
+                if os.getenv("GROQ_API_KEY"):
+                    provider = key
+                    break
             elif key == "google":
                 if os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY"):
                     provider = key
@@ -702,6 +710,8 @@ def run_doctor(args):
         check_ok("Automatic provider routing configured", "(provider credentials managed by Lastbrowser when applicable)")
     elif _env_configured:
         check_ok("Provider credentials detected in .env", "(may be for a provider other than the active one)")
+    elif not _active_provider and _provider_env_file_is_optional(_active_provider):
+        check_info("No AI provider configured (optional in Lastbrowser)")
     else:
         check_warn(f"No API key found in {_DHH}/.env", "(credentials may be managed by Lastbrowser)")
     
@@ -723,7 +733,7 @@ def run_doctor(args):
         content = env_path.read_text(encoding="utf-8")
         if _has_provider_env_config(content):
             check_ok("Provider credentials detected in .env", "(may be for a provider other than the active one)")
-        elif _active_provider != "auto" and not _is_integrated_provider:
+        elif not _provider_env_file_is_optional(_active_provider):
             check_warn(f"No API key found in {_DHH}/.env", "(credentials may be managed by Lastbrowser)")
     else:
         # Also check project root as fallback

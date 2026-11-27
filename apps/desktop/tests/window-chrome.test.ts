@@ -25,4 +25,15 @@ describe('window chrome', () => {
     expect(options.webPreferences?.sandbox).toBe(true);
     expect(options.webPreferences?.preload).toBe('C:\\Lastbrowser\\resources\\app.asar\\dist\\main\\preload.cjs');
   });
+
+  it('fits the initial window and resize limits inside the display work area', () => {
+    const mainDir = 'C:/Lastbrowser/resources/app.asar/dist/main';
+
+    expect(createMainWindowOptions(mainDir, { width: 1440, height: 860 })).toMatchObject({
+      width: 1440, height: 860, minWidth: 1100, minHeight: 720
+    });
+    expect(createMainWindowOptions(mainDir, { width: 1024, height: 600 })).toMatchObject({
+      width: 1024, height: 600, minWidth: 1024, minHeight: 600
+    });
+  });
 });

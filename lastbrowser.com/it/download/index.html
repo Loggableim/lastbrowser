@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Scarica Lastbrowser – Programma di Installazione per Windows (v0.1.56)</title>
-<meta name="description" content="Scarica Lastbrowser per Windows 10 &amp; 11 (64-Bit). Versione 0.1.56: Programma di installazione NSIS ed edizione Portable. 100% Local-First e conforme al GDPR.">
-<meta property="og:title" content="Scarica Lastbrowser – Build Ufficiale per Windows (v0.1.56)">
-<meta property="og:description" content="Browser Chromium rapido e privato con Nova AI, Spazi isolati e Castlabs Widevine DRM. Download diretto per Windows.">
+<title>Scarica LastBrowser | LastBrowser</title>
+<meta name="description" content="Scarica LastBrowser per Windows da Microsoft Store e per Linux.">
+<meta property="og:title" content="Scarica LastBrowser">
+<meta property="og:description" content="Scarica LastBrowser per Windows da Microsoft Store e per Linux.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://lastbrowser.com/it/download/">
 <meta property="og:image" content="https://lastbrowser.com/assets/logos/lastbrowser-logo-primary-dark-card.png">
@@ -34,10 +34,10 @@
   "@context": "https://schema.org",
   "@type": "SoftwareApplication",
   "name": "Lastbrowser",
-  "operatingSystem": "Windows 10, Windows 11 (x64), Linux x64",
+  "operatingSystem": "Windows 10, Windows 11 (x64)",
   "applicationCategory": "BrowserApplication",
-  "softwareVersion": "0.1.56",
-  "downloadUrl": "https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe",
+
+  "downloadUrl": "https://apps.microsoft.com/detail/9NJX1T2KXDM3",
   "offers": {
     "@type": "Offer",
     "price": "0.00",
@@ -54,7 +54,7 @@
   <div class="container inner">
     <a href="/it/" class="logo">
       <img src="/assets/app-icons/nav-icon.ico" alt="Lastbrowser" width="40" height="40">
-      <div><strong>Lastbrowser</strong><span>Scarica · v0.1.56</span></div>
+      <div><strong>Lastbrowser</strong><span>Scarica</span></div>
     </a>
     <div class="nav-links">
       <a href="/it/features/">Funzionalità</a>
@@ -99,31 +99,13 @@
 <main id="main">
   <section class="hero">
     <div class="container">
-      <div class="pill-badge">Build Ufficiale per Windows · v0.1.56</div>
+      <div class="pill-badge">Microsoft Store · Windows</div>
       <h1>Ottieni il <span class="grad">Browser AI-Nativo per Windows</span></h1>
       <p class="lead">Lastbrowser unisce la reattività di Chromium con Nova AI, terminale ConPTY, Widevine DRM L3 e Spazi isolati. 100% Local-First sul tuo PC.</p>
-      
-      <div class="download-counter" data-download-counter data-locale="it" role="status">Il numero di download non è disponibile.</div>
       <div class="cta-group">
-        <a id="main-download-btn" href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-lg">
-          ⬇️ Scarica Installatore (.exe)
-        </a>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-portable.exe" class="btn btn-ghost btn-lg">
-          📦 Versione Portable (.exe)
-        </a>
+        <a id="hero-win-download" href="https://apps.microsoft.com/detail/9NJX1T2KXDM3" class="btn btn-primary btn-lg">Apri in Microsoft Store</a>
       </div>
-      
-      <div style="margin-top:16px;display:flex;gap:16px;justify-content:center;align-items:center;flex-wrap:wrap;">
-        <span class="sub-cta-note">Windows 10 &amp; 11 (x64) · 100% Gratuito &amp; Open Source · Zero Telemetria</span>
-        <button onclick="openSmartScreenModal()" class="btn btn-ghost btn-sm" style="font-size:12px;padding:4px 10px;border-radius:20px;">🛡️ Avviso Windows SmartScreen?</button>
-      </div>
-
-      <!-- Trust Badges -->
-      <div style="display:flex;gap:20px;justify-content:center;margin-top:28px;flex-wrap:wrap;">
-        <div class="badge badge-green">✓ Firma digitale verificata</div>
-        <div class="badge badge-cyan">✓ Crittografia Locale DPAPI</div>
-        <div class="badge badge-purple">✓ Nessun Account Obbligatorio</div>
-      </div>
+      <p class="sub-cta-note">Windows 10 e 11 · 64 bit</p>
     </div>
   </section>
 
@@ -149,46 +131,6 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
     </details>
   </div>
 </section>
-  <!-- Setup vs Portable Comparison -->
-  <section class="container" style="padding: 40px 0 60px;">
-    <div class="section-header">
-      <h2>Scegli il tuo Formato di Installazione</h2>
-      <p>Entrambe le edizioni contengono il motore Chromium completo, Nova AI e il terminale ConPTY.</p>
-    </div>
-
-    <div class="grid-2">
-      <div class="feature-card" style="border:1px solid var(--accent);background:linear-gradient(180deg, rgba(0,229,255,0.04) 0%, transparent 100%);">
-        <div class="badge badge-cyan" style="margin-bottom:12px;">Consigliato per la maggior parte</div>
-        <h3>Installatore Standard (Setup .exe)</h3>
-        <p>Installatore NSIS ottimizzato per una perfetta integrazione in Windows 10 e 11.</p>
-        <ul class="docs-checklist" style="margin:20px 0;">
-          <li>✓ Impostazione con 1 clic come browser predefinito</li>
-          <li>✓ Collegamenti automatici in Menu Start e Desktop</li>
-          <li>✓ Aggiornamenti trasparenti in background</li>
-          <li>✓ Supporto per installazione invisibile tramite flag <code>/S</code></li>
-        </ul>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-sm" style="width:100%;justify-content:center;">
-          Scarica Lastbrowser-0.1.56-x64-setup.exe (264.70 MB)
-        </a>
-      </div>
-
-      <div class="feature-card">
-        <div class="badge badge-purple" style="margin-bottom:12px;">Zero Installazione · Zero Registro</div>
-        <h3>Edizione Portable (.exe)</h3>
-        <p>Esecuzione diretta da qualsiasi cartella o chiavetta USB senza alterare il registro di Windows.</p>
-        <ul class="docs-checklist" style="margin:20px 0;">
-          <li>✓ Nessun privilegio di amministratore richiesto</li>
-          <li>✓ Nessuna scrittura nel registro di sistema</li>
-          <li>✓ Profili salvati localmente o in <code>%APPDATA%</code></li>
-          <li>✓ Ideale per postazioni di lavoro aziendali e test rapidi</li>
-        </ul>
-        <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-portable.exe" class="btn btn-ghost btn-sm" style="width:100%;justify-content:center;">
-          Scarica Lastbrowser-0.1.56-x64-portable.exe (264.35 MB)
-        </a>
-      </div>
-    </div>
-  </section>
-
   <!-- 3-Step Onboarding Preview -->
   <section class="container" style="padding: 20px 0 60px;">
     <div class="section-header">
@@ -199,8 +141,8 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
     <div class="grid-3">
       <div class="feature-card">
         <div class="fc-icon blue">1</div>
-        <h3>Avvia l'Installatore</h3>
-        <p>Apri il file scaricato. L'installazione richiede pochi secondi senza alcun software indesiderato.</p>
+        <h3>Installa da Microsoft Store</h3>
+        <p>Apri Microsoft Store e installa LastBrowser.</p>
       </div>
       <div class="feature-card">
         <div class="fc-icon purple">2</div>
@@ -215,25 +157,6 @@ chmod +x Lastbrowser-0.1.56-x86_64.AppImage
     </div>
   </section>
 
-  <!-- Checksum & Verification -->
-  <section class="container" style="padding: 20px 0 60px;">
-    <div class="feature-card">
-      <h3>Verifica Crittografica di Integrità (SHA-256)</h3>
-      <p>Verifica l'autenticità del binario scaricato prima dell'esecuzione:</p>
-      <div class="code-block" style="margin-top:14px;">
-        <button class="copy-btn" onclick="copyCode(this)">Copia</button>
-        <pre><code># Verifica tramite PowerShell su Windows:
-Get-FileHash -Algorithm SHA256 .\Lastbrowser-0.1.56-x64-setup.exe
-
-# Impronta SHA-256 ufficiale per v0.1.56 (Setup, 277629344 byte):
-BA114390205DC4588EEC5029BE32ABF340A9439DCA8A8B36525C8D827433775F
-
-# Impronta SHA-256 ufficiale per v0.1.56 (Portable, 277265952 byte):
-FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
-      </div>
-    </div>
-  </section>
-
   <!-- Troubleshooting FAQ -->
   <section class="container" style="padding: 20px 0 80px;">
     <div class="section-header">
@@ -243,16 +166,8 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
 
     <div class="grid-2">
       <div class="feature-card">
-        <h4>Perché compare l'avviso di Windows SmartScreen?</h4>
-        <p>Trattandosi di una recente build open source, il binario sta consolidando la propria reputazione statistica sui server Microsoft. Puoi cliccare in tutta sicurezza su "Ulteriori informazioni" e poi su "Esegui comunque".</p>
-      </div>
-      <div class="feature-card">
-        <h4>È supportata l'installazione silenziosa aziendale?</h4>
-        <p>Sì, il setup supporta il parametro <code>/S</code> per installazioni automatizzate via SCCM, Intune o script PowerShell aziendali.</p>
-      </div>
-      <div class="feature-card">
         <h4>Come disinstallare completamente Lastbrowser?</h4>
-        <p>Dalle Impostazioni di Windows > App installate, oppure eseguendo il programma di disinstallazione nella directory dell'app. I dati in <code>%APPDATA%\Lastbrowser</code> possono essere rimossi integralmente.</p>
+        <p>Apri Impostazioni di Windows > App installate e disinstalla Lastbrowser. Durante la disinstallazione, Windows può rimuovere i dati archiviati nel pacchetto. Consulta l'<a href="/privacy/">informativa sulla privacy</a> per conoscere i percorsi dei profili.</p>
       </div>
       <div class="feature-card">
         <h4>Esistono versioni per macOS o Linux?</h4>
@@ -266,34 +181,9 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
 <div class="floating-download-bar">
   <div class="float-info">
     <img src="/assets/app-icons/nav-icon.ico" alt="Icona" width="28" height="28">
-    <div><strong>Lastbrowser</strong> <span>v0.1.56 per Windows 10 &amp; 11</span></div>
+    <div><strong>Lastbrowser</strong> <span>Windows 10 e 11 · 64 bit</span></div>
   </div>
-  <a href="https://github.com/Loggableim/lastbrowser/releases/download/v0.1.56/Lastbrowser-0.1.56-x64-setup.exe" class="btn btn-primary btn-sm">
-    ⬇️ Scarica (.exe)
-  </a>
-</div>
-
-<!-- SmartScreen Modal -->
-<div class="modal-backdrop" id="smartscreen-modal" onclick="if(event.target===this)closeSmartScreenModal()">
-  <div class="modal-card">
-    <div class="modal-header">
-      <h3>Come superare la schermata di Windows SmartScreen</h3>
-      <button class="modal-close" onclick="closeSmartScreenModal()">✕</button>
-    </div>
-    <p style="color:var(--muted);font-size:14px;margin-bottom:16px;">
-      Essendo una nuova versione open source senza telemetria cloud di massa, Windows SmartScreen può mostrare un avviso blu preventivo:
-    </p>
-    <div style="background:rgba(255,255,255,0.03);padding:16px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px;">
-      <p style="font-weight:600;margin-bottom:8px;">Passaggio 1: Fai clic sul link <span style="text-decoration:underline;">"Ulteriori informazioni"</span>.</p>
-      <p style="font-weight:600;color:var(--accent);">Passaggio 2: Fai clic sul pulsante <span style="text-decoration:underline;">"Esegui comunque"</span> in basso.</p>
-    </div>
-    <p style="font-size:13px;color:var(--muted);">
-      Puoi verificare l'impronta SHA-256 e la firma digitale del file scaricato.
-    </p>
-    <div style="margin-top:20px;text-align:right;">
-      <button class="btn btn-primary btn-sm" onclick="closeSmartScreenModal()">Ho capito</button>
-    </div>
-  </div>
+  <a href="https://apps.microsoft.com/detail/9NJX1T2KXDM3" class="btn btn-primary btn-sm">Apri in Microsoft Store</a>
 </div>
 
 <!-- Non-Windows Waitlist Modal -->
@@ -384,6 +274,5 @@ FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3</code></pre>
 </footer>
 
 <script src="/assets/js/app.js?v=linux56-20261014"></script>
-<script src="/assets/js/download-counter.js?v=56-restore1" defer></script>
 </body>
 </html>

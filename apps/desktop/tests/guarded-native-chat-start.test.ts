@@ -156,6 +156,32 @@ describe('guarded native chat start', () => {
     expect(prepared).toEqual({ ok: false, reason: 'model_unavailable' });
   });
 
+  it('does not send to another provider when the selected local model is disabled', async () => {
+    const storage = memoryStorage();
+    setModelActive(storage, { browserProfileId: 'profile-a', backendProfileName: 'backend-a' }, 'ollama', 'local-model', false);
+    const calls: NativeChatStartPayload[] = [];
+    const result = await startGuardedNativeChat(input(storage, {
+      selection: { scope: { backendProfileId: 'backend-id', spaceId: 'space-a', browserProfileId: 'profile-a' }, model: 'local-model', provider: 'ollama' },
+      availableModels: [
+        { provider: 'Ollama', provider_id: 'ollama', configured: true, models: [catalogModel('ollama', 'local-model')] },
+        { provider: 'OpenRouter', provider_id: 'openrouter', configured: true, models: [catalogModel('openrouter', 'cloud-model')] },
+      ],
+    }), async payload => { calls.push(payload); return { sessionId: 'session-a', streamId: 'stream-a' }; });
+    expect(result).toMatchObject({ ok: false, reason: 'no_active_models' });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('rejects conflicting provider metadata before dispatch', async () => {
+    const storage = memoryStorage();
+    const calls: NativeChatStartPayload[] = [];
+    const result = await startGuardedNativeChat(input(storage, {
+      selection: { scope: { backendProfileId: 'backend-id', spaceId: 'space-a', browserProfileId: 'profile-a' }, model: '@openrouter:shared', provider: 'ollama' },
+      allowUntestedBetas: true,
+    }), async payload => { calls.push(payload); return { sessionId: 'session-a', streamId: 'stream-a' }; });
+    expect(result).toMatchObject({ ok: false, reason: 'model_unavailable' });
+    expect(calls).toHaveLength(0);
+  });
+
   it('allows a previously qualified pair without beta opt-in', async () => {
     const storage = memoryStorage();
     recordCompletedChatEvidence({

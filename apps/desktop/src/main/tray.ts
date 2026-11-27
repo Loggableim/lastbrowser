@@ -14,6 +14,7 @@ export type TrayOptions = {
   getWindows?: () => BrowserWindow[];
   getServices: () => SidecarServices | null;
   getLocale?: () => string;
+  protectedSpace?: boolean;
   resourcesDir?: string;
   onQuit?: () => void;
 };
@@ -82,6 +83,9 @@ export function buildTrayContextMenu(
   const sidekickOnline = serviceStatus?.sidekick === 'ready';
   const gatewayRunning = gatewayStatus?.running ?? false;
   const german = options.getLocale?.().toLowerCase().startsWith('de') ?? false;
+  const quitLabel = options.protectedSpace
+    ? (german ? 'Space sperren und LastBrowser beenden' : 'Lock Space and quit LastBrowser')
+    : (german ? 'Lastbrowser beenden' : 'Quit Lastbrowser');
 
   const template: MenuItemConstructorOptions[] = [
     {
@@ -109,7 +113,7 @@ export function buildTrayContextMenu(
     },
     { type: 'separator' },
     {
-      label: german ? 'Lastbrowser beenden' : 'Quit Lastbrowser',
+      label: quitLabel,
       click: () => actions.quit()
     }
   ];

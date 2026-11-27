@@ -39,6 +39,14 @@ def test_missing_desktop_provider_credentials_do_not_make_env_file_required():
     assert not _provider_env_file_is_optional("deepseek")
 
 
+def test_browser_only_desktop_does_not_require_an_env_file(monkeypatch):
+    monkeypatch.setenv("LASTBROWSER_INTEGRATED", "1")
+    assert _provider_env_file_is_optional("")
+    assert not _provider_env_file_is_optional("deepseek")
+    monkeypatch.setenv("LASTBROWSER_INTEGRATED", "0")
+    assert not _provider_env_file_is_optional("")
+
+
 def test_active_provider_credentials_accept_context_pool_and_local_ollama(monkeypatch):
     import web.api.providers as providers
     from cli.doctor import _active_provider_has_credentials

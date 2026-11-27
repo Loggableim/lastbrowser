@@ -6,11 +6,26 @@ import {
   matchesNavigationHistorySnapshot,
   normalizeRestoredNavigationHistory,
   parseDetachTabPayload,
+  prepareDetachedWebviewSource,
   PendingTabDetachRegistry,
   serializeNavigationHistory
 } from '../src/main/window-tab-transfer.js';
 
 describe('Main-process detached tab request handling', () => {
+  it('defers the destination navigation until the captured history is restored', () => {
+    const params = { src: 'https://second.example/' };
+    prepareDetachedWebviewSource(params, 'https://second.example/', true);
+    expect(params.src).toBe('');
+    const bootstrap = { src: 'about:blank' };
+    prepareDetachedWebviewSource(bootstrap, 'https://second.example/', true);
+    expect(bootstrap.src).toBe('');
+    const unrelated = { src: 'https://other.example/' };
+    prepareDetachedWebviewSource(unrelated, 'https://second.example/', true);
+    expect(unrelated.src).toBe('https://other.example/');
+    const noHistory = { src: 'https://second.example/' };
+    prepareDetachedWebviewSource(noHistory, 'https://second.example/', false);
+    expect(noHistory.src).toBe('https://second.example/');
+  });
   it('rejects malformed tab identity or coordinates before a destination is created', () => {
     expect(parseDetachTabPayload({ tab: { url: 'https://example.com' }, screenX: 10, screenY: 20 })).toBeNull();
     expect(parseDetachTabPayload({ tab: { id: 'tab-1', url: '' }, guestWebContentsId: 9, screenX: 10, screenY: 20 })).toBeNull();

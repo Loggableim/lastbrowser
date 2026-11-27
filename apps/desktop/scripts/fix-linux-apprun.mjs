@@ -9,6 +9,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
 
 const { patchAppRunText } = createRequire(import.meta.url)('./patch-linux-apprun.cjs');
 
@@ -51,8 +52,11 @@ export function repackAppImage(appImage) {
   }
 }
 
-const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname);
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isDirectRun) {
-  const appImage = path.resolve(process.argv[2] || 'release/Lastbrowser-0.1.57-demo.4-x86_64.AppImage');
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  const artifact = manifest.build.linux.artifactName
+    .replace('${version}', manifest.version).replace('${arch}', 'x86_64').replace('${ext}', 'AppImage');
+  const appImage = path.resolve(process.argv[2] || path.join('release', artifact));
   repackAppImage(appImage);
 }

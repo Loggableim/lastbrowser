@@ -277,7 +277,7 @@ class LocalAiInstaller:
                     installed.append(artifact.artifact_id)
         return verified, installed
 
-    def _download(self, file, partial, cancel, transferred_chunk=None, verifying=None, *, source_validator=allowed_url):
+    def _download(self, file, partial, cancel, transferred_chunk=None, verifying=None, *, source_validator=allowed_url, resume_progress=None):
         source_validator(file.source_url)
         with _open_file(partial, create=True) as stream:
             offset = stream.seek(0, 2)
@@ -285,6 +285,7 @@ class LocalAiInstaller:
                 raise ValueError('partial_size_exceeds_manifest')
             if offset == file.bytes:
                 _verified(stream, file, cancel, verifying)
+                if resume_progress: resume_progress(offset)
                 return
             _check_cancel(cancel)
             with self.transport.open(file.source_url, offset) as response:
@@ -299,6 +300,7 @@ class LocalAiInstaller:
                         raise ValueError('resume_range_mismatch')
                 else:
                     raise ValueError('download_status_rejected')
+                if resume_progress: resume_progress(offset)
                 encoding = response.headers.get('Content-Encoding', 'identity')
                 get_all = getattr(response.headers, 'get_all', None)
                 if get_all and any(len(get_all(name, [])) > 1 for name in ('Content-Length', 'Content-Range', 'Content-Encoding')):

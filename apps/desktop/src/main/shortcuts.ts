@@ -57,6 +57,10 @@ interface BrowserWindowLike {
   };
 }
 
+interface BrowserNavigationWindow extends BrowserWindowLike {
+  on(event: 'app-command', listener: (event: { preventDefault: () => void }, command: string) => void): void;
+}
+
 interface AppLike {
   on(event: 'web-contents-created', listener: (event: unknown, contents: WebContentsLike) => void): void;
 }
@@ -203,6 +207,17 @@ export function matchBrowserShortcut(input: InputLike): BrowserShortcutEvent | n
   return null;
 }
 
+export function registerBrowserNavigationCommands(window: BrowserNavigationWindow): void {
+  window.on('app-command', (event, command) => {
+    if (window.isDestroyed()) return;
+    if (command === 'browser-backward' || command === 'browser-forward') {
+      event.preventDefault();
+      const action = command === 'browser-backward' ? 'history-back' : 'history-forward';
+      window.webContents.send(browserShortcutChannel, { action });
+    }
+  });
+}
+
 /**
  * Hooks before-input-event across all WebContents in the application
  * (both mainWindow and guest <webview> elements) to break through the webview focus trap.
@@ -212,15 +227,15 @@ export function registerBrowserShortcuts({
   getWindow
 }: {
   app: AppLike;
-  getWindow: () => BrowserWindowLike | null;
+  getWindow: (contents: WebContentsLike) => BrowserWindowLike | null;
 }): void {
   app.on('web-contents-created', (_event, contents) => {
     contents.on('before-input-event', (event, input) => {
       const match = matchBrowserShortcut(input);
       if (match) {
-        event.preventDefault();
-        const win = getWindow();
+        const win = getWindow(contents);
         if (win && !win.isDestroyed()) {
+          event.preventDefault();
           win.webContents.send(browserShortcutChannel, match);
         }
       }

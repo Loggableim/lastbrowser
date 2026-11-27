@@ -8,6 +8,58 @@ export type LocalReleaseNotes = { version: string; changes: readonly string[] };
 // the current UI or from an online changelog at runtime.
 const releaseNotes: Array<{ version: string; changes: Record<DesktopLocaleId, readonly string[]> }> = [
   {
+    version: '0.1.62',
+    changes: {
+      en: ['External web links ending in file-like extensions now open correctly.', 'On Windows, mouse Back and Forward buttons navigate the active window.', 'AI provider selection no longer silently switches away from an explicitly selected local provider.'],
+      de: ['Externe Weblinks mit dateiähnlichen Endungen werden jetzt richtig geöffnet.', 'Unter Windows navigieren die Zurück- und Vorwärts-Maustasten im aktiven Fenster.', 'Eine ausdrücklich gewählte lokale KI-Verbindung wird nicht mehr stillschweigend durch einen anderen Anbieter ersetzt.'],
+      it: ['I link web esterni con estensioni simili a file si aprono correttamente.', 'Su Windows i pulsanti Indietro e Avanti del mouse navigano nella finestra attiva.', 'Un provider IA locale scelto esplicitamente non viene più sostituito silenziosamente.'],
+      es: ['Los enlaces web externos con extensiones similares a archivos se abren correctamente.', 'En Windows, los botones Atrás y Adelante del ratón navegan en la ventana activa.', 'Un proveedor de IA local elegido explícitamente ya no se sustituye sin aviso.'],
+      fr: ['Les liens web externes avec une extension de fichier s’ouvrent correctement.', 'Sous Windows, les boutons Précédent et Suivant de la souris naviguent dans la fenêtre active.', 'Un fournisseur IA local choisi explicitement n’est plus remplacé silencieusement.'],
+      'pt-BR': ['Links externos com extensões semelhantes a arquivos abrem corretamente.', 'No Windows, os botões Voltar e Avançar do mouse navegam na janela ativa.', 'Um provedor de IA local escolhido explicitamente não é mais substituído silenciosamente.'],
+      ru: ['Внешние веб-ссылки с расширениями файлов теперь открываются правильно.', 'В Windows кнопки мыши «Назад» и «Вперёд» управляют активным окном.', 'Явно выбранный локальный провайдер ИИ больше не заменяется без уведомления.'],
+      ja: ['ファイルの拡張子で終わる外部ウェブリンクを正しく開けるようになりました。', 'Windows のマウスの「戻る」「進む」ボタンで、アクティブなウィンドウを操作できます。', '明示的に選んだローカル AI プロバイダーが別のプロバイダーに自動で切り替わらなくなりました。']
+    }
+  },
+  {
+    version: '0.1.60',
+    changes: {
+      en: ['Sidekick startup timeouts, health checks and backend restart handling were updated.', 'The new-tab home page received improvements.', 'Linux x64 AppImage and tar.gz builds were published.'],
+      de: ['Zeitlimits, Gesundheitsprüfung und Backend-Neustart beim Sidekick-Start wurden überarbeitet.', 'Die Startseite für neue Tabs wurde verbessert.', 'Linux-x64-Versionen als AppImage und tar.gz wurden veröffentlicht.'],
+      it: ['Aggiornati timeout, controlli di integrità e riavvio del backend all’avvio di Sidekick.', 'Migliorata la pagina iniziale delle nuove schede.', 'Pubblicate versioni Linux x64 in formato AppImage e tar.gz.'],
+      es: ['Se actualizaron los tiempos de espera, controles de estado y reinicio del backend de Sidekick.', 'Se mejoró la página de nueva pestaña.', 'Se publicaron versiones Linux x64 en AppImage y tar.gz.'],
+      fr: ['Les délais, contrôles de santé et redémarrages du service Sidekick ont été revus.', 'La page des nouveaux onglets a été améliorée.', 'Des versions Linux x64 AppImage et tar.gz ont été publiées.'],
+      'pt-BR': ['Os tempos limite, testes de integridade e reinício do serviço Sidekick foram atualizados.', 'A página de nova aba recebeu melhorias.', 'Foram publicadas versões Linux x64 em AppImage e tar.gz.'],
+      ru: ['Обновлены тайм-ауты, проверка состояния и перезапуск службы Sidekick.', 'Улучшена страница новой вкладки.', 'Опубликованы сборки Linux x64 в форматах AppImage и tar.gz.'],
+      ja: ['Sidekick の起動タイムアウト、状態確認、バックエンド再起動を見直しました。', '新しいタブのホーム画面を改善しました。', 'Linux x64 向けの AppImage と tar.gz を公開しました。']
+    }
+  },
+  {
+    version: '0.1.59',
+    changes: {
+      en: ['The Windows installer download was reduced in size compared with 0.1.58.'],
+      de: ['Der Windows-Installer wurde gegenüber 0.1.58 kleiner.'],
+      it: ['Il download del programma di installazione Windows è più piccolo rispetto alla versione 0.1.58.'],
+      es: ['El instalador de Windows es más pequeño que en la versión 0.1.58.'],
+      fr: ['Le téléchargement du programme d’installation Windows est plus petit que dans la version 0.1.58.'],
+      'pt-BR': ['O instalador do Windows ficou menor em comparação com a versão 0.1.58.'],
+      ru: ['Загрузочный файл установщика Windows стал меньше по сравнению с версией 0.1.58.'],
+      ja: ['Windows インストーラーのダウンロードサイズが 0.1.58 より小さくなりました。']
+    }
+  },
+  {
+    version: '0.1.58',
+    changes: {
+      en: ['Beta update subscriptions gained a notice about unsigned daily builds.', 'The daily beta and stable release pipelines were updated.'],
+      de: ['Das Beta-Update-Abo erhielt einen Hinweis auf unsignierte Tagesversionen.', 'Die Release-Pipelines für Tagesbeta und Stable wurden aktualisiert.'],
+      it: ['Gli aggiornamenti beta mostrano un avviso sulle versioni giornaliere non firmate.', 'Aggiornate le pipeline di rilascio beta giornaliera e stabile.'],
+      es: ['Las actualizaciones beta incluyen un aviso sobre versiones diarias sin firma.', 'Se actualizaron los procesos de publicación beta diaria y estable.'],
+      fr: ['Les mises à jour bêta signalent les versions quotidiennes non signées.', 'Les processus de publication bêta quotidienne et stable ont été mis à jour.'],
+      'pt-BR': ['As atualizações beta receberam um aviso sobre versões diárias não assinadas.', 'Os processos de lançamento beta diário e estável foram atualizados.'],
+      ru: ['В обновлениях бета-канала добавлено предупреждение о неподписанных ежедневных сборках.', 'Обновлены процессы выпуска ежедневной беты и стабильной версии.'],
+      ja: ['ベータ更新に、署名されていない日次ビルドについての注意を追加しました。', '日次ベータ版と安定版のリリース処理を更新しました。']
+    }
+  },
+  {
     version: '0.1.57-beta.3',
     changes: {
           "de": [
@@ -416,7 +468,9 @@ export function releaseNotesBetween(
       && (!isVersion(candidate.fromVersion) || compareVersions(candidate.toVersion, candidate.fromVersion) <= 0))) return [];
   const notes = releaseNotes
     .filter((entry) => isVersion(entry.version)
-      && (candidate.fromVersion === null || compareVersions(entry.version, candidate.fromVersion) > 0)
+      && (candidate.fromVersion === null
+        ? compareVersions(entry.version, candidate.toVersion) === 0
+        : compareVersions(entry.version, candidate.fromVersion) > 0)
       && compareVersions(entry.version, candidate.toVersion) <= 0)
     .sort((a, b) => compareVersions(a.version, b.version))
     .map((entry) => ({ version: entry.version, changes: entry.changes[locale] || entry.changes.en }));

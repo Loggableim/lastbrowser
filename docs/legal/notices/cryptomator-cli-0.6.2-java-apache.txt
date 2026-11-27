@@ -1,0 +1,30 @@
+Apache License 2.0 components shipped with Cryptomator CLI 0.6.2
+
+The Apache License, Version 2.0, accompanies this notice in
+Apache-2.0-LICENSE.txt.
+
+Dagger — com.google.dagger:dagger:2.51.1
+The versioned Java source headers attribute copyright to The Dagger
+Authors in 2007, 2012, 2014–2017 and 2019–2024.
+https://repo.maven.apache.org/maven2/com/google/dagger/dagger/2.51.1/
+https://github.com/google/dagger/blob/dagger-2.51.1/LICENSE.txt
+
+Guava FailureAccess — com.google.guava:failureaccess:1.0.2
+Copyright (C) 2018 The Guava Authors
+https://repo.maven.apache.org/maven2/com/google/guava/failureaccess/1.0.2/
+
+Guava ListenableFuture compatibility placeholder
+com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava
+This artifact consists of manifest and Maven metadata and inherits its
+license declaration from com.google.guava:guava-parent:26.0-android.
+https://repo.maven.apache.org/maven2/com/google/guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava/
+https://repo.maven.apache.org/maven2/com/google/guava/guava-parent/26.0-android/
+
+JSR-330 Dependency Injection — javax.inject:javax.inject:1
+Copyright (C) 2009 The JSR-330 Expert Group
+https://repo.maven.apache.org/maven2/javax/inject/javax.inject/1/
+
+Picocli — info.picocli:picocli:4.7.6
+Copyright 2017 Remko Popma
+https://repo.maven.apache.org/maven2/info/picocli/picocli/4.7.6/
+https://github.com/remkop/picocli/blob/v4.7.6/LICENSE

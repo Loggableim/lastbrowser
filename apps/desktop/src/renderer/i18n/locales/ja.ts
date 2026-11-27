@@ -8,6 +8,7 @@ function group<P extends string, T extends Record<string, string>>(prefix: P, va
 }
 
 export const desktopJaOverrides = {
+  'settings.panels.system.updatesManagedByStore': 'このインストールの更新は Microsoft Store から入手できます。',
   'settings.panels.providers.stableRelease': '安定版',
   'chat.header.moreActions': 'チャットのその他の操作',
   'chat.header.status.unknown': '状態不明',
@@ -25,6 +26,17 @@ export const desktopJaOverrides = {
   'whatsNew.versionOnly': 'バージョン {toVersion}',
   'whatsNew.close': '閉じる',
   'spaceAssistant.switchToQuickChat': 'Quickchat',
+  'access.lock.error.generic': 'ブラウザーのロックを解除できませんでした。もう一度お試しください。',
+  'access.lock.error.invalid': 'パスワードが正しくありません。もう一度お試しください。',
+  'access.lock.error.rateLimited': '試行回数が多すぎます。1分待ってからもう一度お試しください。',
+  'access.lock.error.session': '安全なセッションを確認できませんでした。もう一度お試しください。',
+  'access.lock.error.unreachable': 'ローカルサービスに接続できません。まだ起動中の可能性があります。',
+  'access.lock.hidePassword': 'パスワードを非表示',
+  'access.lock.showPassword': 'パスワードを表示',
+  'access.lock.settingsHint': 'ロック解除後、設定 → システム → アクセスと更新でパスワードを変更できます。',
+  'chat.openCodeFreeLimit': '無料の OpenCode モデルの使用上限に達しました。後でもう一度試すか、別のモデルを選択してください。',
+  'chat.groqKeyInvalid': 'Groq の API キーが無効です。設定で確認してください。',
+  'chat.groqRateLimited': 'Groq の使用量またはリクエスト上限に達しました。利用枠を確認し、後でもう一度お試しください。',
   ...group('access.lock', {
     checking: '安全なセッションを確認中…', description: 'ブラウザーを開くにはアクセスパスワードを入力してください。', password: 'アクセスパスワード', retry: '再試行', title: 'ブラウザーはロックされています', unlock: 'ロックを解除', unlocking: 'ロックを解除中…'
   }),
@@ -91,6 +103,7 @@ export const desktopJaOverrides = {
     plugins: 'プラグイン', preferences: '環境設定', providers: 'プロバイダー', reset: 'リセット', save: '保存', showThinking: '思考過程を表示', sound: 'サウンド', system: 'システム', theme: 'テーマ', title: '設定',
   }),
   ...group('settings.sectionDescriptions', {
+    codexCli: 'このスペースで、インストール済みの Codex CLI を起動します。',
     advanced: '現在のチャットとSpaceに適用するモデルの自動選択と使用ポリシー。', appearance: 'テーマ、スキン、文字サイズ、メッセージのレイアウト。', conversation: '既定のモデル、送信キー、アシスタントの名前や役割。', extensions: 'Chrome拡張機能、Manifest V3アドオン、コンテンツスクリプト。', googleAccounts: 'Google CLI / Antigravity OAuthアカウントとトークンの切り替え。', localAi: 'このテスト版では同梱のローカルモデルストアと推論は利用できません。外部プロバイダーは「AI・ローカルモデル」から設定できます。', plugins: 'インストール済みのアプリ連携とプラグイン一覧。', preferences: '言語、通知、チャットの動作。', providers: 'AIプロバイダー、スペース別のローカルモデル、モデルの振り分け設定。', system: 'アクセス制御、認証、更新、診断。', teamwork: '複数エージェントによるTeamwork、Smart Track、利用可能なモデル。',
   }),
   ...group('settings.sections', {
@@ -241,7 +254,7 @@ export const desktopJaOverrides = {
   'settings.panels.providers.noScannedModels': '利用可能なモデルを検出するにはプロバイダーを接続してください。',
   'settings.panels.providers.activeModelsSaveFailed': '有効なモデルの選択を保存できませんでした。',
   'settings.panels.providers.activeModelFallback': '以前のモデルは無効か利用できません。有効なモデルに切り替えました。',
-  'settings.panels.providers.noActiveModels': '有効なモデルがありません。AI とローカルモデルの設定で検出済みモデルを有効にしてください。',
+  'settings.panels.providers.noActiveModels': '有効なモデルがありません。設定で AI プロバイダーを設定するか、モデルを有効にしてください。',
   'settings.panels.providers.openActiveModels': 'モデル設定を開く',
   'settings.panels.providers.betaCatalogToggle': '未検証のベータ版プロバイダーとモデルをこのセッションで表示して有効にする',
   'settings.panels.providers.betaCatalogDescription': 'このセッションのみ有効です。未検証のプロバイダー／モデルとマルチエージェントの選択肢を表示します。プロフィール、アカウント、ランタイム、ハードウェア、ライセンス、スコープ、停止の各制御は引き続き適用されます。',

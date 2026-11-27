@@ -765,6 +765,8 @@ export class SidecarServices {
           cwd: launch.cwd,
           env,
           windowsHide: true,
+          // Let the supervisor reap Uvicorn after Electron's Windows job closes.
+          detached: process.platform === 'win32',
           stdio: ['ignore', 'pipe', 'pipe']
         }
       );

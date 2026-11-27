@@ -3,15 +3,14 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Settings, Play, X } from 'lucide-react';
 import { chooseStartupSound, playStartupSound, saveStartupPreferences, startupAnimations, startupRainbowStyles, useStartupPreferences, useStartupSounds, type StartupPreferences } from './startup-preferences.js';
 import { getSoundOpening, getSoundOpeningTheme, readStartupAudioClock, soundOpeningFrame, STARTUP_AUDIO_CLOCK_EVENT } from './sound-opening.js';
+import { startupPreferencesCopy } from './startup-preferences-copy.js';
 import './StartupScreen.css';
 export function StartupPreferencesPanel({ compact = false }: { compact?: boolean }) {
   const { locale } = useDesktopI18n();
-  const c = (de: string, en: string) => locale.startsWith('de') ? de : en;
-  const animationNames: Record<string, string> = { awakening: 'Gentle awakening', companion: 'Sidekick moves in', glass: 'Glass dissolves', light: 'Light opens the room' };
-  const rainbowNames = { classic: c('Klassischer Rainbow-Flow', 'Classic rainbow flow'), aurora: c('Sanfter Aurora-Flow', 'Soft aurora flow'), orbit: c('Umlaufendes Lichtband', 'Orbit light band') };
-  const rainbowDescriptions = { classic: c('Alle Regenbogenfarben fließen gleichmäßig um den Rahmen.', 'All rainbow colors flow evenly around the frame.'), aurora: c('Weiche Cyan-, Violett- und Rosatöne bewegen sich langsam hin und zurück.', 'Soft cyan, violet and pink hues drift slowly back and forth.'), orbit: c('Ein heller Lichtbogen umrundet einen ruhigen, dunklen Rahmen.', 'A bright arc circles a calm, dark frame.') };
+  const copy = startupPreferencesCopy[locale];
   const preferences = useStartupPreferences();
   const sounds = useStartupSounds();
+  const rainbowStyle = copy.rainbowStyles[preferences.rainbowStyle];
   // The popover is closed on mount in every context so it can never open itself
   // over the launch animation. The gear is the only entry point.
   const [open, setOpen] = useState(false);
@@ -23,7 +22,7 @@ export function StartupPreferencesPanel({ compact = false }: { compact?: boolean
   const previewValue = useRef<Preview | null>(null);
   const previewElement = useRef<HTMLDivElement>(null);
   const previewSerial = useRef(0);
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState<'storageUnavailable' | 'playbackFailed' | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -85,10 +84,10 @@ export function StartupPreferencesPanel({ compact = false }: { compact?: boolean
     return () => window.clearTimeout(timer);
   }, [preview]);
   const update = (patch: Partial<StartupPreferences>) => {
-    setMessage(saveStartupPreferences({ ...preferences, ...patch }) ? '' : c('Nur für diese Sitzung gespeichert: lokaler Speicher ist nicht verfügbar.', 'Saved for this session only: local storage is unavailable.'));
+    setMessage(saveStartupPreferences({ ...preferences, ...patch }) ? null : 'storageUnavailable');
   };
   const previewSound = () => {
-    stopPreview(); setMessage('');
+    stopPreview(); setMessage(null);
     // Freeze one selection for both sound and animation, including random mode.
     const sound = chooseStartupSound(preferences);
     if (!sound) return;
@@ -99,11 +98,11 @@ export function StartupPreferencesPanel({ compact = false }: { compact?: boolean
     stopSound.current = playStartupSound({ ...preferences, soundEnabled: true }, () => {
       if (previewValue.current?.id !== next.id) return;
       stopPreview();
-      setMessage(c('Dieser Sound konnte nicht abgespielt werden. Bitte ein unterstütztes Audioformat wählen.', 'Could not play this sound. Please choose a supported audio file.'));
+      setMessage('playbackFailed');
     }, sound, { purpose: 'preview' });
   };
   const startAnimationPreview = () => {
-    stopPreview(); setMessage('');
+    stopPreview(); setMessage(null);
     const fallback = startupAnimations.find(item => item.id === preferences.animation)!.duration;
     const durationMs = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 100
       : fallback;
@@ -115,31 +114,54 @@ export function StartupPreferencesPanel({ compact = false }: { compact?: boolean
   const selectedOpening = getSoundOpening(preferences.soundId);
   const previewTheme = getSoundOpeningTheme(preview?.soundId ?? undefined);
   return <div ref={root} className={compact ? 'startup-preferences-trigger' : 'startup-preferences-inline'}>
-    {compact && <button ref={trigger} type="button" className="startup-preferences-gear" aria-label={c("Startanimation und Sound einstellen", "Configure startup animation and sound")} title={c("Startanimation und Sound", "Startup animation and sound")} aria-expanded={open} aria-controls="startup-preferences-popover" onClick={() => setOpen(value => !value)}><Settings size={17} /></button>}
-    {expanded && <div ref={panel} id={compact ? 'startup-preferences-popover' : undefined} className="startup-preferences-panel" role={compact ? 'dialog' : 'group'} aria-label={c("Startanimation und Sound", "Startup animation and sound")}>
-      <div className="startup-preferences-heading"><strong>{c("Startanimation & Sound", "Startup animation & sound")}</strong>{compact && <button type="button" aria-label={c("Schließen", "Close")} onClick={close}><X size={15} /></button>}</div>
-      <small>{c('Mit aktiviertem Sound erhält jeder der fünf Sounds seine eigene Startanimation. Bewegung und Dauer folgen der Audiowiedergabe.', 'When sound is enabled, each of the five sounds has its own opening animation. Movement and duration follow audio playback.')}</small>
-      <label>{c('Animation ohne Sound', 'Silent opening animation')}<select value={preferences.animation} onChange={event => update({ animation: event.target.value as StartupPreferences['animation'] })}>{startupAnimations.map(item => <option key={item.id} value={item.id}>{locale.startsWith('de') ? item.label : animationNames[item.id]} · {item.duration} ms</option>)}</select></label>
-      <button type="button" onClick={startAnimationPreview}><Play size={14} /> {c('Lautlose Animation ansehen', 'Preview silent animation')}</button>
-      {preview && <div key={preview.id} data-startup-sound={preview.soundId ?? undefined} style={{ '--startup-opening-duration': `${preview.durationMs}ms`, '--startup-movement-duration': `${Math.min(preview.durationMs, 850)}ms`, '--startup-lift-duration': `${Math.min(preview.durationMs, 550)}ms`, '--startup-departure-duration': `${Math.min(preview.durationMs, 220)}ms` } as CSSProperties} className={`startup-animation-preview${previewTheme ? '' : ` startup-screen--opening startup-opening-${preview.animation}`}`} aria-label={c("Isolierte Animationsvorschau", "Isolated animation preview")}>
-        <div className="startup-preview-header">LastBrowser <span>✦</span></div><div className="startup-preview-desktop">{c("Dein Browser", "Your browser")}</div>
-        <div ref={previewElement} style={previewTheme ? soundOpeningFrame(0, 0, previewTheme) as CSSProperties : undefined} className={`startup-preview-cover startup-rainbow-frame startup-rainbow-${preferences.rainbowStyle}${preferences.rainbow ? '' : ' startup-screen--no-rainbow'}${previewTheme ? ` startup-sound-opening startup-sound-${previewTheme}` : ''}`}>{previewTheme && <div className="startup-sound-scene" aria-hidden="true"><i /><i /><i /></div>}<div className="startup-screen__content"><div className="startup-screen__art"><img className="startup-screen__icon" src={new URL('./assets/sidekick-01.png', import.meta.url).href} alt="" /></div><span>{c("Willkommen", "Welcome")}</span></div></div>
+    {compact && <button ref={trigger} type="button" className="startup-preferences-gear" aria-label={copy.gearLabel} title={copy.title} aria-expanded={open} aria-controls="startup-preferences-popover" onClick={() => setOpen(value => !value)}><Settings size={17} /></button>}
+    {expanded && <div ref={panel} id={compact ? 'startup-preferences-popover' : undefined} className="startup-preferences-panel" role={compact ? 'dialog' : 'group'} aria-label={copy.title}>
+      <div className="startup-preferences-heading"><strong>{copy.heading}</strong>{compact && <button type="button" aria-label={copy.close} onClick={close}><X size={15} /></button>}</div>
+      <small>{copy.soundAnimationDescription}</small>
+      <label>{copy.animationLabel}
+        <select value={preferences.animation} onChange={event => update({ animation: event.target.value as StartupPreferences['animation'] })}>
+          {startupAnimations.map(item => <option key={item.id} value={item.id}>{copy.animations[item.id]} · {item.duration} ms</option>)}
+        </select>
+      </label>
+      <button type="button" onClick={startAnimationPreview}><Play size={14} /> {copy.previewSilent}</button>
+      {preview && <div key={preview.id} data-startup-sound={preview.soundId ?? undefined} style={{ '--startup-opening-duration': `${preview.durationMs}ms`, '--startup-movement-duration': `${Math.min(preview.durationMs, 850)}ms`, '--startup-lift-duration': `${Math.min(preview.durationMs, 550)}ms`, '--startup-departure-duration': `${Math.min(preview.durationMs, 220)}ms` } as CSSProperties} className={`startup-animation-preview${previewTheme ? '' : ` startup-screen--opening startup-opening-${preview.animation}`}`} aria-label={copy.animationPreview}>
+        <div className="startup-preview-header">LastBrowser <span>✦</span></div><div className="startup-preview-desktop">{copy.browserPreview}</div>
+        <div ref={previewElement} style={previewTheme ? soundOpeningFrame(0, 0, previewTheme) as CSSProperties : undefined} className={`startup-preview-cover startup-rainbow-frame startup-rainbow-${preferences.rainbowStyle}${preferences.rainbow ? '' : ' startup-screen--no-rainbow'}${previewTheme ? ` startup-sound-opening startup-sound-${previewTheme}` : ''}`}>{previewTheme && <div className="startup-sound-scene" aria-hidden="true"><i /><i /><i /></div>}<div className="startup-screen__content"><div className="startup-screen__art"><img className="startup-screen__icon" src={new URL('./assets/sidekick-01.png', import.meta.url).href} alt="" /></div><span>{copy.welcome}</span></div></div>
       </div>}
-      {preview && <button type="button" onClick={stopPreview}><X size={14} /> {c('Vorschau stoppen', 'Stop preview')}</button>}
-      <label className="startup-preferences-check"><input type="checkbox" checked={preferences.rainbow} onChange={event => update({ rainbow: event.target.checked })} /> {c("Animierter Rainbow-Rahmen", "Animated rainbow border")}</label>
-      <label>{c('Rahmenstil', 'Border style')}<select value={preferences.rainbowStyle} disabled={!preferences.rainbow} onChange={event => update({ rainbowStyle: event.target.value as StartupPreferences['rainbowStyle'] })}>{startupRainbowStyles.map(style => <option key={style} value={style}>{rainbowNames[style]}</option>)}</select></label>
-      <div className={`startup-rainbow-swatch startup-rainbow-frame startup-rainbow-${preferences.rainbowStyle}${preferences.rainbow ? '' : ' startup-screen--no-rainbow'}`} role="img" aria-label={preferences.rainbow ? rainbowDescriptions[preferences.rainbowStyle] : c('Rainbow-Rahmen ausgeschaltet', 'Rainbow border disabled')}><span>{preferences.rainbow ? rainbowNames[preferences.rainbowStyle] : c('Rahmen ausgeschaltet', 'Border disabled')}</span></div>
-      <small>{rainbowDescriptions[preferences.rainbowStyle]}</small>
-      <label className="startup-preferences-check"><input type="checkbox" checked={preferences.soundEnabled} onChange={event => update({ soundEnabled: event.target.checked })} /> {c("Sound nach erfolgreicher Anmeldung", "Sound after successful sign-in")}</label>
-      <label className="startup-preferences-check"><input type="checkbox" checked={preferences.eventFeed} onChange={event => update({ eventFeed: event.target.checked })} /> {c("Ereignis-Feed der Startanimation", "Startup animation event feed")}</label>
-      <label>{c("Lautstärke", "Volume")} · {Math.round(preferences.volume * 100)} %<input aria-label={c("Lautstärke", "Volume")} type="range" min="0" max="100" value={Math.round(preferences.volume * 100)} onChange={event => update({ volume: Number(event.target.value) / 100 })} /></label>
-      <label>Sound<select value={preferences.soundId} disabled={!sounds.length} onChange={event => update({ soundId: event.target.value })}><option value="">{sounds.length ? c('Sound auswählen', 'Choose a sound') : c('Noch keine Sounds', 'No sounds yet')}</option>{sounds.map(sound => { const opening = getSoundOpening(sound.id); return <option key={sound.id} value={sound.id}>{sound.label}{opening ? ` · ${c(opening.labelDe, opening.labelEn)}${opening.beatSynced ? c(' · Beat-synchron', ' · Beat synchronized') : ''}` : ''}</option>; })}</select></label>
-      {preferences.randomSound ? <small>{c('Einmal pro Start ausgewürfelt: Sound und zugehörige Animation bleiben zusammen.', 'Chosen once per opening: the sound and its matching animation stay together.')}</small> : selectedOpening && <small>{c('Zugehörige Animation: ', 'Matching animation: ')}{c(selectedOpening.labelDe, selectedOpening.labelEn)} · {selectedOpening.beatSynced ? c('Beat-synchron', 'Beat synchronized') : c('An die Songlänge angepasst', 'Matched to the song duration')}</small>}
-      <label className="startup-preferences-check"><input type="checkbox" checked={preferences.randomSound} onChange={event => update({ randomSound: event.target.checked })} disabled={!sounds.length} /> {c("Zufälliger Sound pro Anmeldung", "Random sound per sign-in")}</label>
-      <button type="button" disabled={!selectedSoundExists} onClick={previewSound}><Play size={14} /> {c('Sound & Animation ansehen', 'Preview sound & animation')}</button>
-      {!sounds.length && <small>{c("Noch keine Sounds hinterlegt. Ohne Audiodatei bleibt der Start lautlos.", "No sounds added yet. Startup remains silent until audio files are supplied.")}</small>}
-      <small>{c("Einstellungen werden sofort auf diesem Gerät gespeichert. Sounds werden nicht hochgeladen.", "Settings are saved immediately on this device. Sounds are never uploaded.")}</small>
-      {message && <p role="status">{message}</p>}
+      {preview && <button type="button" onClick={stopPreview}><X size={14} /> {copy.stopPreview}</button>}
+      <label className="startup-preferences-check"><input type="checkbox" checked={preferences.rainbow} onChange={event => update({ rainbow: event.target.checked })} /> {copy.rainbowEnabled}</label>
+      <label>{copy.rainbowStyle}
+        <select value={preferences.rainbowStyle} disabled={!preferences.rainbow} onChange={event => update({ rainbowStyle: event.target.value as StartupPreferences['rainbowStyle'] })}>
+          {startupRainbowStyles.map(style => <option key={style} value={style}>{copy.rainbowStyles[style].label}</option>)}
+        </select>
+      </label>
+      <div className={`startup-rainbow-swatch startup-rainbow-frame startup-rainbow-${preferences.rainbowStyle}${preferences.rainbow ? '' : ' startup-screen--no-rainbow'}`} role="img" aria-label={preferences.rainbow ? rainbowStyle.description : copy.rainbowOff}><span>{preferences.rainbow ? rainbowStyle.label : copy.borderOff}</span></div>
+      <small>{rainbowStyle.description}</small>
+      <label className="startup-preferences-check"><input type="checkbox" checked={preferences.soundEnabled} onChange={event => update({ soundEnabled: event.target.checked })} /> {copy.signInSound}</label>
+      <label className="startup-preferences-check"><input type="checkbox" checked={preferences.eventFeed} onChange={event => update({ eventFeed: event.target.checked })} /> {copy.eventFeed}</label>
+      <label>{copy.volume} · {Math.round(preferences.volume * 100)} %<input aria-label={copy.volume} type="range" min="0" max="100" value={Math.round(preferences.volume * 100)} onChange={event => update({ volume: Number(event.target.value) / 100 })} /></label>
+      <label>{copy.sound}
+        <select value={preferences.soundId} disabled={!sounds.length} onChange={event => update({ soundId: event.target.value })}>
+          <option value="">{sounds.length ? copy.chooseSound : copy.noSounds}</option>
+          {sounds.map(sound => {
+            const opening = getSoundOpening(sound.id);
+            const label = [sound.label];
+            if (opening) {
+              label.push(copy.soundThemes[opening.animation]);
+              if (opening.beatSynced) label.push(copy.beatSynced);
+            }
+            return <option key={sound.id} value={sound.id}>{label.join(' · ')}</option>;
+          })}
+        </select>
+      </label>
+      {preferences.randomSound ? <small>{copy.randomExplanation}</small> : selectedOpening && <small>
+        {copy.matchingAnimation} {copy.soundThemes[selectedOpening.animation]} · {selectedOpening.beatSynced ? copy.beatSynced : copy.followsSoundLength}
+      </small>}
+      <label className="startup-preferences-check"><input type="checkbox" checked={preferences.randomSound} onChange={event => update({ randomSound: event.target.checked })} disabled={!sounds.length} /> {copy.randomSound}</label>
+      <button type="button" disabled={!selectedSoundExists} onClick={previewSound}><Play size={14} /> {copy.previewSound}</button>
+      {!sounds.length && <small>{copy.silentWithoutAudio}</small>}
+      <small>{copy.localSettings}</small>
+      {message && <p role="status">{copy[message]}</p>}
     </div>}
   </div>;
 }

@@ -26,7 +26,7 @@ export type StoreModel={id:string;name:string;publisher:string;description:strin
   licenseLabel:string;licenseText:string|null;licenseDigest:string|null;gated:boolean;installQualified:boolean;
   commercialRequired:boolean|null;tasks:string[];eligibility:{state:string;reasons:string[];allowed:boolean};
   installed:null|{artifactSha256:string;bytes:number;revision:string;verifiedAt:number};active:boolean;deviceConfirmed:boolean};
-export type StoreJob={id:string;operation:string;modelId:string;state:string;mode:string;progress:number;total:number;downloadedBytes:number;error:string|null;receiptId?:string;result?:StoreMediaResult};
+export type StoreJob={id:string;operation:string;modelId:string;state:string;mode:string;progress:number;total:number;downloadedBytes:number;downloadPhase?:'engine'|'model';modelDownloadedBytes?:number;modelReusedBytes?:number;error:string|null;receiptId?:string;result?:StoreMediaResult};
 export type StoreReceipt={id:string;modelId:string;artifactSha256:string;suite:string;mode:string;origin:string;createdAt:number;
   coldStartMs:number;medianResponseMs:number|null;counts:Record<string,number>;sampleCount:number;state:string;
   recommendation:string;unsafeToolOrSecurityFailure:boolean;measurementLimitations:string[]};
@@ -75,7 +75,10 @@ export function isModelStoreResponse(v:unknown):v is ModelStoreResponse {
     &&strings(m.tasks)&&record(m.eligibility)&&strings(m.eligibility.reasons)&&typeof m.eligibility.state==='string'&&typeof m.eligibility.allowed==='boolean'
     &&typeof m.active==='boolean'&&typeof m.deviceConfirmed==='boolean'&&(m.installed===null||record(m.installed)&&typeof m.installed.artifactSha256==='string')
     &&(m.historicalEvidence===null||record(m.historicalEvidence)))
-    &&Array.isArray(s.jobs)&&s.jobs.every((j:unknown)=>record(j)&&['id','operation','modelId','state','mode'].every(k=>typeof j[k]==='string')&&['progress','total','downloadedBytes'].every(k=>typeof j[k]==='number')&&(j.result===undefined||isStoreMediaResult(j.result)))
+    &&Array.isArray(s.jobs)&&s.jobs.every((j:unknown)=>record(j)&&['id','operation','modelId','state','mode'].every(k=>typeof j[k]==='string')&&['progress','total','downloadedBytes'].every(k=>typeof j[k]==='number')
+    &&(j.downloadPhase===undefined||j.downloadPhase==='engine'||j.downloadPhase==='model')
+    &&['modelDownloadedBytes','modelReusedBytes'].every(k=>j[k]===undefined||(typeof j[k]==='number'&&Number.isFinite(j[k])&&j[k]>=0))
+    &&(j.result===undefined||isStoreMediaResult(j.result)))
     &&Array.isArray(s.history)&&s.history.every((r:unknown)=>record(r)&&['id','modelId','suite','mode','origin','state','recommendation'].every(k=>typeof r[k]==='string')&&record(r.counts)&&strings(r.measurementLimitations))
     &&record(s.entitlement)&&typeof s.entitlement.largeModelsAllowed==='boolean'&&record(s.suite)&&typeof s.suite.version==='string';
 }

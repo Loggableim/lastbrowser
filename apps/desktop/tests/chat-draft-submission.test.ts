@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { ChatDraftSubmissionGate, isDefiniteChatStartRejection } from '../src/renderer/chat-draft-submission.js';
+import { ChatDraftSubmissionGate, isDefiniteChatStartRejection, prepareChatForDraft } from '../src/renderer/chat-draft-submission.js';
 import { hasCurrentTurnBrowserUse } from '../src/renderer/chat-browser-use.js';
 
 describe('optimistic chat submission', () => {
+  it('keeps a newer draft when preparation of the selected assistant finishes late', async () => {
+    let revision = 1;
+    let draft = 'A';
+    let prepared!: (success: boolean) => void;
+    const maySubmit = prepareChatForDraft(() => new Promise(resolve => { prepared = resolve; }), () => revision);
+    draft = 'B';
+    revision += 1;
+    prepared(true);
+    if (await maySubmit) draft = '';
+    expect(draft).toBe('B');
+    await expect(prepareChatForDraft(async () => true, () => revision)).resolves.toBe(true);
+  });
   it('reserves synchronously and prevents repeated Enter before async start returns', () => {
     const gate = new ChatDraftSubmissionGate();
     const turn = gate.begin('  exact draft\n', 1, 'scope');

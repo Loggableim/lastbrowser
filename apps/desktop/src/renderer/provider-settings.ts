@@ -1,4 +1,4 @@
-export type ConfigurableProviderId = 'openrouter' | 'alibaba' | 'xiaomi';
+export type ConfigurableProviderId = 'openrouter' | 'alibaba' | 'xiaomi' | 'groq';
 
 export interface ProviderSettingsRequest {
   method: 'GET' | 'POST';
@@ -128,6 +128,13 @@ export async function requestProviderModelCatalog(
     if (parsedBaseUrl.protocol !== 'https:') throw new Error('alibaba-https-required');
   }
 
+  if (providerId === 'groq' && apiKey) {
+    const probe = await requestWebui({ method: 'POST', path: '/api/models/probe',
+      body: { provider: providerId, api_key: apiKey },
+      ...(options.scopeSelection ? { scopeSelection: options.scopeSelection } : {}) }) as { error_code?: unknown; models?: unknown } | null;
+    if (probe?.error_code === 'provider_key_invalid' || probe?.error_code === 'provider_rate_limited') throw new Error(probe.error_code);
+    if (!Array.isArray(probe?.models) || !probe.models.length) throw new Error('provider_catalog_empty');
+  }
   if (apiKey) {
     await requestWebui({
       method: 'POST',

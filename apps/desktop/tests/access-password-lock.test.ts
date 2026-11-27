@@ -10,6 +10,11 @@ const mainPath = path.resolve(process.cwd(), 'src/main/main.ts');
 const preloadPath = path.resolve(process.cwd(), 'src/main/preload.ts');
 
 describe('desktop access password lock', () => {
+  it('marks the settings password field as a new password for password managers', () => {
+    const source = readFileSync(settingsPanelsPath, 'utf8');
+    const field = source.slice(source.indexOf("t('settings.panels.system.accessPassword')"));
+    expect(field.slice(0, 450)).toContain('autoComplete="new-password"');
+  });
   it('gates the browser shell before rendering the app and its webviews', () => {
     const source = readFileSync(appPath, 'utf8');
     const authGate = source.indexOf('const startupAuthAllowsShell = canRenderBrowserForAccessAuth(');

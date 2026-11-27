@@ -105,8 +105,8 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "key_optional": True,
         "models": [
             {"id": "deepseek-v4.1-flash-free", "label": "DeepSeek V4.1 Flash (free)"},
-            {"id": "space-bunny-free", "label": "Space Bunny (free)"},
-            {"id": "glm-5.3-flash-free", "label": "GLM 5.3 Flash (free)"},
+            {"id": "nemotron-3.5-lightning-free", "label": "Nemotron 3.5 Lightning (free)"},
+            {"id": "mimo-v2.6-flash-free", "label": "MiMo V2.6 Flash (free)"},
         ],
         "category": "easy_start",
     },
@@ -216,6 +216,15 @@ _SUPPORTED_PROVIDER_SETUPS = {
         "default_base_url": "https://api.deepseek.com",
         "requires_base_url": False,
         "models": list(_PROVIDER_MODELS.get("deepseek", [])),
+        "category": "specialized",
+    },
+    "groq": {
+        "label": "Groq",
+        "env_var": "GROQ_API_KEY",
+        "default_model": "llama-3.3-70b-versatile",
+        "default_base_url": "https://api.groq.com/openai/v1",
+        "requires_base_url": False,
+        "models": list(_PROVIDER_MODELS.get("groq", [])),
         "category": "specialized",
     },
     "xiaomi": {

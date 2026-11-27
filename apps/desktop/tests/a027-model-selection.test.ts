@@ -89,6 +89,34 @@ describe('A-027 release model choices', () => {
       .toEqual({ choice: null, changed: true });
   });
 
+  it('keeps the selected model when its stored ID contains the provider prefix', () => {
+    const storage = memoryStorage();
+    const scope = { browserProfileId: 'browser-a', backendProfileName: 'personal' };
+    const choices = [{ providerId: 'opencode-go', id: 'model-a' }, { providerId: 'opencode-go', id: 'model-b' }];
+    expect(chooseActiveModel(choices, { provider: 'opencode-go', model: '@opencode-go:model-b' }, storage, scope))
+      .toEqual({ choice: choices[1], changed: false });
+    setModelActive(storage, scope, 'opencode-go', 'model-b', false);
+    expect(chooseActiveModel(choices, { provider: 'opencode-go', model: '@opencode-go:model-b' }, storage, scope))
+      .toEqual({ choice: choices[0], changed: true });
+  });
+
+  it('does not silently route a conflicting qualified model to another provider', () => {
+    const storage = memoryStorage();
+    const scope = { browserProfileId: 'browser-a', backendProfileName: 'personal' };
+    const choices = [{ providerId: 'ollama', id: 'shared' }, { providerId: 'openrouter', id: 'shared' }];
+    expect(chooseActiveModel(choices, { provider: 'ollama', model: '@openrouter:shared' }, storage, scope))
+      .toEqual({ choice: null, changed: true });
+  });
+
+  it('does not fall back from a disabled local model to an active cloud provider', () => {
+    const storage = memoryStorage();
+    const scope = { browserProfileId: 'browser-a', backendProfileName: 'personal' };
+    const choices = [{ providerId: 'ollama', id: 'local-model' }, { providerId: 'openrouter', id: 'cloud-model' }];
+    setModelActive(storage, scope, 'ollama', 'local-model', false);
+    expect(chooseActiveModel(choices, { provider: 'ollama', model: 'local-model' }, storage, scope))
+      .toEqual({ choice: null, changed: true });
+  });
+
   it('sends the checked P003 catalog models from the captured backend profile', () => {
     const storage = memoryStorage();
     const scope = { browserProfileId: 'browser-a', backendProfileName: 'connected-profile' };

@@ -191,6 +191,8 @@ export function isProviderModelQualified(providerId: string, modelId: string, br
   // Stable release eligibility does not invent a successful chat record.
   // Callers still supply models from the scoped catalog and validate credentials.
   if (!modelId.trim()) return false;
+  // Groq is explicitly beta-only even after a successful individual chat.
+  if (normalizeProviderId(providerId) === 'groq') return false;
   if (isOpenRouterRouterModel(providerId, modelId)) return true;
   if (isVerifiedCatalogModel(providerId, modelId)) return true;
   // A stable provider does not invent a successful chat. OpenCode Go keeps

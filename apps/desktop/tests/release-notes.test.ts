@@ -2,6 +2,26 @@ import { describe, expect, it } from 'vitest';
 import { releaseNotesBetween } from '../src/renderer/release-notes.js';
 
 describe('offline versioned release notes', () => {
+  it('includes published 0.1.58 through 0.1.60 changes in every UI language', () => {
+    for (const locale of ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'] as const) {
+      const notes = releaseNotesBetween({ fromVersion: '0.1.57', toVersion: '0.1.60' }, locale);
+      expect(notes.map(entry => entry.version)).toEqual(['0.1.58', '0.1.59', '0.1.60']);
+      expect(notes.every(entry => entry.changes.length > 0 && entry.changes.every(change => change.trim().length > 12))).toBe(true);
+      if (locale !== 'en') expect(notes[2].changes).not.toEqual(releaseNotesBetween({fromVersion:'0.1.59',toVersion:'0.1.60'}, 'en')[0].changes);
+    }
+  });
+
+  it('provides actual 0.1.62 notes for an upgrade in every shipped language', () => {
+    const english = releaseNotesBetween({ fromVersion: '0.1.61', toVersion: '0.1.62' }, 'en')[0].changes;
+    for (const locale of ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'] as const) {
+      const notes = releaseNotesBetween({ fromVersion: '0.1.61', toVersion: '0.1.62' }, locale);
+      expect(notes).toHaveLength(1);
+      expect(notes[0].version).toBe('0.1.62');
+      expect(notes[0].changes).toHaveLength(3);
+      expect(notes[0].changes.every(change => change.trim().length > 20)).toBe(true);
+      if (locale !== 'en') expect(notes[0].changes).not.toEqual(english);
+    }
+  });
   it('includes the new beta.3 features in every UI language after beta.2', () => {
     for (const locale of ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'] as const) {
       const notes = releaseNotesBetween({ fromVersion: '0.1.57-beta.2', toVersion: '0.1.57-beta.3' }, locale);
@@ -27,6 +47,12 @@ describe('offline versioned release notes', () => {
 
   it('shows notes for the confirmed target when the original version is unknown', () => {
     expect(releaseNotesBetween({ fromVersion: null, toVersion: '0.1.46' }, 'de')).toHaveLength(1);
+    expect(releaseNotesBetween({ fromVersion: null, toVersion: '0.1.53' }, 'de').map(entry => entry.version))
+      .toEqual(['0.1.53']);
+    expect(releaseNotesBetween({ fromVersion: null, toVersion: '0.1.54' }, 'de')).toEqual([{
+      version: '0.1.54',
+      changes: ['Lastbrowser wurde auf Version 0.1.54 aktualisiert.']
+    }]);
   });
 
   it('shows the published release notes for the 0.1.53 upgrade seen in P-003', () => {

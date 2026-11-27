@@ -339,12 +339,6 @@ describe('browser shell layout', () => {
       'listSkills',
       'getSkillContent({ name:',
       'saveSkill({',
-      'listAgents',
-      'getAgentStats',
-      'getAgentActivities',
-      'activateAgent',
-      'getAgentMemory',
-      'getAgentSoul',
       'listProfiles',
       'getMemory',
       'getSupermemoryDocument',
@@ -370,17 +364,16 @@ describe('browser shell layout', () => {
     expect(source).toContain("case 'settings'");
     expect(source).toContain('<NativeSkillsMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeAssistantsMain activeContextItem={activeContextItem}');
-    expect(source).toContain('<NativeAssistantsMain activeContextItem="Profiles"');
-    expect(restPanels).toContain('settings ? <NativeProfilesMain');
-    expect(restPanels).toContain(': <NativeAgentsMain');
-    expect(restPanels).toContain("useState(activeContextItem === 'Profiles')");
+    expect(source).toContain('<NativeProfilesMain activeContextItem={activeContextItem}');
+    expect(restPanels).toContain('<AssistantActivity scope={scope}');
+    expect(restPanels).toContain('saveNovaAssistantProfile(window.localStorage, browserProfileId, draft)');
     expect(source).toContain('<NativeMemoryMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeLogsMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeMailMain workspace={activeSpacePath} activeContextItem={activeContextItem} ready={canCallSidekickApi(serviceStatus)}');
     expect(source).toContain('<NativeDiscordMain activeContextItem={activeContextItem}');
     expect(source).toContain('<NativeAppstoreMain');
     expect(source).toContain('<NativeSettingsMain activeContextItem={activeContextItem} serviceStatus={serviceStatus}');
-    expect(restPanels).toContain('agent-terminal');
+    expect(readRendererFile('panels/AgentPanels.tsx')).not.toContain('agent-terminal');
     expect(restPanels).toContain('memory-editor');
     expect(restPanels).toContain('skill-linked-files');
     expect(restPanels).toContain('skillCategoryDraft');
@@ -395,13 +388,13 @@ describe('browser shell layout', () => {
     expect(restPanels).toContain('<AdvancedWebUiTools');
     // Assistant controls are native and explicitly profile-bound; developer
     // WebUI tools remain accessible from Settings rather than this panel.
-    expect(restPanels).toContain('bridge.scopedAgentOperation({ operation, profile, request })');
+    expect(source).toContain('selectNovaAssistantForSpace(window.localStorage, resolved.value.scope');
     expect(restPanels).toContain('optional.loaded && optional.policy.assistants_enabled');
     expect(restPanels).toContain("panel=\"settings\"");
     // Advanced model policy uses the actual chat identity, never a fabricated session.
     expect(restPanels).toContain('<AdvancedModelPolicySettings sessionId={activeSessionId}');
     expect(css).toContain('.native-rest-main');
-    expect(css).toContain('.agent-terminal');
+    expect(css).toContain('.assistants-main');
     expect(css).toContain('.integration-list');
     expect(css).toContain('.settings-field-grid');
     expect(css).toContain('.appstore-panel-grid');

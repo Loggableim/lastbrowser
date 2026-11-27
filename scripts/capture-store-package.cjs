@@ -10,9 +10,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { setTimeout: delay } = require('node:timers/promises');
 
-const locales = process.env.LASTBROWSER_STORE_CAPTURE_PROBE === '1'
-  ? ['en']
-  : ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'];
+const storeLocales = ['en', 'de', 'it', 'es', 'fr', 'pt-BR', 'ru', 'ja'];
 const dimensions = { width: 1920, height: 1080 };
 const browserReady = "document.querySelector('.addressbar-container input') && !document.querySelector('.first-run-fullscreen-wrap,.startup-animation-layer') && document.querySelector('.app-shell.panel-browser')";
 
@@ -82,18 +80,120 @@ function renderer(socket) {
   return { send, evaluate, click, until };
 }
 
-async function main() {
-  const [input, output] = process.argv.slice(2);
-  assert(input && output, 'Usage: node scripts/capture-store-package.cjs <Lastbrowser.exe> <new output directory>');
-  const exe = path.resolve(input);
-  const out = path.resolve(output);
-  assert.equal(path.basename(exe).toLowerCase(), 'lastbrowser.exe', 'Supply the unpacked app executable');
-  const asar = path.join(path.dirname(exe), 'resources', 'app.asar');
-  const evidence = {
-    schemaVersion: 1, startedAtUtc: new Date().toISOString(),
-    executableSha256: await digest(exe), asarSha256: await digest(asar), locales, captures: [], complete: false
+async function openSocket(url) {
+  const socket = new WebSocket(url);
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(Error('Renderer connection timed out')), 5000);
+      socket.addEventListener('open', () => { clearTimeout(timer); resolve(); }, { once: true });
+      socket.addEventListener('error', () => { clearTimeout(timer); reject(Error('Renderer connection failed')); }, { once: true });
+    });
+    return socket;
+  } catch (error) {
+    socket.close();
+    throw error;
+  }
+}
+
+async function findAttachedRenderer(port) {
+  const host = `127.0.0.1:${port}`;
+  const endpoint = `http://${host}/json/list`;
+  const deadline = Date.now() + 15000;
+  do {
+    const response = await fetch(endpoint, { redirect: 'error', signal: AbortSignal.timeout(5000) });
+    assert(response.ok, 'The attached renderer discovery endpoint must respond');
+    const pages = await response.json();
+    assert(Array.isArray(pages), 'Invalid renderer discovery response');
+    const targets = pages.filter(page => page?.type === 'page' && page.url === 'app://bundle/index.html');
+    assert(targets.length <= 1, 'Expected a single LastBrowser renderer');
+    if (targets.length === 1) {
+      const url = new URL(targets[0].webSocketDebuggerUrl);
+      assert(url.origin === `ws://${host}` && /^\/devtools\/page\/[a-f0-9-]+$/i.test(url.pathname) &&
+        !url.username && !url.password && !url.search && !url.hash, 'Unexpected attached renderer debugging address');
+      return url;
+    }
+    await delay(200);
+  } while (Date.now() < deadline);
+  throw Error('Expected a single app://bundle/index.html renderer on the attached port');
+}
+
+async function captureScreenshots(driver, out, evidence, requireStoreManagedUpdates) {
+  const { send, evaluate, click, until } = driver;
+  await send('Emulation.setDeviceMetricsOverride', { ...dimensions, deviceScaleFactor: 1, mobile: false });
+  const wizard = 'document.querySelector(".first-run-wizard")';
+  const next = '.setup-action-footer .primary-btn';
+  const aiOff = '.first-run-ai-choice-actions button:last-child';
+  await until("Boolean(document.querySelector('.app-shell'))", 'Shell booted');
+  if (requireStoreManagedUpdates) {
+    await until('window.lastbrowser?.updates?.status().then(state => state?.managedByStore === true)', 'Store-managed updates');
+  }
+  for (let step = 0; step < 8; step++) {
+    if (!await evaluate('Boolean(' + wizard + ')')) break;
+    if (await evaluate('Boolean(document.querySelector(' + JSON.stringify(aiOff) + '))')) await click(aiOff);
+    await until('!(' + wizard + ') || document.querySelector(' + JSON.stringify(next) + ')?.disabled === false', 'First-run next is enabled');
+    if (!await evaluate('Boolean(' + wizard + ')')) break;
+    await click(next);
+    await delay(300);
+  }
+  await until('!(' + wizard + ')', 'First run completed');
+
+  const capture = async (locale, view) => {
+    await evaluate('Promise.race([document.fonts.ready.then(()=>true),new Promise(r=>setTimeout(r,2000))])');
+    await delay(300);
+    assert.equal(await evaluate('document.documentElement.lang'), locale);
+    const { data } = await send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: true, clip: { x: 0, y: 0, ...dimensions, scale: 1 } });
+    const png = Buffer.from(data, 'base64');
+    assert.equal(png.readUInt32BE(16), dimensions.width);
+    assert.equal(png.readUInt32BE(20), dimensions.height);
+    const file = locale + '/' + view + '.png';
+    fs.mkdirSync(path.join(out, locale), { recursive: true });
+    fs.writeFileSync(path.join(out, file), png, { flag: 'wx' });
+    evidence.captures.push({ locale, view, file, ...dimensions, sha256: crypto.createHash('sha256').update(png).digest('hex') });
+    console.log(locale, view);
   };
-  fs.mkdirSync(out);
+  const openSection = async icon => {
+    await click(`.settings-section-button:has(.lucide-${icon})`);
+    await until(`Boolean(document.querySelector('.settings-section-button[aria-current="page"] .lucide-${icon}')) &&
+      document.querySelector('.settings-section-button[aria-current="page"] strong')?.textContent ===
+      document.querySelector('.settings-editor-head strong')?.textContent`, `Settings section ${icon}`);
+  };
+  for (const locale of evidence.locales) {
+    await evaluate('localStorage.setItem("lastbrowser.locale",' + JSON.stringify(locale) + ');localStorage.setItem("lastbrowser.activePanel","browser");localStorage.setItem("lastbrowser.sidebarMode.v1","expanded"); true');
+    await send('Page.reload');
+    await until('document.documentElement.lang===' + JSON.stringify(locale) + ' && Boolean(' + browserReady + ')', 'Browser locale ' + locale);
+    await evaluate('document.querySelector(".copilot-toggle-btn.active")?.click(); true');
+    await capture(locale, 'browser');
+    await click('.downloads-trigger');
+    await until("Boolean(document.querySelector('#native-downloads-panel'))", 'Downloads panel');
+    await capture(locale, 'downloads');
+    await click('[data-download-action=close]');
+    await click('.expanded-bottom-footer button:has(.lucide-settings),.shell-rail .rail-bottom .rail-button,.nova-dock-btn:has(.lucide-settings)');
+    await until("Boolean(document.querySelector('.app-shell.panel-settings .settings-section-button'))", 'Settings panel');
+    await openSection('sparkles');
+    await capture(locale, 'appearance');
+    await openSection('gauge');
+    await capture(locale, 'preferences');
+  }
+}
+
+function writeReceipt(out, evidence) {
+  fs.writeFileSync(path.join(out, 'capture-report.json'), JSON.stringify(evidence, null, 2) + '\n', { flag: 'wx' });
+}
+
+async function captureAttached(port, out, evidence) {
+  let socket;
+  evidence.captureComplete = false;
+  try {
+    socket = await openSocket(await findAttachedRenderer(port));
+    await captureScreenshots(renderer(socket), out, evidence, true);
+    evidence.captureComplete = true;
+  } finally {
+    socket?.close();
+    writeReceipt(out, evidence);
+  }
+}
+
+async function captureStandalone(exe, out, evidence) {
   const requestedHosts = new Set();
   const proxy = http.createServer((request, response) => {
     try { requestedHosts.add(new URL(request.url).hostname); } catch {}
@@ -134,58 +234,9 @@ async function main() {
       if (!target) await delay(250);
     }
     assert(target, 'Packaged app renderer opened');
-    socket = new WebSocket(target.webSocketDebuggerUrl);
-    await new Promise((resolve, reject) => {
-      socket.addEventListener('open', resolve, { once: true });
-      socket.addEventListener('error', reject, { once: true });
-    });
+    socket = await openSocket(target.webSocketDebuggerUrl);
     driver = renderer(socket);
-    const { send, evaluate, click, until } = driver;
-    await send('Emulation.setDeviceMetricsOverride', { ...dimensions, deviceScaleFactor: 1, mobile: false });
-    const wizard = 'document.querySelector(".first-run-wizard")';
-    const next = '.setup-action-footer .primary-btn';
-    const aiOff = '.first-run-ai-choice-actions button:last-child';
-    await until("Boolean(document.querySelector('.app-shell'))", 'Shell booted');
-    for (let step = 0; step < 8; step++) {
-      if (!await evaluate('Boolean(' + wizard + ')')) break;
-      if (await evaluate('Boolean(document.querySelector(' + JSON.stringify(aiOff) + '))')) await click(aiOff);
-      await until('!(' + wizard + ') || document.querySelector(' + JSON.stringify(next) + ')?.disabled === false', 'First-run next is enabled');
-      if (!await evaluate('Boolean(' + wizard + ')')) break;
-      await click(next);
-      await delay(300);
-    }
-    await until('!(' + wizard + ')', 'First run completed');
-    const capture = async (locale, view) => {
-      await evaluate('Promise.race([document.fonts.ready.then(()=>true),new Promise(r=>setTimeout(r,2000))])');
-      await delay(300);
-      const { data } = await send('Page.captureScreenshot', { format: 'png', fromSurface: true, captureBeyondViewport: true, clip: { x: 0, y: 0, ...dimensions, scale: 1 } });
-      const png = Buffer.from(data, 'base64');
-      assert.equal(png.readUInt32BE(16), dimensions.width);
-      assert.equal(png.readUInt32BE(20), dimensions.height);
-      assert.equal(await evaluate('document.documentElement.lang'), locale);
-      const file = locale + '/' + view + '.png';
-      fs.mkdirSync(path.join(out, locale), { recursive: true });
-      fs.writeFileSync(path.join(out, file), png);
-      evidence.captures.push({ locale, view, file, ...dimensions, sha256: crypto.createHash('sha256').update(png).digest('hex') });
-      console.log(locale, view);
-    };
-    for (const locale of locales) {
-      await evaluate('localStorage.setItem("lastbrowser.locale",' + JSON.stringify(locale) + ');localStorage.setItem("lastbrowser.activePanel","browser");localStorage.setItem("lastbrowser.sidebarMode.v1","expanded"); true');
-      await send('Page.reload');
-      await until('document.documentElement.lang===' + JSON.stringify(locale) + ' && Boolean(' + browserReady + ')', 'Browser locale ' + locale);
-      await evaluate('document.querySelector(".copilot-toggle-btn.active")?.click(); true');
-      await capture(locale, 'browser');
-      await click('.downloads-trigger');
-      await until("Boolean(document.querySelector('#native-downloads-panel'))", 'Downloads panel');
-      await capture(locale, 'downloads');
-      await click('[data-download-action=close]');
-      await click('.expanded-bottom-footer button:has(.lucide-settings),.shell-rail .rail-bottom .rail-button,.nova-dock-btn:has(.lucide-settings)');
-      await until("Boolean(document.querySelector('.app-shell.panel-settings .settings-section-button'))", 'Settings panel');
-      await click('.settings-section-button:has(.lucide-sparkles)');
-      await capture(locale, 'appearance');
-      await click('.settings-section-button:has(.lucide-gauge)');
-      await capture(locale, 'preferences');
-    }
+    await captureScreenshots(driver, out, evidence, false);
     evidence.complete = true;
   } finally {
     if (driver && app.exitCode === null) {
@@ -200,7 +251,7 @@ async function main() {
     evidence.exitCode = app?.exitCode;
     evidence.proxyBlocked = [...requestedHosts].sort();
     evidence.finishedAtUtc = new Date().toISOString();
-    fs.writeFileSync(path.join(out, 'capture-report.json'), JSON.stringify(evidence, null, 2) + '\n');
+    writeReceipt(out, evidence);
     if (app?.exitCode === 0) {
       const base = path.resolve(os.tmpdir()) + path.sep;
       if (owned.startsWith(base) && path.basename(owned).startsWith('lastbrowser-store-exact-')) {
@@ -208,6 +259,27 @@ async function main() {
       }
     }
   }
+}
+
+async function main() {
+  const [input, output, mode, portValue, ...extra] = process.argv.slice(2);
+  const attached = mode === '--attached-port';
+  assert(input && output && extra.length === 0 && (mode === undefined || (attached && /^[0-9]+$/.test(portValue ?? ''))),
+    'Usage: node scripts/capture-store-package.cjs <Lastbrowser.exe> <new output directory> [--attached-port <port>]');
+  const port = attached ? Number(portValue) : null;
+  if (attached) assert(Number.isInteger(port) && port >= 1024 && port <= 65535, 'Invalid attached renderer port');
+  const exe = path.resolve(input);
+  const out = path.resolve(output);
+  assert.equal(path.basename(exe).toLowerCase(), 'lastbrowser.exe', 'Supply the unpacked app executable');
+  const asar = path.join(path.dirname(exe), 'resources', 'app.asar');
+  const locales = !attached && process.env.LASTBROWSER_STORE_CAPTURE_PROBE === '1' ? ['en'] : storeLocales;
+  const evidence = {
+    schemaVersion: 1, startedAtUtc: new Date().toISOString(),
+    executableSha256: await digest(exe), asarSha256: await digest(asar), locales, captures: [], complete: false
+  };
+  fs.mkdirSync(out);
+  if (attached) await captureAttached(port, out, evidence);
+  else await captureStandalone(exe, out, evidence);
 }
 
 main().catch(error => { console.error(error.message); process.exitCode = 1; });

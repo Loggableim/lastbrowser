@@ -6,6 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { desktopLocaleIds } from '../src/renderer/i18n/keys.js';
 import { DesktopI18nProvider } from '../src/renderer/i18n.js';
+import { NativeSettingsMain } from '../src/renderer/panels/SystemPanels.js';
 import { StartupScreen } from '../src/renderer/startup/StartupScreen.js';
 import { StartupPreferencesPanel } from '../src/renderer/startup/StartupPreferencesPanel.js';
 import { reduceStartupOpeningState } from '../src/renderer/startup/startup-opening-state.js';
@@ -89,6 +90,15 @@ describe('startup screen launch state', () => {
 });
 
 describe('startup screen copy and motion rules', () => {
+  it('announces the session check without a competing quote or phase', () => {
+    const markup = renderWithI18n(createElement(StartupScreen, {
+      locale: 'de', launchIcon: null, phase: 'session', checkingMessage: 'Sichere Sitzung wird geprüft…'
+    }));
+    expect(markup).toContain('Sichere Sitzung wird geprüft…');
+    expect(markup).toContain('role="status"');
+    expect(markup).not.toContain('startup-screen__quote');
+    expect(markup).not.toContain(startupScreenCopy.de.phases.session);
+  });
   it('exposes three distinct border styles and all five supplied sounds in the existing settings', () => {
     try {
       vi.stubGlobal('navigator', { language: 'en' });
@@ -102,6 +112,50 @@ describe('startup screen copy and motion rules', () => {
       vi.stubGlobal('navigator', { language: 'de' });
       const german = renderWithI18n(createElement(StartupPreferencesPanel, { compact: false }));
       for (const style of ['Klassischer Rainbow-Flow', 'Sanfter Aurora-Flow', 'Umlaufendes Lichtband']) expect(german).toContain(style);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it.each([
+    ['ja-JP', '起動アニメーションとサウンド', '穏やかな目覚め', '虹色が枠に沿って均等に流れます。', '起動アニメーションとサウンドを設定'],
+    ['fr-FR', 'Animation et son au démarrage', 'Réveil en douceur', 'Les couleurs de l’arc-en-ciel défilent uniformément autour du cadre.', 'Configurer l’animation et le son au démarrage'],
+  ])('renders localized startup preferences and compact controls for %s', (language, title, animation, borderDescription, gearLabel) => {
+    try {
+      vi.stubGlobal('navigator', { language });
+      vi.stubGlobal('localStorage', { getItem: () => null });
+      const inline = renderWithI18n(createElement(StartupPreferencesPanel));
+      expect(inline).toContain(`aria-label="${title}"`);
+      expect(inline).toContain(animation);
+      expect(inline).toContain(`aria-label="${borderDescription}"`);
+      expect(inline).toContain('Welcome In');
+      const compact = renderWithI18n(createElement(StartupPreferencesPanel, { compact: true }));
+      expect(compact).toContain(`aria-label="${gearLabel}"`);
+      expect(compact).toContain(`title="${title}"`);
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it.each([
+    ['ja-JP', '起動アニメーションとサウンド', 'ロック解除後の切り替え、起動音のオン・オフ、虹色の枠を設定します。'],
+    ['fr-FR', 'Animation et son au démarrage', 'Transition après le déverrouillage, son de démarrage facultatif et bordure arc-en-ciel.'],
+  ])('renders the localized outer startup card in Preferences for %s', (language, title, description) => {
+    try {
+      vi.stubGlobal('navigator', { language });
+      vi.stubGlobal('localStorage', { getItem: () => null });
+      const markup = renderWithI18n(createElement(NativeSettingsMain, {
+        serviceStatus: null,
+        activeContextItem: 'preferences',
+        onboardingStatus: null,
+        onReopenSetup: () => {},
+        searchEngineId: 'google',
+        onSearchEngineChange: () => {},
+        profiles: [],
+        activeProfileId: 'fixture',
+        onSelectProfile: () => {},
+        onCreateProfile: () => {},
+        onRenameProfile: () => {},
+        onDeleteProfile: () => {},
+      }));
+      const panelStart = markup.indexOf('<div class="startup-preferences-inline">');
+      expect(panelStart).toBeGreaterThan(-1);
+      const cardHeader = markup.slice(markup.lastIndexOf('<header class="settings-card-header">', panelStart), panelStart);
+      expect(cardHeader).toContain(`<strong>${title}</strong><p>${description}</p>`);
     } finally { vi.unstubAllGlobals(); }
   });
   it('keeps the compact startup popover closed until the gear is used', () => {
@@ -158,7 +212,7 @@ describe('startup screen copy and motion rules', () => {
     expect(component).toContain('window.setInterval');
     expect(component).toContain('4_000');
     expect(component).toContain('window.clearInterval(timer)');
-    expect(component).toContain('if (error || motionIsReduced || opening) return undefined;');
+    expect(component).toContain('if (error || locked || checkingMessage || motionIsReduced || opening) return undefined;');
   });
 
   it('renders the selected launch icon, localized phase, and retryable error state', () => {
@@ -186,6 +240,19 @@ describe('startup screen copy and motion rules', () => {
     expect(error).toContain('Erneut versuchen');
     expect(error).not.toContain('Hamster beim vortrainieren');
     expect(error).not.toContain('Lokale Engine startet');
+  });
+
+  it('keeps rotating quotes and startup phases out of the locked screen', () => {
+    const screen = renderWithI18n(createElement(StartupScreen, {
+      locale: 'de', launchIcon: 'sidekick-03', phase: 'engine', locked: true, reducedMotion: true,
+      retryContent: createElement('form', { 'aria-label': 'Unlock' })
+    }));
+    expect(screen).toContain('aria-label="Unlock"');
+    expect(screen).not.toContain('startup-screen__quote');
+    expect(screen).not.toContain('startup-screen__phase');
+    const styles = readFileSync(path.join(sourceRoot, 'StartupScreen.css'), 'utf8');
+    expect(styles).toContain('.startup-screen__auth input:focus-visible');
+    expect(styles).toContain('.startup-screen__auth button:focus-visible');
   });
 
   it('keeps a still presentation for reduced motion and uses proportional responsive icon sizing', () => {

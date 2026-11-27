@@ -1,10 +1,14 @@
 # Lastbrowser – Microsoft Store Submission Package & Listing Guide
 
-Dieses Dokument bündelt vorbereitete Metadaten, mehrsprachige Textentwürfe, Screenshot-Vorgaben und Leitfäden für das **Microsoft Partner Center** zur Veröffentlichung von **Lastbrowser** als unpaketierte Win32-Desktop-Anwendung (NSIS).
+Dieses Dokument bündelt Metadaten, mehrsprachige Textentwürfe, Screenshot-Vorgaben und Leitfäden für die Veröffentlichung von **Lastbrowser** als MSIX-paketierte Win32-Desktop-Anwendung im **Microsoft Store**.
 
 **Vorbereitung, noch keine Einreichungsfreigabe:** Die erste Store-Version wartet auf den bestätigten Abschluss des Chats **„Multiagent Umsetzung“** und die anschließenden Prüfungen des gemeinsamen Quellstands. Konto-Onboarding, Paketnachweise und Freigabereihenfolge stehen in [store-submission-preparation.md](store-submission-preparation.md). Die Texte unten sind Entwürfe und müssen zu den tatsächlich geprüften Funktionen der endgültigen Version passen.
 
-**Aktuelle Textentwürfe:** [listing-drafts.json](../assets/store/listing-drafts.json) enthält vollständige Beschreibungen, Kurzbeschreibungen, Produktmerkmale, Suchbegriffe, Hinweise zur ersten Store-Version und Lizenztexte für alle acht App-Sprachen. Der Nutzer hat bestätigt: persönliche Nutzung kostenlos, gewerbliche Nutzung mit separater kommerzieller Lizenz. Diese Texte ersetzen die unbestätigten Leistungsversprechen des historischen Entwurfs unten. Ein [PNG-Hauptlogo mit 1080×1080 Pixeln](../assets/store/store-logo-1080.png), ein [Poster mit 1440×2160 Pixeln](../assets/store/store-poster-1440x2160.png) und [232 echte App-Aufnahmen](../assets/store/screenshots/index.html) sind vorbereitet. Die Bilder zeigen den laufenden Entwicklungsstand und werden vor der Freigabe erneut abgeglichen.
+**Aktuelle Textentwürfe** stehen in [listing-drafts.json](../assets/store/listing-drafts.json) und den acht kopierbaren Dateien unten. Sie nennen Nova als optionalen Assistenten, der Antworten mit generativer KI aus den Eingaben erzeugt. Für die erste Einreichung bleibt „Neu in dieser Version“ leer. [Microsoft-Anleitung für MSIX-Einträge](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/add-and-edit-store-listing-info)
+
+Die Entwürfe übernehmen den dokumentierten kostenlosen Download und verweisen für eigene Originalbestandteile auf den Geltungsbereich von GPL-3.0-or-later. Die Aufzeichnungen vom 4. Oktober nennen eine separate gewerbliche Lizenz. Frühere lokale Textentwürfe beschrieben private und gewerbliche Nutzung als kostenlos. Die Bedingungen für das vollständige Windows-Paket müssen vor Übernahme in den Kontinentwurf bestätigt werden. [Lizenzumfang](../LICENSE-SCOPE.md)
+
+Ein [PNG-Hauptlogo mit 1080×1080 Pixeln](../assets/store/store-logo-1080.png), ein [Poster mit 1440×2160 Pixeln](../assets/store/store-poster-1440x2160.png) und [232 Entwicklungsaufnahmen](../assets/store/screenshots/index.html) sind vorbereitet. Die Aufnahmen für den Store werden am endgültigen Paket überprüft.
 
 | App-Sprache | Store-Sprache | Kopierbarer Text |
 | :--- | :--- | :--- |
@@ -17,9 +21,9 @@ Dieses Dokument bündelt vorbereitete Metadaten, mehrsprachige Textentwürfe, Sc
 | Russisch (`ru`) | Russisch (Russland), `ru-RU` | [ru-RU.txt](../assets/store/listings/ru-RU.txt) |
 | Japanisch (`ja`) | Japanisch (Japan), `ja-JP` | [ja-JP.txt](../assets/store/listings/ja-JP.txt) |
 
-Alle acht Spracheinträge sind im Partner Center gespeichert und zeigen **Abgeschlossen** (4. Oktober 2026). Jeder enthält seine Texte, vier echte Screenshots, das Hauptlogo und das Poster. Die Logos für Italienisch, Portugiesisch, Russisch und Japanisch wurden neu hochgeladen und gespeichert. **Alle acht Logos laden in der frisch geöffneten Übersicht sichtbar mit 1080×1080 Pixeln.** Die zuvor geöffnete Seitensitzung verwendete weiterhin einen anderen regionalen Microsoft-Bildserver und zeigte defekte Bilder. Der offene Tab wurde auf die erfolgreich geprüfte Seitensitzung umgestellt. Die Ursache dieses Vorschauverhaltens ist nicht abschließend bestätigt; vor der Freigabe nochmals prüfen. **Es wurde nicht auf Senden geklickt.** Die Freigabesperre bleibt bestehen. Für einen späteren CSV-Import nur Microsofts exportierte Feldstruktur mit referenzierten Bilddateien verwenden; JSON und TXT sind interne Vorbereitung. [Offizielle Importanleitung](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msi/import-and-export-store-listings).
+Am 4. Oktober 2026 zeigten alle acht Spracheinträge im historischen EXE/MSI-Entwurf im Partner Center **Abgeschlossen**. Jeder enthielt die damaligen Texte, vier echte Screenshots, das Hauptlogo und das Poster. Die Logos für Italienisch, Portugiesisch, Russisch und Japanisch wurden neu hochgeladen und gespeichert. Eine frisch geöffnete Übersicht zeigte danach alle acht Logos mit 1080×1080 Pixeln. Eine ältere Seitensitzung zeigte weiterhin defekte Bilder von einem anderen regionalen Microsoft-Bildserver. Beim Aufbau des MSIX-Entwurfs Texte und Bildvorschauen erneut prüfen. Für einen CSV-Import die exportierte Feldstruktur des MSIX-Entwurfs mit referenzierten Bilddateien verwenden. JSON und TXT dienen als Kopiervorlagen. [MSIX-Importanleitung](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/import-and-export-store-listings)
 
-**Historischer Entwurf ab Abschnitt 2:** Die folgenden ausführlichen Texte und Versionsnotizen sind kein aktueller Einreichungstext. Für das erste Listing sind die oben verlinkten acht Textdateien maßgeblich; alle Funktionsangaben werden nochmals am fertigen Release geprüft. Vorgehen und Grenzen des automatisierten Aufnahmelaufs stehen in [store-screenshot-capture.md](store-screenshot-capture.md).
+Die Abschnitte 2 bis 4 und 8 dokumentieren ältere Text- und Bildentwürfe. Für das erste Listing sind die oben verlinkten acht Textdateien maßgeblich. Alle Funktionsangaben am fertigen Release prüfen. Vorgehen und Grenzen des automatisierten Aufnahmelaufs stehen in [store-screenshot-capture.md](store-screenshot-capture.md).
 
 ---
 
@@ -27,12 +31,10 @@ Alle acht Spracheinträge sind im Partner Center gespeichert und zeigen **Abgesc
 
 | Parameter | Wert | Hinweise |
 | :--- | :--- | :--- |
-| **Produktname** | `Lastbrowser` | Im Partner Center als EXE/MSI-App reserviert; Einreichung bleibt Entwurf |
-| **Paket-Typ** | `Windows-Desktopanwendung (Installationsprogramm)` | Unpackaged Win32 / NSIS |
-| **Installations-URL** | Nach dem endgültigen signierten Build auszufüllen | Unveränderlicher, versionsgebundener HTTPS-Link zum geprüften Setup; bisherige Releases sind kein Store-Freigabenachweis |
-| **Silent Install Argument** | `/S` | NSIS Silent-Switch für automatische WACK-Installation |
-| **Silent Uninstall Argument** | `/S` | NSIS Silent-Switch (gesichert gegen Dialog-Timeouts) |
-| **Erfolgs-Exit-Code** | `0` | Standard Windows Exit Code |
+| **Produktname** | `Lastbrowser` | Reservierung für den MSIX-Entwurf im Partner Center klären |
+| **Pakettyp** | `MSIX` | Microsoft signiert und hostet das freigegebene Store-Paket |
+| **Paketidentität** | Aus **Produktverwaltung → Produktidentität** übernehmen | `Identity/Name`, `Identity/Publisher` und `Properties/PublisherDisplayName` |
+| **Paketdatei** | Geprüfte `.msix` unter **Pakete** hochladen | Paketversion, Architektur und SHA-256 dokumentieren |
 | **Architektur** | `x64` | 64-Bit Windows |
 | **Mindest-Betriebssystem** | Vor der Einreichung anhand des endgültigen Pakets zu bestätigen | Sauberes Windows-Testsystem und tatsächlich verwendete Electron-/Python-Version berücksichtigen |
 | **Kategorie** | `Produktivität` / `Dienstprogramme & Tools` &rsaquo; `Web-Browser` | |
@@ -187,7 +189,7 @@ Die sechs vorbereiteten Bilder haben jeweils 1920×1080 Pixel. Vor dem Upload m�
 Der Fragebogen der **International Age Rating Coalition (IARC)** wird anhand der endgültigen Anwendung beantwortet. Die folgenden Hinweise sind eine Vorbereitung; die Einstufung ergibt sich aus den tatsächlichen Antworten im Partner Center:
 
 1. **App-Kategorie:**
-   - Wählen: *Dienstprogramme, Produktivität, Kommunikation oder andere* &rarr; *Web-Browser*.
+   - Im Beta-MSIX-Entwurf *Alle anderen App-Typen* wählen und die Folgefrage zum Webbrowser mit **Ja** beantworten.
 2. **Uneingeschränkter Internetzugriff:**
    - Frage: *Ermöglicht die Anwendung Nutzern den Zugriff auf das gesamte World Wide Web?*
    - Antwort: **Ja**, sofern die endgültige Anwendung allgemeinen Webzugriff bereitstellt.
@@ -197,45 +199,34 @@ Der Fragebogen der **International Age Rating Coalition (IARC)** wird anhand der
    - Frage: *Enthält die generative KI Sicherheitsfilter oder Guardrails gegen schädliche Inhalte?*
    - Antwort anhand der geprüften Inhaltsfilter des jeweiligen Anbieters und der tatsächlichen Produktfunktionen festlegen. Prompt-Injection-Abwehr allein belegt keine Filterung schädlicher KI-Inhalte.
 4. **Weitergabe von Standortdaten:**
-   - Antwort: **Nein** *(Standortabfragen durch Webseiten unterliegen der expliziten Nutzerzustimmung via Chromium Permission-Prompt).*
+   - LastBrowser verweigert Webseiten den Zugriff auf die Geolokalisierungs-API. Bei der Antwort auf den konkreten Fragetext auch berücksichtigen, ob dieser von Nutzern eingegebene Standortangaben auf externen Websites umfasst.
 5. **Kauf digitaler Güter:**
-   - Antwort: **Nein** *(Lastbrowser ist non-commercial free bzw. source-available ohne In-App-Käufe).*
+   - Nach den Kaufmöglichkeiten in der endgültigen App beantworten. Kosten externer KI-Anbieter stehen in den Store-Texten.
 
 ---
 
 ## 6. Microsoft Store GenAI Policy Checklist
 
-* [x] **Transparente Kennzeichnung:** Nova / Copilot Antworten sind optisch klar von Webseiten-Inhalten abgegrenzt.
-* [x] **Feedback- & Melde-Mechanismus:** Jede KI-Nachricht verfügt über einen Daumen-Runter- / Melde-Button mit Auswahlmenü (`AiFeedbackModal.tsx`), protokolliert in `lastbrowser.aiFeedback.v1`.
-* [x] **Prompt-Injection Guardrails:** Automatische Neutralisierung von Jailbreak-Vektoren (`[⚠️ Guardrail: Untrusted instruction block sanitized]`).
-* [x] **Benutzerkontrolle:** Anfragen an externe KI-Modelle erfolgen nur auf expliziten Nutzerbefehl.
+* [ ] Die generative KI in den aktuellen Metadaten und in der Einreichung im Partner Center angeben.
+* [ ] Die Meldeflagge in Chat und Quickchat am endgültigen Paket prüfen. Sie öffnet einen Dialog mit lokal sichtbarem Auszug. Der Nutzer kann den E-Mail-Entwurf prüfen und absenden.
+* [ ] Inhaltskonformität für die im Release verfügbaren KI-Funktionen prüfen und Supportmeldungen bearbeiten. [Microsoft Store-Richtlinien §11.16](https://learn.microsoft.com/en-us/windows/apps/publish/store-policies#1116-live-generative-ai-content)
 
 ---
 
 ## 7. Schritt-für-Schritt Einreichungsanleitung für das Microsoft Partner Center
 
-Folgen Sie dieser präzisen Anleitung zur Einreichung von Lastbrowser im Microsoft Partner Center:
+Der MSIX-Entwurf folgt den Paketprüfungen und der Freigabereihenfolge in der [Store-Vorbereitung](store-submission-preparation.md).
 
-### Schritt 1: Anmelden & Produkt anlegen
+### Schritt 1: MSIX-Namensreservierung und Produktidentität klären
+
 1. Im [Microsoft Partner Center](https://partner.microsoft.com/dashboard) mit dem Entwicklerkonto anmelden.
-2. Im Menü auf **Apps und Spiele** (Apps and games) klicken.
-3. Auf **Neues Produkt erstellen** &rarr; **Windows-Desktopanwendung (Installationsprogramm)** (Windows desktop application - installer) klicken.
-4. Den reservierten Namen **„Lastbrowser“** auswählen oder neu reservieren.
+2. Unter **Apps und Spiele → Neues Produkt → MSIX- oder PWA-App** die Verfügbarkeit von **Lastbrowser** für den MSIX-Entwurf prüfen. Den Umgang mit der bestehenden EXE/MSI-Reservierung gesondert klären. [MSIX-Namensreservierung](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/reserve-your-apps-name)
+3. Sobald der MSIX-Entwurf verfügbar ist, die drei Manifestwerte aus **Produktverwaltung → Produktidentität** übernehmen. [Produktidentität](https://learn.microsoft.com/en-us/windows/apps/publish/view-app-identity-details)
 
-### Schritt 2: Paket & Installationsparameter konfigurieren
-Unter dem Punkt **Pakete** (Packages) bzw. **Installationsprogramm**:
-1. **Download-URL des Installers:**
-   Erst nach dem endgültigen signierten Build: unveränderlicher, versionsgebundener HTTPS-Link zum geprüften Setup.
-2. **Befehlszeilenargumente für automatische Installation (Silent Install):**
-   `/S`
-3. **Befehlszeilenargumente für automatische Deinstallation (Silent Uninstall):**
-   `/S`
-4. **Rückgabecode für erfolgreiche Installation:**
-   `0`
-5. **Architektur:**
-   `x64`
-6. **Mindestversion des Betriebssystems:**
-   Anhand des endgültigen Electron-/Python-Pakets und eines sauberen Windows-Testsystems bestätigen.
+### Schritt 2: Geprüftes MSIX bereitstellen
+
+1. Paketmanifest mit der bestätigten Produktidentität abgleichen und Architektur `x64`, die vierteilige Paketversion und die getestete Mindestversion von Windows prüfen. Die DLLs, das lokale Python-Backend und die optionalen Funktionen auf einem sauberen Windows-Testsystem prüfen.
+2. Das geprüfte Paket nach Freigabe des Uploads unter **Pakete** hochladen und den Validierungsstatus prüfen. Microsoft akzeptiert `.msix` und empfiehlt für Store-Uploads auch `.msixupload`. [MSIX-Pakete hochladen](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/upload-app-packages)
 
 ### Schritt 3: Eigenschaften & Rechtliches (Properties)
 1. **Kategorie:** `Produktivität` &rsaquo; `Web-Browser` (oder `Dienstprogramme & Tools` &rsaquo; `Web-Browser`).
@@ -251,42 +242,33 @@ Unter dem Punkt **Pakete** (Packages) bzw. **Installationsprogramm**:
 ### Schritt 4: Altersfreigabe (IARC Rating Questionnaire)
 1. Den Online-Fragebogen starten.
 2. Antworten gemäß **Abschnitt 5** dieses Dokuments ausfüllen:
-   - Kategorie: Web-Browser.
+   - Kategorie im Beta-MSIX-Entwurf: *Alle anderen App-Typen*. Die Folgefrage zum Webbrowser mit **Ja** beantworten.
    - Uneingeschränkter Internetzugriff: **Ja**.
    - Generative KI: **Ja**; Fragen zu Inhaltsfiltern anhand der tatsächlich geprüften Funktionen beantworten.
-   - Standortweitergabe & In-App-Käufe: **Nein**.
+   - Standortweitergabe und In-App-Käufe anhand des endgültigen Funktionsumfangs beantworten.
 3. Die aus den tatsächlichen Antworten generierten Altersfreigaben prüfen und speichern.
 
 ### Schritt 5: Store-Einträge (Store Listings)
-Für **Deutsch (de-DE)** und **Englisch (en-US)**:
-1. **App-Titel:** `Lastbrowser`
-2. **Untertitel:** `AI-Native Web Browser`
-3. **Kurzbeschreibung:** Aus Abschnitt 2.1 bzw. 3.1 kopieren.
-4. **Ausführliche Beschreibung:** Vollständigen Markdown-Text aus Abschnitt 2.2 bzw. 3.2 einfügen.
-5. **Suchbegriffe (Keywords):** Die Top 7 Begriffe aus Abschnitt 2.4 bzw. 3.4 eintragen.
-6. **Grafiken hochladen:**
-   - App-Icon: `assets/store/icon-512.png` und `assets/store/icon-1024.png`
-   - Screenshots: Alle 6 Screenshots aus `assets/store/` hochladen (`store-screen-1-zen-sidebar.png` bis `store-screen-6-privacy-shield.png`).
+1. Die Einträge in allen acht Sprachen mit den oben verlinkten Texten und den Eigenschaften des endgültigen Pakets abgleichen.
+2. Den bestätigten Lizenztext, das Hauptlogo und das Poster übernehmen. Echte App-Aufnahmen des endgültigen Builds verwenden. Microsoft verlangt mindestens einen Screenshot pro Eintrag und empfiehlt vier.
+3. „Neu in dieser Version“ für die erste Einreichung leer lassen. [Microsoft-Anleitung für MSIX-Einträge](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/add-and-edit-store-listing-info)
 
 ### Schritt 6: Hinweise für Zertifizierungsprüfer (Notes for Certification)
-Folgenden Text in das Feld für Notizen an die Microsoft-Prüfer eintragen:
+Den Entwurf für die Prüfnotizen am freigegebenen Paket vervollständigen.
 ```text
-Lastbrowser is a standalone, local-first Chromium web browser for Windows with an integrated local Python runtime. 
-No login, product key, or cloud account is required to test and evaluate the application. 
-Silent installation and uninstallation can be performed with the '/S' parameter (exit code 0). 
-All data is stored locally in %APPDATA%\Lastbrowser.
+LastBrowser is a Chromium browser for Windows. Select the browser-only option on first launch to test browsing without a cloud account. Nova can generate replies when an AI provider is configured. The flag on an AI reply opens the reporting dialog, where you can review an email draft before sending it.
 ```
+Die getesteten Start- und KI-Schritte ergänzen. `runFullTrust` mit der Electron-Desktopanwendung und ihren lokalen Begleitprozessen begründen. Voraussetzungen für optionale Funktionen wie verschlüsselte Spaces anhand des geprüften Pakets angeben. [MSIX-Zertifizierungsverfahren](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/app-certification-process)
 
 ### Schritt 7: Einreichen & Verfolgen
-1. Auf **An den Store übermitteln** (Submit to the Store) klicken.
-2. Die automatische Vorprüfung (WACK) und die Microsoft-Prüfung laufen im Hintergrund (typische Dauer: 24–48 Stunden).
-3. Nach erfolgreicher Zertifizierung ist Lastbrowser live im Microsoft Store verfügbar!
+1. Paket- und Installationsnachweise sowie die Angaben im Entwurf überprüfen. Die Freigabe zur Einreichung wird separat erteilt.
+2. Vor der autorisierten Einreichung die manuelle Veröffentlichung als Veröffentlichungsoption wählen. Nach der Einreichung den Zertifizierungsstatus verfolgen. Die Veröffentlichung folgt auf eine gesonderte Freigabe. [MSIX-Veröffentlichungsoptionen](https://learn.microsoft.com/en-us/windows/apps/publish/publish-your-app/msix/manage-submission-options)
 
 ---
 
 ## 8. Historischer Textentwurf für v0.1.31
 
-Dieser Abschnitt dokumentiert einen früheren Entwurf. Für die erste Store-Version ist nach Abschluss von „Multiagent Umsetzung“ ein neuer, auf dem endgültigen Build beruhender Versionshinweis zu erstellen.
+Dieser Abschnitt dokumentiert einen früheren Entwurf. Versionshinweise werden für spätere Store-Updates anhand der tatsächlich enthaltenen Änderungen geschrieben.
 
 > **Hinweis zu Zeichenlimits:** Das Microsoft Partner Center begrenzt das
 > „What's New“-Feld typischerweise auf **1500 Zeichen**. Beide Varianten unten

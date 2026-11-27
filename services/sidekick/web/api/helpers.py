@@ -294,9 +294,10 @@ def redact_session_data(session_dict: dict) -> dict:
     setting is disabled this is also a fast path: the recursion still walks
     but every string returns early.
     """
+    from runtime.independent.nova_assistant import expose_assistant_identity
     from web.api.config import load_settings
     _enabled = bool(load_settings().get("api_redact_enabled", True))
-    result = dict(session_dict)
+    result = expose_assistant_identity(dict(session_dict))
     if isinstance(result.get('title'), str):
         result['title'] = _redact_text(result['title'], _enabled=_enabled)
     if 'messages' in result:

@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 const repoRoot = path.resolve(__dirname, '..', '..', '..');
 
 describe('public release download references', () => {
-  it('keeps every localized download page pinned to a published signed release', () => {
+  it('links every localized Windows download page to the Microsoft Store', () => {
     const expected = [
       'download/index.html',
       'en/download/index.html',
@@ -15,51 +15,35 @@ describe('public release download references', () => {
       'ja/download/index.html',
       'pt/download/index.html',
     ] as const;
-    const digests = {
-      '0.1.52': [
-        'D09747A3A5F55D9A4DA02A8644DE976D342EB2C811798B3778C242515F6BDACE',
-        '16EEC42D1D335112E90EC04A2AC66ACB2941A81A2D7DD229E35EAD7905C51BFF',
-      ],
-      '0.1.53': [
-        '4AB50EA0DCD2B4215A831F2F3D09A707420AA999E9541D377309BB99BB998335',
-        '9821B152B3AE3248C9E3990D833AE047D711DE5391960D92FED02CC654A27663',
-      ],
-      '0.1.56': [
-        'BA114390205DC4588EEC5029BE32ABF340A9439DCA8A8B36525C8D827433775F',
-        'FF4692FFA738CAE731FD182F00C06CD063488CDCD98BB7D4AF17CB3DDB2D04B3',
-      ],
-    } as const;
-
     for (const relativePath of expected) {
       const source = readFileSync(path.join(repoRoot, 'lastbrowser.com', relativePath), 'utf8');
-      const version = source.match(/"softwareVersion": "(0\.1\.\d+)(?: Beta)?"/)?.[1];
-      expect(version).toBe('0.1.56');
-      expect(source).toContain(`/releases/download/v${version}/Lastbrowser-${version}-x64-setup.exe`);
-      expect(source).toContain(`/releases/download/v${version}/Lastbrowser-${version}-x64-portable.exe`);
-      for (const digest of digests[version as keyof typeof digests]) expect(source).toContain(digest);
-      expect(source).not.toContain('/releases/download/v0.1.45/');
-      expect(source).not.toContain('/releases/download/v0.1.34/');
-      expect(source).not.toMatch(/EV Code-Signed|EV Code Signing Certificate|EV-Code-Signed/i);
+      expect(source).toContain('https://apps.microsoft.com/detail/9NJX1T2KXDM3');
+      expect(source).not.toMatch(/Lastbrowser-0\.1\.56-x64-(setup|portable)\.exe/i);
+      expect(source).toContain('Lastbrowser-0.1.56-x86_64.AppImage');
+      expect(source).toContain('Lastbrowser-0.1.56-x64.tar.gz');
     }
   });
 
-  it('proxies the current release or the known pre-A-004b legacy tag', () => {
+  it('redirects Windows downloads to the Store and preserves the legacy update feed', () => {
     const source = readFileSync(path.join(repoRoot, 'lastbrowser.com/functions/downloads/[file].js'), 'utf8');
     expect(source).toContain("const RELEASE_TAG = 'v0.1.56';");
-    expect(source).toContain('/${RELEASE_TAG}/Lastbrowser-0.1.56-x64-setup.exe');
-    expect(source).toContain('/${RELEASE_TAG}/Lastbrowser-0.1.56-x64-portable.exe');
+    expect(source).toContain('https://apps.microsoft.com/detail/9NJX1T2KXDM3');
+    expect(source).toContain("file === 'setup.exe' || file === 'portable.exe'");
+    expect(source).toContain('Response.redirect(WINDOWS_STORE_URL, 302)');
     expect(source).toContain('/${RELEASE_TAG}/latest.yml');
     expect(source).not.toContain('v0.1.34');
   });
 
-  it('pins localized home pages to v0.1.56 and retains published changelog history', () => {
+  it('keeps localized home pages current and retains published changelog history', () => {
     const locales = ['', 'en/', 'es/', 'fr/', 'it/', 'ja/', 'pt/'];
 
     for (const locale of locales) {
       const home = readFileSync(path.join(repoRoot, 'lastbrowser.com', `${locale}index.html`), 'utf8');
       const changelog = readFileSync(path.join(repoRoot, 'lastbrowser.com', `${locale}changelog/index.html`), 'utf8');
 
-      expect(home).toContain('v0.1.56');
+      expect(home).toContain('Microsoft Store');
+      expect(home).not.toContain('v0.1.56');
+      expect(home).not.toContain('"softwareVersion": "0.1.56"');
       expect(home).not.toContain('v0.1.32 Beta');
       expect(changelog).toMatch(/v0\.1\.(52|53|56)/);
       expect(changelog).toContain('published release');

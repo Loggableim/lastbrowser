@@ -2518,6 +2518,7 @@ try:
         save_permanent_allowlist,
         is_approved,
         _pending,
+        _gateway_queues,
         _lock,
         _permanent_approved,
         resolve_gateway_approval,
@@ -2532,6 +2533,7 @@ try:
         interrupt_subagent,
     )
 except ImportError:
+    _gateway_queues = {}
     _submit_pending_raw = lambda *a, **k: None
     approve_session = lambda *a, **k: None
     approve_permanent = lambda *a, **k: None
@@ -7217,14 +7219,23 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             return bad(handler, f"Failed to save worktree settings: {exc}", 500)
 
     if parsed.path == "/api/session/new":
+        nova_assistant = None
         try:
             workspace = str(resolve_trusted_workspace(body.get("workspace"))) if body.get("workspace") else None
             from runtime.independent.chat_binding import capture_chat_profile, require_native_scope_header
             from web.api.profiles import get_active_profile_name
             require_native_scope_header(handler, body.get("space_scope"))
-            captured_space_profile = capture_chat_profile(raw_scope=body.get("space_scope"), actor=str(get_active_profile_name() or "default"), workspace=workspace or "")
+            actor = str(get_active_profile_name() or "default")
+            captured_space_profile = capture_chat_profile(raw_scope=body.get("space_scope"), actor=actor, workspace=workspace or "")
             if captured_space_profile is not None:
                 workspace = captured_space_profile.workspace
+            if "assistant" in body:
+                from runtime.independent.nova_assistant import normalize_nova_assistant, require_assistant_scope
+
+                nova_assistant = normalize_nova_assistant(body["assistant"])
+                if body.get("agent"):
+                    raise ValueError("invalid_assistant_with_legacy_agent")
+                require_assistant_scope(captured_space_profile, actor)
         except (TypeError, ValueError) as e:
             return bad(handler, str(e))
         except PermissionError as e:
@@ -7284,6 +7295,7 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             title=body.get("title") or None,
             space_scope=captured_space_profile.scope.model_dump(mode="json", by_alias=True) if captured_space_profile is not None else None,
             space_profile_snapshot={"profileId": captured_space_profile.snapshot_id, "revision": captured_space_profile.snapshot_revision} if captured_space_profile is not None else None,
+            nova_assistant=nova_assistant,
         )
         if body.get("title"):
             s.title = str(body["title"]).strip()
@@ -7292,9 +7304,9 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             s.space_scope = captured_space_profile.scope.model_dump(mode="json", by_alias=True)
             s.space_profile_snapshot = {"profileId": captured_space_profile.snapshot_id, "revision": captured_space_profile.snapshot_revision}
             # The persona is chosen when the conversation starts and stays with it.
-            from runtime.independent.companion import start_conversation_companion
-            s.companion = start_conversation_companion(native_store, native_resolver, captured_space_profile.scope,
-                str(get_active_profile_name() or "default"))
+            if nova_assistant is None:
+                from runtime.independent.companion import start_conversation_companion
+                s.companion = start_conversation_companion(native_store, native_resolver, captured_space_profile.scope, actor)
             s.save()
         try:
             from web.api.state_sync import sync_session_start, sync_session_usage
@@ -7349,6 +7361,9 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
                 personality=session.personality,
                 # A copy continues the same conversation, so it keeps its persona.
                 companion=copy.deepcopy(getattr(session, "companion", None)),
+                _nova_assistant=getattr(session, "_nova_assistant", None),
+                space_scope=getattr(session, "space_scope", None) if getattr(session, "_nova_assistant", None) else None,
+                space_profile_snapshot=getattr(session, "space_profile_snapshot", None) if getattr(session, "_nova_assistant", None) else None,
                 enabled_toolsets=getattr(session, "enabled_toolsets", None),
                 context_length=getattr(session, "context_length", None),
                 threshold_tokens=getattr(session, "threshold_tokens", None),
@@ -7999,6 +8014,9 @@ def _handle_post_parsed(handler, parsed, body, diag=None):
             session_source="fork",
             # A fork continues the same conversation, so it keeps its persona.
             companion=copy.deepcopy(getattr(source, "companion", None)),
+            _nova_assistant=getattr(source, "_nova_assistant", None),
+            space_scope=getattr(source, "space_scope", None) if getattr(source, "_nova_assistant", None) else None,
+            space_profile_snapshot=getattr(source, "space_profile_snapshot", None) if getattr(source, "_nova_assistant", None) else None,
             # Inherit workspace metadata so the fork appears in the same
             # workspace sidebar. Without workspace_slug, a forked session
             # is invisible when the sidebar filters by workspace (#465 fix).
@@ -10669,20 +10687,18 @@ def _handle_file_read(handler, parsed):
         return bad(handler, _sanitize_error(e))
 
 
+def _approval_pending_locked(sid):
+    """Snapshot legacy and blocking approvals while holding the approval lock."""
+    legacy = _pending.get(sid)
+    entries = list(legacy) if isinstance(legacy, list) else ([legacy] if legacy else [])
+    entries.extend(entry.data for entry in _gateway_queues.get(sid, []) if not entry.event.is_set())
+    return (dict(entries[0]) if entries else None, len(entries))
+
+
 def _handle_approval_pending(handler, parsed):
     sid = parse_qs(parsed.query).get("session_id", [""])[0]
     with _lock:
-        queue = _pending.get(sid)
-        # Support both the new list format and a legacy single-dict value.
-        if isinstance(queue, list):
-            p = queue[0] if queue else None
-            total = len(queue)
-        elif queue:
-            p = queue
-            total = 1
-        else:
-            p = None
-            total = 0
+        p, total = _approval_pending_locked(sid)
     if p:
         return j(handler, {"pending": dict(p), "pending_count": total})
     return j(handler, {"pending": None, "pending_count": 0})
@@ -10696,15 +10712,8 @@ def _handle_approval_pending_all(handler, parsed):
     """
     result = {}
     with _lock:
-        for sid, queue in _pending.items():
-            if isinstance(queue, list):
-                p = queue[0] if queue else None
-                total = len(queue)
-            elif queue:
-                p = queue
-                total = 1
-            else:
-                continue
+        for sid in _pending.keys() | _gateway_queues.keys():
+            p, total = _approval_pending_locked(sid)
             if p:
                 result[sid] = {"pending": dict(p), "pending_count": total}
     return j(handler, {"sessions": result})
@@ -10733,13 +10742,7 @@ def _handle_approval_sse_stream(handler, parsed):
     with _lock:
         old_subs = list(_approval_sse_subscribers.get(sid) or [])
         _approval_sse_subscribers[sid] = [q]
-        q_list = _pending.get(sid)
-        if isinstance(q_list, list):
-            initial_pending = dict(q_list[0]) if q_list else None
-            initial_count = len(q_list)
-        elif q_list:
-            initial_pending = dict(q_list)
-            initial_count = 1
+        initial_pending, initial_count = _approval_pending_locked(sid)
     for old_q in old_subs:
         try:
             old_q.put_nowait(None)
@@ -11141,6 +11144,7 @@ def _handle_model_probe(handler, body):
         "openrouter": "https://openrouter.ai/api/v1/models",
         "openai": "https://api.openai.com/v1/models",
         "deepseek": "https://api.deepseek.com/v1/models",
+        "groq": "https://api.groq.com/openai/v1/models",
         "anthropic": "https://api.anthropic.com/v1/models",
     }
     endpoint = endpoints.get(provider)
@@ -11154,7 +11158,10 @@ def _handle_model_probe(handler, body):
         if provider == "anthropic":
             headers = {"x-api-key": api_key, "anthropic-version": "2023-06-01", "Accept": "application/json"}
         request = urllib.request.Request(endpoint, headers=headers)
-        with urllib.request.urlopen(request, timeout=12) as response:
+        class _NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, *_args, **_kwargs):
+                return None
+        with urllib.request.build_opener(_NoRedirect()).open(request, timeout=12) as response:
             payload = json.loads(response.read(4 * 1024 * 1024))
         data = payload.get("data", []) if isinstance(payload, dict) else []
         models = []
@@ -11166,6 +11173,14 @@ def _handle_model_probe(handler, body):
                         models.append({"id": model_id, "label": str(item.get("name") or model_id).strip()})
         models.sort(key=lambda item: item["id"].lower())
         return j(handler, {"provider": provider, "models": models, "count": len(models)})
+    except urllib.error.HTTPError as exc:
+        if provider == "groq" and exc.code in (401, 429):
+            # Provider authentication is separate from the browser session.
+            # A transport-level 401 would trigger the browser lock handler.
+            code = "provider_key_invalid" if exc.code == 401 else "provider_rate_limited"
+            return j(handler, {"provider": provider, "error_code": code, "models": []})
+        logger.info("Transient model probe failed for %s (HTTP %s)", provider, exc.code)
+        return j(handler, {"error": "Could not load models. Check the key and try again.", "models": []}, status=502)
     except Exception as exc:
         # Avoid returning provider response bodies or request details that may
         # contain credential-shaped data.
@@ -12466,6 +12481,13 @@ def _start_chat_stream_for_session(
                     "error_code": "space_profile_changed", "_status": 409}
     except (StoreError, PermissionError, ValueError) as exc:
         return {"error": str(exc), "error_code": getattr(exc, "code", "scope_denied"), "_status": 409}
+    if getattr(s, "_nova_assistant", None) is not None:
+        from runtime.independent.nova_assistant import require_assistant_scope
+
+        try:
+            require_assistant_scope(captured_space_profile, str(get_active_profile_name() or "default"))
+        except (StoreError, PermissionError, ValueError) as exc:
+            return {"error": str(exc), "error_code": getattr(exc, "code", "assistants_disabled"), "_status": 403}
     # Prevent duplicate runs in the same session while a stream is still active.
     # This commonly happens after page refresh/reconnect races and can produce
     # duplicated clarify cards for what appears to be a single user request.
@@ -14981,26 +15003,13 @@ def _handle_approval_respond(handler, body):
                     if entry.get("approval_id") == approval_id:
                         pending = queue.pop(i)
                         break
-                else:
-                    # approval_id not found -- fall back to oldest entry.
-                    pending = queue.pop(0) if queue else None
             else:
-                pending = queue.pop(0) if queue else None
+                pending = queue.pop(0) if queue and not queue[0].get("once_only") else None
             if not queue:
                 _pending.pop(sid, None)
-        elif queue:
+        elif queue and (queue.get("approval_id") == approval_id if approval_id else not queue.get("once_only")):
             # Legacy single-dict value.
             pending = _pending.pop(sid, None)
-        # Notify SSE subscribers of the new head (or empty state) so the UI
-        # surfaces any trailing approvals that were queued behind this one
-        # without waiting for the next submit_pending. Without this, a parallel
-        # tool-call scenario (#527) would leave the second approval invisible
-        # in the SSE path until the next event ever fired (the agent thread
-        # would be parked indefinitely from the user's perspective).
-        if isinstance(_pending.get(sid), list) and _pending[sid]:
-            _approval_sse_notify_locked(sid, _pending[sid][0], len(_pending[sid]))
-        else:
-            _approval_sse_notify_locked(sid, None, 0)
 
     if pending:
         keys = pending.get("pattern_keys") or [pending.get("pattern_key", "")]
@@ -15015,7 +15024,12 @@ def _handle_approval_respond(handler, body):
     # Unblock the agent thread waiting in the gateway approval queue.
     # This is the primary signal when streaming is active â€” the agent
     # thread is parked in entry.event.wait() and needs to be woken up.
-    resolve_gateway_approval(sid, choice, resolve_all=False)
+    resolved = resolve_gateway_approval(sid, choice, resolve_all=False, approval_id=approval_id or None, require_exact=True)
+    if pending is None and not resolved:
+        return j(handler, {"error": "Approval request is no longer pending"}, status=409)
+    with _lock:
+        head, count = _approval_pending_locked(sid)
+        _approval_sse_notify_locked(sid, head, count)
     return j(handler, {"ok": True, "choice": choice})
 
 

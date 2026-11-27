@@ -1,13 +1,64 @@
 import { readFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
 import { resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import {
   browserShortcutChannel,
   matchBrowserShortcut,
+  registerBrowserNavigationCommands,
   registerBrowserShortcuts
 } from '../src/main/shortcuts.js';
 
 describe('shortcuts system', () => {
+  it('routes shortcuts to the window owning the originating contents and leaves unrelated contents alone', () => {
+    let created!: (event: unknown, contents: any) => void;
+    const app = { on: (_name: string, listener: typeof created) => { created = listener; } };
+    const primary = { isDestroyed: () => false, webContents: { send: vi.fn() } };
+    const detached = { isDestroyed: () => false, webContents: { send: vi.fn() } };
+    const createContents = () => {
+      let handler!: (event: { preventDefault: () => void }, input: any) => void;
+      return { on: (_name: string, listener: typeof handler) => { handler = listener; }, fire: (event: any) => handler(event, { type: 'keyDown', key: 't', control: true }) };
+    };
+    const primaryContents = createContents();
+    const detachedGuest = createContents();
+    const unrelatedContents = createContents();
+    registerBrowserShortcuts({ app, getWindow: (contents: any) => contents === primaryContents ? primary : contents === detachedGuest ? detached : null });
+    for (const contents of [primaryContents, detachedGuest, unrelatedContents]) created(null, contents);
+    const primaryEvent = { preventDefault: vi.fn() };
+    const detachedEvent = { preventDefault: vi.fn() };
+    const unrelatedEvent = { preventDefault: vi.fn() };
+    primaryContents.fire(primaryEvent);
+    detachedGuest.fire(detachedEvent);
+    unrelatedContents.fire(unrelatedEvent);
+    expect(primary.webContents.send).toHaveBeenCalledTimes(1);
+    expect(detached.webContents.send).toHaveBeenCalledWith(browserShortcutChannel, { action: 'new-tab' });
+    expect(primaryEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(detachedEvent.preventDefault).toHaveBeenCalledOnce();
+    expect(unrelatedEvent.preventDefault).not.toHaveBeenCalled();
+  });
+  it('sends native back and forward commands only to the window that received them', () => {
+    const createWindow = () => Object.assign(new EventEmitter(), {
+      isDestroyed: () => false,
+      webContents: { send: vi.fn() }
+    });
+    const primary = createWindow();
+    const detached = createWindow();
+    registerBrowserNavigationCommands(primary);
+    registerBrowserNavigationCommands(detached);
+
+    const event = { preventDefault: vi.fn() };
+    detached.emit('app-command', event, 'browser-backward');
+    detached.emit('app-command', event, 'browser-forward');
+    detached.emit('app-command', event, 'media-play-pause');
+
+    expect(detached.webContents.send.mock.calls).toEqual([
+      [browserShortcutChannel, { action: 'history-back' }],
+      [browserShortcutChannel, { action: 'history-forward' }]
+    ]);
+    expect(primary.webContents.send).not.toHaveBeenCalled();
+    expect(event.preventDefault).toHaveBeenCalledTimes(2);
+  });
+
   it('exposes the correct IPC channel name', () => {
     expect(browserShortcutChannel).toBe('lastbrowser:browser:shortcut');
   });

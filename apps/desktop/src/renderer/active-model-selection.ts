@@ -59,9 +59,16 @@ export function setModelActive(storage: Pick<Storage, 'getItem' | 'setItem'>, sc
 export function chooseActiveModel(choices: readonly ActiveModelChoice[], selected: Readonly<{ model: string; provider?: string }>,
   storage: Pick<Storage, 'getItem'>, scope: ActiveModelScope): Readonly<{ choice: ActiveModelChoice | null; changed: boolean }> {
   const active = choices.filter(choice => isModelActive(storage, scope, choice.providerId, choice.id));
-  const current = active.find(choice => choice.id === selected.model && choice.providerId === selected.provider);
-  const choice = current || active[0] || null;
-  return { choice, changed: Boolean(selected.model) && (!choice || choice.id !== selected.model || choice.providerId !== selected.provider) };
+  const parsed = parseProviderModelId(selected.model, selected.provider);
+  const provider = parsed.provider?.trim().toLowerCase();
+  const explicitProvider = selected.provider?.trim().toLowerCase();
+  if (explicitProvider && provider && explicitProvider !== provider) {
+    return { choice: null, changed: Boolean(selected.model.trim()) };
+  }
+  const current = active.find(choice => choice.providerId.trim().toLowerCase() === provider
+    && parseProviderModelId(choice.id, choice.providerId).model === parsed.model);
+  const choice = current || (provider ? active.find(item => item.providerId.trim().toLowerCase() === provider) : active[0]) || null;
+  return { choice, changed: Boolean(selected.model.trim()) && !current };
 }
 
 function subscribe(listener: () => void): () => void {

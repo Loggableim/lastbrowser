@@ -16,6 +16,7 @@ import sys
 import threading
 import time
 import unicodedata
+import uuid
 from typing import Optional
 from cli.config import cfg_get
 
@@ -162,9 +163,9 @@ _COMMAND_TAIL = r'(?:\s*(?:&&|\|\||;).*)?$'
 # The list is deliberately tiny — only things with no recovery path:
 # filesystem destruction rooted at /, raw block device overwrites, kernel
 # shutdown/reboot, and denial-of-service commands that take the host down.
-# Recoverable-but-costly operations (git reset --hard, rm -rf /tmp/x,
-# chmod -R 777, curl|sh) stay in DANGEROUS_PATTERNS where yolo can pass
-# them through — that's what yolo is for.
+# Recoverable-but-costly operations remain in DANGEROUS_PATTERNS. Destructive
+# patterns selected by requires_explicit_destructive_approval always require
+# a fresh decision, including when ordinary approval is disabled.
 #
 # Inspired by Mercury Agent's permission-hardened blocklist
 # (https://github.com/cosmicstack-labs/mercury-agent).
@@ -302,10 +303,29 @@ def _sudo_stdin_block_result(description: str) -> dict:
 # Dangerous command patterns
 # =========================================================================
 
+_GIT_OPTION_VALUE = r'(?:"[^"]*"|\'[^\']*\'|[^\s;|&]+)'
+# The input is lowercased before matching, so -C (working directory) and -c
+# (configuration) share this branch. Preserve quoted paths with spaces.
+_GIT_COMMAND_PREFIX = (
+    r'\bgit\s+(?:(?:-c\s+|--(?:git-dir|work-tree)(?:=|\s+))'
+    + _GIT_OPTION_VALUE + r'\s+)*'
+)
+
 DANGEROUS_PATTERNS = [
     (r'\brm\s+(-[^\s]*\s+)*/', "delete in root path"),
-    (r'\brm\s+-[^\s]*r', "recursive delete"),
-    (r'\brm\s+--recursive\b', "recursive delete (long flag)"),
+    (r'\brm\s+(?:-(?!-\s)[^\s;|&]+\s+)*-(?!-)[^\s;|&]*r[^\s;|&]*(?=\s|$)', "recursive delete"),
+    (r'\brm\s+(?:-[^\s;|&]+\s+)*--recursive\b', "recursive delete (long flag)"),
+    # GNU rm also accepts options after operands. Do not treat anything after
+    # the explicit end-of-options marker as a flag.
+    (r'''\brm\b(?:'[^']*'|"[^"]*"|(?!\s--(?:\s|$))[^\n;&|'"])*?\s+(?:-(?!-)[^\s;|&]*r[^\s;|&]*|--recursive)(?=\s|$)''', "recursive delete"),
+    (r'\b(?:del|erase|rmdir|rd)(?:\.exe)?\b[^\n;&|]*\s/s(?:\s|$)', "recursive Windows delete"),
+    # PowerShell accepts unambiguous parameter prefixes, including -R and -Rec.
+    (r'\b(?:remove-item|ri|del|erase|rmdir|rd|rm)\b(?:(?!\s--(?:\s|$))[^\n;&|])*\s-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?=\s|:|$)', "recursive PowerShell delete"),
+    (r'\b(?:remove-item|ri|del|erase|rmdir|rd|rm)\b[^\n;&|]*\bwindows[\\/]system32\b', "delete Windows system files"),
+    (r'\bformat(?:\.com|\.exe)?\s+[a-z]:', "format Windows drive"),
+    (r'\btaskkill(?:\.exe)?\s+', "terminate Windows process"),
+    (r'\bstop-process\s+', "terminate Windows process"),
+    (r'\b(?:kill|pkill|killall)\s+', "terminate process"),
     (r'\bchmod\s+(-[^\s]*\s+)*(777|666|o\+[rwx]*w|a\+[rwx]*w)\b', "world/other-writable permissions"),
     (r'\bchmod\s+--recursive\b.*(777|666|o\+[rwx]*w|a\+[rwx]*w)', "recursive world/other-writable (long flag)"),
     (r'\bchown\s+(-[^\s]*)?R\s+root', "recursive chown to root"),
@@ -314,9 +334,8 @@ DANGEROUS_PATTERNS = [
     (r'\bdd\s+.*if=', "disk copy"),
     (r'>\s*/dev/sd', "write to block device"),
     (r'\bDROP\s+(TABLE|DATABASE)\b', "SQL DROP"),
-    # Use [^\n]* instead of .* so DOTALL mode does not cause a WHERE clause on the
-    # *next* line to satisfy the negative lookahead, silently allowing DELETE without WHERE.
-    (r'\bDELETE\s+FROM\b(?![^\n]*\bWHERE\b)', "SQL DELETE without WHERE"),
+    # A WHERE in a later SQL statement cannot constrain this DELETE.
+    (r'\bDELETE\s+FROM\b(?![^\n;]*\bWHERE\b)', "SQL DELETE without WHERE"),
     (r'\bTRUNCATE\s+(TABLE)?\s*\w', "SQL TRUNCATE"),
     (r'>\s*/etc/', "overwrite system config"),
     (r'\bsystemctl\s+(-[^\s]+\s+)*(stop|restart|disable|mask)\b', "stop/restart system service"),
@@ -361,10 +380,13 @@ DANGEROUS_PATTERNS = [
     (r'\b(python[23]?|perl|ruby|node)\s+<<', "script execution via heredoc"),
     # Git destructive operations that can lose uncommitted work or rewrite
     # shared history. Not captured by rm/chmod/etc patterns.
-    (r'\bgit\s+reset\s+--hard\b', "git reset --hard (destroys uncommitted changes)"),
-    (r'\bgit\s+push\b.*--force\b', "git force push (rewrites remote history)"),
-    (r'\bgit\s+push\b.*-f\b', "git force push short flag (rewrites remote history)"),
-    (r'\bgit\s+clean\s+-[^\s]*f', "git clean with force (deletes untracked files)"),
+    (_GIT_COMMAND_PREFIX + r'reset\s+(?:-[^\s;|&]+\s+)*--hard\b', "git reset --hard (destroys uncommitted changes)"),
+    (_GIT_COMMAND_PREFIX + r'''reset\b(?:'[^']*'|"[^"]*"|(?!\s--(?:\s|$))[^\n;&|'"])*?\s+--hard(?=\s|$)''', "git reset --hard (destroys uncommitted changes)"),
+    (_GIT_COMMAND_PREFIX + r'push\b.*--force\b', "git force push (rewrites remote history)"),
+    (_GIT_COMMAND_PREFIX + r'push\b.*-f\b', "git force push short flag (rewrites remote history)"),
+    (_GIT_COMMAND_PREFIX + r'push\b[^\n;|&]*\s+["\']?\+[^\s;|&"\']+', "git force push refspec (rewrites remote history)"),
+    (_GIT_COMMAND_PREFIX + r'clean\s+(?:-(?!-\s)[^\s;|&]+\s+)*(?:--force\b|-(?!-)[^\s;|&]*f)', "git clean with force (deletes untracked files)"),
+    (_GIT_COMMAND_PREFIX + r'''clean\b(?:'[^']*'|"[^"]*"|(?!\s--(?:\s|$))[^\n;&|'"])*?\s+(?:--force|-(?!-)[^\s;|&]*f[^\s;|&]*)(?=\s|$)''', "git clean with force (deletes untracked files)"),
     (r'\bgit\s+branch\s+-D\b', "git branch force delete"),
     # Script execution after chmod +x — catches the two-step pattern where
     # a script is first made executable then immediately run. The script
@@ -444,6 +466,50 @@ def _normalize_command_for_detection(command: str) -> str:
     return command
 
 
+def _sql_delete_without_where(command: str) -> bool:
+    """Ignore SQL comments and string literals when looking for a WHERE clause.
+
+    This is a conservative heuristic, not a SQL parser. Examine each DELETE
+    separately so a WHERE in a later statement cannot approve an earlier one.
+    """
+    separator = r'(?:\s|/\*.*?\*/|--[^\n]*(?:\n|$))+'
+    name = r'(?:`[^`]+`|[a-z_][\w$]*)(?:\s*\.\s*(?:`[^`]+`|[a-z_][\w$]*|\*))?'
+    targets = name + r'(?:\s*,\s*' + name + r')*'
+    delete_start = (r'\bdelete' + separator
+        + r'(?:(?:low_priority|quick|ignore)' + separator + r')*'
+        + r'(?:from\b|' + targets + separator + r'from\b)')
+    for match in re.finditer(delete_start, command, re.IGNORECASE | re.DOTALL):
+        tail = command[match.end():]
+        # Identifiers, SQL string literals and comments cannot constrain the
+        # DELETE. In particular, MySQL backticks and # comments may contain
+        # the word WHERE without introducing a predicate.
+        tail = re.sub(r'''/\*.*?\*/|--[^\n]*|\#[^\n]*|`(?:``|[^`])*`|'(?:''|[^'])*'|"(?:""|[^"])*"''', ' ', tail, flags=re.DOTALL)
+        # A subsequent shell command cannot supply this statement's WHERE.
+        # Treat ambiguous separators conservatively: extra approval is safer
+        # than attributing another command's text to this DELETE.
+        tail = re.split(r'[;\n&|]', tail, maxsplit=1)[0]
+        depth = 0
+        top_level = []
+        for char in tail:
+            if char == '(':
+                depth += 1
+                top_level.append(' ')
+            elif char == ')':
+                depth = max(0, depth - 1)
+                top_level.append(' ')
+            else:
+                top_level.append(char if depth == 0 else ' ')
+        if not re.search(r'\bwhere\b', ''.join(top_level), re.IGNORECASE):
+            return True
+    return False
+
+
+def _dangerous_pattern_matches(pattern, description: str, command: str) -> bool:
+    if description == "SQL DELETE without WHERE":
+        return _sql_delete_without_where(command)
+    return bool(pattern.search(command))
+
+
 def detect_dangerous_command(command: str) -> tuple:
     """Check if a command matches any dangerous patterns.
 
@@ -452,10 +518,43 @@ def detect_dangerous_command(command: str) -> tuple:
     """
     command_lower = _normalize_command_for_detection(command).lower()
     for pattern_re, description in DANGEROUS_PATTERNS_COMPILED:
-        if pattern_re.search(command_lower):
+        if _dangerous_pattern_matches(pattern_re, description, command_lower):
             pattern_key = description
             return (True, pattern_key, description)
     return (False, None, None)
+
+
+def requires_explicit_destructive_approval(command: str) -> bool:
+    """Require a fresh human decision for destructive terminal actions."""
+    destructive_descriptions = {
+        "delete in root path", "recursive delete", "recursive delete (long flag)",
+        "recursive Windows delete", "recursive PowerShell delete", "delete Windows system files", "format Windows drive",
+        "terminate Windows process", "terminate process", "format filesystem", "disk copy",
+        "SQL DROP", "SQL DELETE without WHERE", "SQL TRUNCATE",
+        "git reset --hard (destroys uncommitted changes)",
+        "git force push (rewrites remote history)", "git force push short flag (rewrites remote history)",
+        "git force push refspec (rewrites remote history)",
+        "git clean with force (deletes untracked files)",
+    }
+    normalized = _normalize_command_for_detection(command).lower()
+    return any(
+        _dangerous_pattern_matches(pattern, description, normalized)
+        for pattern, description in DANGEROUS_PATTERNS_COMPILED
+        if description in destructive_descriptions
+    )
+
+
+def requires_non_bypassable_guard(command: str) -> bool:
+    """Re-run mandatory checks even when a caller supplies force=True."""
+    return (requires_explicit_destructive_approval(command)
+            or detect_hardline_command(command)[0]
+            or _check_sudo_stdin_guard(command)[0])
+
+
+def command_approval_choices(command: str, *, allow_permanent: bool = True) -> list[str]:
+    if requires_explicit_destructive_approval(command):
+        return ["once", "deny"]
+    return ["once", "session", "always", "deny"] if allow_permanent else ["once", "session", "deny"]
 
 
 # =========================================================================
@@ -517,7 +616,8 @@ def unregister_gateway_notify(session_key: str) -> None:
 
 
 def resolve_gateway_approval(session_key: str, choice: str,
-                             resolve_all: bool = False) -> int:
+                             resolve_all: bool = False, approval_id: str | None = None,
+                             require_exact: bool = False) -> int:
     """Called by the gateway's /approve or /deny handler to unblock
     waiting agent thread(s).
 
@@ -531,9 +631,16 @@ def resolve_gateway_approval(session_key: str, choice: str,
         queue = _gateway_queues.get(session_key)
         if not queue:
             return 0
-        if resolve_all:
-            targets = list(queue)
-            queue.clear()
+        if require_exact and not approval_id and queue[0].data.get("once_only"):
+            return 0
+        if approval_id:
+            targets = [entry for entry in queue if entry.data.get("approval_id") == approval_id]
+            if not targets:
+                return 0
+            queue.remove(targets[0])
+        elif resolve_all:
+            targets = [entry for entry in queue if choice == "deny" or not entry.data.get("once_only")]
+            queue[:] = [entry for entry in queue if entry not in targets]
         else:
             targets = [queue.pop(0)]
         if not queue:
@@ -690,6 +797,7 @@ def prompt_dangerous_approval(command: str, description: str,
     """
     if timeout_seconds is None:
         timeout_seconds = _get_approval_timeout()
+    once_only = requires_explicit_destructive_approval(command)
 
     if approval_callback is not None:
         try:
@@ -736,7 +844,9 @@ def prompt_dangerous_approval(command: str, description: str,
             print(f"  {t('approval.dangerous_header', description=description)}")
             print(f"      {command}")
             print()
-            if allow_permanent:
+            if once_only:
+                print(t("approval.once_only"))
+            elif allow_permanent:
                 print(t("approval.choose_long"))
             else:
                 print(t("approval.choose_short"))
@@ -744,7 +854,7 @@ def prompt_dangerous_approval(command: str, description: str,
             sys.stdout.flush()
 
             result = {"choice": ""}
-            prompt = t("approval.prompt_long") if allow_permanent else t("approval.prompt_short")
+            prompt = "> " if once_only else (t("approval.prompt_long") if allow_permanent else t("approval.prompt_short"))
 
             def get_input(choice_result=result, input_prompt=prompt):
                 try:
@@ -764,10 +874,10 @@ def prompt_dangerous_approval(command: str, description: str,
             if choice in {'o', 'once'}:
                 print(t("approval.allowed_once"))
                 return "once"
-            elif choice in {'s', 'session'}:
+            elif not once_only and choice in {'s', 'session'}:
                 print(t("approval.allowed_session"))
                 return "session"
-            elif choice in {'a', 'always'}:
+            elif not once_only and choice in {'a', 'always'}:
                 if not allow_permanent:
                     print(t("approval.allowed_session"))
                     return "session"
@@ -881,9 +991,9 @@ Respond with exactly one word: APPROVE, DENY, or ESCALATE"""
 
         answer = (response.choices[0].message.content or "").strip().upper()
 
-        if "APPROVE" in answer:
+        if answer == "APPROVE":
             return "approve"
-        elif "DENY" in answer:
+        elif answer == "DENY":
             return "deny"
         else:
             return "escalate"
@@ -1032,8 +1142,9 @@ def check_all_command_guards(command: str, env_type: str,
     a gateway force=True replay from bypassing one check when only the
     other was shown to the user.
     """
-    # Skip containers for both checks
-    if env_type in {"docker", "singularity", "modal", "daytona", "vercel_sandbox"}:
+    mandatory_approval = requires_explicit_destructive_approval(command)
+    # Skip containers for ordinary checks; destructive commands still require approval.
+    if not mandatory_approval and env_type in {"docker", "singularity", "modal", "daytona", "vercel_sandbox"}:
         return {"approved": True, "message": None}
 
     # Hardline floor: unconditional block for catastrophic commands
@@ -1059,7 +1170,7 @@ def check_all_command_guards(command: str, env_type: str,
     # --yolo or approvals.mode=off: bypass all approval prompts.
     # Gateway /yolo is session-scoped; CLI --yolo remains process-scoped.
     approval_mode = _get_approval_mode()
-    if is_truthy_value(os.getenv("SIDEKICK_YOLO_MODE")) or is_current_session_yolo_enabled() or approval_mode == "off":
+    if not mandatory_approval and (is_truthy_value(os.getenv("SIDEKICK_YOLO_MODE")) or is_current_session_yolo_enabled() or approval_mode == "off"):
         return {"approved": True, "message": None}
 
     is_cli = os.getenv("SIDEKICK_INTERACTIVE")
@@ -1069,6 +1180,8 @@ def check_all_command_guards(command: str, env_type: str,
     # Preserve the existing non-interactive behavior: outside CLI/gateway/ask
     # flows, we do not block on approvals and we skip external guard work.
     if not is_cli and not is_gateway and not is_ask:
+        if mandatory_approval:
+            return {"approved": False, "message": "BLOCKED: This destructive command requires explicit user approval."}
         # Cron sessions: respect cron_mode config
         if os.getenv("SIDEKICK_CRON_SESSION"):
             if _get_cron_approval_mode() == "deny":
@@ -1121,7 +1234,7 @@ def check_all_command_guards(command: str, env_type: str,
             warnings.append((tirith_key, tirith_desc, True))
 
     if is_dangerous:
-        if not is_approved(session_key, pattern_key):
+        if mandatory_approval or not is_approved(session_key, pattern_key):
             warnings.append((pattern_key, description, False))
 
     # Nothing to warn about
@@ -1132,7 +1245,7 @@ def check_all_command_guards(command: str, env_type: str,
     # When approvals.mode=smart, ask the aux LLM before prompting the user.
     # Inspired by OpenAI Codex's Smart Approvals guardian subagent
     # (openai/codex#13860).
-    if approval_mode == "smart":
+    if approval_mode == "smart" and not mandatory_approval:
         combined_desc_for_llm = "; ".join(desc for _, desc, _ in warnings)
         verdict = _smart_approve(command, combined_desc_for_llm)
         if verdict == "approve":
@@ -1177,9 +1290,11 @@ def check_all_command_guards(command: str, env_type: str,
             # and execute_code threads can block concurrently.
             approval_data = {
                 "command": command,
+                "approval_id": uuid.uuid4().hex,
                 "pattern_key": primary_key,
                 "pattern_keys": all_keys,
                 "description": combined_desc,
+                "once_only": mandatory_approval,
             }
             entry = _ApprovalEntry(approval_data)
             with _lock:
@@ -1281,7 +1396,7 @@ def check_all_command_guards(command: str, env_type: str,
                 choice=_outcome,
             )
 
-            if not resolved or choice is None or choice == "deny":
+            if not resolved or choice not in {"once", "session", "always"}:
                 reason = "timed out" if not resolved else "denied by user"
                 return {
                     "approved": False,
@@ -1291,7 +1406,7 @@ def check_all_command_guards(command: str, env_type: str,
                 }
 
             # User approved — persist based on scope (same logic as CLI)
-            for key, _, is_tirith in warnings:
+            for key, _, is_tirith in ([] if mandatory_approval else warnings):
                 if choice == "session" or (choice == "always" and is_tirith):
                     approve_session(session_key, key)
                 elif choice == "always":
@@ -1306,6 +1421,12 @@ def check_all_command_guards(command: str, env_type: str,
 
         # Fallback: no gateway callback registered (e.g. cron, batch).
         # Return approval_required for backward compat.
+        if mandatory_approval:
+            return {
+                "approved": False,
+                "message": "BLOCKED: No interactive approval handler is available for this destructive command.",
+                "description": combined_desc,
+            }
         submit_pending(session_key, {
             "command": command,
             "pattern_key": primary_key,
@@ -1348,7 +1469,7 @@ def check_all_command_guards(command: str, env_type: str,
         choice=choice,
     )
 
-    if choice == "deny":
+    if choice not in {"once", "session", "always"}:
         return {
             "approved": False,
             "message": "BLOCKED: User denied. Do NOT retry.",
@@ -1357,7 +1478,7 @@ def check_all_command_guards(command: str, env_type: str,
         }
 
     # Persist approval for each warning individually
-    for key, _, is_tirith in warnings:
+    for key, _, is_tirith in ([] if mandatory_approval else warnings):
         if choice == "session" or (choice == "always" and is_tirith):
             # tirith: session only (no permanent broad allowlisting)
             approve_session(session_key, key)

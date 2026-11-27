@@ -2785,6 +2785,8 @@ def _bound_workspace_session(workspace_path: Path, sid: str):
 
 
 def _bound_workspace_sessions(workspace_path: Path):
+    from runtime.independent.nova_assistant import expose_assistant_identity
+
     rows, ambiguous = {}, set()
     for binding, space_root, actor in _bound_workspace_spaces(workspace_path):
         expected = binding.scope.model_dump(mode="json", by_alias=True)
@@ -2801,10 +2803,10 @@ def _bound_workspace_sessions(workspace_path: Path):
                 ambiguous.add(sid)
             public_fields = {"session_id", "title", "workspace", "workspace_slug", "goal_space_slug", "profile",
                 "model", "model_provider", "created_at", "updated_at", "last_message_at", "last_active", "started_at", "ended_at",
-                "pinned", "archived", "project_id", "personality", "message_count", "active_stream_id", "source_tag",
+                "pinned", "archived", "project_id", "personality", "assistant", "message_count", "active_stream_id", "source_tag",
                 "independent", "space_scope", "space_profile_snapshot", "chat_execution_mode", "reasoning_selection",
                 "enabled_toolsets", "input_tokens", "output_tokens", "estimated_cost", "parent_session_id"}
-            rows[sid] = {key: value for key, value in raw.items() if key in public_fields}
+            rows[sid] = {key: value for key, value in expose_assistant_identity(raw).items() if key in public_fields}
             rows[sid]["has_pending_user_message"] = bool(raw.get("pending_user_message"))
     return [row for sid, row in rows.items() if sid not in ambiguous]
 
@@ -3572,7 +3574,9 @@ async def get_space_session_detail(request: Request):
     else:
         tail_message_count_unknown = False
     t_slice = time.perf_counter()
-    payload = dict(session)
+    from runtime.independent.nova_assistant import expose_assistant_identity
+
+    payload = expose_assistant_identity(dict(session))
     if workspace_path is not None and bound_scope is not None:
         payload["space_scope"] = bound_scope
     payload.pop("context_messages", None)

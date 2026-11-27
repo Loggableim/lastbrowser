@@ -4,6 +4,7 @@ import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlencode
+from uuid import uuid4
 
 import pytest
 
@@ -170,6 +171,78 @@ def test_native_session_new_uses_canonical_space_storage_and_reloads(native_post
     reloaded = Session.load(sid)
     assert reloaded is not None and Path(reloaded.path) == path
     assert store.list_leases() == ()
+
+
+def test_native_custom_assistant_snapshot_survives_reload_without_readback_of_instructions(native_post, monkeypatch):
+    from cli import web_server
+    from runtime.memory_policy import update_policy
+    from starlette.requests import Request
+    from web.api import goals, independent, workspace
+    from web.api.config import set_session_dir
+    from web.api.helpers import redact_session_data
+    from web.api.models import Session
+
+    routes, context, store, token, hub, _ = native_post
+    monkeypatch.setattr(independent, "_hub", hub)
+    monkeypatch.setattr(workspace, "resolve_trusted_workspace_read_only", lambda value: context.workspace)
+    monkeypatch.setattr(goals, "goal_state_for_session", lambda *args, **kwargs: None)
+    binding = store.get_binding(context.scope)
+    store.bind_space(binding.model_copy(update={"workspace_locator": context.workspace, "revision": 2}), expected_revision=1)
+    policy_home = Path(context.profile_home)
+    update_policy({"assistants_enabled": True}, policy_home)
+    assistant = {"id": str(uuid4()), "name": "Editor", "instructions": "Lead with the clearest revision."}
+    identity = {"id": assistant["id"], "name": assistant["name"]}
+    scope = context.scope.model_dump(mode="json", by_alias=True)
+    request = {"profile": "a", "workspace": context.workspace, "space_scope": scope, "assistant": assistant}
+
+    status, payload = _post(routes, context, token, request)
+    assert status == 200, payload
+    row = payload["session"]
+    sid = row["session_id"]
+    assert row["assistant"] == identity
+    assert row["companion"]["botName"] == identity["name"]
+    assert assistant["instructions"] not in json.dumps(row)
+
+    set_session_dir(context.sessions_dir)
+    reloaded = Session.load(sid)
+    assert reloaded is not None
+    assert reloaded.compact()["assistant"] == identity
+    assert assistant["instructions"] not in json.dumps(redact_session_data(vars(reloaded)))
+    from runtime.independent.nova_assistant import assistant_instruction
+    assert assistant["instructions"] in assistant_instruction(reloaded._nova_assistant)
+    query = urlencode({"session_id": sid, "workspace_path": context.workspace, "msg_limit": 80})
+    read = Request({"type": "http", "method": "GET", "path": "/api/session", "query_string": query.encode(), "headers": []})
+    read_session = asyncio.run(web_server.get_space_session_detail(read))["session"]
+    assert read_session["assistant"] == identity
+    assert assistant["instructions"] not in json.dumps(read_session)
+    recent = next(row for row in web_server._bound_workspace_sessions(Path(context.workspace)) if row["session_id"] == sid)
+    assert recent["assistant"] == identity
+    assert assistant["instructions"] not in json.dumps(recent)
+
+    update_policy({"assistants_enabled": False}, policy_home)
+    denied = routes._start_chat_stream_for_session(
+        reloaded, msg="Continue editing.", workspace=context.workspace, model="controlled-model")
+    assert denied["_status"] == 403 and denied["error_code"] == "assistants_disabled"
+    assert not store.list_leases()
+
+
+def test_custom_assistant_rejects_unscoped_disabled_and_invalid_creates(native_post):
+    from runtime.memory_policy import update_policy
+
+    routes, context, _, token, _, _ = native_post
+    assistant = {"id": str(uuid4()), "name": "Editor", "instructions": "Lead with the clearest revision."}
+    request = {"profile": "a", "workspace": context.workspace, "assistant": assistant}
+    scope = context.scope.model_dump(mode="json", by_alias=True)
+    initial_files = set(Path(context.sessions_dir).iterdir())
+    assert _post(routes, context, token, request)[0] == 403
+    assert _post(routes, context, token, {**request, "space_scope": scope})[0] == 403
+
+    update_policy({"assistants_enabled": True}, Path(context.profile_home))
+    for invalid in (None, {**assistant, "id": "not-a-uuid"}, {**assistant, "name": "x" * 81},
+                    {**assistant, "instructions": "x" * 8001}, {**assistant, "instructions": "\ud800"},
+                    {**assistant, "tools": ["terminal"]}):
+        assert _post(routes, context, token, {**request, "space_scope": scope, "assistant": invalid})[0] == 400
+    assert set(Path(context.sessions_dir).iterdir()) == initial_files
 
 
 def test_native_session_metadata_remains_verifiable_when_large_fields_are_saved(native_post):

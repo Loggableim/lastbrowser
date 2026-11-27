@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { BrowserWindowConstructorOptions, Menu as ElectronMenu } from 'electron';
+import type { BrowserWindowConstructorOptions, Menu as ElectronMenu, Size } from 'electron';
 
 export type ApplicationMenuApi = {
   setApplicationMenu(menu: ElectronMenu | null): void;
@@ -9,12 +9,16 @@ export function installBrowserChrome(menuApi: ApplicationMenuApi): void {
   menuApi.setApplicationMenu(null);
 }
 
-export function createMainWindowOptions(mainDir: string): BrowserWindowConstructorOptions {
+const defaultWindowSize: Size = { width: 1440, height: 920 };
+
+export function createMainWindowOptions(mainDir: string, workArea: Size = defaultWindowSize): BrowserWindowConstructorOptions {
+  const width = Math.min(defaultWindowSize.width, workArea.width);
+  const height = Math.min(defaultWindowSize.height, workArea.height);
   return {
-    width: 1440,
-    height: 920,
-    minWidth: 1100,
-    minHeight: 720,
+    width,
+    height,
+    minWidth: Math.min(1100, width),
+    minHeight: Math.min(720, height),
     title: 'LastBrowser',
     frame: false,
     autoHideMenuBar: true,

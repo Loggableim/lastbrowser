@@ -3,15 +3,16 @@
   "purpose": "Local preparation file; not a Microsoft import format. Final features, licenses and assets must be checked against the completed release.",
   "productId": "082d0bf3-3370-478c-995c-538b27476935",
   "releaseHold": "Do not submit or publish before explicit completion of Multiagent Umsetzung and successful combined release validation.",
-  "licenseModelConfirmedByUser": "Free for personal and commercial use; no LastBrowser license fee or model-size limit.",
+  "status": "All eight Store language drafts saved in Partner Center and visibly marked Complete on 2026-10-04. Each contains localized text, four genuine current-source screenshots, main logo and poster. Final release comparison and publication remain on hold.",
+  "licenseNotes": "The October 4, 2026 Partner Center record describes separate commercial licensing. The previous local drafts stated: Free for personal and commercial use; no LastBrowser license fee or model-size limit. This draft uses the documented free download price and the scope in LICENSE-SCOPE.md. Confirm the packaged distribution terms before updating Partner Center.",
   "listings": {
     "de-DE": {
       "productName": "LastBrowser",
-      "description": "LastBrowser verbindet einen Chromium-Browser für Windows mit dem integrierten Nova KI-Assistenten. Organisieren Sie Webseiten in vertikalen Tabs und Arbeitsbereichen und nutzen Sie den Assistenten neben Ihren geöffneten Seiten.\n\nFunktionen:\n• Vertikale Tabs und Arbeitsbereiche für Ihre Webprojekte.\n• Nova KI-Assistent für Fragen, Zusammenfassungen und die Arbeit mit bereitgestelltem Webseitenkontext.\n• Verbinden Sie sich mit eigenen Zugangsdaten mit getesteten und qualifizierten KI-Anbieter-/Modellkombinationen; lokale Ollama-Modelle können verfügbar sein. Nicht getestete Beta-Kombinationen sind standardmäßig ausgeblendet und erfordern, sofern angeboten, eine ausdrückliche Aktivierung in den Einstellungen.\n• Integriertes Terminal und Unterstützung für Browser-Erweiterungen.\n• Lokal gespeicherte Browserprofile und Werkzeuge zum Löschen von Browserdaten.\n• Chats verwenden standardmäßig ein einzelnes Modell. Teamwork-Orchestrierung ist eine optionale Beta.\n\nLastBrowser ist kostenlos und darf privat wie kommerziell genutzt werden. Externe KI-Dienste können ein eigenes Konto und kostenpflichtige Leistungen erfordern. Wenn Sie einen externen KI-Anbieter nutzen, werden Ihre Anfrage und der von Ihnen für die Aufgabe bereitgestellte Kontext an diesen Anbieter gesendet. Browserprofile werden lokal auf Ihrem PC gespeichert. Für enthaltene Drittanbieter-Komponenten, Modelle und externe Dienste gelten deren jeweilige Lizenzen und Bedingungen.",
-      "shortDescription": "Chromium-Browser für Windows mit vertikalen Tabs, Arbeitsbereichen und Nova KI-Assistent. Browserprofile bleiben lokal; externe KI-Dienste erhalten die von Ihnen bereitgestellten Anfragen und Inhalte.",
+      "description": "LastBrowser ist ein Chromium-Browser für Windows mit vertikalen Tabs und Arbeitsbereichen. Der optionale Nova-Assistent nutzt generative KI, um Antworten auf Ihre Eingaben zu erstellen.\n\nFunktionen:\n• Vertikale Tabs und Arbeitsbereiche für Ihre Webprojekte.\n• Nova KI-Assistent für Fragen, Zusammenfassungen und die Arbeit mit bereitgestelltem Webseitenkontext.\n• Verbinden Sie sich mit eigenen Zugangsdaten mit getesteten und qualifizierten KI-Anbieter-/Modellkombinationen; lokale Ollama-Modelle können verfügbar sein. Nicht getestete Beta-Kombinationen sind standardmäßig ausgeblendet und erfordern, sofern angeboten, eine ausdrückliche Aktivierung in den Einstellungen.\n• Integriertes Terminal und Unterstützung für Browser-Erweiterungen.\n• Lokal gespeicherte Browserprofile und Werkzeuge zum Löschen von Browserdaten.\n• Chats verwenden standardmäßig ein einzelnes Modell. Teamwork-Orchestrierung ist eine optionale Beta.\n\nLastBrowser steht zum kostenlosen Download bereit. Externe KI-Dienste können ein eigenes Konto und kostenpflichtige Leistungen erfordern. Wenn Sie einen externen KI-Anbieter nutzen, werden Ihre Anfrage und der von Ihnen für die Aufgabe bereitgestellte Kontext an diesen Anbieter gesendet. Browserprofile werden lokal auf Ihrem PC gespeichert. Für enthaltene Drittanbieter-Komponenten, Modelle und externe Dienste gelten deren jeweilige Lizenzen und Bedingungen.",
+      "shortDescription": "Chromium-Browser für Windows mit vertikalen Tabs, Arbeitsbereichen und optionalem Nova-Assistenten. Browserprofile bleiben lokal. Externe KI-Dienste erhalten die Anfragen und Inhalte, die Sie für Ihre Aufgabe bereitstellen.",
       "productFeatures": [
         "Vertikale Tabs und Arbeitsbereiche",
-        "Integrierter Nova KI-Assistent",
+        "Optionaler Nova-Assistent mit generativer KI",
         "Getestete und qualifizierte KI-Anbieter-/Modellkombinationen; Ollama-Modelle, sofern verfügbar",
         "Integriertes Terminal und Browser-Erweiterungen",
         "Lokal gespeicherte Browserprofile",
@@ -26,17 +27,17 @@
         "arbeitsbereiche"
       ],
       "copyright": "© 2026 Dominik Rainer / Lastbrowser.com",
-      "additionalLicenseTerms": "LastBrowser ist kostenlos und darf privat wie kommerziell genutzt werden. Externe KI-Dienste können ein eigenes Konto und kostenpflichtige Leistungen erfordern. Wenn Sie einen externen KI-Anbieter nutzen, werden Ihre Anfrage und der von Ihnen für die Aufgabe bereitgestellte Kontext an diesen Anbieter gesendet. Browserprofile werden lokal auf Ihrem PC gespeichert. Für enthaltene Drittanbieter-Komponenten, Modelle und externe Dienste gelten deren jeweilige Lizenzen und Bedingungen.",
+      "additionalLicenseTerms": "LastBrowser steht zum kostenlosen Download bereit. Für die in LICENSE-SCOPE.md beschriebenen Originalbestandteile von LastBrowser gilt GPL-3.0-or-later im dort angegebenen Umfang. Für enthaltene Komponenten Dritter, Modelle und externe Dienste gelten die jeweiligen Lizenzen und Nutzungsbedingungen. Externe KI-Dienste können ein eigenes Konto erfordern und Kosten verursachen.",
       "developedBy": "Dominik Rainer / Lastbrowser.com",
-      "whatsNew": "Fehlerbehebungen und Verbesserungen."
+      "whatsNew": ""
     },
     "en-US": {
       "productName": "LastBrowser",
-      "description": "LastBrowser combines a Chromium browser for Windows with the integrated Nova AI assistant. Organize webpages in vertical tabs and workspaces, and use the assistant alongside your open pages.\n\nFeatures:\n• Vertical tabs and workspaces for your web projects.\n• Nova AI assistant for questions, summaries, and working with webpage context you provide.\n• Connect with your own credentials to tested and qualified AI provider/model combinations; local Ollama models may be available. Untested beta combinations are hidden by default and, where offered, require explicit opt-in in Settings.\n• Integrated terminal and support for browser extensions.\n• Locally stored browser profiles and tools for clearing browsing data.\n• Chats use a single model by default. Teamwork orchestration is an opt-in beta.\n\nLastBrowser is free for personal and commercial use. External AI services may require their own account and paid services. When you use an external AI provider, your request and the context you provide for the task are sent to that provider. Browser profiles are stored locally on your PC. The respective licenses and terms apply to included third-party components, models, and external services.",
-      "shortDescription": "Chromium browser for Windows with vertical tabs, workspaces, and Nova AI assistant. Browser profiles stay local; external AI services receive the requests and content you provide.",
+      "description": "LastBrowser is a Chromium browser for Windows with vertical tabs and workspaces. The optional Nova assistant uses live generative AI to respond to your prompts.\n\nFeatures:\n• Vertical tabs and workspaces for your web projects.\n• Nova AI assistant for questions, summaries, and working with webpage context you provide.\n• Connect with your own credentials to tested and qualified AI provider/model combinations; local Ollama models may be available. Untested beta combinations are hidden by default and, where offered, require explicit opt-in in Settings.\n• Integrated terminal and support for browser extensions.\n• Locally stored browser profiles and tools for clearing browsing data.\n• Chats use a single model by default. Teamwork orchestration is an opt-in beta.\n\nLastBrowser is free to download. External AI services may require their own account and paid services. When you use an external AI provider, your request and the context you provide for the task are sent to that provider. Browser profiles are stored locally on your PC. The respective licenses and terms apply to included third-party components, models, and external services.",
+      "shortDescription": "Chromium browser for Windows with vertical tabs, workspaces, and an optional Nova assistant. Browser profiles stay local. External AI services receive the requests and content you provide for your task.",
       "productFeatures": [
         "Vertical tabs and workspaces",
-        "Integrated Nova AI assistant",
+        "Optional Nova assistant with live generative AI",
         "Tested and qualified AI provider/model combinations; Ollama models where available",
         "Integrated terminal and browser extensions",
         "Locally stored browser profiles",
@@ -51,17 +52,17 @@
         "workspaces"
       ],
       "copyright": "© 2026 Dominik Rainer / Lastbrowser.com",
-      "additionalLicenseTerms": "LastBrowser is free for personal and commercial use. External AI services may require their own account and paid services. When you use an external AI provider, your request and the context you provide for the task are sent to that provider. Browser profiles are stored locally on your PC. The respective licenses and terms apply to included third-party components, models, and external services.",
+      "additionalLicenseTerms": "LastBrowser is free to download. GPL-3.0-or-later applies to original LastBrowser material within the scope defined in LICENSE-SCOPE.md. Included third-party components, models, and external services are subject to their respective licenses and terms. External AI services may require a separate account and charge fees.",
       "developedBy": "Dominik Rainer / Lastbrowser.com",
-      "whatsNew": "Stability improvements and fixes."
+      "whatsNew": ""
     },
     "it-IT": {
       "productName": "LastBrowser",
-      "description": "LastBrowser unisce un browser Chromium per Windows all’assistente IA integrato Nova. Organizza le pagine web in schede verticali e spazi di lavoro e usa l’assistente accanto alle pagine aperte.\n\nFunzionalità:\n• Schede verticali e spazi di lavoro per i tuoi progetti sul web.\n• Assistente IA Nova per domande, riepiloghi e attività con il contesto delle pagine web che fornisci.\n• Collegati con le tue credenziali alle combinazioni di fornitori e modelli IA testate e qualificate; i modelli locali tramite Ollama potrebbero essere disponibili. Le combinazioni beta non testate sono nascoste per impostazione predefinita e, se offerte, richiedono l’attivazione esplicita nelle Impostazioni.\n• Terminale integrato e supporto per le estensioni del browser.\n• Profili del browser salvati localmente e strumenti per cancellare i dati di navigazione.\n• Le chat usano un solo modello per impostazione predefinita. L’orchestrazione Teamwork è una beta facoltativa.\n\nLastBrowser è gratuito per uso personale e commerciale. I servizi IA esterni possono richiedere un account e servizi a pagamento. Quando utilizzi un fornitore IA esterno, la tua richiesta e il contesto che fornisci per l’attività vengono inviati a tale fornitore. I profili del browser sono salvati localmente sul PC. Restano applicabili le licenze e condizioni dei componenti di terze parti, dei modelli e dei servizi esterni.",
-      "shortDescription": "Browser Chromium per Windows con schede verticali, spazi di lavoro e assistente IA Nova. I profili restano locali; i servizi IA esterni ricevono le richieste e i contenuti che fornisci.",
+      "description": "LastBrowser è un browser Chromium per Windows con schede verticali e spazi di lavoro. L’assistente facoltativo Nova usa l’IA generativa per creare risposte alle tue richieste.\n\nFunzionalità:\n• Schede verticali e spazi di lavoro per i tuoi progetti sul web.\n• Assistente IA Nova per domande, riepiloghi e attività con il contesto delle pagine web che fornisci.\n• Collegati con le tue credenziali alle combinazioni di fornitori e modelli IA testate e qualificate; i modelli locali tramite Ollama potrebbero essere disponibili. Le combinazioni beta non testate sono nascoste per impostazione predefinita e, se offerte, richiedono l’attivazione esplicita nelle Impostazioni.\n• Terminale integrato e supporto per le estensioni del browser.\n• Profili del browser salvati localmente e strumenti per cancellare i dati di navigazione.\n• Le chat usano un solo modello per impostazione predefinita. L’orchestrazione Teamwork è una beta facoltativa.\n\nLastBrowser si scarica gratuitamente. I servizi IA esterni possono richiedere un account e servizi a pagamento. Quando utilizzi un fornitore IA esterno, la tua richiesta e il contesto che fornisci per l’attività vengono inviati a tale fornitore. I profili del browser sono salvati localmente sul PC. Restano applicabili le licenze e condizioni dei componenti di terze parti, dei modelli e dei servizi esterni.",
+      "shortDescription": "Browser Chromium per Windows con schede verticali, spazi di lavoro e assistente Nova facoltativo. I profili restano sul PC. I servizi IA esterni ricevono le richieste e i contenuti che fornisci per la tua attività.",
       "productFeatures": [
         "Schede verticali e spazi di lavoro",
-        "Assistente IA Nova integrato",
+        "Assistente Nova facoltativo con IA generativa",
         "Combinazioni di fornitori e modelli IA testate e qualificate; modelli Ollama se disponibili",
         "Terminale integrato ed estensioni del browser",
         "Profili del browser salvati localmente",
@@ -75,18 +76,18 @@
         "assistente ia",
         "spazi di lavoro"
       ],
-      "additionalLicenseTerms": "LastBrowser è gratuito per uso personale e commerciale. I servizi IA esterni possono richiedere un account e servizi a pagamento. Quando utilizzi un fornitore IA esterno, la tua richiesta e il contesto che fornisci per l’attività vengono inviati a tale fornitore. I profili del browser sono salvati localmente sul PC. Restano applicabili le licenze e condizioni dei componenti di terze parti, dei modelli e dei servizi esterni.",
-      "whatsNew": "Miglioramenti alla stabilità e correzioni.",
-      "copyright": "© 2026 Dominik Rainer / LastBrowser.com",
+      "additionalLicenseTerms": "LastBrowser si scarica gratuitamente. La licenza GPL-3.0-or-later si applica al materiale originale di LastBrowser nei limiti definiti in LICENSE-SCOPE.md. Ai componenti di terze parti inclusi, ai modelli e ai servizi esterni si applicano le rispettive licenze e condizioni. I servizi IA esterni possono richiedere un account separato e addebitare costi.",
+      "whatsNew": "",
+      "copyright": "© 2026 Dominik Rainer / Lastbrowser.com",
       "developedBy": "Dominik Rainer / Lastbrowser.com"
     },
     "es-ES": {
       "productName": "LastBrowser",
-      "description": "LastBrowser combina un navegador Chromium para Windows con el asistente de IA integrado Nova. Organiza las páginas web en pestañas verticales y espacios de trabajo y utiliza el asistente junto a las páginas abiertas.\n\nFunciones:\n• Pestañas verticales y espacios de trabajo para tus proyectos web.\n• Asistente de IA Nova para preguntas, resúmenes y tareas con el contexto de las páginas web que proporcionas.\n• Conéctate con tus propias credenciales a combinaciones de proveedor y modelo de IA probadas y cualificadas; puede haber modelos locales de Ollama. Las combinaciones beta no probadas están ocultas de forma predeterminada y, si se ofrecen, requieren activarlas expresamente en Configuración.\n• Terminal integrado y compatibilidad con extensiones del navegador.\n• Perfiles del navegador almacenados localmente y herramientas para borrar los datos de navegación.\n• Los chats usan un único modelo de forma predeterminada. La orquestación Teamwork es una versión beta opcional.\n\nLastBrowser es gratuito para uso personal y comercial. Los servicios externos de IA pueden requerir una cuenta y servicios de pago. Cuando utilizas un proveedor externo de IA, tu solicitud y el contexto que proporcionas para la tarea se envían a dicho proveedor. Los perfiles del navegador se guardan localmente en tu PC. Siguen aplicándose las licencias y condiciones de los componentes de terceros, modelos y servicios externos.",
-      "shortDescription": "Navegador Chromium para Windows con pestañas verticales, espacios de trabajo y asistente de IA Nova. Los perfiles permanecen locales; los servicios externos de IA reciben las solicitudes y el contenido que proporcionas.",
+      "description": "LastBrowser es un navegador Chromium para Windows con pestañas verticales y espacios de trabajo. El asistente opcional Nova usa IA generativa para crear respuestas a tus solicitudes.\n\nFunciones:\n• Pestañas verticales y espacios de trabajo para tus proyectos web.\n• Asistente de IA Nova para preguntas, resúmenes y tareas con el contexto de las páginas web que proporcionas.\n• Conéctate con tus propias credenciales a combinaciones de proveedor y modelo de IA probadas y cualificadas; puede haber modelos locales de Ollama. Las combinaciones beta no probadas están ocultas de forma predeterminada y, si se ofrecen, requieren activarlas expresamente en Configuración.\n• Terminal integrado y compatibilidad con extensiones del navegador.\n• Perfiles del navegador almacenados localmente y herramientas para borrar los datos de navegación.\n• Los chats usan un único modelo de forma predeterminada. La orquestación Teamwork es una versión beta opcional.\n\nLastBrowser se puede descargar gratis. Los servicios externos de IA pueden requerir una cuenta y servicios de pago. Cuando utilizas un proveedor externo de IA, tu solicitud y el contexto que proporcionas para la tarea se envían a dicho proveedor. Los perfiles del navegador se guardan localmente en tu PC. Siguen aplicándose las licencias y condiciones de los componentes de terceros, modelos y servicios externos.",
+      "shortDescription": "Navegador Chromium para Windows con pestañas verticales, espacios de trabajo y el asistente opcional Nova. Los perfiles se guardan en el PC. Los servicios externos de IA reciben las solicitudes y el contenido que proporcionas para la tarea.",
       "productFeatures": [
         "Pestañas verticales y espacios de trabajo",
-        "Asistente de IA Nova integrado",
+        "Asistente opcional Nova con IA generativa",
         "Combinaciones de proveedor y modelo de IA probadas y cualificadas; modelos de Ollama si están disponibles",
         "Terminal integrado y extensiones del navegador",
         "Perfiles del navegador almacenados localmente",
@@ -100,18 +101,18 @@
         "asistente ia",
         "espacios de trabajo"
       ],
-      "additionalLicenseTerms": "LastBrowser es gratuito para uso personal y comercial. Los servicios externos de IA pueden requerir una cuenta y servicios de pago. Cuando utilizas un proveedor externo de IA, tu solicitud y el contexto que proporcionas para la tarea se envían a dicho proveedor. Los perfiles del navegador se guardan localmente en tu PC. Siguen aplicándose las licencias y condiciones de los componentes de terceros, modelos y servicios externos.",
-      "whatsNew": "Mejoras de estabilidad y correcciones.",
-      "copyright": "© 2026 Dominik Rainer / LastBrowser.com",
+      "additionalLicenseTerms": "LastBrowser se puede descargar gratis. La licencia GPL-3.0-or-later se aplica al material original de LastBrowser dentro del alcance definido en LICENSE-SCOPE.md. Los componentes de terceros incluidos, los modelos y los servicios externos se rigen por sus propias licencias y condiciones. Los servicios externos de IA pueden requerir una cuenta aparte y tener costes.",
+      "whatsNew": "",
+      "copyright": "© 2026 Dominik Rainer / Lastbrowser.com",
       "developedBy": "Dominik Rainer / Lastbrowser.com"
     },
     "fr-FR": {
       "productName": "LastBrowser",
-      "description": "LastBrowser associe un navigateur Chromium pour Windows à l’assistant IA intégré Nova. Organisez vos pages web dans des onglets verticaux et des espaces de travail, puis utilisez l’assistant à côté de vos pages ouvertes.\n\nFonctionnalités :\n• Onglets verticaux et espaces de travail pour vos projets web.\n• Assistant IA Nova pour vos questions, résumés et tâches utilisant le contexte des pages web que vous fournissez.\n• Connectez-vous avec vos propres identifiants aux combinaisons fournisseur/modèle d’IA testées et qualifiées ; des modèles locaux via Ollama peuvent être proposés. Les combinaisons bêta non testées sont masquées par défaut et, lorsqu’elles sont proposées, nécessitent une activation explicite dans les Paramètres.\n• Terminal intégré et prise en charge des extensions du navigateur.\n• Profils du navigateur stockés localement et outils pour effacer les données de navigation.\n• Les discussions utilisent un seul modèle par défaut. L’orchestration Teamwork est une version bêta facultative.\n\nLastBrowser est gratuit pour un usage personnel et commercial. Les services d’IA externes peuvent nécessiter un compte et des services payants. Lorsque vous utilisez un fournisseur d’IA externe, votre requête et le contexte que vous fournissez pour la tâche lui sont transmis. Les profils du navigateur sont stockés localement sur votre PC. Les licences et conditions des composants tiers, modèles et services externes restent applicables.",
-      "shortDescription": "Navigateur Chromium pour Windows avec onglets verticaux, espaces de travail et assistant IA Nova. Les profils restent locaux ; les services d’IA externes reçoivent les requêtes et contenus que vous fournissez.",
+      "description": "LastBrowser est un navigateur Chromium pour Windows doté d’onglets verticaux et d’espaces de travail. L’assistant facultatif Nova utilise l’IA générative pour produire des réponses à vos demandes.\n\nFonctionnalités :\n• Onglets verticaux et espaces de travail pour vos projets web.\n• Assistant IA Nova pour vos questions, résumés et tâches utilisant le contexte des pages web que vous fournissez.\n• Connectez-vous avec vos propres identifiants aux combinaisons fournisseur/modèle d’IA testées et qualifiées ; des modèles locaux via Ollama peuvent être proposés. Les combinaisons bêta non testées sont masquées par défaut et, lorsqu’elles sont proposées, nécessitent une activation explicite dans les Paramètres.\n• Terminal intégré et prise en charge des extensions du navigateur.\n• Profils du navigateur stockés localement et outils pour effacer les données de navigation.\n• Les discussions utilisent un seul modèle par défaut. L’orchestration Teamwork est une version bêta facultative.\n\nLastBrowser est disponible en téléchargement gratuit. Les services d’IA externes peuvent nécessiter un compte et des services payants. Lorsque vous utilisez un fournisseur d’IA externe, votre requête et le contexte que vous fournissez pour la tâche lui sont transmis. Les profils du navigateur sont stockés localement sur votre PC. Les licences et conditions des composants tiers, modèles et services externes restent applicables.",
+      "shortDescription": "Navigateur Chromium pour Windows avec onglets verticaux, espaces de travail et assistant Nova facultatif. Les profils restent sur votre PC. Les services d’IA externes reçoivent les requêtes et les contenus que vous fournissez pour la tâche.",
       "productFeatures": [
         "Onglets verticaux et espaces de travail",
-        "Assistant IA Nova intégré",
+        "Assistant Nova facultatif doté d’une IA générative",
         "Combinaisons fournisseur/modèle d’IA testées et qualifiées ; modèles Ollama selon disponibilité",
         "Terminal intégré et extensions du navigateur",
         "Profils du navigateur stockés localement",
@@ -125,18 +126,18 @@
         "assistant ia",
         "espaces de travail"
       ],
-      "additionalLicenseTerms": "LastBrowser est gratuit pour un usage personnel et commercial. Les services d’IA externes peuvent nécessiter un compte et des services payants. Lorsque vous utilisez un fournisseur d’IA externe, votre requête et le contexte que vous fournissez pour la tâche lui sont transmis. Les profils du navigateur sont stockés localement sur votre PC. Les licences et conditions des composants tiers, modèles et services externes restent applicables.",
-      "whatsNew": "Améliorations de la stabilité et corrections.",
-      "copyright": "© 2026 Dominik Rainer / LastBrowser.com",
+      "additionalLicenseTerms": "LastBrowser est disponible en téléchargement gratuit. La licence GPL-3.0-or-later s’applique aux éléments originaux de LastBrowser dans le périmètre défini dans LICENSE-SCOPE.md. Les composants tiers inclus, les modèles et les services externes restent soumis à leurs licences et conditions respectives. Les services d’IA externes peuvent exiger un compte distinct et être payants.",
+      "whatsNew": "",
+      "copyright": "© 2026 Dominik Rainer / Lastbrowser.com",
       "developedBy": "Dominik Rainer / Lastbrowser.com"
     },
     "pt-BR": {
       "productName": "LastBrowser",
-      "description": "O LastBrowser combina um navegador Chromium para Windows com o assistente de IA integrado Nova. Organize páginas da web em abas verticais e espaços de trabalho e use o assistente ao lado das páginas abertas.\n\nRecursos:\n• Abas verticais e espaços de trabalho para seus projetos na web.\n• Assistente de IA Nova para perguntas, resumos e tarefas com o contexto das páginas da web que você fornece.\n• Conecte-se com suas próprias credenciais a combinações de provedor e modelo de IA testadas e qualificadas; modelos locais do Ollama podem estar disponíveis. Combinações beta não testadas ficam ocultas por padrão e, quando oferecidas, exigem ativação explícita nas Configurações.\n• Terminal integrado e suporte a extensões do navegador.\n• Perfis do navegador armazenados localmente e ferramentas para limpar os dados de navegação.\n• Os chats usam um único modelo por padrão. A orquestração Teamwork é uma versão beta opcional.\n\nO LastBrowser é gratuito para uso pessoal e comercial. Os serviços externos de IA podem exigir uma conta e serviços pagos. Ao usar um provedor externo de IA, sua solicitação e o contexto fornecido para a tarefa são enviados a esse provedor. Os perfis do navegador ficam armazenados localmente no PC. Continuam aplicáveis as licenças e condições dos componentes de terceiros, modelos e serviços externos.",
-      "shortDescription": "Navegador Chromium para Windows com abas verticais, espaços de trabalho e assistente de IA Nova. Os perfis ficam locais; os serviços externos de IA recebem as solicitações e os conteúdos que você fornece.",
+      "description": "O LastBrowser é um navegador Chromium para Windows com abas verticais e espaços de trabalho. O assistente opcional Nova usa IA generativa para criar respostas às suas solicitações.\n\nRecursos:\n• Abas verticais e espaços de trabalho para seus projetos na web.\n• Assistente de IA Nova para perguntas, resumos e tarefas com o contexto das páginas da web que você fornece.\n• Conecte-se com suas próprias credenciais a combinações de provedor e modelo de IA testadas e qualificadas; modelos locais do Ollama podem estar disponíveis. Combinações beta não testadas ficam ocultas por padrão e, quando oferecidas, exigem ativação explícita nas Configurações.\n• Terminal integrado e suporte a extensões do navegador.\n• Perfis do navegador armazenados localmente e ferramentas para limpar os dados de navegação.\n• Os chats usam um único modelo por padrão. A orquestração Teamwork é uma versão beta opcional.\n\nO download do LastBrowser é gratuito. Os serviços externos de IA podem exigir uma conta e serviços pagos. Ao usar um provedor externo de IA, sua solicitação e o contexto fornecido para a tarefa são enviados a esse provedor. Os perfis do navegador ficam armazenados localmente no PC. Continuam aplicáveis as licenças e condições dos componentes de terceiros, modelos e serviços externos.",
+      "shortDescription": "Navegador Chromium para Windows com abas verticais, espaços de trabalho e assistente Nova opcional. Os perfis ficam no PC. Os serviços externos de IA recebem as solicitações e o conteúdo que você fornece para a tarefa.",
       "productFeatures": [
         "Abas verticais e espaços de trabalho",
-        "Assistente de IA Nova integrado",
+        "Assistente Nova opcional com IA generativa",
         "Combinações de provedor e modelo de IA testadas e qualificadas; modelos Ollama quando disponíveis",
         "Terminal integrado e extensões do navegador",
         "Perfis do navegador armazenados localmente",
@@ -150,18 +151,18 @@
         "assistente ia",
         "espaços de trabalho"
       ],
-      "additionalLicenseTerms": "O LastBrowser é gratuito para uso pessoal e comercial. Os serviços externos de IA podem exigir uma conta e serviços pagos. Ao usar um provedor externo de IA, sua solicitação e o contexto fornecido para a tarefa são enviados a esse provedor. Os perfis do navegador ficam armazenados localmente no PC. Continuam aplicáveis as licenças e condições dos componentes de terceiros, modelos e serviços externos.",
-      "whatsNew": "Melhorias de estabilidade e correções.",
-      "copyright": "© 2026 Dominik Rainer / LastBrowser.com",
+      "additionalLicenseTerms": "O download do LastBrowser é gratuito. A licença GPL-3.0-or-later se aplica ao material original do LastBrowser dentro do escopo definido em LICENSE-SCOPE.md. Os componentes de terceiros incluídos, os modelos e os serviços externos seguem suas próprias licenças e condições. Os serviços externos de IA podem exigir uma conta separada e cobrar pelo uso.",
+      "whatsNew": "",
+      "copyright": "© 2026 Dominik Rainer / Lastbrowser.com",
       "developedBy": "Dominik Rainer / Lastbrowser.com"
     },
     "ru-RU": {
       "productName": "LastBrowser",
-      "description": "LastBrowser объединяет браузер на базе Chromium для Windows и встроенного ИИ-помощника Nova. Организуйте веб-страницы с помощью вертикальных вкладок и рабочих пространств и используйте помощника рядом с открытыми страницами.\n\nВозможности:\n• Вертикальные вкладки и рабочие пространства для ваших веб-проектов.\n• ИИ-помощник Nova для вопросов, кратких изложений и работы с предоставленным вами контекстом веб-страниц.\n• Подключайтесь со своими учетными данными к проверенным и квалифицированным сочетаниям поставщика и модели ИИ; локальные модели Ollama могут быть доступны. Непроверенные бета-сочетания скрыты по умолчанию и, если предлагаются, требуют явного включения в настройках.\n• Встроенный терминал и поддержка расширений браузера.\n• Локальное хранение профилей браузера и инструменты для удаления данных просмотра.\n• В чатах по умолчанию используется одна модель. Оркестрация Teamwork — бета-функция, включаемая пользователем.\n\nLastBrowser можно бесплатно использовать в личных и коммерческих целях. Внешние ИИ-сервисы могут требовать учётную запись и оплату. При использовании внешнего поставщика ИИ ему отправляются ваш запрос и предоставленный вами контекст задачи. Профили браузера хранятся локально на вашем ПК. Продолжают действовать лицензии и условия сторонних компонентов, моделей и внешних сервисов.",
-      "shortDescription": "Браузер Chromium для Windows с вертикальными вкладками, рабочими пространствами и ИИ-помощником Nova. Профили хранятся локально; внешние ИИ-сервисы получают предоставленные вами запросы и материалы.",
+      "description": "LastBrowser — браузер на базе Chromium для Windows с вертикальными вкладками и рабочими пространствами. Включаемый по желанию помощник Nova использует генеративный ИИ, чтобы создавать ответы на ваши запросы.\n\nВозможности:\n• Вертикальные вкладки и рабочие пространства для ваших веб-проектов.\n• ИИ-помощник Nova для вопросов, кратких изложений и работы с предоставленным вами контекстом веб-страниц.\n• Подключайтесь со своими учетными данными к проверенным и квалифицированным сочетаниям поставщика и модели ИИ; локальные модели Ollama могут быть доступны. Непроверенные бета-сочетания скрыты по умолчанию и, если предлагаются, требуют явного включения в настройках.\n• Встроенный терминал и поддержка расширений браузера.\n• Локальное хранение профилей браузера и инструменты для удаления данных просмотра.\n• В чатах по умолчанию используется одна модель. Оркестрация Teamwork — бета-функция, включаемая пользователем.\n\nLastBrowser можно скачать бесплатно. Внешние ИИ-сервисы могут требовать учётную запись и оплату. При использовании внешнего поставщика ИИ ему отправляются ваш запрос и предоставленный вами контекст задачи. Профили браузера хранятся локально на вашем ПК. Продолжают действовать лицензии и условия сторонних компонентов, моделей и внешних сервисов.",
+      "shortDescription": "Браузер Chromium для Windows с вертикальными вкладками, рабочими пространствами и помощником Nova, которого можно включить по желанию. Профили хранятся на ПК. Внешние ИИ-сервисы получают запросы и материалы, которые вы предоставляете для задачи.",
       "productFeatures": [
         "Вертикальные вкладки и рабочие пространства",
-        "Встроенный ИИ-помощник Nova",
+        "Включаемый по желанию помощник Nova с генеративным ИИ",
         "Проверенные сочетания поставщика и модели ИИ; модели Ollama при наличии",
         "Встроенный терминал и расширения браузера",
         "Локальное хранение профилей браузера",
@@ -175,18 +176,18 @@
         "ии помощник",
         "рабочие пространства"
       ],
-      "additionalLicenseTerms": "LastBrowser можно бесплатно использовать в личных и коммерческих целях. Внешние ИИ-сервисы могут требовать учётную запись и оплату. При использовании внешнего поставщика ИИ ему отправляются ваш запрос и предоставленный вами контекст задачи. Профили браузера хранятся локально на вашем ПК. Продолжают действовать лицензии и условия сторонних компонентов, моделей и внешних сервисов.",
-      "whatsNew": "Исправления ошибок и повышение стабильности.",
-      "copyright": "© 2026 Dominik Rainer / LastBrowser.com",
+      "additionalLicenseTerms": "LastBrowser можно скачать бесплатно. Лицензия GPL-3.0-or-later распространяется на оригинальные материалы LastBrowser в пределах, описанных в LICENSE-SCOPE.md. На включённые сторонние компоненты, модели и внешние сервисы распространяются их собственные лицензии и условия. Внешние ИИ-сервисы могут требовать отдельную учётную запись и взимать плату.",
+      "whatsNew": "",
+      "copyright": "© 2026 Dominik Rainer / Lastbrowser.com",
       "developedBy": "Dominik Rainer / Lastbrowser.com"
     },
     "ja-JP": {
       "productName": "LastBrowser",
-      "description": "LastBrowser は、Windows 向けの Chromium ブラウザーに Nova AI アシスタントを統合したアプリです。縦型タブとワークスペースでウェブページを整理し、開いているページの横でアシスタントを利用できます。\n\n主な機能:\n• ウェブ上の作業を整理する縦型タブとワークスペース。\n• 質問、要約、ユーザーが提供したウェブページの情報を使った作業に対応する Nova AI アシスタント。\n• ご自身の認証情報を使って、テストと適格性確認を終えた AI プロバイダーとモデルの組み合わせに接続できます。Ollama のローカルモデルは利用可能な場合があります。未テストのベータ機能は既定で非表示となり、提供される場合も設定で明示的に有効化する必要があります。\n• 統合ターミナルとブラウザー拡張機能への対応。\n• PC 内に保存されるブラウザープロファイルと、閲覧データを削除するツール。\n• チャットでは既定で単一のモデルを使用します。Teamwork オーケストレーションはオプトインのベータ機能です。\n\nLastBrowser は個人利用・商用利用ともに無料です。外部 AI サービスには別のアカウントや有料サービスが必要な場合があります。外部 AI サービスを利用すると、リクエストと作業のために提供したコンテキストが選択したサービス提供者に送信されます。ブラウザープロファイルは PC 内に保存されます。同梱コンポーネント、モデル、外部サービスの各ライセンスと利用条件が適用されます。",
-      "shortDescription": "縦型タブ、ワークスペース、Nova AI アシスタントを備えた Windows 向け Chromium ブラウザー。プロファイルは PC 内に保存され、外部 AI サービスにはユーザーが提供したリクエストと情報が送信されます。",
+      "description": "LastBrowser は、縦型タブとワークスペースを備えた Windows 向けの Chromium ブラウザーです。必要に応じて使える Nova は、入力に応じて生成 AI で回答を作成します。\n\n主な機能:\n• ウェブ上の作業を整理する縦型タブとワークスペース。\n• 質問、要約、ユーザーが提供したウェブページの情報を使った作業に対応する Nova AI アシスタント。\n• ご自身の認証情報を使って、テストと適格性確認を終えた AI プロバイダーとモデルの組み合わせに接続できます。Ollama のローカルモデルは利用可能な場合があります。未テストのベータ機能は既定で非表示となり、提供される場合も設定で明示的に有効化する必要があります。\n• 統合ターミナルとブラウザー拡張機能への対応。\n• PC 内に保存されるブラウザープロファイルと、閲覧データを削除するツール。\n• チャットでは既定で単一のモデルを使用します。Teamwork オーケストレーションはオプトインのベータ機能です。\n\nLastBrowser は無料でダウンロードできます。外部 AI サービスには別のアカウントや有料サービスが必要な場合があります。外部 AI サービスを利用すると、リクエストと作業のために提供したコンテキストが選択したサービス提供者に送信されます。ブラウザープロファイルは PC 内に保存されます。同梱コンポーネント、モデル、外部サービスの各ライセンスと利用条件が適用されます。",
+      "shortDescription": "縦型タブ、ワークスペース、任意で使える Nova を備えた Windows 向け Chromium ブラウザー。プロファイルは PC 内に保存されます。外部 AI サービスには、作業のために提供したリクエストと情報が送信されます。",
       "productFeatures": [
         "縦型タブとワークスペース",
-        "統合された Nova AI アシスタント",
+        "生成 AI を使うオプションの Nova アシスタント",
         "テストと適格性確認を終えた AI プロバイダーとモデルの組み合わせ。Ollama モデルは利用可能な場合に対応",
         "統合ターミナルとブラウザー拡張機能",
         "PC 内に保存されるブラウザープロファイル",
@@ -201,9 +202,9 @@
         "ワークスペース",
         "ローカルモデル"
       ],
-      "additionalLicenseTerms": "LastBrowser は個人利用・商用利用ともに無料です。外部 AI サービスには別のアカウントや有料サービスが必要な場合があります。外部 AI サービスを利用すると、リクエストと作業のために提供したコンテキストが選択したサービス提供者に送信されます。ブラウザープロファイルは PC 内に保存されます。同梱コンポーネント、モデル、外部サービスの各ライセンスと利用条件が適用されます。",
-      "whatsNew": "安定性の向上と不具合の修正。",
-      "copyright": "© 2026 Dominik Rainer / LastBrowser.com",
+      "additionalLicenseTerms": "LastBrowser は無料でダウンロードできます。LastBrowser のオリジナル素材には、LICENSE-SCOPE.md に定める範囲で GPL-3.0-or-later が適用されます。同梱のサードパーティ製コンポーネント、モデル、外部サービスには、それぞれのライセンスと利用条件が適用されます。外部 AI サービスによっては、別のアカウントや利用料金が必要です。",
+      "whatsNew": "",
+      "copyright": "© 2026 Dominik Rainer / Lastbrowser.com",
       "developedBy": "Dominik Rainer / Lastbrowser.com"
     }
   },
@@ -217,7 +218,6 @@
     "ru": "ru-RU",
     "ja": "ja-JP"
   },
-  "status": "All eight Store language drafts saved in Partner Center and visibly marked Complete on 2026-10-04. Each contains localized text, four genuine current-source screenshots, main logo and poster. Final release comparison and publication remain on hold.",
   "preparedArtwork": {
     "mainLogo": "assets/store/store-logo-1080.png",
     "poster": "assets/store/store-poster-1440x2160.png",

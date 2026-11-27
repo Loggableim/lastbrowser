@@ -33,9 +33,15 @@ describe('desktop runtime packaging', () => {
     expect(packageJson.scripts['package:win']).toContain('npm run prepare:python');
     expect(packageJson.scripts['package:win']).toContain('--win nsis portable');
     expect(packageJson.scripts['package:linux']).toContain('node scripts/stage-opencode-client.mjs');
-    expect(packageJson.scripts['package:linux']).toContain('electron-builder --linux tar.gz AppImage --config.electronVersion=37.10.3+wvcus');
+    const lock = JSON.parse(readFileSync(path.resolve(process.cwd(), '../../package-lock.json'), 'utf8'));
+    const electronVersion = lock.packages['node_modules/electron'].version;
+    expect(electronVersion).toBe('45.2.1+wvcus');
+    expect(packageJson.scripts['package:linux']).toContain(
+      'electron-builder --linux tar.gz AppImage --config.electronVersion=' + electronVersion
+    );
+    expect(readFileSync('build/lastbrowser-builder-config.yml', 'utf8')).toContain('electronVersion: ' + electronVersion);
     expect(packageJson.scripts['package:linux']).toContain('--config.electronDownload.mirror=https://github.com/castlabs/electron-releases/releases/download/');
-    expect(packageJson.build.electronVersion).toBe('45.0.0-alpha.14+wvcus');
+    expect(packageJson.build.electronVersion).toBe(electronVersion);
     expect(packageJson.build.electronDownload.mirror).toBe('https://github.com/castlabs/electron-releases/releases/download/v');
     expect(packageJson.build.linux.target).toContain('AppImage');
     expect(packageJson.scripts['package:linux']).toMatch(/^node scripts\/linux-release-checksums\.mjs --check-key && .*electron-builder .*node scripts\/linux-release-checksums\.mjs release$/);
@@ -68,6 +74,13 @@ describe('desktop runtime packaging', () => {
         })
       ])
     );
+  });
+
+  it('omits JDK development module archives from the Windows runtime package', () => {
+    const packageJson = JSON.parse(readFileSync(path.resolve(process.cwd(), 'package.json'), 'utf8'));
+    const resource = packageJson.build.win.extraResources.find((entry: { from: string }) => entry.from === 'runtime/protected-spaces');
+    expect(resource.to).toBe('protected-spaces');
+    expect(resource.filter).toContain('!jdk/jmods/**');
   });
 
   it('excludes model weights from packaged resources and Python build inputs from app.asar', () => {

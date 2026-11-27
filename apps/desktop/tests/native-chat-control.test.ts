@@ -1,10 +1,27 @@
 import { beforeEach,describe,expect,it,vi } from 'vitest';
 import { nativeChatProcessExitConfirmed,requestNativeChatControl,useNativeChatControls,readNativeControlSnapshot,recoverNativeControls } from '../src/renderer/native-chat-control.js';
 import { nativeChatControlCopy } from '../src/renderer/i18n/native-chat-control-copy.js';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ApprovalCard } from '../src/renderer/NativeApproval.js';
 const scope={backendProfileId:'9cc9ed75-7731-4da4-88f1-af453a3dfdc3',spaceId:'9cc9ed75-7731-4da4-88f1-af453a3dfdc4',browserProfileId:'controlled'};
 const binding={scope,sessionId:'session-a',streamId:'stream-a',workspacePath:'C:\\controlled\\a',browserProfileId:'controlled'};
 beforeEach(()=>useNativeChatControls.setState({records:{}}));
 describe('native chat controls',()=>{
+  it('preserves one-time-only approval through live events and recovery',()=>{
+    const store=useNativeChatControls.getState();store.bind(binding);
+    store.event({streamId:'stream-a',event:'approval',data:{requestId:'once-a',command:'rm -rf project',once_only:true}});
+    expect(useNativeChatControls.getState().records['stream-a'].pending[0].onceOnly).toBe(true);
+    const snapshot={schemaVersion:1 as const,scope,sessionId:'session-a',streamId:'stream-a',writerGeneration:'writer-a',processExited:false,status:'running' as const,pendingControls:[
+      {schemaVersion:1 as const,type:'approval' as const,requestId:'once-b',scope,sessionId:'session-a',streamId:'stream-a',writerGeneration:'writer-a',data:{command:'rm -rf other',once_only:true}}]};
+    recoverNativeControls(snapshot,binding);
+    expect(useNativeChatControls.getState().records['stream-a'].pending[0].onceOnly).toBe(true);
+  });
+  it('hides session and permanent actions for one-time approval cards',()=>{
+    const markup=renderToStaticMarkup(React.createElement(ApprovalCard,{entry:{command:'rm -rf project',once_only:true},onRespond:()=>{}}));
+    expect(markup).toContain('Allow once');expect(markup).toContain('Deny');
+    expect(markup).not.toContain('Allow session');expect(markup).not.toContain('Always allow');
+  });
   it('uses the exact scoped accepted stream without providing backend actor fields',async()=>{
     const request={sessionId:binding.sessionId,streamId:binding.streamId,command:'approval' as const,workspacePath:binding.workspacePath,browserProfileId:binding.browserProfileId,requestId:'pending-a',choice:'once' as const};
     const transport=vi.fn(async()=>({schemaVersion:1,scope,sessionId:'session-a',streamId:'stream-a',accepted:true,state:'submitted'}));

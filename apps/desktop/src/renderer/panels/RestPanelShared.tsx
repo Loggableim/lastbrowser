@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Loader2, RefreshCw, X } from 'lucide-react';
+import { useDesktopI18n } from '../i18n.js';
 import { canCallSidekickApi } from '../runtime-readiness.js';
 
 export type ServiceStatus = Awaited<ReturnType<typeof window.lastbrowser.services.status>>;
@@ -145,6 +146,8 @@ export function NativeHeader({
   onClose?: () => void;
   closeLabel?: string;
 }): JSX.Element {
+  const { t } = useDesktopI18n();
+  const closeText = closeLabel || t('common.close');
   return (
     <header className="native-rest-header">
       <div className="native-rest-title">
@@ -158,18 +161,18 @@ export function NativeHeader({
       <div className="native-rest-header-actions">
         {ready !== undefined && <span className={`native-rest-pill ${ready ? 'ready' : 'starting'}`}>
           <span className={ready ? 'status-dot ready' : 'status-dot'} />
-          {ready ? 'Online' : 'Starting'}
+          {t(ready ? 'common.online' : 'common.starting')}
         </span>}
         {onRefresh && (
           <button type="button" className="secondary-action compact" onClick={() => void onRefresh()} disabled={!ready || loading}>
             {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-            <span>Refresh</span>
+            <span>{t('common.refresh')}</span>
           </button>
         )}
         {onClose && (
-          <button type="button" className="secondary-action compact" onClick={onClose} aria-label={closeLabel || 'Close'}>
+          <button type="button" className="secondary-action compact" onClick={onClose} aria-label={closeText}>
             <X size={15} />
-            <span>{closeLabel || 'Close'}</span>
+            <span>{closeText}</span>
           </button>
         )}
       </div>

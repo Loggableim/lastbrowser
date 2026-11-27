@@ -9,9 +9,11 @@ import { pipeline } from 'node:stream/promises';
 
 const scripts = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.dirname(scripts);
+const repository = path.resolve(desktop, '../..');
 const runtime = path.join(desktop, 'runtime');
 const cache = path.resolve(process.env.LASTBROWSER_SPACE_RUNTIME_CACHE || path.join(runtime, 'space-runtime-cache'));
 const output = path.join(runtime, 'protected-spaces');
+const notices = path.join(repository, 'docs', 'legal', 'notices');
 const archives = [
   {
     name: 'cryptomator-cli-0.6.2-win-x64.zip',
@@ -70,13 +72,36 @@ async function stage() {
     const system = process.env.SystemRoot;
     if (!system || !path.isAbsolute(system)) throw new Error('Windows SystemRoot is unavailable');
     const tar = path.join(system, 'System32', 'tar.exe');
-    for (const archive of archives) run(tar, ['-xf', path.join(cache, archive.name), '-C', stageRoot]);
     const staged = path.join(stageRoot, 'staged');
     await mkdir(staged);
-    await rename(path.join(stageRoot, 'cryptomator-cli'), path.join(staged, 'cryptomator-cli'));
-    await rename(path.join(stageRoot, 'jdk-25.0.5.0.2+1'), path.join(staged, 'jdk'));
+    const [cliArchive, jdkArchive, tssArchive] = archives;
+    // LastBrowser runs the Cryptomator modules with the separately pinned JDK.
+    // Include the modules and their license, without the unused standalone launcher and JRE.
+    run(tar, ['-xf', path.join(cache, cliArchive.name), '-C', staged,
+      'cryptomator-cli/LICENSE.txt', 'cryptomator-cli/app/mods']);
+    const jdk = path.join(staged, 'jdk');
+    await mkdir(jdk);
+    run(tar, ['-xf', path.join(cache, jdkArchive.name), '--strip-components', '1', '-C', jdk]);
+    run(tar, ['-xf', path.join(cache, tssArchive.name), '-C', stageRoot, 'lib/net46/TSS.Net.dll']);
     const dll = path.join(staged, 'TSS.Net.dll');
     await copyFile(path.join(stageRoot, 'lib', 'net46', 'TSS.Net.dll'), dll);
+    await Promise.all([
+      copyFile(path.join(notices, 'microsoft-tss-2.1.1.txt'), path.join(staged, 'Microsoft.TSS-LICENSE.txt')),
+      copyFile(path.join(notices, 'jfuse-0.7.3.txt'), path.join(staged, 'jFUSE-LICENSE.txt')),
+      copyFile(path.join(repository, 'LICENSE'), path.join(staged, 'jFUSE-GPL-3.0.txt')),
+      copyFile(path.join(notices, 'auth0-java-jwt-4.4.0.txt'), path.join(staged, 'Auth0-java-jwt-LICENSE.txt')),
+      copyFile(path.join(notices, 'logback-1.5.18.txt'), path.join(staged, 'Logback-LICENSE-NOTICE.txt')),
+      copyFile(path.join(notices, 'siv-mode-1.5.2.txt'), path.join(staged, 'SIV-Mode-LICENSE.txt')),
+      copyFile(path.join(notices, 'bouncy-castle-1.78.html'), path.join(staged, 'Bouncy-Castle-LICENSE.html')),
+      copyFile(path.join(notices, 'apache-2.0.txt'), path.join(staged, 'Apache-2.0-LICENSE.txt')),
+      copyFile(path.join(notices, 'logback-epl-1.0.txt'), path.join(staged, 'Logback-EPL-1.0.txt')),
+      copyFile(path.join(notices, 'logback-lgpl-2.1.txt'), path.join(staged, 'Logback-LGPL-2.1.txt')),
+      copyFile(path.join(notices, 'gson-2.10.1-license.txt'), path.join(staged, 'Gson-2.10.1-LICENSE.txt')),
+      copyFile(path.join(notices, 'jsr305-reference-bsd-3-clause.txt'), path.join(staged, 'JSR305-Reference-BSD-3-Clause.txt')),
+      copyFile(path.join(notices, 'cc-by-2.5.txt'), path.join(staged, 'CC-BY-2.5.txt')),
+      copyFile(path.join(notices, 'cryptomator-cli-0.6.2-jar-attributions.txt'), path.join(staged, 'Cryptomator-CLI-0.6.2-JAR-ATTRIBUTIONS.txt')),
+      copyFile(path.join(notices, 'cryptomator-cli-0.6.2-java-apache.txt'), path.join(staged, 'Cryptomator-Java-Apache-NOTICE.txt'))
+    ]);
     await copyFile(path.join(scripts, 'InitializeSpaceVault.java'), path.join(staged, 'InitializeSpaceVault.java'));
     run(path.join(system, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe'), [
       '/nologo', '/target:exe', `/reference:${dll}`, `/out:${path.join(staged, 'space-tpm-nv.exe')}`,

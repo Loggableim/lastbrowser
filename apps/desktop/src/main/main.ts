@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, Notification, powerMonitor, screen, shell, session, webContents, type MessageBoxOptions, type Session } from 'electron';
 import { getChatCompletionNotification, shouldNotifyChatCompletion } from './chat-notifications.js';
-import { detachRequestKey, ensureDetachedPageReady, isGuestOwnedByRenderer, normalizeRestoredNavigationHistory, parseDetachTabPayload, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
+import { detachRequestKey, ensureDetachedPageReady, isGuestOwnedByRenderer, normalizeRestoredNavigationHistory, parseDetachTabPayload, prepareDetachedWebviewSource, PendingTabDetachRegistry, serializeNavigationHistory } from './window-tab-transfer.js';
 import { clearDeletedProfilePartitions } from './profile-partition-cleanup.js';
 import { registerBrowserDataCleanupIpc } from './browser-data-cleanup.js';
 import { createDownloadOriginTracker } from './download-origin.js';
@@ -206,7 +206,7 @@ import { hardenWebViewAttachment } from './webview-security.js';
 import { IndependentController, independentIpcRequest } from './independent-controller.js';
 import { installSessionRequestPolicy } from './session-request-policy.js';
 import { independentApiRequest } from './sidekick-api.js';
-import { captureTrustedShellSender } from './ipc-sender.js';
+import { assertTrustedShellSender, captureTrustedShellSender } from './ipc-sender.js';
 import { requestScopedWebui } from './scoped-webui-request.js';
 import { isReservedAgentPartition } from './agent-execution-partition.js';
 import { capturePageDataUrl, normalizeCapturePageRect } from './capture-page.js';
@@ -219,7 +219,7 @@ import { createMainWindowOptions, installBrowserChrome } from './window-chrome.j
 import { appendWindowsFirstPaintSwitches, installWindowsFirstPaintNudge } from './windows-presentation.js';
 import { registerBrowserContextMenu } from './browser-context-menu.js';
 import { defaultSearchEngineId, searchEngineById } from './browser-search.js';
-import { registerBrowserShortcuts } from './shortcuts.js';
+import { registerBrowserNavigationCommands, registerBrowserShortcuts } from './shortcuts.js';
 import { openAuthConnectWindow, isStreamingLoginUrl, openExternalUrl } from './auth-window.js';
 import { synthesizeTabs, extractActiveWebview, type TabSynthesisOptions } from './tab-intelligence.js';
 import { configureProfileDirectory, defaultBrowserProfileDirectory } from './profile-directory.js';
@@ -228,6 +228,7 @@ import { resolveSpaceMigrationLayout } from './space-migration-layout.js';
 import { spaceMigrationPrerequisite } from './windows-space-runtime.js';
 import { encodeWindowsSpaceMigrationRequest } from './windows-space-migration-request.js';
 import { launchWindowsSpaceMigration } from './windows-space-migration-launch.js';
+import { protectedSpaceLinksSwitch, readProtectedSpaceLinks } from './protected-space-process.js';
 
 const protectedProfileStartup = configureProfileDirectory(app);
 
@@ -442,12 +443,13 @@ const extensionManager = new ExtensionManager(app.getPath('userData'), () => Arr
 import { extractUrlFromArgs } from './url-dispatch.js';
 export { extractUrlFromArgs };
 
-export function dispatchOpenUrl(targetUrl: string): void {
-  openUrlLifecycle.dispatchOpenUrl(targetUrl);
+export function dispatchOpenUrl(targetUrl: string, onDelivered?: () => void): void {
+  openUrlLifecycle.dispatchOpenUrl(targetUrl, onDelivered);
 }
 
 function createWindow(): BrowserWindow {
-  const window = new BrowserWindow(createMainWindowOptions(mainDir));
+  const window = new BrowserWindow(createMainWindowOptions(mainDir, screen.getPrimaryDisplay().workAreaSize));
+  registerBrowserNavigationCommands(window);
   installWindowsFirstPaintNudge(window);
   mainWindow = window;
 
@@ -474,15 +476,23 @@ function createWindow(): BrowserWindow {
   });
   window.webContents.on('render-process-gone', (_event, details) => {
     logRendererLifecycle('render-process-gone', { reason: details.reason, exitCode: details.exitCode });
+    openUrlLifecycle.onWindowNavigating(window);
   });
   window.webContents.on('unresponsive', () => logRendererLifecycle('unresponsive'));
   window.webContents.on('responsive', () => logRendererLifecycle('responsive'));
   window.once('ready-to-show', () => logRendererLifecycle('ready-to-show'));
 
-  window.webContents.on('did-start-loading', () => openUrlLifecycle.onWindowLoading(window));
-  window.webContents.on('did-finish-load', () => {
-    // Let preload, React, and the browser tab event subscription mount first.
-    setTimeout(() => openUrlLifecycle.onWindowReady(window), 350);
+  window.webContents.on('did-start-navigation', ({ isMainFrame, isSameDocument }) => {
+    if (isMainFrame && !isSameDocument) openUrlLifecycle.onWindowNavigating(window);
+  });
+  window.webContents.on('ipc-message', (event, channel) => {
+    if (channel !== 'lastbrowser:browser:openTabReady') return;
+    try {
+      assertTrustedShellSender(event, contents => contents === window.webContents);
+    } catch {
+      return;
+    }
+    openUrlLifecycle.onWindowReady(window);
   });
   window.on('closed', () => {
     if (mainWindow === window) mainWindow = null;
@@ -514,7 +524,7 @@ function createWindow(): BrowserWindow {
   });
 
   setupMinimizeToTray(window, () => {
-    if (isQuitting || process.platform === 'darwin' || !appTray?.tray || appTray.tray.isDestroyed()) return false;
+    if (protectedProfileStartup || isQuitting || process.platform === 'darwin' || !appTray?.tray || appTray.tray.isDestroyed()) return false;
     return true;
   });
 
@@ -1388,6 +1398,7 @@ function registerIpc(): void {
           height
         });
         newWin = detachedWindow;
+        registerBrowserNavigationCommands(detachedWindow);
 
         secondaryWindows.add(detachedWindow);
         detachedWindowWebContents.add(detachedWindow.webContents.id);
@@ -1407,12 +1418,7 @@ function registerIpc(): void {
         });
         detachedWindow.webContents.on('will-attach-webview', (_event, _webPreferences, params) => {
           const transfer = detachedTabTransfers.get(contentsId);
-          if (transfer?.payload.navigationHistory && params.src === transfer.payload.tab.url) {
-            // Give the guest a valid attachment without committing its first
-            // navigation. did-attach-webview restores the snapshot before the
-            // transferred page creates its first history entry.
-            params.src = 'about:blank';
-          }
+          if (transfer) prepareDetachedWebviewSource(params, transfer.payload.tab.url, Boolean(transfer.payload.navigationHistory));
         });
         detachedWindow.webContents.on('did-attach-webview', (_event, guest) => {
           const transfer = detachedTabTransfers.get(contentsId);
@@ -1436,7 +1442,7 @@ function registerIpc(): void {
         });
 
         setupMinimizeToTray(detachedWindow, () => {
-          if (isQuitting || process.platform === 'darwin' || !appTray?.tray || appTray.tray.isDestroyed()) return false;
+          if (protectedProfileStartup || isQuitting || process.platform === 'darwin' || !appTray?.tray || appTray.tray.isDestroyed()) return false;
           return true;
         });
 
@@ -1740,6 +1746,9 @@ if (gotSingleInstanceLock && typeof app?.on === 'function') {
   app.on('second-instance', (_event, commandLine) => {
     openUrlLifecycle.handleSecondInstance(commandLine);
   });
+  if (protectedProfileStartup && app.commandLine.hasSwitch(protectedSpaceLinksSwitch)) {
+    app.once('will-quit', readProtectedSpaceLinks(dispatchOpenUrl));
+  }
 }
 
 // Auto-detect and register system Widevine CDM before app is ready (Ansatz 3)
@@ -1785,7 +1794,11 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
   });
   registerBrowserShortcuts({
     app,
-    getWindow: () => mainWindow
+    getWindow: (contents) => {
+      const source = contents as Electron.WebContents;
+      const owner = source.hostWebContents ?? source;
+      return isTrustedShell(owner) ? BrowserWindow.fromWebContents(owner) : null;
+    }
   });
   services = new SidecarServices(resolveServiceLayout(appResourcesDir(), undefined, process.env, process.platform, app.isPackaged));
   independentController = new IndependentController({
@@ -1845,6 +1858,7 @@ startPrimaryInstanceStartup(gotSingleInstanceLock, registerAppScheme, () => app.
     getWindows: () => BrowserWindow.getAllWindows(),
     getServices: () => services,
     getLocale: () => currentLocale,
+    protectedSpace: protectedProfileStartup,
     resourcesDir: appResourcesDir(),
     onQuit: () => {
       isQuitting = true;

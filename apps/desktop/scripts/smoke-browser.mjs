@@ -252,7 +252,7 @@ async function startSmokeDownloadFixture() {
   return `http://127.0.0.1:${address.port}/download`;
 }
 
-async function enterAddressThroughKeyboard(cdp, url) {
+async function enterAddressThroughKeyboard(cdp, url, retries = 1) {
   const rectResponse = await cdp.send('Runtime.evaluate', {
     expression: `(() => {
       const input = document.querySelector('.addressbar-container input');
@@ -301,6 +301,7 @@ async function enterAddressThroughKeyboard(cdp, url) {
   }
   addressEntryTrace.push({ requested: url, focused: typedState?.focused, focusBeforeTyping: focusState.result.value, typedValue: typedState?.value || '', selectedSuggestion: typedState?.optionText || '' });
   if (typedState?.value !== url) {
+    if (retries > 0) return enterAddressThroughKeyboard(cdp, url, retries - 1);
     return { submitted: false, typedValue: typedState?.value || '', selectedSuggestion: typedState?.optionText || '' };
   }
   // Submit the exact text through the real form path. Clicking the dropdown's
@@ -469,6 +470,17 @@ async function main() {
   smokeCdp = cdp;
   await cdp.send('Runtime.enable');
 
+  // This test exercises the browser after setup, not the first-run flow. The
+  // test profile is always temporary; set the app's existing dismissal flag
+  // there before React initializes so late backend startup cannot open the
+  // wizard over subsequent pointer and settings checks.
+  await cdp.send('Runtime.evaluate', {
+    expression: `(() => { localStorage.setItem('lastbrowser.setupDismissed', '1'); localStorage.setItem('lastbrowser.locale', 'en'); })()`,
+    returnByValue: true
+  });
+  await cdp.send('Page.reload');
+  await sleep(500);
+
   // Electron can expose the CDP target before React has mounted. Wait for
   // either browser chrome or the first-run wizard before interacting.
   let initialUi = null;
@@ -476,7 +488,7 @@ async function main() {
     const probe = await cdp.send('Runtime.evaluate', {
       expression: `JSON.stringify({
         hasAddressBar: Boolean(document.querySelector('.addressbar-container input')),
-        hasFirstRun: Boolean(document.querySelector('[role="dialog"][aria-label="First-run setup"]')),
+        hasFirstRun: Boolean(document.querySelector('.first-run-wizard[role="dialog"]')),
         hasSidebar: Boolean(document.querySelector('.sidekick-sidebar, .shell-rail'))
       })`,
       returnByValue: true
@@ -486,16 +498,9 @@ async function main() {
     await sleep(250);
   }
 
-  // If first-run wizard is open, dismiss it so browser chrome renders
+  // A wizard here means the isolated-profile setup above did not take effect.
   if (initialUi?.hasFirstRun) {
-    await cdp.send('Runtime.evaluate', {
-      expression: `(() => {
-        const btn = [...document.querySelectorAll('button')]
-          .find(b => /erstmal ohne|ohne ki|dismiss|skip/i.test(b.innerText || ''));
-        if (btn) btn.click();
-      })()`,
-      returnByValue: true
-    });
+    throw new Error('First-run wizard unexpectedly opened in the isolated browser smoke profile.');
   }
 
   let shellInfo = null;
@@ -518,6 +523,17 @@ async function main() {
 
   check('shell ui rendered', shellInfo.hasSidebar && shellInfo.hasAddressBar,
     `sidebar=${shellInfo.hasSidebar} addressbar=${shellInfo.hasAddressBar}`);
+
+  let startupOverlayCleared = false;
+  for (let attempt = 0; attempt < 120; attempt++) {
+    const probe = await cdp.send('Runtime.evaluate', {
+      expression: `!document.querySelector('.startup-animation-layer, .startup-screen')`,
+      returnByValue: true
+    });
+    if (probe.result.value) { startupOverlayCleared = true; break; }
+    await sleep(250);
+  }
+  check('startup overlay clears before pointer tests', startupOverlayCleared);
 
   const topbarProfileSelector = await cdp.send('Runtime.evaluate', {
     expression: `document.querySelectorAll('.modern-titlebar .profile-switcher, .browser-titlebar .profile-switcher').length`,
@@ -607,7 +623,9 @@ async function main() {
           const items = [...document.querySelectorAll('.nova-dock-item-wrapper')];
           const labels = [...document.querySelectorAll('.nova-dock-label-pill')];
           const scale = (element) => Number((getComputedStyle(element).transform.match(/^matrix\\(([^,]+)/) || [])[1] || 1);
-          return { hoveredScale: scale(items[0]), neighborScale: scale(items[1]), hoveredLabel: Number(labels[0] ? getComputedStyle(labels[0]).opacity : 0), neighborLabel: Number(labels[1] ? getComputedStyle(labels[1]).opacity : 0), dockClass: document.querySelector('.nova-dock')?.className };
+          const rect = items[0]?.getBoundingClientRect();
+          const hit = rect && document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+          return { hoveredScale: scale(items[0]), neighborScale: scale(items[1]), hoveredLabel: Number(labels[0] ? getComputedStyle(labels[0]).opacity : 0), neighborLabel: Number(labels[1] ? getComputedStyle(labels[1]).opacity : 0), dockClass: document.querySelector('.nova-dock')?.className, hit: hit ? { tag: hit.tagName, className: String(hit.className), insideItem: items[0].contains(hit), x: rect.left, y: rect.top, width: rect.width, height: rect.height } : null };
         })()`,
         returnByValue: true
       });
@@ -666,6 +684,40 @@ async function main() {
   check('Downloads opens from the visible toolbar trigger', downloadsOpen.result.value === 'CLICKED' && panelInitiallyOpened,
     `${downloadsOpen.result.value}, panel=${panelInitiallyOpened}`);
 
+  const currentDownloadsUi = await cdp.send('Runtime.evaluate', {
+    expression: `Boolean(document.querySelector('.downloads-panel button[data-dock-mode="top"]'))`,
+    returnByValue: true
+  });
+  if (currentDownloadsUi.result.value) {
+    await cdp.send('Runtime.evaluate', {
+      expression: `(() => { if (!document.querySelector('.expanded-workspace-pill')) document.querySelector('.nova-dock .toggle-expand-btn, .modern-titlebar .sidebar-toggle')?.click(); })()`,
+      returnByValue: true
+    });
+    const sidebarReady = await waitForUi('.expanded-workspace-pill', true);
+    const observed = [];
+    for (const mode of ['floating', 'sidebar', 'top']) {
+      const clicked = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const button = document.querySelector('.downloads-panel button[data-dock-mode="${mode}"]'); if (!button || button.disabled) return false; button.click(); return true; })()`,
+        returnByValue: true
+      });
+      const applied = await waitForDownloads(`.downloads-panel.mode-${mode}`, true);
+      observed.push({ mode, clicked: clicked.result.value, applied });
+    }
+    check('Downloads switches between floating, sidebar and toolbar docks', sidebarReady && observed.every(item => item.clicked && item.applied), JSON.stringify(observed));
+    const closed = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const button = document.querySelector('.downloads-panel button[data-download-action="close"]'); if (!button) return false; button.click(); return true; })()`,
+      returnByValue: true
+    });
+    const hidden = await waitForDownloads('.downloads-panel', false);
+    const reopened = await cdp.send('Runtime.evaluate', {
+      expression: `(() => { const button = [...document.querySelectorAll('.downloads-trigger')].find(el => el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden'); if (!button) return false; button.click(); return true; })()`,
+      returnByValue: true
+    });
+    const topPanel = await waitForDownloads('.downloads-panel.mode-top', true);
+    check('Downloads closes and reopens from the toolbar', closed.result.value && hidden && reopened.result.value && topPanel,
+      `closed=${closed.result.value}/${hidden}, reopened=${reopened.result.value}/${topPanel}`);
+    skip('legacy Downloads minimize pill', 'The current panel has no minimize control; this legacy behavior is not verified.');
+  } else {
   let dockChecksPassed = panelInitiallyOpened;
   const dockCases = [
     'floating',
@@ -771,6 +823,7 @@ async function main() {
     && reopenedInfo.mode === 'mode-floating';
   check('Downloads close and reopen expanded with saved dock mode', downloadsLifecycleOk,
     `closeClick=${closeExpanded.result.value}, closed=${closedDownloads}, reopenClick=${reopenedDownloads.result.value}, reopened=${reopenedInfo.mode}/${reopenedInfo.minimized ? 'minimized' : 'expanded'}`);
+  }
   await cdp.send('Runtime.evaluate', {
     expression: `document.querySelector('.downloads-panel button[data-download-action="close"]')?.click()`,
     returnByValue: true
@@ -795,7 +848,7 @@ async function main() {
   // translated text and persisted renderer preference, then restore the prior
   // locale so the remaining smoke assertions keep their expected labels.
   const openPreferences = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelectorAll('.settings-section-button')[2]; if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    expression: `(() => { const button = [...document.querySelectorAll('.settings-section-button')].find(item => /^(Preferences|Präferenzen)$/i.test(item.querySelector('strong')?.textContent?.trim() || '')); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
   const preferencesReady = await waitForUi('.settings-panel-scroll select', true);
@@ -941,7 +994,7 @@ async function main() {
   // toggle through the real Settings controls. Reset the accessibility card
   // afterwards so later browser checks run with the default tab layout/font.
   const openAccessibilityPreferences = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelectorAll('.settings-section-button')[2]; if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    expression: `(() => { const button = [...document.querySelectorAll('.settings-section-button')].find(item => /^(Preferences|Präferenzen)$/i.test(item.querySelector('strong')?.textContent?.trim() || '')); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
   const accessibilityPreferencesReady = await cdp.send('Runtime.evaluate', {
@@ -1032,7 +1085,7 @@ async function main() {
   for (let attempt = 0; attempt < 300; attempt++) {
     const state = await cdp.send('Runtime.evaluate', {
       expression: `(() => {
-        const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('System-Diagnose (sidekick doctor)'));
+        const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('(sidekick doctor)'));
         if (!card) return null;
         const text = card.innerText || '';
         const passed = text.match(/✓\\s*\\d+\\s*Passed/)?.[0];
@@ -1048,13 +1101,13 @@ async function main() {
     await sleep(200);
   }
   const openDoctorRaw = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('System-Diagnose (sidekick doctor)')); const button = [...(card?.querySelectorAll('button') || [])].find(item => /Raw Log/.test(item.innerText || '')); if (!button) return false; button.click(); return true; })()` ,
+    expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('(sidekick doctor)')); const button = [...(card?.querySelectorAll('button') || [])].find(item => /Raw Log/.test(item.innerText || '')); if (!button) return false; button.click(); return true; })()` ,
     returnByValue: true
   });
   let doctorRaw = '';
   for (let attempt = 0; attempt < 30; attempt++) {
     const raw = await cdp.send('Runtime.evaluate', {
-      expression: `(() => [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('System-Diagnose (sidekick doctor)'))?.querySelector('pre')?.textContent || '')()` ,
+      expression: `(() => [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('(sidekick doctor)'))?.querySelector('pre')?.textContent || '')()` ,
       returnByValue: true
     });
     doctorRaw = raw.result.value || '';
@@ -1073,6 +1126,10 @@ async function main() {
     .map(line => line.trim()
       .replace(/\bsk-[A-Za-z0-9_-]{12,}\b/g, '[redacted-key]')
       .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '[redacted-email]'));
+  const doctorFailureKinds = cleanDoctorRaw.split(/\r?\n/).filter(line => /[✗✘]\s+/.test(line)).map(line => {
+    const known = ['OpenAI SDK', 'Rich (terminal UI)', 'python-dotenv', 'PyYAML', 'HTTPX'];
+    return known.find(label => line.includes(label)) || 'other diagnostic failure';
+  });
   const displayedDoctorCounts = {
     passed: Number(doctorVisual?.passed?.match(/\d+/)?.[0] ?? -1),
     warnings: Number(doctorVisual?.warnings?.match(/\d+/)?.[0] ?? -1),
@@ -1081,7 +1138,7 @@ async function main() {
   const doctorCountsMatch = Object.keys(doctorCliCounts).every(key => doctorCliCounts[key] === displayedDoctorCounts[key]);
   const doctorCliSucceeded = /All checks passed!/i.test(cleanDoctorRaw) && doctorCliCounts.warnings === 0;
   const doctorRawButton = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('System-Diagnose (sidekick doctor)')); const button = [...(card?.querySelectorAll('button') || [])].find(item => /^Visual$/.test(item.innerText?.trim() || '')); if (!button) return false; button.click(); return true; })()` ,
+    expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(item => (item.innerText || '').includes('(sidekick doctor)')); const button = [...(card?.querySelectorAll('button') || [])].find(item => /^Visual$/.test(item.innerText?.trim() || '')); if (!button) return false; button.click(); return true; })()` ,
     returnByValue: true
   });
   check('Doctor Dashboard renders visual and raw output with matching successful CLI counts',
@@ -1089,7 +1146,12 @@ async function main() {
     && openDoctorRaw.result.value === true && doctorCliSucceeded
     && doctorCountsMatch && doctorCliCounts.warnings === 0 && doctorCliCounts.failures === 0 && doctorRawButton.result.value === true
     && doctorWarningLines.length === doctorCliCounts.warnings,
-    `section=${openDoctorSettings.result.value}, visual=${JSON.stringify(displayedDoctorCounts)}, raw=${JSON.stringify(doctorCliCounts)}, categories=${doctorVisual?.hasCategory}, success=${doctorCliSucceeded}, warningLines=${JSON.stringify(doctorWarningLines)}, rawViewRestored=${doctorRawButton.result.value}`);
+    `section=${openDoctorSettings.result.value}, visual=${JSON.stringify(displayedDoctorCounts)}, raw=${JSON.stringify(doctorCliCounts)}, categories=${doctorVisual?.hasCategory}, success=${doctorCliSucceeded}, warningLines=${JSON.stringify(doctorWarningLines)}, failureKinds=${JSON.stringify(doctorFailureKinds)}, rawViewRestored=${doctorRawButton.result.value}`);
+  if (process.env.LASTBROWSER_SMOKE_DOCTOR_ONLY === '1') {
+    cdp.close();
+    finish(child);
+    return;
+  }
 
   const cdpSettingsSmoke = await cdp.send('Runtime.evaluate', {
     expression: `(async () => {
@@ -1133,7 +1195,7 @@ async function main() {
   });
   const settingsForSuperTabsReady = await waitForUi('.app-shell.panel-settings', true);
   const openPreferencesForSuperTabs = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const button = document.querySelectorAll('.settings-section-button')[2]; if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
+    expression: `(() => { const button = [...document.querySelectorAll('.settings-section-button')].find(item => /^(Preferences|Präferenzen)$/i.test(item.querySelector('strong')?.textContent?.trim() || '')); if (!button) return 'NOT_FOUND'; button.click(); return 'CLICKED'; })()`,
     returnByValue: true
   });
   await waitForUi('.settings-panel-scroll', true);
@@ -1169,7 +1231,7 @@ async function main() {
     returnByValue: true
   });
   await waitForUi('.app-shell.panel-settings', true);
-  await cdp.send('Runtime.evaluate', { expression: `document.querySelectorAll('.settings-section-button')[2]?.click()`, returnByValue: true });
+  await cdp.send('Runtime.evaluate', { expression: `[...document.querySelectorAll('.settings-section-button')].find(item => /^(Preferences|Präferenzen)$/i.test(item.querySelector('strong')?.textContent?.trim() || ''))?.click()`, returnByValue: true });
   const resetSuperTabsButton = await cdp.send('Runtime.evaluate', {
     expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(element => /super-sized vertical tabs|super-siz/i.test(element.innerText || '')); const reset = card?.querySelector('.settings-card-header .secondary-action'); if (!reset) return false; reset.click(); return true; })()`,
     returnByValue: true
@@ -1190,10 +1252,13 @@ async function main() {
     await sleep(100);
   }
   const zenSensor = await cdp.send('Runtime.evaluate', {
-    expression: `(() => { const element = document.querySelector('.zen-left-hover-sensor'); if (!element) return null; const rect = element.getBoundingClientRect(); return { x: Math.max(1, rect.left + Math.min(rect.width / 2, 3)), y: rect.top + rect.height / 2, rect: { x: rect.x, width: rect.width, height: rect.height } }; })()`,
+    expression: `(() => { const element = document.querySelector('.zen-left-hover-sensor'); if (!element) return null; const rect = element.getBoundingClientRect(); const x = Math.max(1, rect.left + Math.min(rect.width / 2, 3)); const y = rect.top + rect.height / 2; const hit = document.elementFromPoint(x, y); return { x, y, hit: hit?.className || hit?.tagName || '', sensorHit: hit === element, rect: { x: rect.x, width: rect.width, height: rect.height } }; })()`,
     returnByValue: true
   });
   if (zenSensor.result.value) {
+    // Start away from the sensor so the next movement generates a real entry.
+    await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 500, y: 400 });
+    await sleep(100);
     await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: zenSensor.result.value.x, y: zenSensor.result.value.y });
   }
   let zenRevealed = false;
@@ -1218,7 +1283,7 @@ async function main() {
     }
   }
   check('Zen sidebar reveals on left-edge hover and hides after leaving', enterZen.result.value === 'CLICKED' && zenActive && zenSensor.result.value && zenRevealed && zenHiddenAfterLeave,
-    `enter=${enterZen.result.value}, active=${zenActive}, sensor=${JSON.stringify(zenSensor.result.value?.rect)}, revealed=${zenRevealed}, hiddenAfterLeave=${zenHiddenAfterLeave}`);
+    `enter=${enterZen.result.value}, active=${zenActive}, sensor=${JSON.stringify(zenSensor.result.value)}, revealed=${zenRevealed}, hiddenAfterLeave=${zenHiddenAfterLeave}`);
   const dockZenSidebar = await cdp.send('Runtime.evaluate', {
     expression: `(() => { const button = document.querySelector('.zen-sidebar-overlay .sidebar-dock-pin-btn'); if (!button) return false; button.click(); return true; })()`,
     returnByValue: true
@@ -1226,6 +1291,10 @@ async function main() {
   const zenModeExited = dockZenSidebar.result.value && await waitForUi('.app-shell.zen-mode', false);
   check('Zen smoke returns to docked sidebar mode after hover testing', zenModeExited,
     `dock=${dockZenSidebar.result.value}, exited=${zenModeExited}`);
+  if (process.env.LASTBROWSER_SMOKE_ZEN_ONLY === '1') {
+    cdp.close();
+    finish(child);
+  }
 
   // Exercise the full Space setup flow in the isolated profile. The audio
   // continuity check below needs a second real Space to switch to and back.
@@ -1356,7 +1425,7 @@ async function main() {
         returnByValue: true
       });
       await waitForUi('.app-shell.panel-settings', true);
-      await cdp.send('Runtime.evaluate', { expression: `document.querySelectorAll('.settings-section-button')[2]?.click()`, returnByValue: true });
+      await cdp.send('Runtime.evaluate', { expression: `[...document.querySelectorAll('.settings-section-button')].find(item => /^(Preferences|Präferenzen)$/i.test(item.querySelector('strong')?.textContent?.trim() || ''))?.click()`, returnByValue: true });
       const resetAfterMagnifier = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const card = [...document.querySelectorAll('.settings-card')].find(element => /vision-impaired mode/i.test(element.innerText || '')); const reset = card?.querySelector('.settings-card-header .secondary-action'); if (!reset) return false; reset.click(); return true; })()`,
         returnByValue: true
@@ -1669,6 +1738,21 @@ async function main() {
       // of the user's browser data.
       webviewSmokePhase = 'site permission trust and revoke';
       const permissionOrigin = new URL(downloadFixtureUrl).origin;
+      const openBrowserTools = async () => {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const trigger = document.querySelector('.titlebar-research-trigger-btn'); if (!trigger) return 'NO_RESEARCH_TRIGGER'; if (trigger.getAttribute('aria-expanded') !== 'true') trigger.click(); return 'OPENING'; })()`,
+          returnByValue: true
+        });
+        if (state.result.value !== 'OPENING') return state.result.value;
+        await waitForUi('.titlebar-research-flyout', true);
+        const more = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const button = document.querySelector('.titlebar-research-flyout .research-icon-action'); if (!button) return 'NO_MORE_BUTTON'; if (button.getAttribute('aria-expanded') !== 'true') button.click(); return 'OPENING'; })()`,
+          returnByValue: true
+        });
+        if (more.result.value !== 'OPENING') return more.result.value;
+        return await waitForUi('.research-more-popover', true) ? 'OPEN' : 'NO_MENU';
+      };
+      const trustMenu = await openBrowserTools();
       const trustSite = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const button = document.querySelector('.site-permission-trigger'); if (!button || !button.getClientRects().length) return 'NOT_AVAILABLE'; button.click(); return 'CLICKED'; })()`,
         returnByValue: true
@@ -1693,6 +1777,7 @@ async function main() {
         awaitPromise: true,
         returnByValue: true
       });
+      const permissionsMenu = await openBrowserTools();
       const openPermissions = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const button = document.querySelector('.permissions-trigger'); if (!button) return 'NOT_AVAILABLE'; button.click(); return 'CLICKED'; })()`,
         returnByValue: true
@@ -1733,7 +1818,7 @@ async function main() {
         && permissionOriginRendered && permissionRow.result.value === permissionOrigin && revokePermission.result.value
         && siteRevoked && revokedMedia.result.value === 'deny';
       check('site permissions grant and revoke camera access without granting geolocation', permissionPassed,
-        `trust=${trustSite.result.value}/${siteTrusted}, media=${trustedMedia.result.value}->${revokedMedia.result.value}, geolocation=${unrelatedPermission.result.value}, panel=${permissionPanelReady}, row=${permissionRow.result.value}/${permissionOriginRendered}, revoked=${siteRevoked}`);
+        `menus=${trustMenu}/${permissionsMenu}, trust=${trustSite.result.value}/${siteTrusted}, media=${trustedMedia.result.value}->${revokedMedia.result.value}, geolocation=${unrelatedPermission.result.value}, panel=${permissionPanelReady}, row=${permissionRow.result.value}/${permissionOriginRendered}, revoked=${siteRevoked}`);
       const closePermissions = await cdp.send('Runtime.evaluate', {
         expression: `(() => { const button = document.querySelector('.permissions-panel button[aria-label="Close site permissions"]'); if (!button) return false; button.click(); return true; })()`,
         returnByValue: true
@@ -1760,6 +1845,69 @@ async function main() {
         await wvCdp.ready;
       }
       console.log(`  INFO  audio CDP target snapshot — shell=${audioTargetSnapshot.result.value}, target=${JSON.stringify(audioTargets.filter(target => target.type === 'webview').map(({ id, url, webSocketDebuggerUrl }) => ({ id, url, ws: Boolean(webSocketDebuggerUrl) })))}, originalTarget=${webview.id}/${webview.url}, selectedTarget=${liveAudioTarget?.id || 'none'}, socketState=${wvCdp.ws.readyState}`);
+      // Verify Chromium's real middle-click autoscroll on a tall local page.
+      // Dispatch to the guest, not the shell, so this exercises the WebView.
+      const scrollPoint = await wvCdp.send('Runtime.evaluate', {
+        expression: `(() => { document.body.style.minHeight = '4000px'; window.scrollTo(0, 0); return { x: Math.round(innerWidth / 2), y: Math.round(innerHeight / 3) }; })()`,
+        returnByValue: true
+      });
+      const middlePoint = scrollPoint.result.value;
+      await wvCdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...middlePoint });
+      await wvCdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'middle', buttons: 4, clickCount: 1, ...middlePoint });
+      await wvCdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'middle', buttons: 0, clickCount: 1, ...middlePoint });
+      await wvCdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: middlePoint.x, y: middlePoint.y + 150 });
+      await sleep(1200);
+      const autoscroll = await wvCdp.send('Runtime.evaluate', { expression: 'window.scrollY', returnByValue: true });
+      await wvCdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', button: 'middle', buttons: 4, clickCount: 1, x: middlePoint.x, y: middlePoint.y + 150 });
+      await wvCdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', button: 'middle', buttons: 0, clickCount: 1, x: middlePoint.x, y: middlePoint.y + 150 });
+      await wvCdp.send('Runtime.evaluate', { expression: `document.body.style.minHeight = ''; window.scrollTo(0, 0)` });
+      check('middle-click autoscroll moves a local WebView page', autoscroll.result.value > 0, `scrollY=${autoscroll.result.value}`);
+      if (process.env.LASTBROWSER_SMOKE_DRM === '1') {
+        // Public Shaka/Widevine test vectors; no service account or personal
+        // profile is used. This is not a Spotify/Netflix compatibility test.
+        const drmStart = await wvCdp.send('Runtime.evaluate', {
+          expression: `(() => {
+            window.__smokeDrm = { stage: 'loading-player', error: '' };
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/shaka-player/5.1.8/shaka-player.compiled.js';
+            script.onerror = () => { window.__smokeDrm.stage = 'player-load-error'; };
+            script.onload = async () => {
+              try {
+                shaka.polyfill.installAll();
+                const video = document.createElement('video');
+                video.muted = true; video.controls = true;
+                document.body.appendChild(video);
+                const player = new shaka.Player();
+                window.__smokeDrm.video = video; window.__smokeDrm.player = player;
+                player.addEventListener('error', event => { window.__smokeDrm.error = String(event.detail?.code || 'player-error'); });
+                await player.attach(video);
+                player.configure({ drm: { servers: { 'com.widevine.alpha': 'https://cwip-shaka-proxy.appspot.com/no_auth' } } });
+                window.__smokeDrm.stage = 'loading-media';
+                await player.load('https://storage.googleapis.com/shaka-demo-assets/sintel-widevine/dash.mpd');
+                window.__smokeDrm.stage = 'starting';
+                await video.play();
+                // The public sample begins clear and becomes encrypted after
+                // ten seconds. Seek into the encrypted segment before judging.
+                video.currentTime = 12;
+                window.__smokeDrm.stage = 'playing';
+              } catch (error) { window.__smokeDrm.stage = 'failed'; window.__smokeDrm.error = String(error?.code || error?.name || 'error'); }
+            };
+            document.head.appendChild(script);
+            return true;
+          })()`, returnByValue: true
+        });
+        let drmState = null;
+        for (let attempt = 0; attempt < 80; attempt++) {
+          const state = await wvCdp.send('Runtime.evaluate', {
+            expression: `(() => { const s = window.__smokeDrm; return { stage: s?.stage, error: s?.error, time: s?.video?.currentTime || 0, readyState: s?.video?.readyState || 0, mediaKeys: Boolean(s?.video?.mediaKeys) }; })()`, returnByValue: true
+          });
+          drmState = state.result.value;
+          if ((drmState?.stage === 'playing' && drmState.time > 13) || ['failed', 'player-load-error'].includes(drmState?.stage)) break;
+          await sleep(500);
+        }
+        check('public Widevine test content obtains a license and plays', drmStart.result.value && drmState?.stage === 'playing' && drmState.time > 13 && drmState.readyState >= 2 && drmState.mediaKeys && !drmState.error, JSON.stringify(drmState));
+        await wvCdp.send('Runtime.evaluate', { expression: `window.__smokeDrm?.video?.pause(); window.__smokeDrm?.player?.destroy()` });
+      }
       const audioButton = await wvCdp.send('Runtime.evaluate', {
         expression: `(() => {
           const button = document.createElement('button');
@@ -2104,12 +2252,12 @@ async function main() {
           await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Control', code: 'ControlLeft', windowsVirtualKeyCode: 17 });
           await sleep(200);
           const paletteQuery = await cdp.send('Runtime.evaluate', {
-            expression: `(() => { const input = document.querySelector('.command-palette-input'); if (!input) return 'PALETTE_NOT_OPEN'; input.focus(); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, 'Verlauf anzeigen'); input.dispatchEvent(new Event('input', { bubbles: true })); return 'SEARCHED'; })()`,
+            expression: `(() => { const input = document.querySelector('.command-palette-input'); if (!input) return 'PALETTE_NOT_OPEN'; input.focus(); const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, 'history'); input.dispatchEvent(new Event('input', { bubbles: true })); return 'SEARCHED'; })()`,
             returnByValue: true
           });
           await sleep(200);
           const paletteClick = await cdp.send('Runtime.evaluate', {
-            expression: `(() => { const item = [...document.querySelectorAll('.command-palette-item')].find(el => /Verlauf anzeigen|History/i.test(el.innerText || '')); if (!item) return 'ITEM_NOT_FOUND'; item.click(); return 'CLICKED'; })()`,
+            expression: `(() => { const item = [...document.querySelectorAll('.command-palette-item')].find(el => /^(Show history|Verlauf anzeigen)$/i.test(el.querySelector('.command-palette-item-title')?.textContent?.trim() || '')); if (!item) return 'ITEM_NOT_FOUND'; item.click(); return 'CLICKED'; })()`,
             returnByValue: true
           });
           commandPaletteResult = `${paletteQuery.result.value}/${paletteClick.result.value}`;
@@ -3243,6 +3391,51 @@ async function main() {
   check('detached tab back and forward return to the original pages',
     detachedHistoryRoundTrip.backUrl.includes('example.com') && detachedHistoryRoundTrip.forwardUrl.includes('iana.org'),
     JSON.stringify(detachedHistoryRoundTrip));
+  // Send the shortcut into the actual detached guest, not just its shell.
+  // Both tab counts are checked to catch accidental routing to the source window.
+  let detachedShortcutResult = { skipped: 'detached guest unavailable' };
+  if (process.platform === 'win32' && detachedCdp && detachedGuestVisible) {
+    let guestCdp = null;
+    try {
+      const target = (await cdpList()).find(item => item.type === 'webview' && item.url === detachedGuest.url && item.webSocketDebuggerUrl);
+      if (!target) throw new Error('detached guest CDP target unavailable');
+      guestCdp = new CDP(target.webSocketDebuggerUrl);
+      await detachedCdp.send('Page.bringToFront');
+      await detachedCdp.send('Runtime.evaluate', { expression: "document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view')?.focus()" });
+      await guestCdp.send('Runtime.evaluate', { expression: "globalThis.__lastbrowserSmokeKeyCount = 0; document.addEventListener('keydown', event => { if (event.ctrlKey && event.key.toLowerCase() === 't') globalThis.__lastbrowserSmokeKeyCount++; }, {capture:true})" });
+      // CDP Input.dispatchKeyEvent sent directly to a webview did not reach
+      // Electron's before-input-event. Guard native input by process ID so it
+      // cannot type into another application if foreground activation fails.
+      const nativeInput = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `
+        Add-Type -AssemblyName System.Windows.Forms
+        Add-Type 'using System; using System.Runtime.InteropServices; public static class SmokeForeground { [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow(); [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid); }'
+        $owner = [uint32]0
+        [void][SmokeForeground]::GetWindowThreadProcessId([SmokeForeground]::GetForegroundWindow(), [ref]$owner)
+        if ($owner -ne ${child.pid}) { throw 'Test window is not foreground' }
+        [System.Windows.Forms.SendKeys]::SendWait('^t')
+      `], { encoding: 'utf8', timeout: 10000 });
+      if (nativeInput.status !== 0) throw new Error('native shortcut could not be sent to the test window');
+      for (let attempt = 0; attempt < 50; attempt++) {
+        const detachedTabs = (await detachedCdp.send('Runtime.evaluate', { expression: "document.querySelectorAll('.vertical-tab-item').length", returnByValue: true })).result.value;
+        const sourceTabs = (await cdp.send('Runtime.evaluate', { expression: "document.querySelectorAll('.vertical-tab-item').length", returnByValue: true })).result.value;
+        detachedShortcutResult = { detachedTabs, sourceTabs };
+        if (detachedTabs === 2 || sourceTabs !== 1) break;
+        await sleep(100);
+      }
+      detachedShortcutResult.guestKeyEvents = (await guestCdp.send('Runtime.evaluate', { expression: 'globalThis.__lastbrowserSmokeKeyCount', returnByValue: true })).result.value;
+    } catch (error) {
+      detachedShortcutResult = { error: String(error) };
+    } finally {
+      guestCdp?.close();
+    }
+  }
+  if (process.platform === 'win32') {
+    check('shortcut in detached webview opens a tab only in its own window',
+      detachedShortcutResult.detachedTabs === 2 && detachedShortcutResult.sourceTabs === 1,
+      JSON.stringify(detachedShortcutResult));
+  } else {
+    skip('shortcut in detached webview opens a tab only in its own window', 'Native input probe is Windows-only.');
+  }
   detachedCdp?.close();
   // Detaching activates the new window. Resume the remaining user actions in
   // the original shell rather than a background renderer with paused frames.
@@ -3765,6 +3958,101 @@ async function main() {
   const shellShotPath = path.join(OUT_DIR, 'shell.png');
   writeFileSync(shellShotPath, Buffer.from(shellShot.data, 'base64'));
   console.log(`  screenshot: ${shellShotPath}`);
+
+  if (process.env.LASTBROWSER_SMOKE_ACCESS_LOCK === '1') {
+    // This process always uses SMOKE_PROFILE_DIR. Generate a throwaway value
+    // in the renderer and never return it or persist it outside that profile.
+    const waitForAuthUi = async (selector) => {
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const element = document.querySelector(${JSON.stringify(selector)}); if (!element) return false; const style = getComputedStyle(element); const rect = element.getBoundingClientRect(); return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0; })()`, returnByValue: true
+        });
+        if (state.result.value) return true;
+        await sleep(250);
+      }
+      return false;
+    };
+    const setup = await cdp.send('Runtime.evaluate', {
+      expression: `(async () => {
+        try {
+          window.__smokePassword = 'fixture-' + crypto.randomUUID();
+          await window.lastbrowser.sidekick.saveSettings({ settings: { _set_password: window.__smokePassword } });
+          await window.lastbrowser.sidekick.lockAccessWindows();
+          return true;
+        } catch { return false; }
+      })()`, awaitPromise: true, returnByValue: true
+    });
+    const lockVisible = setup.result.value && await waitForAuthUi('[data-startup-auth]');
+    const submitPassword = async (valid) => {
+      const filled = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const input = document.querySelector('#access-lock-password'); if (!input) return false; const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set; setter.call(input, ${valid ? 'window.__smokePassword' : "'deliberately-wrong'"}); input.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`,
+        returnByValue: true
+      });
+      if (!filled.result.value) return false;
+      await sleep(100);
+      const submitted = await cdp.send('Runtime.evaluate', {
+        expression: `(() => { const form = document.querySelector('[data-startup-auth] form'); if (!form) return false; form.requestSubmit(); return true; })()`, returnByValue: true
+      });
+      return submitted.result.value;
+    };
+    const wrongSubmitted = lockVisible && await submitPassword(false);
+    const wrongError = wrongSubmitted && await waitForAuthUi('[data-startup-auth] [role="alert"]');
+    const retryFormVisible = wrongError && await waitForAuthUi('[data-startup-auth] form');
+    const validSubmitted = retryFormVisible && await submitPassword(true);
+    let unlocked = false;
+    for (let attempt = 0; validSubmitted && attempt < 80; attempt++) {
+      const state = await cdp.send('Runtime.evaluate', {
+        expression: `Boolean(document.querySelector('.app-shell')) && !document.querySelector('[data-startup-auth]')`, returnByValue: true
+      });
+      if (state.result.value) { unlocked = true; break; }
+      await sleep(250);
+    }
+    check('access lock retains its form after a wrong password and unlocks with the right one',
+      Boolean(setup.result.value && lockVisible && wrongSubmitted && wrongError && retryFormVisible && validSubmitted && unlocked),
+      `setup=${Boolean(setup.result.value)}, locked=${Boolean(lockVisible)}, wrongError=${Boolean(wrongError)}, form=${Boolean(retryFormVisible)}, unlocked=${unlocked}`);
+    if (unlocked) await cdp.send('Runtime.evaluate', {
+      expression: `(async () => { try { await window.lastbrowser.sidekick.saveSettings({ settings: { _clear_password: true } }); } finally { delete window.__smokePassword; } })()`, awaitPromise: true
+    });
+  }
+
+  if (process.env.LASTBROWSER_SMOKE_STREAMING_PAGES === '1') {
+    // Availability only: never copy a user profile, authenticate, or log page
+    // content. Playback requires a separate authenticated service test.
+    for (const [service, url] of [
+      ['Spotify', 'https://open.spotify.com/'],
+      ['Netflix', 'https://www.netflix.com/'],
+      ['Disney+', 'https://www.disneyplus.com/']
+    ]) {
+      const entry = await enterAddressThroughKeyboard(cdp, url);
+      let guestUrl = '';
+      for (let attempt = 0; attempt < 80; attempt++) {
+        const state = await cdp.send('Runtime.evaluate', {
+          expression: `(() => { const view = document.querySelector('.browser-tab-pane.active-tab-pane webview.browser-view'); return { url: view?.getURL?.() || '', loading: view?.isLoading?.() ?? true }; })()`,
+          returnByValue: true
+        });
+        if (state.result.value?.url && !state.result.value.loading && state.result.value.url !== 'about:blank') {
+          guestUrl = state.result.value.url;
+          if (new URL(guestUrl).hostname.endsWith(new URL(url).hostname.replace(/^www\./, ''))) break;
+        }
+        await sleep(250);
+      }
+      const target = (await cdpList()).find(item => item.type === 'webview' && item.url === guestUrl && item.webSocketDebuggerUrl);
+      let page = null;
+      if (target) {
+        const observer = new CDP(target.webSocketDebuggerUrl);
+        try {
+          const state = await observer.send('Runtime.evaluate', {
+            expression: `({ ready: document.readyState, hasBody: Boolean(document.body), hasVideo: Boolean(document.querySelector('video')), hasElectronUserAgent: /Electron\\//i.test(navigator.userAgent) })`,
+            returnByValue: true
+          });
+          page = state.result.value;
+        } finally { observer.close(); }
+      }
+      let host = '';
+      try { host = new URL(guestUrl).hostname; } catch { /* no committed URL */ }
+      console.log(`  INFO public streaming page — ${service}: ${JSON.stringify({ submitted: Boolean(entry?.submitted), host, page, authenticatedPlayback: false })}`);
+    }
+  }
 
   cdp.close();
   finish(child);

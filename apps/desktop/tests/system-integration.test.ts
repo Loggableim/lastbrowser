@@ -12,6 +12,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // Minimal electron mock
 vi.mock('electron', () => ({
@@ -80,17 +81,31 @@ describe('Single-Instance URL Dispatcher (extractUrlFromArgs)', () => {
     expect(extractUrlFromArgs(args)).toBe('http://localhost:3000/dashboard');
   });
 
+  it.each(['https://example.invalid/file.js', 'https://example.invalid/download.exe', 'https://example.invalid/app.mjs', 'https://example.invalid/file.bin'])('does not mistake web URL %s for a local launcher', url => {
+    expect(extractUrlFromArgs(['Lastbrowser.exe', url])).toBe(url);
+  });
+
   it('extracts file URLs', () => {
     const args = ['Lastbrowser.exe', 'file:///C:/Users/test/report.html'];
     expect(extractUrlFromArgs(args)).toBe('file:///C:/Users/test/report.html');
   });
 
-  it('converts relative or absolute .html file arguments to file:// URLs', () => {
-    const args = ['Lastbrowser.exe', 'README.html'];
+  it.each(['htm', 'html', 'shtml', 'xhtml'])('opens .%s files registered by the package', extension => {
+    const filename = `README.${extension}`;
+    const args = ['Lastbrowser.exe', filename];
     const extracted = extractUrlFromArgs(args);
     expect(extracted).not.toBeNull();
     expect(extracted?.startsWith('file:///')).toBe(true);
-    expect(extracted?.endsWith('README.html')).toBe(true);
+    expect(extracted?.endsWith(filename)).toBe(true);
+  });
+
+  it.each(['Report #1.html', 'Progress 100%.htm'])('keeps the literal filename when opening %s', filename => {
+    const file = path.resolve('Store QA', filename);
+    const extracted = extractUrlFromArgs(['Lastbrowser.exe', file]);
+    expect(extracted).not.toBeNull();
+    const url = new URL(extracted!);
+    expect(url.hash).toBe('');
+    expect(fileURLToPath(url)).toBe(file);
   });
 
   it('extracts URL when provided as a single standalone argument', () => {
@@ -99,13 +114,16 @@ describe('Single-Instance URL Dispatcher (extractUrlFromArgs)', () => {
 
   it('wires macOS open-url and cold-start links through the queued window lifecycle', () => {
     const main = readFileSync(path.resolve(__dirname, '../src/main/main.ts'), 'utf8');
+    const preload = readFileSync(path.resolve(__dirname, '../src/main/preload.ts'), 'utf8');
     expect(main).toContain("app.on('open-url', (event, url) => {");
     expect(main).toContain('openUrlLifecycle.handleOpenUrl(event, url)');
     expect(main).toContain('openUrlLifecycle.handleSecondInstance(commandLine)');
     expect(main).toContain('dispatchOpenUrl(initialUrl)');
-    expect(main).toContain("window.webContents.on('did-finish-load', () => {");
+    expect(main).toContain("if (channel !== 'lastbrowser:browser:openTabReady') return");
+    expect(main).toContain('assertTrustedShellSender(event, contents => contents === window.webContents)');
     expect(main).toContain('openUrlLifecycle.onWindowReady(window)');
     expect(main).toContain('if (mainWindow === window) mainWindow = null');
+    expect(preload).toMatch(/ipcRenderer\.on\('lastbrowser:browser:openTab', listener\);\s+ipcRenderer\.send\('lastbrowser:browser:openTabReady'\);/);
   });
 });
 

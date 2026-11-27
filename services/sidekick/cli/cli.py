@@ -9953,7 +9953,8 @@ class SidekickCLI:
 
     def _approval_choices(self, command: str, *, allow_permanent: bool = True) -> list[str]:
         """Return approval choices for a dangerous command prompt."""
-        choices = ["once", "session", "always", "deny"] if allow_permanent else ["once", "session", "deny"]
+        from tools.approval import command_approval_choices
+        choices = command_approval_choices(command, allow_permanent=allow_permanent)
         if len(command) > 70:
             choices.append("view")
         return choices

@@ -100,14 +100,15 @@ const fallbackCloudProviders = [
   { id: 'openai', label: 'OpenAI' },
   { id: 'anthropic', label: 'Anthropic' },
   { id: 'gemini', label: 'Google Gemini' },
-  { id: 'deepseek', label: 'DeepSeek' }
+  { id: 'deepseek', label: 'DeepSeek' },
+  { id: 'groq', label: 'Groq' }
 ];
 
 const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string }>> = {
   opencode: [
     { id: 'deepseek-v4.1-flash-free', label: 'DeepSeek V4.1 Flash (free)' },
-    { id: 'space-bunny-free', label: 'Space Bunny (free)' },
-    { id: 'glm-5.3-flash-free', label: 'GLM 5.3 Flash (free)' }
+    { id: 'nemotron-3.5-lightning-free', label: 'Nemotron 3.5 Lightning (free)' },
+    { id: 'mimo-v2.6-flash-free', label: 'MiMo V2.6 Flash (free)' }
   ],
   ollama: [
     { id: 'llama3.3', label: 'Llama 3.3 (70B)' },
@@ -128,6 +129,7 @@ const fallbackModelsByProvider: Record<string, Array<{ id: string; label: string
     { id: 'deepseek-chat', label: 'DeepSeek V3 (Chat)' },
     { id: 'deepseek-reasoner', label: 'DeepSeek R1 (Reasoner)' }
   ],
+  groq: [],
   'openai-codex': [
     { id: 'gpt-5.5', label: 'GPT-5.5' },
     { id: 'gpt-5.5-mini', label: 'GPT-5.5 Mini' },

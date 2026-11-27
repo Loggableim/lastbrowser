@@ -2,6 +2,7 @@ import type { ScopedModelSelection } from './independent-contracts.js';
 import { isModelActive } from './active-model-selection.js';
 import { canSelectNativeModel, mapScopedModelPickerOptions } from './model-picker-options.js';
 import { parseProviderModelId } from './provider-model-selection.js';
+import { providerDeployment } from './provider-presentation.js';
 import { isProviderModelQualified } from './provider-chat-evidence.js';
 import type { QuickchatFavorite, QuickchatPreferenceScope } from './quickchat-preferences.js';
 
@@ -53,8 +54,9 @@ function initialRank(model: string): number {
 export function chooseQuickchatModel(selection: ScopedModelSelection, scope: QuickchatPreferenceScope,
   favorite: QuickchatFavorite | null, storage: Storage, showBetas: boolean): QuickchatChoice | null {
   const candidates = quickchatEligibleGroups(selection).flatMap(group => group.models
-    .map(model => ({ provider: group.providerId, model: parseProviderModelId(model.id, group.providerId).model, label: model.label, deployment: group.deployment })))
+    .map(model => ({ provider: group.providerId, model: parseProviderModelId(model.id, group.providerId).model, label: model.label, deployment: model.deploymentKind ?? group.deployment })))
     .filter(choice => isModelActive(storage, scope, choice.provider, choice.model)
+      && (showBetas || choice.provider.trim().toLowerCase() !== 'groq')
       && (showBetas || choice.deployment === 'local'
         || isProviderModelQualified(choice.provider, choice.model, scope.browserProfileId, scope.backendProfileName, storage)));
   if (favorite) {
@@ -62,7 +64,20 @@ export function chooseQuickchatModel(selection: ScopedModelSelection, scope: Qui
     // An explicit favorite must never silently send its prompt to another provider.
     return choice ? { provider: choice.provider, model: choice.model, basis: 'favorite' } : null;
   }
-  const automaticCandidates = designatedAutomaticPool(candidates);
+  const selected = parseProviderModelId(selection.model || '', selection.provider || '');
+  const configuredProvider = (selection.provider || '').trim().toLowerCase();
+  const selectedProvider = (selected.provider || '').trim().toLowerCase();
+  if (configuredProvider && selectedProvider && configuredProvider !== selectedProvider) return null;
+  const configuredGroup = selection.groups?.find(group => group.provider_id.trim().toLowerCase() === selectedProvider);
+  const deployment = selectedProvider && providerDeployment(selectedProvider, undefined,
+    configuredGroup?.deploymentKind ?? configuredGroup?.deployment);
+  const restrictProvider = selectedProvider && (deployment === 'local' || deployment === 'unknown');
+  // Unknown endpoints may be local, so they must not silently fall back to a
+  // different provider either. Explicit favorites remain available above.
+  const automaticCandidates = designatedAutomaticPool(restrictProvider
+    ? candidates.filter(candidate => candidate.provider.trim().toLowerCase() === selectedProvider
+      && (deployment !== 'local' || (candidate.deployment === 'local' && !/(?:[-:/]cloud)$/i.test(candidate.model))))
+    : candidates);
   const now = Date.now() / 1000;
   const measured = (selection.quickchatLatency?.models ?? []).filter(row => row.samples >= 3
     && Number.isFinite(row.median_ttft_ms) && row.median_ttft_ms >= 0

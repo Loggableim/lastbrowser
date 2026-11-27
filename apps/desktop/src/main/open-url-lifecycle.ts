@@ -8,7 +8,6 @@ export type OpenUrlWindow = {
   show(): void;
   focus(): void;
   webContents: {
-    isLoading(): boolean;
     send(channel: string, url: string): void;
   };
 };
@@ -23,7 +22,7 @@ export type OpenUrlLifecycleOptions<TWindow extends OpenUrlWindow> = {
 export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
   options: OpenUrlLifecycleOptions<TWindow>
 ) {
-  const pendingUrls: string[] = [];
+  const pendingUrls: { url: string; onDelivered?: () => void }[] = [];
   const readyWindows = new WeakSet<object>();
 
   const isLive = (window: TWindow | null): window is TWindow =>
@@ -46,45 +45,46 @@ export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
   }
 
   function flushPending(window: TWindow): void {
-    if (!isLive(window) || options.getMainWindow() !== window
-      || !readyWindows.has(window) || window.webContents.isLoading()) return;
+    if (!isLive(window) || options.getMainWindow() !== window || !readyWindows.has(window)) return;
 
     while (pendingUrls.length > 0) {
-      const url = pendingUrls[0];
+      const { url, onDelivered } = pendingUrls[0];
       try {
         window.webContents.send('lastbrowser:browser:openTab', url);
-        pendingUrls.shift();
       } catch {
         // Preserve this URL and the remaining queue if the renderer is closing.
         return;
       }
+      pendingUrls.shift();
+      onDelivered?.();
     }
   }
 
-  function dispatchOpenUrl(rawUrl: string): boolean {
+  function dispatchOpenUrl(rawUrl: string, onDelivered?: () => void): boolean {
     const url = extractUrlFromArgs([String(rawUrl || '').trim()]);
     if (!url) return false;
 
     const window = options.getMainWindow();
     if (!isLive(window)) {
-      pendingUrls.push(url);
+      pendingUrls.push({ url, onDelivered });
       ensureMainWindow();
       return true;
     }
 
     reveal(window);
-    if (!readyWindows.has(window) || window.webContents.isLoading()) {
-      pendingUrls.push(url);
+    if (!readyWindows.has(window)) {
+      pendingUrls.push({ url, onDelivered });
       return true;
     }
 
     try {
       window.webContents.send('lastbrowser:browser:openTab', url);
-      return true;
     } catch {
-      pendingUrls.push(url);
+      pendingUrls.push({ url, onDelivered });
       return true;
     }
+    onDelivered?.();
+    return true;
   }
 
   return {
@@ -102,11 +102,11 @@ export function createOpenUrlLifecycle<TWindow extends OpenUrlWindow>(
       }
       return url;
     },
-    onWindowLoading(window: TWindow): void {
+    onWindowNavigating(window: TWindow): void {
       readyWindows.delete(window);
     },
     onWindowReady(window: TWindow): void {
-      if (!isLive(window) || options.getMainWindow() !== window || window.webContents.isLoading()) return;
+      if (!isLive(window) || options.getMainWindow() !== window) return;
       readyWindows.add(window);
       flushPending(window);
     },

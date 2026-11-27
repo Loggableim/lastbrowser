@@ -1,8 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
+import type { Writable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { loadActiveSpaceConfiguration } from './active-space-config.js';
+import { protectedSpaceLinkAck } from './protected-space-process.js';
+import { extractUrlFromArgs } from './url-dispatch.js';
 import { createWindowsProtectedSpaceBroker } from './windows-protected-space-broker.js';
 import { resolveWindowsSpaceRuntime } from './windows-space-runtime.js';
 
@@ -44,16 +48,51 @@ export async function startWindowsProtectedSpace(pair: string): Promise<void> {
     return;
   }
 
+  // Keep OS activations in memory until a mounted browser can receive them.
+  const pendingUrls: string[] = [];
+  let browser: { input: Writable; awaitingAck: boolean } | undefined;
+  let unlockWindow: BrowserWindow | undefined;
+  function sendNextLink() {
+    if (!browser?.input.writable || browser.awaitingAck || pendingUrls.length === 0) return;
+    browser.awaitingAck = true;
+    browser.input.write(JSON.stringify(pendingUrls[0]) + '\n');
+  }
+  const forwardLinks = (args: string[]) => {
+    const url = extractUrlFromArgs(args);
+    if (!url || !/^(?:https?|file):\/\//i.test(url)) return;
+    if (pendingUrls.length < 32) pendingUrls.push(url);
+    sendNextLink();
+  };
+  forwardLinks(process.argv);
+  app.on('second-instance', (_event, args) => {
+    forwardLinks(args);
+    if (unlockWindow && !unlockWindow.isDestroyed() && unlockWindow.isVisible()) unlockWindow.focus();
+  });
+
   const runtime = resolveWindowsSpaceRuntime(process.resourcesPath);
 
   void app.whenReady().then(() => showUnlockWindow({
     ...configuration, ...runtime,
     executable: process.execPath,
     browserArgs: app.isPackaged ? [] : [app.getAppPath()],
+    onBrowserStarted(input, acknowledgements) {
+      const connection = { input, awaitingAck: false };
+      browser = connection;
+      const reader = createInterface({ input: acknowledgements, crlfDelay: Infinity });
+      reader.on('line', line => {
+        if (browser !== connection || !connection.awaitingAck || line !== protectedSpaceLinkAck) return;
+        pendingUrls.shift();
+        connection.awaitingAck = false;
+        sendNextLink();
+      });
+      reader.on('error', () => reader.close());
+      reader.once('close', () => { if (browser === connection) browser = undefined; });
+      sendNextLink();
+    },
     async lockPrimary() {
       if (existsSync(runtime.drive)) throw new Error('A protected drive is still mounted');
     }
-  })).catch(() => {
+  }, window => { unlockWindow = window; }, () => pendingUrls.length > 0)).catch(() => {
     dialog.showErrorBox('LastBrowser', app.getLocale().startsWith('de')
       ? 'Der geschützte Space konnte nicht gestartet werden.'
       : 'The protected Space could not start.');
@@ -61,7 +100,11 @@ export async function startWindowsProtectedSpace(pair: string): Promise<void> {
   });
 }
 
-async function showUnlockWindow(options: Parameters<typeof createWindowsProtectedSpaceBroker>[0]): Promise<void> {
+async function showUnlockWindow(
+  options: Parameters<typeof createWindowsProtectedSpaceBroker>[0],
+  onWindowCreated: (window: BrowserWindow) => void,
+  hasPendingLinks: () => boolean
+): Promise<void> {
   const window = new BrowserWindow({
     title: 'LastBrowser',
     width: 420,
@@ -79,6 +122,7 @@ async function showUnlockWindow(options: Parameters<typeof createWindowsProtecte
       spellcheck: false
     }
   });
+  onWindowCreated(window);
   window.removeMenu();
   window.webContents.on('will-navigate', event => event.preventDefault());
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -93,9 +137,6 @@ async function showUnlockWindow(options: Parameters<typeof createWindowsProtecte
   });
 
   let busy = false;
-  app.on('second-instance', () => {
-    if (!window.isDestroyed() && window.isVisible()) window.focus();
-  });
   window.on('close', event => { if (busy) event.preventDefault(); });
   window.on('closed', () => {
     ipcMain.removeHandler(unlockChannel);
@@ -116,7 +157,7 @@ async function showUnlockWindow(options: Parameters<typeof createWindowsProtecte
       supplied.fill(0);
       password = undefined;
       busy = false;
-      if (okay) app.quit();
+      if (okay && !hasPendingLinks()) app.quit();
       else if (!window.isDestroyed()) window.show();
     }
   });

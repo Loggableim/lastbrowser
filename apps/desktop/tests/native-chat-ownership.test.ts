@@ -7,7 +7,16 @@ const appSource = readFileSync(resolve(process.cwd(), 'src/renderer/App.tsx'), '
 
 describe('native chat ownership transitions', () => {
   it('routes recent-session picks through a handler that invalidates pending creates and clears the old draft', () => {
-    expect((appSource.match(/selectNativeSession\(sessionId\);/g) || [])).toHaveLength(3);
+    const recentSelection = /onSelectSession=\{\(sessionId\) => \{\s*selectNativeSession\(sessionId\);/;
+    const floatingSidebar = appSource.match(/\n([ \t]*)<SidekickSidebar\s+mode=\{zenFloatingMode\}[\s\S]*?\n\1\/>/)?.[0] || '';
+    const dockedSidebar = appSource.match(/\n([ \t]*)<SidekickSidebar\s+mode=\{sidebarMode\}[\s\S]*?\n\1\/>/)?.[0] || '';
+    const contextSidebar = appSource.match(/\n([ \t]*)<ContextSidebar\b[\s\S]*?\n\1\/>/)?.[0] || '';
+    expect(floatingSidebar).toMatch(recentSelection);
+    expect(dockedSidebar).toMatch(recentSelection);
+    expect(contextSidebar).toMatch(recentSelection);
+    expect(appSource).toMatch(/const openNovaActivitySession = \(sessionId: string\) => \{\s*const currentScope = currentNovaAssistantScope\(\);\s*if \(novaAssistantScope && currentScope && sameAssistantScope\(novaAssistantScope, currentScope\)\) selectNativeSession\(sessionId\);/);
+    expect(appSource).toContain('onSelectSession: openNovaActivitySession');
+    expect(appSource).toContain('onOpenTask: openNovaActivitySession');
     const handler = appSource.match(/function selectNativeSession\(sessionId: string\): void \{([\s\S]*?)\n  \}/)?.[1] || '';
     expect(handler).toContain('selectNativeChatSession(sessionId, activeSessionIdRef.current');
     expect(handler).toContain('createSessionRequestRef.current += 1');
@@ -32,14 +41,19 @@ describe('native chat ownership transitions', () => {
     expect(events).toEqual([]);
   });
 
-  it('starts each new session with an empty, unbound composer and activates it only after scoped load', () => {
-    const create = appSource.match(/async function createNativeSession\(\): Promise<void> \{([\s\S]*?)\n  \}/)?.[1] || '';
-    expect(create).toContain('activeSessionIdRef.current = null');
-    expect(create).toContain("setComposerText('')");
+  it('clears a normal new chat before creation and keeps an existing chat until an assistant switch is verified', () => {
+    const create = appSource.match(/async function createNativeSession\([^\n]*\)\s*:[^\n]*\{([\s\S]*?)\n  \}/)?.[1] || '';
+    const clear = create.match(/const clearPreviousSession = \(\) => \{([\s\S]*?)\n    \};/)?.[1] || '';
+    expect(clear).toContain('activeSessionIdRef.current = null');
+    expect(clear).toContain("if (!keepDraft) setComposerText('')");
+    expect(create).toMatch(/if \(!changesAssistant && !keepDraft\) \{[\s\S]*?clearPreviousSession\(\);\s*setActivePanel\('chat'\);\s*\}[\s\S]*?const result = await createAndLoadScopedSession/);
     expect(create).toContain('const session = result?.loaded.session');
+    expect(create).toMatch(/if \(session\?\.session_id && isCurrent\(\)\) \{[\s\S]*?sameAssistantScope\(session\.space_scope, resolved\.value\.scope\)[\s\S]*?if \(changesAssistant\) \{\s*selectNovaAssistantForSpace\([^\n]+\);\s*clearPreviousSession\(\);\s*\}/);
     expect(create).toContain('activeSessionIdRef.current = session.session_id');
     expect(create).toContain('setActiveSessionId(session.session_id)');
     expect(create).toContain("setActivePanel('chat')");
+    expect(appSource).toContain('if (keepDraft) draftPreservedForSessionRef.current = session.session_id;');
+    expect(appSource).toContain('loadDraft: !preserveDraft');
   });
 
   it('wires the real guarded operation to the final Sidekick startChat transport', () => {

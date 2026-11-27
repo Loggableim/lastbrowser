@@ -46,6 +46,7 @@ export type DesktopSessionSummary = {
   source_tag?: string;
   // Persona this conversation started with (its own choice, not the global one).
   companion?: { personality: string; botName: string } | null;
+  assistant?: { id: string; name: string } | null;
 };
 
 export function shortSessionId(sessionId: string): string {
@@ -411,7 +412,7 @@ export function saveNumericPreference(
 
 export const panelContextItems: Partial<Record<LastbrowserPanelId, string[]>> = {
   skills: ['Library', 'Editor', 'Linked files', 'Create skill'],
-  agents: ['Dashboard', 'Agents', 'Chat sessions', 'Workspace terminal', 'Create agent'],
+  agents: [],
   memory: [],
   workspaces: ['Spaces', 'Active workspace', 'Files', 'New chat'],
   profiles: ['Profiles', 'Active profile', 'Gateway', 'Model defaults'],

@@ -46,7 +46,7 @@ import { companionDefaultNames, personalityAvatar, type CompanionPersonality } f
 import { importBookmarksFromHtml, importBookmarksFromJson, mergeBookmarks } from '../bookmark-io.js';
 import { loadBookmarks, saveBookmarks } from '../bookmarks.js';
 import { saveImportedVisitedSites } from '../history.js';
-import { usePinnedAppStore, PRESET_PINNED_APPS } from '../stores/usePinnedAppStore.js';
+import { usePinnedAppStore, PRESET_PINNED_APPS, type PinnedApp } from '../stores/usePinnedAppStore.js';
 import {
   modelNote,
   providerPresentation,
@@ -195,7 +195,7 @@ export function FirstRunSetupPane({
   // Stable providers are available immediately. Experimental providers still
   // require explicit beta visibility or successful chat evidence in this scope.
   const evidenceStorage = typeof window === 'undefined' ? undefined : window.localStorage;
-  const qualifiedProviders = providers.filter(item => isStableProvider(item.id) || Boolean(browserProfileId && evidenceStorage
+  const qualifiedProviders = providers.filter(item => isStableProvider(item.id) || Boolean(item.id !== 'groq' && browserProfileId && evidenceStorage
     && getProviderChatEvidence(item.id, browserProfileId, backendProfileName || 'default', evidenceStorage)));
   const connectedProviderId = onboardingStatus?.system?.chat_ready === true
     ? String(onboardingStatus.system.current_provider || '').trim().toLowerCase()
@@ -368,11 +368,13 @@ export function FirstRunSetupPane({
     try {
       const readCatalog = async () => {
         const probeLocalOllama = reloadLocalOllama && provider === 'ollama';
-        if (probeLocalOllama || (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider))) {
+        if (probeLocalOllama || (apiKey.trim() && ['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek', 'groq'].includes(provider))) {
           const endpoint = baseUrl.trim() || (probeLocalOllama ? defaultProviderEndpoint : '');
           const response = await window.lastbrowser.sidekick.requestWebui({ method: 'POST', path: '/api/models/probe',
             body: { provider, api_key: apiKey.trim(), ...(endpoint ? { base_url: endpoint } : {}) }
-          }) as { models?: Array<{ id?: string; name?: string; label?: string }>; error?: string };
+          }) as { models?: Array<{ id?: string; name?: string; label?: string }>; error?: string; error_code?: string };
+          if (response.error_code === 'provider_key_invalid') throw new Error(shellText(locale, 'Der Groq-API-Schlüssel ist ungültig. Bitte prüfe ihn.', 'The Groq API key is invalid. Please check it.'));
+          if (response.error_code === 'provider_rate_limited') throw new Error(shellText(locale, 'Groq meldet ein Nutzungs- oder Ratenlimit. Bitte prüfe dein Kontingent und versuche es später erneut.', 'Groq reports a usage or rate limit. Check your quota and try again later.'));
           if (response.error) throw new Error(response.error);
           return { models: response.models || [], configured: false };
         }
@@ -651,12 +653,8 @@ export function FirstRunSetupPane({
 
   // Pinned Apps state
   const currentPinnedApps = usePinnedAppStore((state) => state.apps);
-  const setPinnedApps = usePinnedAppStore((state) => state.setApps);
-  const [selectedAppIds, setSelectedAppIds] = useState<string[]>(() =>
-    currentPinnedApps.length > 0
-      ? currentPinnedApps.map((a) => a.id)
-      : ['notion', 'figma', 'slack', 'github', 'chatgpt', 'youtube', 'terminal', 'spotify']
-  );
+  const selectedAppIds = new Set(currentPinnedApps.map((app) => app.id));
+  const selectedPresetCount = PRESET_PINNED_APPS.filter((app) => selectedAppIds.has(app.id)).length;
 
   // Default browser state
   const [isDefaultBrowser, setIsDefaultBrowser] = useState<boolean | null>(null);
@@ -758,13 +756,13 @@ export function FirstRunSetupPane({
     } finally { if (importTargetScopeRef.current === capturedScope) setImportRunning(false); }
   };
 
-  const togglePinnedApp = (appId: string) => {
-    const nextIds = selectedAppIds.includes(appId)
-      ? selectedAppIds.filter((id) => id !== appId)
-      : [...selectedAppIds, appId];
-    setSelectedAppIds(nextIds);
-    const newApps = PRESET_PINNED_APPS.filter((a) => nextIds.includes(a.id));
-    setPinnedApps(newApps);
+  const togglePinnedApp = (app: PinnedApp) => {
+    const { apps, removeApp, setApps } = usePinnedAppStore.getState();
+    if (apps.some((pinned) => pinned.id === app.id)) {
+      removeApp(app.id);
+      return;
+    }
+    setApps([...apps, app]);
   };
 
   async function handleSetDefaultBrowser(): Promise<void> {
@@ -1154,13 +1152,14 @@ export function FirstRunSetupPane({
 
             <div className="setup-pinned-grid" role="group" aria-label={shellText(locale, "Pinned Web Apps auswählen", "Choose pinned web apps")}>
               {PRESET_PINNED_APPS.map((app) => {
-                const isSelected = selectedAppIds.includes(app.id);
+                const isSelected = selectedAppIds.has(app.id);
                 return (
                   <button
                     key={app.id}
                     type="button"
                     className={`setup-pinned-card ${isSelected ? 'active' : ''}`}
-                    onClick={() => togglePinnedApp(app.id)}
+                    aria-pressed={isSelected}
+                    onClick={() => togglePinnedApp(app)}
                     style={{ '--app-color': app.color } as React.CSSProperties}
                   >
                     <div className="setup-pinned-avatar" style={{ background: app.bg || 'rgba(255,255,255,0.08)' }}>
@@ -1179,7 +1178,7 @@ export function FirstRunSetupPane({
               })}
             </div>
             <div className="setup-pinned-summary">
-              <small>{shellText(locale, `Ausgewählte Apps: ${selectedAppIds.length}`, `Selected apps: ${selectedAppIds.length}`)}</small>
+              <small>{shellText(locale, `Ausgewählte Apps: ${selectedPresetCount}`, `Selected apps: ${selectedPresetCount}`)}</small>
             </div>
           </div>
 
@@ -1491,7 +1490,7 @@ export function FirstRunSetupPane({
                       <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a>.
                     </small>
                   )}
-                  {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek'].includes(provider) && (
+                  {['openrouter', 'alibaba', 'anthropic', 'openai', 'deepseek', 'groq'].includes(provider) && (
                     <div className="field-hint" style={{ marginTop: '0.5rem' }}>
                       <button type="button" className="import-file-btn" onClick={() => void loadLiveModels()} disabled={modelProbeLoading}>
                         {modelProbeLoading ? t('settings.panels.providers.loadingModels') : shellText(locale, "Verfügbare Modelle laden", "Load available models")}

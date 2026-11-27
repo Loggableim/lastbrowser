@@ -17,6 +17,11 @@ export type NavigationHistorySnapshot = {
   index: number;
 };
 
+/** Attach the transferred guest without committing a navigation before restore(). */
+export function prepareDetachedWebviewSource(params: { src?: string }, tabUrl: string, hasHistory: boolean): void {
+  if (hasHistory && (params.src === tabUrl || params.src === 'about:blank')) params.src = '';
+}
+
 /** Verify both the history sequence and active entry, including duplicate URLs. */
 export function matchesNavigationHistorySnapshot(
   expected: NavigationHistorySnapshot,

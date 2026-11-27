@@ -12,6 +12,7 @@ from contextlib import closing
 from pathlib import Path
 
 from shared.sessions import DEFAULT_SESSION_TITLE, is_default_session_title
+from runtime.independent.nova_assistant import assistant_identity, normalize_nova_assistant
 import web.api.config as _cfg
 from web.api._home import get_webui_home
 from web.api.config import (
@@ -770,6 +771,10 @@ class Session:
         self.personality = personality
         # Persona this conversation started with; turns use it, not the global choice.
         self.companion = _conversation_companion(kwargs.get('companion'))
+        snapshot = kwargs.get('_nova_assistant')
+        self._nova_assistant = normalize_nova_assistant(snapshot) if snapshot is not None else None
+        if self._nova_assistant is not None:
+            self.companion = {'personality': 'nova', 'botName': self._nova_assistant['name']}
         self.active_stream_id = active_stream_id
         self.pending_user_message = pending_user_message
         self.pending_attachments = pending_attachments or []
@@ -1016,6 +1021,8 @@ class Session:
             'grill_state', 'grill_history',
         ]
         meta = {k: getattr(self, k, None) for k in METADATA_FIELDS}
+        if self._nova_assistant is not None:
+            meta['_nova_assistant'] = self._nova_assistant
         meta['messages'] = self.messages
         meta['tool_calls'] = self.tool_calls
         # Fields not in METADATA_FIELDS (e.g. last_usage, message_count) go at the end
@@ -1218,6 +1225,7 @@ class Session:
             'estimated_cost': self.estimated_cost,
             'personality': self.personality,
             'companion': self.companion,
+            **({'assistant': assistant_identity(self._nova_assistant)} if self._nova_assistant is not None else {}),
             'compression_anchor_visible_idx': self.compression_anchor_visible_idx,
             'compression_anchor_message_key': self.compression_anchor_message_key,
             'compression_anchor_summary': self.compression_anchor_summary,
@@ -1556,7 +1564,7 @@ def get_session(sid, metadata_only=False):
         return s
     raise KeyError(sid)
 
-def new_session(workspace=None, model=None, profile=None, model_provider=None, project_id=None, worktree_info=None, agent_slug=None, workspace_slug=None, goal_space_slug=None, title=None, *, space_scope=None, space_profile_snapshot=None):
+def new_session(workspace=None, model=None, profile=None, model_provider=None, project_id=None, worktree_info=None, agent_slug=None, workspace_slug=None, goal_space_slug=None, title=None, *, space_scope=None, space_profile_snapshot=None, nova_assistant=None):
     """Create a new in-memory session.
 
     The session lives in the SESSIONS dict only — no disk write happens until
@@ -1636,6 +1644,7 @@ def new_session(workspace=None, model=None, profile=None, model_provider=None, p
         agent_slug=agent_slug,
         space_scope=space_scope,
         space_profile_snapshot=space_profile_snapshot,
+        _nova_assistant=nova_assistant,
     )
     with LOCK:
         SESSIONS[s.session_id] = s

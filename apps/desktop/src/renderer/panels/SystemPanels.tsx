@@ -2,6 +2,7 @@ import { NativeTerminalMain } from './NativeTerminalMain.js';
 import { MailPluginSettings } from './MailPluginSettings.js';
 import { PasswordVaultPanel } from '../components/PasswordVaultPanel.js';
 import { StartupPreferencesPanel } from '../startup/StartupPreferencesPanel.js';
+import { startupPreferencesCopy } from '../startup/startup-preferences-copy.js';
 import { OptionalAiProfileContext } from '../optional-ai-policy.js';
 import { ProfileResolutionPending } from '../profile-resolution.js';
 import { isRetiredProvider } from '../retired-providers.js';
@@ -2447,11 +2448,19 @@ function AdvancedModelPolicySettings({ sessionId, workspacePath, browserProfileI
   </SettingsCard>;
 }
 
-export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose, onSectionChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void; onSectionChange?: (section: SettingsSectionId) => void }): JSX.Element {
+export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardingStatus, automaticProviderDiscovery = true, onReopenSetup, searchEngineId, onSearchEngineChange, desktopSettings, profiles, activeProfileId, activeSpacePath='', activeBackendProfileName, activeSessionId=null, onSelectProfile, onCreateProfile, onRenameProfile, onDeleteProfile, onClose, onSectionChange }: { serviceStatus: ServiceStatus | null; activeContextItem: string; onboardingStatus: OnboardingStatus | null; automaticProviderDiscovery?: boolean; onReopenSetup: () => void; searchEngineId: string; onSearchEngineChange: (id: string) => void; desktopSettings?: AnyRecord | null; profiles: BrowserProfile[]; activeProfileId: string; activeSpacePath?:string; activeBackendProfileName?: string | null; activeSessionId?: string | null; onSelectProfile: (profileId: string) => void; onCreateProfile: (name: string) => void; onRenameProfile: (profileId: string, name: string) => void; onDeleteProfile: (profileId: string) => void; onClose?: () => void; onSectionChange?: (section: SettingsSectionId) => void }): JSX.Element {
   const { t, locale, setLocale } = useDesktopI18n();
   useActiveModelRevision();
   const showUntestedBetas = useShowUntestedProviderBetas();
   const ready = isReady(serviceStatus);
+  const [localSection, setLocalSection] = useState<SettingsSectionId>(() => normalizeSettingsSectionId(activeContextItem) ?? 'preferences');
+  const section = onSectionChange ? normalizeSettingsSectionId(activeContextItem) ?? 'preferences' : localSection;
+  const setSection = onSectionChange ?? setLocalSection;
+  useEffect(() => {
+    const target = normalizeSettingsSectionId(activeContextItem);
+    if (!onSectionChange && target) setLocalSection(target);
+  }, [activeContextItem, onSectionChange]);
+  const providerDiscoveryReady = ready && (automaticProviderDiscovery || section === 'providers');
   const activeProviderScope = { browserProfileId: activeProfileId, workspacePath: activeSpacePath || null,
     ...(activeBackendProfileName ? { backendProfileName: activeBackendProfileName } : {}) };
   const activeProviderScopeRef = useRef(activeProviderScope);
@@ -2460,14 +2469,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     isProviderSettingsScopeCurrent(scope, activeProviderScopeRef.current, 0, 0);
   const settingsState = useApiState(() => window.lastbrowser.sidekick.getSettings(), [ready], ready);
   const modelsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/models', scopeSelection: activeProviderScope }),
-    [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
+    [providerDiscoveryReady, activeProfileId, activeSpacePath, activeBackendProfileName], providerDiscoveryReady);
   const [catalogState, setCatalogState] = useState<{ key: string; selection: import('../independent-contracts.js').ScopedModelSelection | null; loading: boolean; error: string }>({ key: '', selection: null, loading: false, error: '' });
   const providerCatalogKey = JSON.stringify([activeProfileId, activeSpacePath || null, activeBackendProfileName || null]);
   useEffect(() => {
     let active = true;
-    setCatalogState({ key: providerCatalogKey, selection: null, loading: ready, error: '' });
-    if (!ready || !activeBackendProfileName) {
-      if (ready) setCatalogState({ key: providerCatalogKey, selection: null, loading: false, error: 'provider_catalog_scope_unavailable' });
+    setCatalogState({ key: providerCatalogKey, selection: null, loading: providerDiscoveryReady, error: '' });
+    if (!providerDiscoveryReady || !activeBackendProfileName) {
+      if (providerDiscoveryReady) setCatalogState({ key: providerCatalogKey, selection: null, loading: false, error: 'provider_catalog_scope_unavailable' });
       return () => { active = false; };
     }
     void (async () => {
@@ -2488,9 +2497,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       }
     })();
     return () => { active = false; };
-  }, [ready, activeProfileId, activeSpacePath, activeBackendProfileName, providerCatalogKey]);
+  }, [providerDiscoveryReady, activeProfileId, activeSpacePath, activeBackendProfileName, providerCatalogKey]);
   const providerAuthState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/providers', scopeSelection: activeProviderScope }),
-    [ready, activeProfileId, activeSpacePath, activeBackendProfileName], ready);
+    [providerDiscoveryReady, activeProfileId, activeSpacePath, activeBackendProfileName], providerDiscoveryReady);
   const authState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/auth/status' }), [ready], ready);
   const pluginsState = useApiState(() => window.lastbrowser.sidekick.requestWebui({ method: 'GET', path: '/api/plugins' }), [ready], ready);
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null);
@@ -2519,13 +2528,6 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     });
     return () => { active = false; };
   }, []);
-  const [localSection, setLocalSection] = useState<SettingsSectionId>(() => normalizeSettingsSectionId(activeContextItem) ?? 'preferences');
-  const section = onSectionChange ? normalizeSettingsSectionId(activeContextItem) ?? 'preferences' : localSection;
-  const setSection = onSectionChange ?? setLocalSection;
-  useEffect(() => {
-    const target = normalizeSettingsSectionId(activeContextItem);
-    if (!onSectionChange && target) setLocalSection(target);
-  }, [activeContextItem, onSectionChange]);
   const [providerPage, setProviderPage] = useState<'working' | 'beta' | 'local'>('working');
   const [draft, setDraft] = useState<AnyRecord>({});
   const draftRef = useRef<AnyRecord>({});
@@ -2559,7 +2561,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   useEffect(() => () => { ollamaScopeRef.current = null; }, []);
   const [openRouterModalOpen, setOpenRouterModalOpen] = useState(false);
   const [openRouterScope, setOpenRouterScope] = useState<typeof activeProviderScope | null>(null);
-  const [openRouterConfigProvider, setOpenRouterConfigProvider] = useState<'openrouter' | 'alibaba'>('openrouter');
+  const [openRouterConfigProvider, setOpenRouterConfigProvider] = useState<'openrouter' | 'alibaba' | 'groq'>('openrouter');
   const [alibabaBaseUrl, setAlibabaBaseUrl] = useState('');
   const [openRouterKey, setOpenRouterKey] = useState('');
   const [openRouterHasSavedKey, setOpenRouterHasSavedKey] = useState(false);
@@ -2898,6 +2900,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
   const updateCurrentVersion = settingsText(updateStatus?.currentVersion, '');
   const updateAvailableVersion = settingsText(updateStatus?.availableVersion, '');
   const updateMessage = settingsText(updateStatus?.message, '');
+  const updatesManagedByStore = updateStatus?.managedByStore === true;
   const pluginList = arrayFrom(pluginsState.data, ['plugins', 'items']);
   // Pages classify release eligibility, independently of saved selection or chat evidence.
   const providerOptions = useMemo(() => cloudProviderOptions(onboardingStatus).map(option => ({ ...option,
@@ -3376,7 +3379,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     keyToSave = openRouterKey,
     existingKeyAvailable = openRouterHasSavedKey,
     savedSelection?: { ids: string[]; configured: boolean; defaultModel: string },
-    providerId: 'openrouter' | 'alibaba' = openRouterConfigProvider,
+    providerId: 'openrouter' | 'alibaba' | 'groq' = openRouterConfigProvider,
     baseUrl = alibabaBaseUrl,
     scopeSelection = openRouterScope ?? activeProviderScope
   ): Promise<void> {
@@ -3419,12 +3422,18 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       );
     } catch (error) {
       const code = error instanceof Error ? error.message : String(error);
-      const message = code === 'alibaba-base-url-required'
+      const message = code === 'provider_key_invalid'
+        ? (locale === 'de' ? 'Der Groq-API-Schlüssel ist ungültig.' : 'The Groq API key is invalid.')
+        : code === 'provider_rate_limited'
+          ? (locale === 'de' ? 'Groq meldet ein Nutzungs- oder Ratenlimit. Bitte später erneut versuchen.' : 'Groq reports a usage or rate limit. Try again later.')
+          : code === 'provider_catalog_empty'
+            ? (locale === 'de' ? 'Groq hat keine Modelle zurückgegeben.' : 'Groq returned no models.')
+        : code === 'alibaba-base-url-required'
         ? t('settings.panels.providers.alibabaBaseUrlRequired')
         : code === 'alibaba-https-required'
           ? t('settings.panels.providers.alibabaHttpsRequired')
           : code === 'provider-key-required'
-            ? t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')
+            ? providerId === 'groq' ? (locale === 'de' ? 'Gib einen Groq-API-Schlüssel ein.' : 'Enter a Groq API key.') : t(providerId === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')
             : code;
       setOpenRouterError(message);
     } finally {
@@ -3432,7 +3441,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
     }
   }
 
-  async function openOpenRouterSettings(providerId: 'openrouter' | 'alibaba' = 'openrouter'): Promise<void> {
+  async function openOpenRouterSettings(providerId: 'openrouter' | 'alibaba' | 'groq' = 'openrouter'): Promise<void> {
     const scopeSelection = activeProviderScope;
     setOpenRouterScope(scopeSelection);
     setOpenRouterConfigProvider(providerId);
@@ -3471,6 +3480,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   async function saveOpenRouterSettings(): Promise<void> {
     if (openRouterSaving) return;
+    if (openRouterConfigProvider === 'groq' && !showUntestedBetas) { setOpenRouterError(t('settings.panels.providers.betaCatalogEmpty')); return; }
     const scopeSelection = openRouterScope ?? activeProviderScope;
     if (!isActiveProviderScope(scopeSelection)) { setOpenRouterError('Provider scope changed. Reopen settings for the selected space.'); return; }
     const selectedModels = [...new Set(openRouterSelectedModels)];
@@ -3479,7 +3489,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
       return;
     }
     if (!openRouterHasSavedKey && !openRouterKey.trim()) {
-      setOpenRouterError(t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired'));
+      setOpenRouterError(openRouterConfigProvider === 'groq' ? (locale === 'de' ? 'Gib einen Groq-API-Schlüssel ein.' : 'Enter a Groq API key.') : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired'));
       return;
     }
     if (openRouterConfigProvider === 'alibaba') {
@@ -3505,7 +3515,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
         settings: {
           ...cleanSettingsPayload(settings),
           provider: openRouterConfigProvider,
-          base_url: openRouterConfigProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : alibabaBaseUrl.trim(),
+          base_url: openRouterConfigProvider === 'groq' ? 'https://api.groq.com/openai/v1' : openRouterConfigProvider === 'openrouter' ? 'https://openrouter.ai/api/v1' : alibabaBaseUrl.trim(),
           default_model: selectedDefault
         }
       });
@@ -3635,7 +3645,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
 
   const sectionList = visibleSettingsSections();
   const sectionCopy = (key: SettingsSectionId) => key === 'codex-cli'
-    ? { title: 'Codex CLI', description: shellText(locale, 'Starte die installierte Codex CLI im aktuellen Space.', SETTINGS_SECTIONS[key].description) }
+    ? { title: SETTINGS_SECTIONS[key].title, description: t('settings.sectionDescriptions.codexCli') }
     : { title: t(SETTINGS_SECTION_COPY[key].title), description: t(SETTINGS_SECTION_COPY[key].description) };
   const updateAvailable = updateState === 'available';
 
@@ -4347,8 +4357,8 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
             {section === 'preferences' && (
               <>
                 <SettingsCard
-                  title={locale === 'de' ? 'Startanimation & Sound' : 'Opening animation & sound'}
-                  description={locale === 'de' ? 'Übergang nach dem Entsperren, optionaler Startklang und Rainbow-Rahmen.' : 'Unlock transition, optional opening sound and rainbow border.'}
+                  title={startupPreferencesCopy[locale].cardTitle}
+                  description={startupPreferencesCopy[locale].cardDescription}
                 >
                   <StartupPreferencesPanel />
                 </SettingsCard>
@@ -4550,42 +4560,47 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       checked={settingsBoolean(draft.sync_to_insights ?? settings.sync_to_insights, false)}
                       onChange={(value) => updateDraftToggle('sync_to_insights', value)}
                     />
-                    <SettingsToggle
-                      label={t('settings.panels.notifications.updates')}
-                      description={t('settings.panels.notifications.updatesDescription')}
-                      checked={autoUpdateChecksEnabled}
-                      onChange={(value) => updateDraftToggle('check_for_updates', value)}
-                    />
-                    <SettingsField
-                      label={t('settings.panels.notifications.updateChannel')}
-                      description={t('settings.panels.notifications.updateChannelDescription')}
-                    >
-                      <select
-                        value={updateChannel}
-                        disabled={updateChannelLoading || ['checking', 'available', 'downloading', 'downloaded'].includes(updateStatus?.state || '')}
-                        onChange={(event) => {
-                          const previous = updateChannel;
-                          const next = event.currentTarget.value === 'beta' ? 'beta' : 'stable';
-                          setUpdateChannel(next);
-                          void window.lastbrowser.updates.setChannel(next).then((result) => {
-                            if (result.persisted) return;
-                            setUpdateChannel(previous);
-                            showToast('Could not save the update channel.');
-                          }).catch((error) => {
-                            setUpdateChannel(previous);
-                            showToast(`Could not save update channel: ${error instanceof Error ? error.message : String(error)}`);
-                          });
-                        }}
+                    {updatesManagedByStore ? (
+                      <p className="settings-hint">{t('settings.panels.system.updatesManagedByStore')}</p>
+                    ) : <>
+                      <SettingsToggle
+                        label={t('settings.panels.notifications.updates')}
+                        description={t('settings.panels.notifications.updatesDescription')}
+                        checked={autoUpdateChecksEnabled}
+                        onChange={(value) => updateDraftToggle('check_for_updates', value)}
+                        disabled={!updateStatus}
+                      />
+                      <SettingsField
+                        label={t('settings.panels.notifications.updateChannel')}
+                        description={t('settings.panels.notifications.updateChannelDescription')}
                       >
-                        <option value="stable">{t('settings.panels.notifications.updateChannelStable')}</option>
-                        <option value="beta">{t('settings.panels.notifications.updateChannelPreview')}</option>
-                      </select>
-                    </SettingsField>
-                    {updateChannel === 'beta' && (
-                      <p className="settings-hint" role="alert">
-                        {t('settings.panels.notifications.updateChannelBetaUnsigned')}
-                      </p>
-                    )}
+                        <select
+                          value={updateChannel}
+                          disabled={!updateStatus || updateChannelLoading || ['checking', 'available', 'downloading', 'downloaded'].includes(updateStatus.state)}
+                          onChange={(event) => {
+                            const previous = updateChannel;
+                            const next = event.currentTarget.value === 'beta' ? 'beta' : 'stable';
+                            setUpdateChannel(next);
+                            void window.lastbrowser.updates.setChannel(next).then((result) => {
+                              if (result.persisted) return;
+                              setUpdateChannel(previous);
+                              showToast('Could not save the update channel.');
+                            }).catch((error) => {
+                              setUpdateChannel(previous);
+                              showToast(`Could not save update channel: ${error instanceof Error ? error.message : String(error)}`);
+                            });
+                          }}
+                        >
+                          <option value="stable">{t('settings.panels.notifications.updateChannelStable')}</option>
+                          <option value="beta">{t('settings.panels.notifications.updateChannelPreview')}</option>
+                        </select>
+                      </SettingsField>
+                      {updateChannel === 'beta' && (
+                        <p className="settings-hint" role="alert">
+                          {t('settings.panels.notifications.updateChannelBetaUnsigned')}
+                        </p>
+                      )}
+                    </>}
                   </div>
                 </SettingsCard>
                 {/* === Accessibility Card === */}
@@ -4786,12 +4801,12 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                                   </div>
                                 )}
                               </>
-                            ) : ['openrouter', 'alibaba'].includes(option.id) ? (
+                            ) : ['openrouter', 'alibaba', 'groq'].includes(option.id) ? (
                               <button
                                 type="button"
                                 className="secondary-action compact"
-                                onClick={() => void openOpenRouterSettings(option.id as 'openrouter' | 'alibaba')}
-                                disabled={!ready || saving}
+                                onClick={() => void openOpenRouterSettings(option.id as 'openrouter' | 'alibaba' | 'groq')}
+                                disabled={!ready || saving || (option.id === 'groq' && !showUntestedBetas)}
                               >
                                 <Settings size={14} />
                                 <span>{t('settings.panels.providers.configure')}</span>
@@ -4999,9 +5014,9 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                 {openRouterModalOpen && (
                   <div className="settings-modal-overlay" onClick={() => setOpenRouterModalOpen(false)}>
                     <div className="settings-modal-box" onClick={(event) => event.stopPropagation()}>
-                      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>{openRouterConfigProvider === 'alibaba' ? 'Alibaba Cloud (DashScope)' : 'OpenRouter'} {t('settings.panels.providers.configure')}</h3>
+                      <h3 style={{ margin: '0 0 8px', fontSize: 15 }}>{openRouterConfigProvider === 'groq' ? 'Groq' : openRouterConfigProvider === 'alibaba' ? 'Alibaba Cloud (DashScope)' : 'OpenRouter'} {t('settings.panels.providers.configure')}</h3>
                       <p className="settings-hint" style={{ margin: '0 0 12px' }}>
-                        {t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyHint' : 'settings.panels.providers.openrouterKeyHint')}
+                        {openRouterConfigProvider === 'groq' ? (locale === 'de' ? 'Dein Schlüssel wird lokal gespeichert und für Groq-Anfragen verwendet.' : 'Your key is stored locally and used for Groq requests.') : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyHint' : 'settings.panels.providers.openrouterKeyHint')}
                       </p>
                       {openRouterConfigProvider === 'alibaba' && <>
                         <label style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{t('settings.panels.providers.baseUrl')}</label>
@@ -5042,7 +5057,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                       {!openRouterLoading && !openRouterError && openRouterModels.length === 0 && (
                         <p className="settings-hint">{openRouterHasSavedKey || openRouterKey.trim()
                           ? t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaNoModels' : 'settings.panels.providers.openrouterNoModels')
-                          : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')}</p>
+                          : openRouterConfigProvider === 'groq' ? (locale === 'de' ? 'Gib einen Groq-API-Schlüssel ein.' : 'Enter a Groq API key.') : t(openRouterConfigProvider === 'alibaba' ? 'settings.panels.providers.alibabaKeyRequired' : 'settings.panels.providers.openrouterKeyRequired')}</p>
                       )}
                       {openRouterModels.length > 0 && (
                         <>
@@ -5357,6 +5372,7 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     <SettingsField label={t('settings.panels.system.accessPassword')} description={t('settings.panels.system.passwordKeepDescription')}>
                       <input
                         type="password"
+                        autoComplete="new-password"
                         value={passwordDraft}
                         disabled={passwordEnvLocked}
                         onChange={(event) => {
@@ -5389,12 +5405,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                     </div>
                   )}
                   <div className="settings-system-actions">
-                    <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || updateStatus?.state === 'checking'}>
-                      {updateStatus?.state === 'checking' ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-                      <span>{t('settings.panels.system.checkUpdates')}</span>
-                    </button>
-                    <UpdateNowButton status={updateStatus} pending={updateInstallPending}
-                      label={t('settings.panels.system.updateNow')} onInstall={() => void installUpdateNow()} />
+                    {!updatesManagedByStore && <>
+                      <button type="button" className="secondary-action compact" onClick={() => void checkUpdates()} disabled={!ready || !updateStatus || updateStatus.state === 'checking'}>
+                        {updateStatus?.state === 'checking' ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
+                        <span>{t('settings.panels.system.checkUpdates')}</span>
+                      </button>
+                      <UpdateNowButton status={updateStatus} pending={updateInstallPending}
+                        label={t('settings.panels.system.updateNow')} onInstall={() => void installUpdateNow()} />
+                    </>}
                     <button type="button" className="secondary-action compact" onClick={() => void signOut()} disabled={!ready || !loggedIn}>
                       <Shield size={15} />
                       <span>{t('settings.panels.system.signOut')}</span>
@@ -5409,10 +5427,14 @@ export function NativeSettingsMain({ serviceStatus, activeContextItem, onboardin
                   )}
                   <div className="settings-system-status">
                     {updateStatus ? <>
-                      <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>
+                      {!updatesManagedByStore && <span className={`settings-badge ${updateAvailable ? 'warning' : ''}`}>{t('settings.panels.system.updateState', { state: updateState })}</span>}
                       {updateCurrentVersion && <span className="settings-badge">{t('settings.panels.system.currentVersion', { version: updateCurrentVersion })}</span>}
-                      {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
-                      {updateMessage && <span className="settings-badge">{updateMessage}</span>}
+                      {updatesManagedByStore ? (
+                        <span className="settings-badge">{t('settings.panels.system.updatesManagedByStore')}</span>
+                      ) : <>
+                        {updateAvailableVersion && <span className="settings-badge">{t('settings.panels.system.availableVersion', { version: updateAvailableVersion })}</span>}
+                        {updateMessage && <span className="settings-badge">{updateMessage}</span>}
+                      </>}
                     </> : <span className="settings-badge">{t('settings.panels.system.updateStatusLoading')}</span>}
                   </div>
                   {updateStatusReadError && <p className="settings-hint" role="alert">{t('settings.panels.system.updateStatusUnavailable')} {updateStatusReadError}</p>}

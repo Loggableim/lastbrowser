@@ -119,6 +119,7 @@ export const AVAILABLE_MODELS: AvailableModelItem[] = [
 
 export interface CopilotSplitViewProps {
   isOpen: boolean;
+  automaticProviderDiscovery?: boolean;
   onClose: () => void;
   onMinimize?: () => void;
   botName?: string;
@@ -151,6 +152,7 @@ export interface CopilotSplitViewProps {
 
 export function CopilotSplitView({
   isOpen,
+  automaticProviderDiscovery = true,
   onClose,
   onMinimize,
   botName = 'Nova',
@@ -284,6 +286,7 @@ export function CopilotSplitView({
 
   // Phase 13.6: Dynamic live discovery via /api/models with quota status
   useEffect(() => {
+    if (!automaticProviderDiscovery && !modelPickerOpen) return;
     let alive = true;
     const generation = orchestrationScopeGenerationRef.current;
     const hasCachedCatalogForScope = isModelCatalogCacheCurrent(modelCatalogCacheScopeKeyRef.current, orchestrationScopeKey);
@@ -470,10 +473,11 @@ export function CopilotSplitView({
       alive = false;
       window.clearTimeout(loadingDeadline);
     };
-  }, [orchestrationScope, orchestrationScopeKey, modelPickerOpen, modelCatalogRetry, preparedModelSelection, preparedModelSelectionScopeKey, browserProfileId, workspacePath, backendProfileName]);
+  }, [automaticProviderDiscovery, orchestrationScope, orchestrationScopeKey, modelPickerOpen, modelCatalogRetry, preparedModelSelection, preparedModelSelectionScopeKey, browserProfileId, workspacePath, backendProfileName]);
 
   const visibleModelList = useMemo(() => modelList.filter((model) => {
     if (!model.providerId || !isDirectQuickchatProvider(model.providerId)) return false;
+    if (!showUntestedBetas && model.providerId.trim().toLowerCase() === 'groq') return false;
     const multiAgent = model.category === 'teamwork' || isMultiAgentModelSelection({ model: model.id, provider: model.providerId });
     if (multiAgent) {
       if (!AI_ORCHESTRATION_ENABLED) return false;

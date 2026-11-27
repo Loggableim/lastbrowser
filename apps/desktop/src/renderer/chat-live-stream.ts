@@ -335,10 +335,13 @@ export function localizeKnownChatStatus(message: string, translate: (key: typeof
 }
 
 /** Read actionable provider errors from native chat SSE payload variants. */
-export function readNativeChatStreamError(data: unknown): string {
+export function readNativeChatStreamError(data: unknown, translate?: (key: 'chat.openCodeFreeLimit' | 'chat.groqKeyInvalid' | 'chat.groqRateLimited') => string): string {
   if (typeof data === 'string' && data.trim()) return data.trim();
   if (data && typeof data === 'object' && !Array.isArray(data)) {
     const payload = data as Record<string, unknown>;
+    if (payload.code === 'opencode_free_limit' && translate) return translate('chat.openCodeFreeLimit');
+    if (payload.code === 'groq_key_invalid' && translate) return translate('chat.groqKeyInvalid');
+    if (payload.code === 'groq_rate_limited' && translate) return translate('chat.groqRateLimited');
     for (const key of ['error', 'message', 'detail']) {
       const value = payload[key];
       if (typeof value === 'string' && value.trim()) return value.trim();

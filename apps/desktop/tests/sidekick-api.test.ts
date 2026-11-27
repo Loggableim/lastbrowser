@@ -539,6 +539,34 @@ describe('sidekick api client', () => {
     expect(calls[1].url).toBe('http://127.0.0.1:8787/api/session?session_id=s2&messages=1&resolve_model=0');
   });
 
+  it('creates a custom-assistant chat only with a resolved native scope', async () => {
+    const assistant = {
+      id: 'd6cbfbfc-b2af-47c5-ba10-6e4df38bbe39',
+      name: 'Editor',
+      instructions: 'Lead with the clearest revision.',
+    };
+    const spaceScope = {
+      browserProfileId: 'browser-a',
+      backendProfileId: 'e6cbfbfc-b2af-47c5-ba10-6e4df38bbe39',
+      spaceId: 'f6cbfbfc-b2af-47c5-ba10-6e4df38bbe39',
+    };
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fetchImpl = async (url: string | URL, init?: RequestInit) => {
+      calls.push({ url: String(url), init });
+      return Response.json({ session: { session_id: 'assistantchat1' } });
+    };
+    expect(() => createSidekickSession('http://127.0.0.1:8787', { assistant }, fetchImpl)).toThrow(/Space/i);
+    expect(calls).toHaveLength(0);
+
+    await createSidekickSession('http://127.0.0.1:8787', {
+      profile: 'work', spaceScope, nativeBridgeNonce: 'native-fixture', assistant
+    }, fetchImpl);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toBe('http://127.0.0.1:8787/api/session/new');
+    expect(new Headers(calls[0].init?.headers).get('x-lastbrowser-bridge-token')).toBe('native-fixture');
+    expect(JSON.parse(String(calls[0].init?.body))).toEqual({ profile: 'work', space_scope: spaceScope, assistant });
+  });
+
   it('loads workspace tree entries and file previews for the native right panel', async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fetchImpl = async (url: string | URL, init?: RequestInit) => {

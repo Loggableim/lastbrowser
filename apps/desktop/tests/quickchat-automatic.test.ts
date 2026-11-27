@@ -17,6 +17,19 @@ function selection(provider: string, models: string[]): ScopedModelSelection {
 }
 
 describe('direct Quickchat automatic model selection', () => {
+  it('requires the beta switch for Groq even if a catalog claims a local deployment', () => {
+    const catalog = selection('groq', ['fixture-model']);
+    const local: ScopedModelSelection = { ...catalog, groups: [{ ...catalog.groups[0], deployment: 'local' }] };
+    const favorite = { provider: 'groq', model: 'fixture-model' };
+    expect(chooseQuickchatModel(local, scope, favorite, storage, false)).toBeNull();
+    expect(chooseQuickchatModel(local, scope, favorite, storage, true)).toEqual({ ...favorite, basis: 'favorite' });
+  });
+  it('does not choose an unconfigured provider when no model is selected', () => {
+    const unconfigured = selection('openrouter', ['openrouter/free']);
+    const catalog: ScopedModelSelection = { ...unconfigured, model: '', provider: '', configured: false,
+      groups: unconfigured.groups?.map(group => ({ ...group, configured: false })) };
+    expect(chooseQuickchatModel(catalog, scope, null, storage, true)).toBeNull();
+  });
   it.each(['xiaomi', 'mimo'])('prefers the requested MiMo Flash under catalog provider %s', provider => {
     const catalog = selection(provider, ['mimo-instant', 'mimo-v2.6-flash']);
     expect(chooseQuickchatModel(catalog, scope, null, storage, true)).toEqual({
@@ -34,6 +47,37 @@ describe('direct Quickchat automatic model selection', () => {
   it('does not route an unavailable favorite to a different model', () => {
     expect(chooseQuickchatModel(selection('xiaomi', ['mimo-v2.6-flash']), scope,
       { provider: 'xiaomi', model: 'missing' }, storage, true)).toBeNull();
+  });
+
+  it('keeps automatic Quickchat local when the selected local provider has no usable model', () => {
+    const local = selection('ollama', ['local-model']);
+    const remote = selection('openrouter', ['cloud-model']);
+    const catalog: ScopedModelSelection = {
+      ...local,
+      groups: [{ ...local.groups[0], configured: false }, remote.groups[0]],
+    };
+    expect(chooseQuickchatModel(catalog, scope, null, storage, true)).toBeNull();
+    expect(chooseQuickchatModel(catalog, scope, { provider: 'openrouter', model: 'cloud-model' }, storage, true))
+      .toEqual({ provider: 'openrouter', model: 'cloud-model', basis: 'favorite' });
+  });
+
+  it('does not treat an Ollama cloud-suffixed model as a local fallback', () => {
+    const catalog = selection('ollama', ['gpt-oss:20b-cloud']);
+    expect(chooseQuickchatModel(catalog, scope, null, storage, true)).toBeNull();
+  });
+
+  it('still selects an available local model in automatic mode', () => {
+    expect(chooseQuickchatModel(selection('ollama', ['local-model']), scope, null, storage, true))
+      .toEqual({ provider: 'ollama', model: 'local-model', basis: 'estimated' });
+  });
+
+  it('does not infer cloud fallback when a custom endpoint has unknown deployment', () => {
+    const custom = selection('custom', ['local-model']);
+    const cloud = selection('openrouter', ['cloud-model']);
+    const catalog: ScopedModelSelection = { ...custom, groups: [{ ...custom.groups[0], configured: false }, cloud.groups[0]] };
+    expect(chooseQuickchatModel(catalog, scope, null, storage, true)).toBeNull();
+    expect(chooseQuickchatModel(custom, scope, null, storage, true))
+      .toEqual({ provider: 'custom', model: 'local-model', basis: 'estimated' });
   });
 
   it('accepts a verified local Ollama favorite in text-only Quickchat', () => {

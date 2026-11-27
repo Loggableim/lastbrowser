@@ -315,7 +315,7 @@ export function NativeChatMain({
           if (!migrated.ok) throw new Error(migrated.error.message);
           data = migrated.value;
           selectionForView = data;
-          setStatusMessage(t('settings.panels.providers.activeModelFallback'));
+          if (activeChoice.changed) setStatusMessage(t('settings.panels.providers.activeModelFallback'));
         } else if (!(AI_ORCHESTRATION_ENABLED && isMultiAgentModelSelection(selectionForView)) && !activeChoice.choice) {
           selectionForView = { ...selectionForView, model: '', provider: '', configured: false };
         }
@@ -449,6 +449,7 @@ export function NativeChatMain({
   const isAntigravityCatalogUnknown = String(catalogStatus.antigravity || '').toLowerCase() === 'unknown';
   const isAntigravityCatalogUnverified = isAntigravityCatalogUnavailable || isAntigravityCatalogUnknown;
   const visibleModelCatalog = useMemo(() => modelCatalog.flatMap(group => {
+    if (!showUntestedBetas && group.providerId?.toLowerCase() === 'groq') return [];
     if (isAntigravityCatalogUnverified && (group.providerId === 'antigravity' || group.provider === 'antigravity')) {
       return [];
     }
@@ -555,12 +556,15 @@ export function NativeChatMain({
   const multiAgentBetaBlocked = (!AI_ORCHESTRATION_ENABLED || !showUntestedBetas)
     && (multiAgentSelection || Boolean(automaticSelected && currentPolicy?.response.policy.orchestrator));
   // Before the catalog answers, only the synchronous multi-agent beta gate applies; the rest needs the verified catalog.
-  const betaSelectionBlocked = !modelCatalogLoaded ? multiAgentBetaBlocked : (automaticSelected
+  const groqBetaBlocked = !showUntestedBetas && (automaticSelected
+    ? automaticAllowedModels.some(pair => pair.provider.toLowerCase() === 'groq')
+    : modelProvider?.toLowerCase() === 'groq');
+  const betaSelectionBlocked = groqBetaBlocked || (!modelCatalogLoaded ? multiAgentBetaBlocked : (automaticSelected
     ? unqualifiedAutoModels || Boolean(currentPolicy?.response.policy.orchestrator && !showUntestedBetas)
     : multiAgentSelection ? multiAgentBetaBlocked : !modelPairAvailable
       || !isModelActive(window.localStorage, { browserProfileId: activeBrowserProfileId,
         backendProfileName: activeBackendProfileName || (activeSession as any)?.profile || 'default' }, modelProvider, model)
-      || (!showUntestedBetas && !modelQualified));
+      || (!showUntestedBetas && !modelQualified)));
   const automaticAvailable=currentPolicy?canExecuteAutomaticPolicy(currentPolicy.response):false;
   const automaticBlocked=Boolean(automaticSelected&&!automaticAvailable);
   // Unverified catalog: sending needs a chosen model unless the automatic policy supplies one.

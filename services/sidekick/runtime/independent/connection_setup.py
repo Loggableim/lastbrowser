@@ -35,7 +35,7 @@ _SETUP_OWNERS: dict[tuple[str, str], tuple[object, str]] = {}
 # Actual native key-writer IDs. Discovery and all writes are revalidated in the
 # bound child; this pure adapter inventory never imports parent provider globals.
 _KEY_PROVIDERS = frozenset({"openrouter", "anthropic", "openai", "alibaba", "google", "gemini", "zai", "kimi-coding",
-                           "deepseek", "minimax", "minimax-cn", "mistralai", "x-ai", "xiaomi", "opencode-zen",
+                           "deepseek", "groq", "minimax", "minimax-cn", "mistralai", "x-ai", "xiaomi", "opencode-zen",
                            "opencode-go", "ollama-cloud", "lmstudio", "nvidia", "morph"})
 
 

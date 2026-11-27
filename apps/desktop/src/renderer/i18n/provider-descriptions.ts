@@ -2,7 +2,7 @@ import type { DesktopLocaleId } from './keys.js';
 
 type ProviderDescriptionId =
   | 'openai-codex' | 'anthropic' | 'google-gemini-cli' | 'antigravity' | 'openai' | 'openrouter' | 'alibaba' | 'ollama-cloud'
-  | 'gemini' | 'deepseek' | 'mistralai' | 'nvidia' | 'xiaomi' | 'zai' | 'x-ai'
+  | 'gemini' | 'deepseek' | 'groq' | 'mistralai' | 'nvidia' | 'xiaomi' | 'zai' | 'x-ai'
   | 'ollama' | 'lmstudio' | 'custom';
 
 const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string>> = {
@@ -59,6 +59,12 @@ const descriptions: Record<ProviderDescriptionId, Record<DesktopLocaleId, string
     ja: 'DeepSeek の推論モデルを利用するための API キーです。',
     en: 'DeepSeek API key for its reasoning models.', de: 'DeepSeek-API-Schlüssel für die Reasoning-Modelle.', es: 'Clave de API de DeepSeek para sus modelos de razonamiento.', fr: 'Clé API DeepSeek pour ses modèles de raisonnement.',
     it: 'Chiave API DeepSeek per i suoi modelli di ragionamento.', 'pt-BR': 'Chave de API da DeepSeek para modelos de raciocínio.', ru: 'Ключ API DeepSeek для моделей рассуждения.'
+  },
+  groq: {
+    en: 'Groq beta with your own API key and live model list.', de: 'Groq-Beta mit eigenem API-Schlüssel und aktueller Modellliste.',
+    es: 'Beta de Groq con tu propia clave API y lista de modelos actualizada.', fr: 'Bêta Groq avec votre clé API et la liste des modèles à jour.',
+    it: 'Beta Groq con la tua chiave API e l’elenco aggiornato dei modelli.', 'pt-BR': 'Beta do Groq com sua chave de API e lista atualizada de modelos.',
+    ru: 'Бета Groq с вашим ключом API и актуальным списком моделей.', ja: '独自の API キーと最新のモデル一覧を使用する Groq ベータ版。'
   },
   mistralai: {
     ja: '欧州でホストされるモデルを利用するための Mistral API キーです。',

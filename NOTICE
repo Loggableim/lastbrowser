@@ -1,8 +1,7 @@
 LastBrowser — distribution notices (A-022 work in progress)
 
-Read LICENSE-SCOPE.md before treating the root LICENSE as applying to any file.
-Eligible original LastBrowser material is licensed under GPL-3.0-only only to
-the extent described there; the repository is not relicensed as a whole.
+LICENSE-SCOPE.md identifies the original LastBrowser material covered by the
+root LICENSE and describes the terms that apply to that material.
 
 Third-party components keep their own license terms. See THIRD-PARTY-LICENSES.md,
 services/sidekick/LICENSE, and component-specific notices in the tree.
